@@ -69,7 +69,7 @@ P4 与 P5 可并行（互不依赖），但都依赖 P3。
 
 **Goal**：把空目录变成"能 `uv sync` 通过 + 能起 FastAPI + 能连 PG + 能跑空 Alembic migration"的可运行壳。
 
-**Output**：所有顶级子包目录就位、`uvicorn chameleon.app.main:app` 起得来、`curl localhost:8000/healthz` 通、PG + pgvector 容器跑起来、Alembic baseline migration 落地。
+**Output**：所有顶级子包目录就位、`uvicorn chameleon.app.main:app` 起得来、`curl localhost:8000/health` 通、复用本机 `127.0.0.1:8103` PG 实例（镜像升 pgvector/pgvector:pg16）+ 新建 `chameleon` 库、Alembic baseline migration 落地。
 
 **估时**：1.5 天。
 
@@ -143,51 +143,92 @@ python -c "import chameleon.core; import chameleon.providers.base; import chamel
 
 ---
 
-### Task 0.3 - PG + pgvector 容器 + Alembic 初始化
+### Task 0.3 - 复用本机 PG 实例（升 pgvector 镜像） + 建库 + Alembic 初始化
 
-**输入**：设计文档 S4.1（schema 整体）、S4.2（pgvector 决策）、A13
+**输入**：设计文档 S4.1（schema 整体）、S4.2（pgvector 决策）、A13、`/Users/links/Environment/Docker/postgres/README.md`（本机共享 PG 实例说明）
+
+**前置背景**：
+- 本机已有共享 PG 实例：`/Users/links/Environment/Docker/postgres/docker-compose.yml`
+  - 容器名 `postgres`，端口 `127.0.0.1:8103 → 5432`，user=`collector`，密码见 `.env`（`030317Archer`），默认 DB=`wave_obs`（wavecollector 用）
+  - 当前镜像 `postgres:16-alpine`，**不含 pgvector 扩展**
+- README 明确鼓励"多项目共用此实例，按 database 隔离"
+- **Chameleon 不另起容器**，只做两件事：把镜像升级到带 pgvector 的版本 + 在共享实例里建独立 `chameleon` 库
 
 **输出**：
-- `docker-compose.yml`（postgres:16 + pgvector 扩展、暴露 5432、数据卷）
-- `migrations/`（Alembic init 产物：`alembic.ini` 移到根、`migrations/env.py`、`migrations/versions/`）
-- 第一个 baseline migration（仅 `CREATE EXTENSION IF NOT EXISTS vector`，无表）
-- `config/example/.env.example` 加 `DATABASE_URL` 示例
+- 升级共享 PG 实例镜像（**改用户那份 docker-compose**，不在 Chameleon 仓内放 docker-compose.yml）：
+  - `/Users/links/Environment/Docker/postgres/docker-compose.yml` 的 `image: postgres:16-alpine` 改为 `image: pgvector/pgvector:pg16`
+  - data volume 完全兼容（都是 PG 16 数据格式），wave_obs 现有数据无损
+- 在共享实例里新建 `chameleon` 库（owner=collector，与 wave_obs 隔离）
+- 在 `chameleon` 库里启用 pgvector 扩展
+- `migrations/`（Alembic init 产物：`alembic.ini` 在 workspace 根、`migrations/env.py` async 模式、`migrations/versions/`）
+- 第一个 baseline migration `0001_enable_pgvector.py`（`CREATE EXTENSION IF NOT EXISTS vector` + rollback）
+- `config/example/.env.example` 的 `DATABASE_URL` 已是 `postgresql+asyncpg://collector:030317Archer@127.0.0.1:8103/chameleon`
 
 **关键决策点**：
-- Postgres 镜像选 `pgvector/pgvector:pg16`（官方）而非 `postgres:16` + 手动装扩展
+- 升镜像 `postgres:16-alpine → pgvector/pgvector:pg16` 是 drop-in replacement，PG 16 data format 兼容，wavecollector 完全无感（连接参数不变）。**不要换大版本**（如 pg17）会强制 pg_upgrade。
+- 严禁在 Chameleon 仓内放 `docker-compose.yml`——尊重共享 PG 实例由 `/Users/links/Environment/Docker/postgres/` 集中管理的约定。
 - Alembic 用 async 模式（`env.py` 用 `async_engine_from_config`）
 - baseline migration 名字 `0001_enable_pgvector.py`，含 `--rollback DROP EXTENSION vector`
+- Chameleon README 必须明确写"依赖本机共享 PG 实例 v8103，首次部署需升 pgvector 镜像"
+
+**操作步骤**：
+```bash
+# 1. 升镜像
+cd /Users/links/Environment/Docker/postgres
+# 编辑 docker-compose.yml：image: postgres:16-alpine → image: pgvector/pgvector:pg16
+docker compose down
+docker compose up -d
+
+# 2. 等就绪
+docker compose ps             # postgres healthy
+
+# 3. 验证现有 wave_obs 库无损
+docker exec postgres psql -U collector -d wave_obs -c "\dt"
+
+# 4. 建 chameleon 库
+docker exec postgres psql -U collector -d postgres -c "CREATE DATABASE chameleon OWNER collector;"
+
+# 5. 验证扩展可用（在 chameleon 库里启用，由 alembic 干）
+docker exec postgres psql -U collector -d chameleon -c "CREATE EXTENSION IF NOT EXISTS vector; SELECT extname FROM pg_extension WHERE extname='vector';"
+# → vector
+docker exec postgres psql -U collector -d chameleon -c "DROP EXTENSION vector;"  # 留给 alembic 重做
+```
 
 **验收**：
-```
-docker compose up -d pg
-psql $DATABASE_URL -c "SELECT extname FROM pg_extension WHERE extname='vector';"
-# → vector
-
+```bash
+# Chameleon 仓内执行
 alembic upgrade head
 # → 0001_enable_pgvector.py 应用成功
+
+psql "postgresql://collector:030317Archer@127.0.0.1:8103/chameleon" \
+  -c "SELECT extname FROM pg_extension WHERE extname='vector';"
+# → vector
+
+# 同时 wave_obs 必须依旧健康
+docker exec postgres pg_isready -U collector -d wave_obs
+# → accepting connections
 ```
 
 ---
 
-### Task 0.4 - 最小 FastAPI app + /healthz + /readyz
+### Task 0.4 - 最小 FastAPI app + /health + /ready
 
 **输入**：设计文档 S3.1、S3.3 健康段
 
 **输出**：
-- `chameleon-app/src/chameleon/app/main.py`：FastAPI app 初始化、`/healthz` 返 `{"ok": true}`、`/readyz` 检 DB（用 chameleon-core 的 db.py，本阶段用最简单 `SELECT 1`）
+- `chameleon-app/src/chameleon/app/main.py`：FastAPI app 初始化、`/health` 返 `{"ok": true}`、`/ready` 检 DB（用 chameleon-core 的 db.py，本阶段用最简单 `SELECT 1`）
 - 暂不接入 auth、不接入 router、不接入 registry——只让壳跑起来
 
 **关键决策点**：
-- `/healthz` **不**走 `/v1` 前缀（运维 probe 友好）
-- `/readyz` 失败返 503，body 仍是 `Result.fail(...)`（响应封装从 Phase 1 加，此阶段先返 dict 占位，P1 接入后替换）
+- `/health` **不**走 `/v1` 前缀（运维 probe 友好）
+- `/ready` 失败返 503，body 仍是 `Result.fail(...)`（响应封装从 Phase 1 加，此阶段先返 dict 占位，P1 接入后替换）
 
 **验收**：
 ```
 uvicorn chameleon.app.main:app --port 8000 &
-curl -s http://localhost:8000/healthz | jq .
+curl -s http://localhost:8000/health | jq .
 # → {"ok": true}
-curl -s http://localhost:8000/readyz | jq .
+curl -s http://localhost:8000/ready | jq .
 # → DB 检查通过的响应
 ```
 
@@ -279,7 +320,7 @@ cp config/example/chameleon.example.json config/chameleon.json
 cp config/example/baseurl.example.json config/baseurl.json
 cp config/example/model.example.json config/model.json
 cp config/example/agents.example.yaml config/agents.yaml
-# 编辑 .env 改 DATABASE_URL 为本地 PG
+# 编辑 .env 改 DATABASE_URL 为 postgresql+asyncpg://collector:030317Archer@127.0.0.1:8103/chameleon
 
 uv run python -c "from chameleon.core.config import inventory as cfg; print(cfg.case_llm())"
 # 打印 example 里配的 llm 名（如 qwen-plus）
@@ -391,6 +432,7 @@ pytest chameleon-core/tests/test_db.py -v
 - 新 migration `0002_initial_tables.py`（autogenerate，含所有表 + 索引 + HNSW 向量索引）
 
 **关键决策点**：
+- **ORM 全栈 SQLAlchemy 2.0 async**（声明式 + `Mapped[]` 类型），**禁用 SQLModel / Tortoise / raw SQL 业务持久层**。复杂查询用 SQLAlchemy Core / text() 走同一 session
 - 雪花 ID 实现选 `python-snowflake-id` 或自封——选自封 helper（仅一份 `utils/snowflake.py`，instance id 取 env，方法 `next_id() -> int`）
 - `Vector(1536)` 列：用 `pgvector.sqlalchemy.Vector`（pgvector 官方 Python 包）
 - HNSW 索引创建用 `op.create_index(..., postgresql_using="hnsw", postgresql_with={"m": 16, "ef_construction": 64}, postgresql_ops={"embedding": "vector_cosine_ops"})`
@@ -503,7 +545,7 @@ pytest chameleon-app/tests/test_global_handler.py -v
 **验收**：
 - `uv sync --all-packages && ruff check . && pytest -q` 全绿
 - `alembic upgrade head` 成功
-- `uvicorn chameleon.app.main:app` 起来，`/healthz`、`/readyz` 通
+- `uvicorn chameleon.app.main:app` 起来，`/health`、`/ready` 通
 
 ---
 
@@ -1316,9 +1358,9 @@ async def test_echo_streaming():
 **输入**：设计文档 S5 + Phase 0 部署细节
 
 **输出**：
-- 部署：docker-compose、env 变量清单、卷挂载
+- 部署：依赖本机共享 PG 实例 `/Users/links/Environment/Docker/postgres/`（说明镜像必须含 pgvector），Chameleon 自身只跑 uvicorn，env 变量清单
 - Alembic 操作：upgrade / downgrade / autogenerate 流程 + 红线（不改已发布 migration）
-- 备份：PG dump + chunks 表向量大小估算
+- 备份：PG dump（`chameleon` 库） + chunks 表向量大小估算
 - 升级：从 v0.1 → v0.2 的标准动作
 
 ---

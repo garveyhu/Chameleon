@@ -41,7 +41,8 @@
 | 10 | Embedding 维度 | **v1 全局单维 1536**（OpenAI text-embedding-3-small） | 单表简单；扩展点已留 |
 | 11 | 异步 ingest | **v1 FastAPI BackgroundTasks** | 个人项目简化，未来切 Arq |
 | 12 | 配置体系 | **pydantic-settings（.env）+ sage 风格 JSON Settings** | 强类型秘钥 + 灵活业务参数 |
-| 13 | DB | **PostgreSQL + pgvector** | 取代 sage 的 MySQL；向量与业务表同事务边界 |
+| 13 | DB | **PostgreSQL + pgvector**（复用本机 `127.0.0.1:8103` 实例，镜像切 `pgvector/pgvector:pg16`，新建 `chameleon` 库与 `wave_obs` 隔离） | 取代 sage 的 MySQL；向量与业务表同事务边界；不另起容器 |
+| — | ORM | **SQLAlchemy 2.0 async**（声明式 + `Mapped[]` 类型）—— 全局唯一持久化栈 | 不引入 SQLModel / Tortoise / raw SQL 业务持久层，单栈减少认知负担 |
 
 ---
 
@@ -401,7 +402,7 @@ modules/agent/service.invoke():
 ### 3.1 路径与版本
 
 - 业务接口：`/v1/...`
-- 健康：`/healthz`、`/readyz`
+- 健康：`/health`、`/ready`
 - 破坏性变更走 `/v2/...`，共存渐进迁移
 
 ### 3.2 鉴权机制
@@ -451,8 +452,8 @@ modules/agent/service.invoke():
 | | `POST /v1/admin/api-keys/{id}/revoke` |
 | | `GET /v1/admin/call-logs`（支持 app/agent/时间窗/状态过滤） |
 | | `GET /v1/admin/providers/status` |
-| **健康** | `GET /healthz` |
-| | `GET /readyz` |
+| **健康** | `GET /health` |
+| | `GET /ready` |
 
 ### 3.4 统一响应封装（学 sage）
 
@@ -954,7 +955,7 @@ config/
 **`.env`**（敏感）：
 
 ```
-DATABASE_URL=postgresql+asyncpg://chameleon:xxx@localhost:5432/chameleon
+DATABASE_URL=postgresql+asyncpg://collector:030317Archer@127.0.0.1:8103/chameleon
 REDIS_URL=redis://localhost:6379/0
 LOG_LEVEL=INFO
 
@@ -1116,7 +1117,7 @@ LOG_DIR = Path(os.getenv("CHAMELEON_LOG_DIR") or CHAMELEON_ROOT / "logs")
 ### 6.3 v1 验收清单
 
 **功能轴**：
-- [ ] FastAPI app 可启动，`/healthz` / `/readyz` 通
+- [ ] FastAPI app 可启动，`/health` / `/ready` 通
 - [ ] CLI `chameleon init-admin` 落第一个 admin key
 - [ ] admin key 通过 `POST /v1/admin/api-keys` 发普通 app key
 - [ ] 至少 1 个本地 LangGraph agent（`echo`）可调
