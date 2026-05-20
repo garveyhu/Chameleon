@@ -1,0 +1,48 @@
+# Chameleon workspace 根 —— virtual workspace（root 本身非 project）
+# 实际包：chameleon-core / chameleon-providers/* / chameleon-agents/* / chameleon-app
+
+[tool.uv.workspace]
+members = [
+    "chameleon-core",
+    "chameleon-providers/*",
+    "chameleon-agents/*",
+    "chameleon-app",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+    "respx>=0.21",
+    "pytest-httpserver>=1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I"]  # isort
+
+[tool.ruff.lint.isort]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+known-first-party = ["chameleon"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+# importlib 模式：允许跨子包同名 test 文件（不需要 __init__.py）
+addopts = "--import-mode=importlib"
+# 不设 testpaths——默认从 rootdir 递归发现，覆盖各子包 tests/
+# 跨包集成测试放 workspace 根的 tests/
+
