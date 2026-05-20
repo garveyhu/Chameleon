@@ -1,0 +1,252 @@
+"""Provider + Agent 注册表构建
+
+启动时执行一次，运行时只读。
+fail-fast：重复 key / 占位符未解析 / yaml 引用未注册的 provider —— 全报错退出。
+
+两个全局 dict：
+  PROVIDERS: dict[str, Provider]
+  AGENTS:    dict[str, AgentDef]
+"""
+
+from __future__ import annotations
+
+import importlib
+import pkgutil
+from pathlib import Path
+from typing import Any
+
+import yaml
+from loguru import logger
+
+from chameleon.core.config.base_settings import (
+    ConfigError,
+    _resolve_placeholders,
+    make_default_resolver,
+)
+from chameleon.core.config.constants import CONFIG_PATH
+from chameleon.core.config.json_settings import url_settings
+from chameleon.core.exceptions import RegistryError
+from chameleon.providers.base.protocol import Provider
+from chameleon.providers.base.types import AgentDef
+
+PROVIDERS: dict[str, Provider] = {}
+AGENTS: dict[str, AgentDef] = {}
+
+_BUILT = False
+
+
+# ── Provider 注册（扫 chameleon.providers.* namespace） ─────
+
+
+def build_provider_registry() -> dict[str, Provider]:
+    """扫 chameleon.providers.* namespace，找到每个子包的 PROVIDER 实例
+
+    base 子包跳过；其它每个子包 __init__.py 必须 export PROVIDER。
+    """
+    import chameleon.providers as pkg
+
+    providers: dict[str, Provider] = {}
+    for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.providers."):
+        # base 自身不是 provider 实现
+        if mod_info.name.endswith(".base"):
+            continue
+        try:
+            mod = importlib.import_module(mod_info.name)
+        except Exception as e:
+            raise RegistryError(
+                message=f"failed to import provider package {mod_info.name}: {e}"
+            ) from e
+
+        provider = getattr(mod, "PROVIDER", None)
+        if provider is None:
+            logger.warning(
+                "provider package {} has no PROVIDER export — skipped", mod_info.name
+            )
+            continue
+        if not isinstance(provider, Provider):
+            raise RegistryError(
+                message=f"{mod_info.name}.PROVIDER is not a Provider instance"
+            )
+        if provider.name in providers:
+            raise RegistryError(message=f"duplicate provider name: {provider.name}")
+        providers[provider.name] = provider
+        logger.info(
+            "provider registered | name={} | from={}", provider.name, mod_info.name
+        )
+
+    return providers
+
+
+# ── Agent 注册（namespace 扫 + yaml 读，双源合并） ─────────
+
+
+def _build_local_agents() -> dict[str, AgentDef]:
+    """扫 chameleon.agents.* namespace，每个子包必须 export AGENT_META + build_graph"""
+    try:
+        import chameleon.agents as pkg
+    except ImportError:
+        # 没有任何 agent 子包安装也允许（极端情况）
+        logger.warning("chameleon.agents namespace not found — no local agents")
+        return {}
+
+    agents: dict[str, AgentDef] = {}
+    for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.agents."):
+        try:
+            mod = importlib.import_module(mod_info.name)
+        except Exception as e:
+            raise RegistryError(
+                message=f"failed to import agent package {mod_info.name}: {e}"
+            ) from e
+
+        meta = getattr(mod, "AGENT_META", None)
+        build_fn = getattr(mod, "build_graph", None)
+
+        if meta is None and build_fn is None:
+            # 占位空包（如 P0 阶段的 echo）—— 跳过
+            logger.debug(
+                "agent package {} has no AGENT_META/build_graph — skipped (placeholder)",
+                mod_info.name,
+            )
+            continue
+
+        if meta is None or build_fn is None:
+            raise RegistryError(
+                message=f"agent package {mod_info.name} must export both AGENT_META and build_graph"
+            )
+
+        key = meta.get("key")
+        if not key:
+            raise RegistryError(
+                message=f"agent package {mod_info.name} AGENT_META missing 'key'"
+            )
+
+        agents[key] = AgentDef(
+            key=key,
+            provider="langgraph",
+            description=meta.get("description", ""),
+            version=meta.get("version"),
+            tags=meta.get("tags", []),
+            config={
+                "module": mod_info.name,
+                "build_fn": "build_graph",
+            },
+        )
+        logger.info(
+            "agent registered (local langgraph) | key={} | module={}",
+            key,
+            mod_info.name,
+        )
+    return agents
+
+
+def _build_yaml_agents(yaml_path: Path) -> dict[str, AgentDef]:
+    """读 config/agents.yaml，按 provider 字段注册外部 agent"""
+    if not yaml_path.exists():
+        logger.warning("agents.yaml not found at {} — no external agents", yaml_path)
+        return {}
+
+    with open(yaml_path, encoding="utf-8") as f:
+        raw: Any = yaml.safe_load(f)
+    if raw is None:
+        return {}
+    if not isinstance(raw, list):
+        raise RegistryError(
+            message=f"agents.yaml must be a list, got {type(raw).__name__}"
+        )
+
+    # 占位符替换
+    resolver = make_default_resolver(baseurl_lookup=lambda k: url_settings.get(k))
+    try:
+        resolved = _resolve_placeholders(raw, resolver)
+    except ConfigError as e:
+        raise RegistryError(message=f"agents.yaml placeholder error: {e}") from e
+
+    agents: dict[str, AgentDef] = {}
+    for i, entry in enumerate(resolved):
+        if not isinstance(entry, dict):
+            raise RegistryError(message=f"agents.yaml entry #{i} must be a dict")
+        key = entry.get("key")
+        provider = entry.get("provider")
+        if not key or not provider:
+            raise RegistryError(
+                message=f"agents.yaml entry #{i} missing 'key' or 'provider'"
+            )
+        config = {
+            k: v
+            for k, v in entry.items()
+            if k not in {"key", "provider", "description", "version", "tags"}
+        }
+        agents[key] = AgentDef(
+            key=key,
+            provider=provider,
+            description=entry.get("description", ""),
+            version=entry.get("version"),
+            tags=entry.get("tags", []),
+            config=config,
+        )
+        logger.info("agent registered (yaml) | key={} | provider={}", key, provider)
+    return agents
+
+
+def build_agent_registry(
+    providers: dict[str, Provider],
+    yaml_path: Path | None = None,
+) -> dict[str, AgentDef]:
+    """合并本地 + yaml，校验：provider 必须已注册；agent key 不可重复"""
+    if yaml_path is None:
+        yaml_path = CONFIG_PATH / "agents.yaml"
+
+    local = _build_local_agents()
+    yaml_agents = _build_yaml_agents(yaml_path)
+
+    duplicates = set(local) & set(yaml_agents)
+    if duplicates:
+        raise RegistryError(
+            message=f"agent key conflict (both local + yaml): {sorted(duplicates)}"
+        )
+
+    merged: dict[str, AgentDef] = {**local, **yaml_agents}
+
+    # 校验 provider 已注册
+    unknown_providers = {
+        agent.provider for agent in merged.values() if agent.provider not in providers
+    }
+    if unknown_providers:
+        raise RegistryError(
+            message=f"agents reference unregistered providers: {sorted(unknown_providers)}"
+        )
+
+    return merged
+
+
+# ── 启动钩子 ────────────────────────────────────────────
+
+
+def init_registry(yaml_path: Path | None = None) -> None:
+    """一次性构建全局 PROVIDERS / AGENTS"""
+    global _BUILT
+    if _BUILT:
+        logger.debug("registry already built — skip")
+        return
+
+    PROVIDERS.clear()
+    PROVIDERS.update(build_provider_registry())
+
+    AGENTS.clear()
+    AGENTS.update(build_agent_registry(PROVIDERS, yaml_path=yaml_path))
+
+    _BUILT = True
+
+    logger.info(
+        "registry built | providers={} | agents={}",
+        list(PROVIDERS.keys()),
+        list(AGENTS.keys()),
+    )
+
+
+def reset_registry_for_test() -> None:
+    """测试用：重置 built 标记"""
+    global _BUILT
+    PROVIDERS.clear()
+    AGENTS.clear()
+    _BUILT = False

@@ -9,7 +9,8 @@ P2 接 providers registry 启动钩子；P3+ 挂业务模块 router。
 from __future__ import annotations
 
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -25,22 +26,53 @@ from chameleon.core.exceptions import (
 )
 from chameleon.core.logger import setup_logger
 from chameleon.core.response import Result
+from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 
 REQUEST_ID_HEADER = "X-Request-Id"
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """startup: 构建 registry + healthcheck warn-only；shutdown: 暂无清理"""
+    init_registry()
+    _log_registry_summary()
+    await _trigger_healthchecks()
+    yield
 
 
 def create_app() -> FastAPI:
     setup_logger()
 
-    app = FastAPI(title="Chameleon", version="0.1.0")
+    app = FastAPI(title="Chameleon", version="0.1.0", lifespan=_lifespan)
 
     _register_middleware(app)
     _register_exception_handlers(app)
     _register_health_routes(app)
-    # P2+ 在这里接入 registry / 业务 router
+    # P3+ 在这里挂业务 router
 
     logger.info("FastAPI app created")
     return app
+
+
+def _log_registry_summary() -> None:
+    """启动日志按设计文档 S2.5 末段格式化输出"""
+    logger.info("─── Chameleon Registry ───")
+    logger.info("Loaded {} providers: {}", len(PROVIDERS), ", ".join(PROVIDERS.keys()))
+    logger.info("Loaded {} agents:", len(AGENTS))
+    for key, agent in AGENTS.items():
+        source = "(built-in)" if agent.provider == "langgraph" else "(from agents.yaml)"
+        logger.info("  [{:<9}] {:<24} {}", agent.provider, key, source)
+
+
+async def _trigger_healthchecks() -> None:
+    """异步 ping 各 provider —— 失败仅 warn，不阻塞启动（裁决：warn-only）"""
+    for name, provider in PROVIDERS.items():
+        try:
+            ok = await provider.healthcheck()
+            if not ok:
+                logger.warning("provider {} healthcheck returned False", name)
+        except Exception as e:
+            logger.warning("provider {} healthcheck failed: {}", name, e)
 
 
 # ── Middleware ──────────────────────────────────────────
