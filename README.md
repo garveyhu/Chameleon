@@ -152,6 +152,9 @@ Chameleon/                              ← uv workspace 根
 
 ## 文档
 
+> 👉 **第一次看？先读 [入门指南](docs/getting-started.md)**——用大白话讲每个模块干嘛 / 三种 agent 怎么接入 / 我的应用怎么调 / sage 用户友好
+
+- 🌱 [**入门指南**](docs/getting-started.md) **← 使用者视角**
 - 📐 [设计文档](docs/plans/2026-05-20-chameleon-design.md) ——核心决策与架构
 - 🛠️ [实施计划](docs/plans/2026-05-20-chameleon-impl-plan.md)
 - 🚀 [部署运维](docs/operations.md)
