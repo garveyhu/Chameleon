@@ -22,6 +22,8 @@ from chameleon.app.modules.admin import admin_router
 from chameleon.app.modules.agent import agents_router
 from chameleon.app.modules.api_key import api_keys_router
 from chameleon.app.modules.conversation import conversations_router
+from chameleon.app.modules.knowledge import knowledge_router
+from chameleon.app.modules.task import tasks_router
 from chameleon.core.db import engine
 from chameleon.core.exceptions import (
     BusinessError,
@@ -64,6 +66,8 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(admin_router)
     app.include_router(conversations_router)
     app.include_router(agents_router)
+    app.include_router(knowledge_router)
+    app.include_router(tasks_router)
 
 
 def _log_registry_summary() -> None:

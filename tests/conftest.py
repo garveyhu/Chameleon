@@ -1,10 +1,13 @@
 """跨包集成测试 fixtures
 
-注入一个 mock provider + agent 到 registry，方便测试整条 invoke 流程。
+- 注入 mock provider + agent 到 registry
+- 注入 DeterministicHashEmbedding 替代真实 OpenAI 调用
 """
 
 from __future__ import annotations
 
+import hashlib
+import math
 import secrets
 from collections.abc import AsyncIterator
 
@@ -16,7 +19,17 @@ from chameleon.app.main import create_app
 from chameleon.app.modules.api_key.schemas import CreateApiKeyRequest
 from chameleon.app.modules.api_key.service import create_api_key
 from chameleon.core.db import AsyncSessionLocal
-from chameleon.core.models import ApiKey, CallLog, Conversation, Message
+from chameleon.core.embedding import set_for_test as set_embedding_for_test
+from chameleon.core.models import (
+    ApiKey,
+    CallLog,
+    Chunk,
+    Conversation,
+    Document,
+    KnowledgeBase,
+    Message,
+    Task,
+)
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
@@ -57,9 +70,9 @@ class _MockEchoProvider(Provider):
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def _registry_with_mock() -> AsyncIterator[None]:
-    """启动 registry + 注入 mock provider + mock-echo agent
+    """启动 registry + 注入 mock provider + mock-echo agent + mock embedding
 
-    autouse + session-scoped：所有跨包 tests 共享一个 registry。
+    autouse + session-scoped：所有跨包 tests 共享。
     """
     init_registry()
     PROVIDERS["mock"] = _MockEchoProvider()
@@ -68,7 +81,50 @@ async def _registry_with_mock() -> AsyncIterator[None]:
         provider="mock",
         description="mock echo agent for integration tests",
     )
+    set_embedding_for_test(
+        _DeterministicHashEmbedding(dim=1536, model="text-embedding-3-small")
+    )
     yield
+    set_embedding_for_test(None)
+
+
+# ── Deterministic embedding（测试用，避免真实 OpenAI 调用） ──────
+
+
+class _DeterministicHashEmbedding:
+    """hash(text) 派生向量。同一文本必出同一向量。L2-normalized。
+
+    用于：
+    - knowledge ingest worker（确定性结果便于断言）
+    - search 命中校验（用同文本 query 必能找回自己）
+    """
+
+    def __init__(self, *, dim: int, model: str) -> None:
+        self.dim = dim
+        self.model = model
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        return [self._vec(t) for t in texts]
+
+    def _vec(self, text: str) -> list[float]:
+        # SHA256 → 32 bytes → 用作 PRNG 种子，铺到 dim 维
+        seed = hashlib.sha256(text.encode("utf-8")).digest()
+        out: list[float] = []
+        i = 0
+        while len(out) < self.dim:
+            # 每 4 字节取一个 float（uniform on [-1, 1]）
+            b = seed[i % 32 : (i % 32) + 4]
+            if len(b) < 4:
+                b = (b + seed)[:4]
+            v = int.from_bytes(b, "big", signed=False)
+            out.append((v / 0xFFFFFFFF) * 2 - 1)
+            i += 1
+            if i % 32 == 0:
+                # 派生下一轮 seed 防止平坦
+                seed = hashlib.sha256(seed).digest()
+        # L2 normalize（让 cosine = 内积）
+        norm = math.sqrt(sum(x * x for x in out)) or 1.0
+        return [x / norm for x in out]
 
 
 # ── HTTP client fixtures ────────────────────────────────
@@ -91,6 +147,11 @@ async def client() -> AsyncIterator[AsyncClient]:
 async def _cleanup() -> AsyncIterator[None]:
     yield
     async with AsyncSessionLocal() as s:
+        # 按外键依赖倒序清
+        await s.execute(delete(Chunk))
+        await s.execute(delete(Document))
+        await s.execute(delete(KnowledgeBase).where(KnowledgeBase.kb_key.like("e2e-%")))
+        await s.execute(delete(Task))
         await s.execute(delete(Message))
         await s.execute(delete(Conversation))
         await s.execute(delete(CallLog))
