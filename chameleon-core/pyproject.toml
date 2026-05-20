@@ -14,6 +14,9 @@ dependencies = [
     "python-dotenv>=1.0",
     "pyyaml>=6",
     "pgvector>=0.3",
+    "diskcache>=5.6",                 # components/cache 用
+    "cryptography>=43",               # utils/crypto_util 用
+    "langchain-openai>=0.3",          # components/llms BaseLLM 用
 ]
 
 [build-system]

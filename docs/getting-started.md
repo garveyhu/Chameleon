@@ -24,24 +24,67 @@
 
 ---
 
-## 二、项目模块大白话对照
+## 二、项目模块大白话对照（已系统融合 sage 习惯）
 
-如果你以前看 sage，下面这表帮你快速建立映射：
+如果你以前看 sage，下面这表帮你快速建立映射。**🟢 标记 = v1 已对齐 sage 习惯**：
 
 | sage 里的概念 | Chameleon 里的位置 | 干嘛的 |
 |---|---|---|
-| `sage-core/components/llms/` | `chameleon-core/.../core/embedding/openai_compat.py`（同样思路，目前仅 embedding；LLM 待 v0.2 补） | LLM / embedding 客户端工厂 |
-| `sage-core/components/vector/` | `chameleon-core/.../core/vector/` | 向量存储抽象 + pgvector 实现 |
-| `sage-core/components/inventory.py` | `chameleon-core/.../core/config/inventory.py` + `chameleon.core.knowledge.search_kb` | 全局访问点（配置 + 知识库 in-process API） |
-| `sage-core/components/skill/` | （v1 暂无；future v0.2 看需求） | 技能注册 / lazy reference |
-| `sage-core/components/cache/` | （v1 暂无） | 缓存 |
-| `sage-core/base/base_agent.py` | （v1 暂无 BaseAgent 基类；本地 agent 直接写 `build_graph`） | agent 基类 |
-| `sage-agents/data_qa_v2/agent.py` | `chameleon-agents/<your_agent>/` 子包 | 具体 agent 实现 |
-| `sage-agents/data_qa_v2/deps_factory.py` | （范式参考，没强制） | 依赖注入工厂 |
-| `sage-agents/data_qa_v2/function/graph/` | 你 agent 子包里的 `graph.py` + `nodes/` 目录 | LangGraph 图与节点 |
+| 🟢 `sage-core/components/llms/` | `chameleon-core/.../core/components/llms/`（BaseLLM + ChatQwen/ChatDeepSeek/ChatOpenAI + LLMFactory） | LLM 客户端工厂（OpenAI 兼容） |
+| 🟢 `sage-core/components/embeddings/` | `chameleon-core/.../core/components/embeddings/`（DashScopeEmbeddings/OpenAIEmbeddings 别名） | embedding 客户端工厂 |
+| 🟢 `sage-core/components/vector/` | `chameleon-core/.../core/components/vector/`（VectorStore + PgVectorStore） | 向量存储抽象 + pgvector |
+| 🟢 `sage-core/components/cache/cache_manager.py` | `chameleon-core/.../core/components/cache/`（CacheManager 单例 + diskcache） | 通用 kv 缓存 |
+| 🟢 `sage-core/components/inventory.py` | `chameleon-core/.../core/components/inventory.py`（llm/embedding/vector/cache/search_kb 顶层函数） | 全局组件具名访问点 |
+| 🟢 `sage-core/base/base_agent.py` + agent_router + agent_context | `chameleon-core/.../core/base/`（BaseAgent + AgentRouter + AgentContext + AgentMetadata + AgentConfigOption） | agent 基类 + 注册中心 |
+| 🟢 `sage-core/function/` (prompts + chain) | `chameleon-core/.../core/function/`（占位 + README 范式） | prompt 模板 + Runnable 工厂 |
+| 🟢 `sage-core/complex/utils/convert_util.py` | `chameleon-core/.../core/utils/convert.py` | ORM↔dict/Pydantic |
+| 🟢 `sage-core/complex/utils/crypto_util.py` | `chameleon-core/.../core/utils/crypto.py` | AES-256-GCM 敏感数据加密 |
+| 🟢 `sage-core/complex/utils/snowflake.py` | `chameleon-core/.../core/utils/snowflake.py` | 雪花 ID |
+| `sage-core/complex/config/` | `chameleon-core/.../core/config/`（pydantic-settings + BaseSettings + inventory） | 配置 |
+| `sage-core/complex/response/` | `chameleon-core/.../core/response.py` + `exceptions.py` | Result + 业务错误码 |
+| `sage-core/components/skill/` | （v1 占位 `function/`；v0.2 接） | 技能注册 |
+| `sage-core/components/audio/` | （v1 不做） | 语音模型 |
+| `sage-core/components/memory/` | 部分由 conversations + messages 表实现；ES/Redis v1 不做 | 历史 |
 | `sage-system/modules/chat/` | `chameleon-app/.../modules/agent/` | HTTP 入口 + 会话编排 |
+| `sage-agents/data_qa_v2/` | `chameleon-agents/<your_agent>/` 子包 | 具体 agent 实现 |
+| `sage-agents/data_qa_v2/deps_factory.py` | 你 agent 子包里的 `deps_factory.py` | 依赖注入工厂 |
+| `sage-agents/data_qa_v2/function/graph/` | 你 agent 子包里的 `function/graph/`（含 `nodes/`） | LangGraph 图与节点 |
+| `sage` AiModel 表 DB-driven 配置 | Chameleon model.json 配置文件 | 理念不同：sage 入 DB，chameleon 走配置 |
 
-**实话实说**：v1 的 Chameleon 在 LLM 接入、技能系统、复杂 deps 注入这些方面**没有 sage 成熟**。v1 优先打通"三类来源统一入口"的骨架，components 的丰富度让位给后续迭代。你想用 sage 那套 LLM 多厂商，可以参考"把 sage components 搬过来"的 v0.2 思路（见末尾）。
+### v1 完整顶层 imports 视图
+
+业务代码 / agent 代码统一从这里 import：
+
+```python
+# 组件（仿 sage components/inventory）
+from chameleon.core.components import llm, embedding, vector, cache, search_kb
+
+# LLM 多厂商类（仿 sage components/llms/base.py）
+from chameleon.core.components.llms import BaseLLM, ChatQwen, ChatDeepSeek, ChatOpenAI
+
+# BaseAgent 体系（仿 sage core/base）
+from chameleon.core.base import (
+    BaseAgent, AgentMetadata, AgentConfigOption, AgentContext, agent_router,
+)
+
+# 工具（仿 sage complex/utils）
+from chameleon.core.utils import model_to_dict, next_id, next_session_id
+from chameleon.core.utils.crypto import encrypt, decrypt, get_or_decrypt
+```
+
+### 与 sage 的关键差异（务必知道）
+
+1. **配置存哪**：sage 走 DB（`ai_models` 表 + AiModel ORM）；chameleon 走 `config/model.json`——理念是"个人项目配置即代码"，DB-driven 配置等多用户场景再加
+2. **agent 注册**：sage 用 `agent_router.register(MyAgent)` 显式调用；chameleon 通过 namespace 扫描自动注册（写 `chameleon-agents/<key>/` 子包即可），同时 BaseAgent 子类也会自动注册到 `agent_router`
+3. **流式协议**：sage agent 自己产 SSE event；chameleon 通过 LangGraphProvider 统一 `astream_events` 自动翻译，agent 只写 graph 节点
+4. **session 概念**：sage 有 space_id / user_id 多租户；chameleon v1 简化为 app_id 单租户（多 app 通过 API key 隔离）
+
+### v1 故意没做的（v0.2+ 按需）
+
+- **sage skill registry**：v1 用 LangGraph node 直接组装即可，等真需要跨 agent 复用"技能"才接
+- **AiModel DB 表**：v1 走 model.json 配置文件，等需要 admin UI 改模型时再入 DB
+- **sage's chat workflow event_types**（INTENT/SQL/DATA 等业务级事件）：chameleon 用统一 StreamEvent 抽象层级；业务级语义通过 `step.thinking` / `step.output` / `metadata` 字段携带
+- **audio / memory(ES) / analytics**：v1 不做
 
 ---
 

@@ -98,8 +98,20 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 message=f"failed to import agent package {mod_info.name}: {e}"
             ) from e
 
-        meta = getattr(mod, "AGENT_META", None)
-        build_fn = getattr(mod, "build_graph", None)
+        # 优先 BaseAgent 子类（sage 风格）；fallback 到 AGENT_META + build_graph 字典模式
+        agent_cls = _find_base_agent_class(mod)
+        if agent_cls is not None:
+            md = agent_cls.get_metadata()
+            meta = {
+                "key": md.id,
+                "description": md.description,
+                "version": md.version,
+                "tags": list(md.tags),
+            }
+            build_fn = agent_cls.build_graph
+        else:
+            meta = getattr(mod, "AGENT_META", None)
+            build_fn = getattr(mod, "build_graph", None)
 
         if meta is None and build_fn is None:
             # 占位空包（如 P0 阶段的 echo）—— 跳过
@@ -120,23 +132,63 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 message=f"agent package {mod_info.name} AGENT_META missing 'key'"
             )
 
+        # 区分 BaseAgent 子类（agent_cls 已找到）vs 字典模式（用模块路径 build_graph）
+        if agent_cls is not None:
+            cfg = {
+                "module": mod_info.name,
+                "build_fn": "build_graph",
+                "agent_class": agent_cls.__name__,  # 仅记录用
+            }
+        else:
+            cfg = {
+                "module": mod_info.name,
+                "build_fn": "build_graph",
+            }
+
         agents[key] = AgentDef(
             key=key,
             provider="langgraph",
             description=meta.get("description", ""),
             version=meta.get("version"),
             tags=meta.get("tags", []),
-            config={
-                "module": mod_info.name,
-                "build_fn": "build_graph",
-            },
+            config=cfg,
         )
         logger.info(
-            "agent registered (local langgraph) | key={} | module={}",
+            "agent registered (local langgraph) | key={} | module={} | mode={}",
             key,
             mod_info.name,
+            "BaseAgent" if agent_cls is not None else "dict",
         )
+
+        # 同时注册到 agent_router（如果是 BaseAgent 子类）
+        if agent_cls is not None:
+            try:
+                from chameleon.core.base.agent_router import agent_router
+
+                agent_router.register(agent_cls)
+            except Exception as e:
+                logger.warning("agent_router.register failed for {}: {}", key, e)
+
     return agents
+
+
+def _find_base_agent_class(module):
+    """在模块的顶层符号里找一个 BaseAgent 子类。约定：同一模块至多一个。"""
+    try:
+        from chameleon.core.base.base_agent import BaseAgent
+    except ImportError:
+        return None
+
+    for name in dir(module):
+        obj = getattr(module, name, None)
+        if (
+            isinstance(obj, type)
+            and issubclass(obj, BaseAgent)
+            and obj is not BaseAgent
+            and obj.__module__.startswith(module.__name__)
+        ):
+            return obj
+    return None
 
 
 def _build_yaml_agents(yaml_path: Path) -> dict[str, AgentDef]:

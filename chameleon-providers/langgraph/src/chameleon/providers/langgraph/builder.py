@@ -59,7 +59,17 @@ class GraphBuilder:
         except Exception as e:
             raise RegistryError(message=f"failed to import {module_path}: {e}") from e
 
+        # 1) 模块顶层 build_graph 函数（v1 dict 模式 / 兼容 echo）
         build_fn = getattr(mod, build_fn_name, None)
+
+        # 2) BaseAgent 子类的 classmethod（sage 风格）
+        if build_fn is None:
+            agent_cls_name = agent_def.config.get("agent_class")
+            if agent_cls_name:
+                agent_cls = getattr(mod, agent_cls_name, None)
+                if agent_cls is not None:
+                    build_fn = getattr(agent_cls, build_fn_name, None)
+
         if build_fn is None:
             raise RegistryError(message=f"{module_path}.{build_fn_name} not found")
         try:
