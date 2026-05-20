@@ -47,7 +47,7 @@ def test_build_agent_registry_with_yaml_file(tmp_path: Path) -> None:
 def test_yaml_agents_unknown_provider_fail_fast(tmp_path: Path) -> None:
     yaml_path = tmp_path / "agents.yaml"
     yaml_path.write_text("- key: x\n  provider: nonexistent\n  endpoint: http://x\n")
-    providers = {"dify": _FakeProvider("dify")}
+    providers = {"dify": _FakeProvider("dify"), "langgraph": _FakeProvider("langgraph")}
     with pytest.raises(RegistryError):
         build_agent_registry(providers, yaml_path=yaml_path)
 
@@ -61,7 +61,8 @@ def test_yaml_agents_placeholder_env(tmp_path: Path, monkeypatch) -> None:
         "  endpoint: http://localhost\n"
         "  app_id: ${env:TEST_AGENT_APP_ID}\n"
     )
-    providers = {"dify": _FakeProvider("dify")}
+    # 注：build_agent_registry 也扫 chameleon.agents.* namespace（含 echo, provider=langgraph）
+    providers = {"dify": _FakeProvider("dify"), "langgraph": _FakeProvider("langgraph")}
     agents = build_agent_registry(providers, yaml_path=yaml_path)
     assert agents["y"].config["app_id"] == "resolved-app-id"
 
@@ -74,7 +75,7 @@ def test_yaml_agents_placeholder_missing_env_fail_fast(tmp_path: Path) -> None:
         "  endpoint: http://localhost\n"
         "  app_id: ${env:DEFINITELY_NOT_SET_VAR_XYZ}\n"
     )
-    providers = {"dify": _FakeProvider("dify")}
+    providers = {"dify": _FakeProvider("dify"), "langgraph": _FakeProvider("langgraph")}
     with pytest.raises(RegistryError):
         build_agent_registry(providers, yaml_path=yaml_path)
 

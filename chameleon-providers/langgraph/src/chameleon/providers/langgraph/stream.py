@@ -37,13 +37,18 @@ def translate(event: dict[str, Any]) -> Iterator[StreamEvent]:
         return
 
     if kind == "on_chain_end":
-        # 跳过根 chain（整体 graph）的 on_chain_end —— 由 service 层在收完所有 event
-        # 后自行产出 done
         if name and not name.startswith("LangGraph"):
             yield StreamEvent(
                 type=StreamEventType.step,
                 data={"name": name, "status": "success"},
             )
+        else:
+            # 根 chain end → 从 final state 提取 citations / tool_calls 等结构化数据
+            output = data.get("output") or {}
+            if isinstance(output, dict):
+                for cit in output.get("citations", []) or []:
+                    if isinstance(cit, dict):
+                        yield StreamEvent(type=StreamEventType.citation, data=cit)
         return
 
     if kind == "on_tool_start":
