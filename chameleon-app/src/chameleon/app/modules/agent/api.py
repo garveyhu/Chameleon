@@ -1,12 +1,13 @@
 """agent 模块 HTTP 路由
 
 挂点：
-  POST /v1/agents/{key}/invoke      —— 非流式（P4 接 SSE 流式）
+  POST /v1/agents/{key}/invoke      —— stream by body field
   GET  /v1/agents                   —— 列表
   GET  /v1/agents/{key}             —— 详情
 """
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.app.modules.agent import service
@@ -15,9 +16,9 @@ from chameleon.app.modules.agent.schemas import (
     InvokeRequest,
     InvokeResponse,
 )
+from chameleon.app.modules.agent.stream import sse_iter
 from chameleon.core.auth import CurrentApp, current_app
 from chameleon.core.db import get_session
-from chameleon.core.exceptions import BusinessError, ResultCode
 from chameleon.core.response import Result
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
@@ -38,22 +39,40 @@ async def get_agent(
     return Result.ok(service.get_agent(key))
 
 
-@router.post("/{key}/invoke", response_model=Result[InvokeResponse])
+@router.post(
+    "/{key}/invoke",
+    # response_model 仅描述非流模式；流式返 text/event-stream
+    response_model=Result[InvokeResponse],
+)
 async def invoke_agent(
     key: str,
     req: InvokeRequest,
     request: Request,
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
-) -> Result[InvokeResponse]:
+):
+    request_id = getattr(request.state, "request_id", "req_unknown")
+
     if req.stream:
-        # P4 实现 SSE 路径；P3 阶段拒绝
-        raise BusinessError(
-            ResultCode.InvalidStreamMode,
-            message="stream=true 暂未实现（Phase 4 接入）",
+        # 流式：自管 session（service.stream_invoke 内部），返 SSE StreamingResponse
+        return StreamingResponse(
+            sse_iter(
+                service.stream_invoke(
+                    key,
+                    req,
+                    current_app=app,
+                    request_id=request_id,
+                )
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # 防 Nginx 缓冲
+                "X-Request-Id": request_id,
+            },
         )
 
-    request_id = getattr(request.state, "request_id", "req_unknown")
+    # 非流式
     resp = await service.invoke(
         session,
         key,

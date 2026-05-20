@@ -212,18 +212,6 @@ async def test_admin_call_logs_filter(
     assert all(log["success"] for log in items)
 
 
-async def test_stream_true_rejected_in_p3(client: AsyncClient, app_key: str) -> None:
-    """P3 阶段 stream=true 拒绝（P4 接入后这条测试会被改写）"""
-    r = await client.post(
-        "/v1/agents/mock-echo/invoke",
-        headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hi", "stream": True},
-    )
-    body = r.json()
-    assert body["success"] is False
-    assert body["code"] == 40020  # InvalidStreamMode
-
-
 async def test_session_agent_mismatch_rejected(
     client: AsyncClient, app_key: str
 ) -> None:
