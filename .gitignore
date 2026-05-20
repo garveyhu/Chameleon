@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# uv / venv
+.venv/
+venv/
+env/
+.uv-cache/
+
+# 配置（敏感 + 实例化）—— 见 docs/plans/2026-05-20-chameleon-design.md S5
+config/.env
+config/chameleon.json
+config/model.json
+config/agents.yaml
+# baseurl.json 一般不含秘钥，按需放行；如需隐藏，取消下一行注释
+# config/baseurl.json
+
+# 资源 / 数据
+resources/
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
