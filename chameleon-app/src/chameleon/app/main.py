@@ -18,6 +18,10 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy import text
 
+from chameleon.app.modules.admin import admin_router
+from chameleon.app.modules.agent import agents_router
+from chameleon.app.modules.api_key import api_keys_router
+from chameleon.app.modules.conversation import conversations_router
 from chameleon.core.db import engine
 from chameleon.core.exceptions import (
     BusinessError,
@@ -48,10 +52,18 @@ def create_app() -> FastAPI:
     _register_middleware(app)
     _register_exception_handlers(app)
     _register_health_routes(app)
-    # P3+ 在这里挂业务 router
+    _mount_routers(app)
 
     logger.info("FastAPI app created")
     return app
+
+
+def _mount_routers(app: FastAPI) -> None:
+    """挂载业务模块 router（P3+ 渐次增加）"""
+    app.include_router(api_keys_router)
+    app.include_router(admin_router)
+    app.include_router(conversations_router)
+    app.include_router(agents_router)
 
 
 def _log_registry_summary() -> None:
