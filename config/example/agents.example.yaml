@@ -1,0 +1,25 @@
+# 外部 agent 注册（DIFY / FastGPT 等 HTTP 外调 provider）
+# 本地 LangGraph agent 由 chameleon.agents.* namespace 自动发现，无需在此声明
+#
+# 支持占位符：
+#   ${baseurl:KEY}  → 引用 baseurl.json 里的值
+#   ${env:NAME}     → 引用 .env 里的值
+
+# 示例（注释掉的）：
+#
+# - key: customer-faq
+#   provider: dify
+#   description: 客服 FAQ 机器人
+#   endpoint: ${baseurl:dify-default}
+#   app_id: ${env:DIFY_FAQ_APP_ID}
+#   api_key_env: DIFY_FAQ_KEY
+#   mode: chat              # chat | workflow
+#
+# - key: order-analyst
+#   provider: fastgpt
+#   description: 订单分析助手
+#   endpoint: ${baseurl:fastgpt-default}
+#   app_id: ${env:FASTGPT_ORDER_APP}
+#   api_key_env: FASTGPT_ORDER_KEY
+
+[]

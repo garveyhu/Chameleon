@@ -1,0 +1,120 @@
+"""API Key 鉴权
+
+裁决 A12: plaintext = "chm_" + 40 字符 base62；hash = sha256(plaintext)；
+       key_prefix 存前 12 字符（含 "chm_"）作为列表回显。
+
+Bootstrap：第一个 admin key 由 CLI `chameleon init-admin` 落库（明文回显一次）。
+之后所有 admin 接口通过 admin scope 的 api_key 鉴权。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import secrets
+import string
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Annotated
+
+from fastapi import Depends, Header
+from loguru import logger
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from chameleon.core.db import get_session
+from chameleon.core.exceptions import (
+    BusinessError,
+    PermissionDeniedError,
+    ResultCode,
+)
+from chameleon.core.models import ApiKey
+
+_ALPHABET = string.ascii_letters + string.digits
+_KEY_BODY_LEN = 40
+_PREFIX_LEN = 12
+
+
+@dataclass(frozen=True)
+class CurrentApp:
+    """请求级当前应用上下文（来自鉴权 middleware）"""
+
+    id: int
+    app_id: str
+    name: str
+    scopes: list[str]
+
+
+# ── key 生成与校验 ────────────────────────────────────────
+
+
+def generate_api_key() -> tuple[str, str, str]:
+    """生成 (plaintext, hash, key_prefix)
+
+    plaintext 仅一次回显，不存库；存 hash + prefix。
+    """
+    body = "".join(secrets.choice(_ALPHABET) for _ in range(_KEY_BODY_LEN))
+    plaintext = f"chm_{body}"
+    digest = hash_api_key(plaintext)
+    prefix = plaintext[:_PREFIX_LEN]
+    return plaintext, digest, prefix
+
+
+def hash_api_key(plaintext: str) -> str:
+    return hashlib.sha256(plaintext.encode("utf-8")).hexdigest()
+
+
+# ── FastAPI Depends ─────────────────────────────────────
+
+
+async def current_app(
+    authorization: Annotated[str | None, Header()] = None,
+    session: AsyncSession = Depends(get_session),
+) -> CurrentApp:
+    """从 Authorization: Bearer 头解析当前应用
+
+    缺失 → MissingApiKey；无效 → InvalidApiKey；已撤 → ApiKeyRevoked
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise BusinessError(ResultCode.MissingApiKey)
+    plaintext = authorization.removeprefix("Bearer ").strip()
+    if not plaintext:
+        raise BusinessError(ResultCode.MissingApiKey)
+
+    digest = hash_api_key(plaintext)
+    row = (
+        await session.execute(select(ApiKey).where(ApiKey.key_hash == digest))
+    ).scalar_one_or_none()
+
+    if row is None:
+        raise BusinessError(ResultCode.InvalidApiKey)
+    if row.revoked_at is not None:
+        raise BusinessError(ResultCode.ApiKeyRevoked)
+
+    # 更新 last_used_at（不阻塞响应——简单同步即可，QPS 不高）
+    row.last_used_at = datetime.now(timezone.utc)
+    # 不显式 commit，由 get_session 上下文管理
+
+    logger.debug("auth ok | app_id={} | scopes={}", row.app_id, row.scopes)
+    return CurrentApp(
+        id=row.id,
+        app_id=row.app_id,
+        name=row.name,
+        scopes=list(row.scopes or []),
+    )
+
+
+def require_scope(scope: str):
+    """Depends factory：要求 CurrentApp.scopes 包含指定 scope
+
+    Example: `app = Depends(require_scope("admin"))`
+    """
+
+    async def _guard(app: CurrentApp = Depends(current_app)) -> CurrentApp:
+        if scope not in app.scopes:
+            if scope == "admin":
+                raise PermissionDeniedError(ResultCode.AdminScopeRequired)
+            # 通用：用 AgentNotInScope 兜底（细分由 ResultCode 自带）
+            raise PermissionDeniedError(ResultCode.AgentNotInScope)
+        return app
+
+    return _guard

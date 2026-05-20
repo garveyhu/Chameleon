@@ -41,6 +41,8 @@ quote-style = "double"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "session"
 # importlib 模式：允许跨子包同名 test 文件（不需要 __init__.py）
 addopts = "--import-mode=importlib"
 # 不设 testpaths——默认从 rootdir 递归发现，覆盖各子包 tests/

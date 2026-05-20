@@ -1,0 +1,33 @@
+{
+  "log_level": "INFO",
+
+  "session": {
+    "history_limit": 20,
+    "title_max_length": 30,
+    "ai_title_generation": false
+  },
+
+  "knowledge": {
+    "embedding_dim": 1536,
+    "default_top_k": 5,
+    "chunk_size": 800,
+    "chunk_overlap": 100,
+    "ingest_concurrency": 4
+  },
+
+  "stream": {
+    "chunk_flush_ms": 50,
+    "max_event_size_kb": 64
+  },
+
+  "provider_timeout_ms": {
+    "default": 60000,
+    "dify": 60000,
+    "fastgpt": 60000,
+    "langgraph": 120000
+  },
+
+  "call_log": {
+    "retention_days": null
+  }
+}

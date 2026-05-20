@@ -1,0 +1,23 @@
+{
+  "cases": {
+    "llm": "qwen-plus",
+    "embedding": "text-embedding-3-small",
+    "vision": null
+  },
+
+  "providers": {
+    "openai":   { "url_alias": "openai",   "key_env": "OPENAI_API_KEY" },
+    "deepseek": { "url_alias": "deepseek", "key_env": "DEEPSEEK_API_KEY" },
+    "qwen":     { "url_alias": "qwen",     "key_env": "QWEN_API_KEY" }
+  },
+
+  "models": {
+    "llm": [
+      { "name": "qwen-plus",     "provider": "qwen",     "temperature": 0.7, "max_tokens": 8000 },
+      { "name": "deepseek-chat", "provider": "deepseek", "temperature": 0.5, "max_tokens": 8000 }
+    ],
+    "embedding": [
+      { "name": "text-embedding-3-small", "provider": "openai", "dim": 1536 }
+    ]
+  }
+}

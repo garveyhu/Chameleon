@@ -33,9 +33,10 @@ config.set_main_option("sqlalchemy.url", _db_url)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 共享 ORM 的 MetaData object —— P1.6 引入 `from chameleon.core.models import Base`
-# Phase 0 baseline migration 无业务表，target_metadata = None 即可
-target_metadata = None
+# 共享 ORM 的 MetaData object（autogenerate 用）
+from chameleon.core.models import Base  # noqa: E402
+
+target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
