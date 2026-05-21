@@ -1,4 +1,10 @@
-"""Conversation + Message 模型"""
+"""Conversation + Message 模型
+
+v0.2 重构：
+- agent_key 加 FK 引用 agents.agent_key
+- app_id 加 FK 引用 apps.app_key
+- provider 字段废除（agents 表已有 source 字段提供同等信息）
+"""
 
 from datetime import datetime
 
@@ -6,6 +12,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -22,9 +29,13 @@ class Conversation(Base, TimestampMixin, SoftDeleteMixin):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=next_id)
     session_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # agent_key FK 推到 P5（agents 表由 registry sync 在 P5 填充）
     agent_key: Mapped[str] = mapped_column(String(64), nullable=False)
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)
-    app_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    app_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("apps.app_key", ondelete="CASCADE"),
+        nullable=False,
+    )
     provider_conv_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)

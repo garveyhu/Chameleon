@@ -20,8 +20,8 @@ from chameleon.system.api_key.schemas import (
     CreateApiKeyRequest,
 )
 from chameleon.core.infra.auth import generate_api_key
-from chameleon.core.api.exceptions import BusinessError, ResultCode, ValidationError
-from chameleon.core.models import ApiKey, CallLog
+from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.models import ApiKey, App, CallLog
 from chameleon.core.api.response import PageParams, PageResult
 
 
@@ -29,15 +29,21 @@ async def create_api_key(
     session: AsyncSession,
     req: CreateApiKeyRequest,
     *,
-    created_by_id: int | None = None,
+    created_by_user_id: int | None = None,
 ) -> ApiKeyCreated:
-    """创建一个 api_key，返 ApiKeyCreated（含明文，仅响应可见）"""
-    # 校验 app_id 唯一
-    exists = (
-        await session.execute(select(ApiKey.id).where(ApiKey.app_id == req.app_id))
+    """创建一个 api_key，返 ApiKeyCreated（含明文，仅响应可见）
+
+    v0.2 改造：移除 app_id 唯一校验（一 app 多 key 合法），FK 由 DB 强制 app 存在。
+
+    过渡：app_id 对应的 App 不存在时自动创建一个（P6 完整 apps CRUD 上线后移除此 upsert）。
+    """
+    # 过渡 upsert：让现有 v0.1 用法（直接发 key 不先建 app）继续工作
+    existing_app = (
+        await session.execute(select(App.id).where(App.app_key == req.app_id))
     ).scalar_one_or_none()
-    if exists:
-        raise ValidationError(message=f"app_id 已存在: {req.app_id}")
+    if existing_app is None:
+        session.add(App(app_key=req.app_id, name=req.app_id))
+        await session.flush()
 
     plaintext, key_hash, key_prefix = generate_api_key()
     row = ApiKey(
@@ -47,7 +53,7 @@ async def create_api_key(
         key_prefix=key_prefix,
         scopes=req.scopes,
         description=req.description,
-        created_by_id=created_by_id,
+        created_by_user_id=created_by_user_id,
     )
     session.add(row)
     await session.flush()
@@ -57,7 +63,7 @@ async def create_api_key(
         "api_key created | app_id={} | scopes={} | by={}",
         row.app_id,
         row.scopes,
-        created_by_id,
+        created_by_user_id,
     )
     return ApiKeyCreated(
         id=row.id,

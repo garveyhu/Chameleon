@@ -10,7 +10,7 @@ class ConversationItem(BaseModel):
     id: int
     session_id: str
     agent_key: str
-    provider: str
+    provider: str | None = None  # v0.2 字段已删；保留 schema 兼容外部调用方
     app_id: str
     provider_conv_id: str | None
     title: str | None

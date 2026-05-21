@@ -69,7 +69,7 @@ async def _init_admin_async(*, name: str, app_id: str, force: bool) -> None:
                 scopes=["admin"],
                 description="bootstrapped via `chameleon init-admin`",
             ),
-            created_by_id=None,
+            created_by_user_id=None,
         )
         await session.commit()
 

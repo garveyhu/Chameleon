@@ -24,9 +24,11 @@ router = APIRouter(prefix="/v1/admin/api-keys", tags=["admin:api-keys"])
 async def create_api_key(
     req: CreateApiKeyRequest,
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(require_scope("admin")),
+    _: CurrentApp = Depends(require_scope("admin")),
 ) -> Result[ApiKeyCreated]:
-    created = await service.create_api_key(session, req, created_by_id=app.id)
+    # P2 阶段：created_by_user_id 暂传 None（v0.1 鉴权基于 ApiKey 不是 User）
+    # P3 完成 JWT 鉴权后改为 current_user.id
+    created = await service.create_api_key(session, req, created_by_user_id=None)
     return Result.ok(created)
 
 

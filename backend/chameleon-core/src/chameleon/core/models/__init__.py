@@ -1,22 +1,56 @@
 """共享 ORM 模型集中地
 
-集中导出 Base + 全部业务模型，让 alembic env.py 一次性 import 全表
+集中导出 Base + 全部业务模型，让 alembic env.py 一次性 import 全表 metadata。
 """
 
+from chameleon.core.models.agent import Agent
 from chameleon.core.models.api_key import ApiKey, CallLog
+from chameleon.core.models.app import App, AppAgent
+from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
 from chameleon.core.models.conversation import Conversation, Message
+from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
+from chameleon.core.models.model_def import LLMModel
+from chameleon.core.models.provider import Provider
+from chameleon.core.models.setting import Setting
 from chameleon.core.models.task import Task
+from chameleon.core.models.user import (
+    Permission,
+    Role,
+    RolePermission,
+    User,
+    UserRole,
+)
 
 __all__ = [
+    # 鉴权域
+    "User",
+    "Role",
+    "Permission",
+    "UserRole",
+    "RolePermission",
+    # 应用域
+    "App",
+    "AppAgent",
     "ApiKey",
-    "Base",
-    "CallLog",
-    "Chunk",
+    # 模型域
+    "Provider",
+    "LLMModel",
+    "Agent",
+    # 业务域
     "Conversation",
-    "Document",
-    "KnowledgeBase",
     "Message",
+    "KnowledgeBase",
+    "Document",
+    "Chunk",
     "Task",
+    "CallLog",
+    # 嵌入域
+    "EmbedConfig",
+    # 杂项
+    "AuditLog",
+    "Setting",
+    # base
+    "Base",
 ]

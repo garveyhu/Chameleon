@@ -41,12 +41,16 @@ async def create(
     provider: str,
     app_id: str,
 ) -> Conversation:
-    """新建会话；session_id 由 chameleon 雪花签发"""
+    """新建会话；session_id 由 chameleon 雪花签发
+
+    v0.2 重构：provider 字段已从 Conversation 表删除（agents 表的 source 字段提供同等信息）。
+    参数 provider 接受但忽略，签名保持兼容；后续 P5 改造调用方时移除。
+    """
+    del provider  # 兼容签名，但不再使用
     sid = next_session_id()
     conv = Conversation(
         session_id=sid,
         agent_key=agent_key,
-        provider=provider,
         app_id=app_id,
     )
     session.add(conv)
