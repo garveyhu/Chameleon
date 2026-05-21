@@ -19,9 +19,9 @@ Chameleon 设计上有两条**对称的资产积累轴**：
 
 | 范式 | 何时用 | 样板 |
 |---|---|---|
-| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 极致灵活 | `chameleon-agents/echo_native/` |
-| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式 | `chameleon-agents/echo_runnable/` |
-| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | `chameleon-agents/echo/` |
+| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 极致灵活 | `chameleon-agents/examples/echo_native/` |
+| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式 | `chameleon-agents/examples/echo_runnable/` |
+| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | `chameleon-agents/examples/echo_langgraph/` |
 
 完整三范式代码示例 + 选择指南见 [docs/getting-started.md 第三章 A 节](getting-started.md#a-自己写的本地-agent--三种范式任选)。
 
@@ -63,46 +63,52 @@ build-backend = "hatchling.build"
 packages = ["src/chameleon"]
 ```
 
-### Step 3 - 写 `__init__.py`（registry 入口）
+### Step 3 - 写 `agent.py`（BaseAgent 子类）
+
+`chameleon-agents/my_agent/src/chameleon/agents/my_agent/agent.py`：
+
+```python
+from chameleon.core.base import AgentMetadata, BaseAgent
+
+
+class MyAgent(BaseAgent):
+    @classmethod
+    def get_metadata(cls) -> AgentMetadata:
+        return AgentMetadata(
+            id="my-agent",                # ★ 唯一 agent key（HTTP path 用）
+            name="我的智能体",
+            description="干嘛用的一句话",
+            version="0.1",
+            tags=["domain-x"],
+        )
+
+    @classmethod
+    def build_graph(cls):
+        # 范式 A3：返回 LangGraph CompiledGraph
+        ...
+    # 或 build_runnable() 返回 LangChain Runnable —— 范式 A2
+    # 或 override astream() 直接 yield StreamEvent —— 范式 A1
+```
+
+**约定（registry 启动自动扫描）**：
+- 模块顶层必须有一个 `BaseAgent` 子类
+- 子类必须实现 `get_metadata()` —— `id` 即对外 agent_key
+- 三选一实现：`astream()` / `build_graph()` / `build_runnable()`
+
+### Step 4 - export 子类
 
 `chameleon-agents/my_agent/src/chameleon/agents/my_agent/__init__.py`：
 
 ```python
-from chameleon.agents.my_agent.graph import build_graph
-
-AGENT_META = {
-    "key": "my-agent",                # ★ 唯一 agent key
-    "description": "干嘛用的一句话",
-    "version": "0.1",
-    "tags": ["domain-x"],
-}
-
-__all__ = ["AGENT_META", "build_graph"]
+from chameleon.agents.my_agent.agent import MyAgent
+__all__ = ["MyAgent"]
 ```
 
-**约定（registry 自动扫描依赖这两条）**：
-- `AGENT_META` 必须有 `key` 字段
-- `build_graph` 必须是 sync function（裁决 A4），返回 `CompiledGraph`
-
-### Step 4 - 写 `graph.py`
-
-参考 `chameleon-agents/echo/src/chameleon/agents/echo/graph.py`：
-
-```python
-from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState
-
-async def my_node(state: MessagesState):
-    # 你的业务
-    return {"messages": [...]}
-
-def build_graph():
-    sg = StateGraph(MessagesState)
-    sg.add_node("my", my_node)
-    sg.add_edge(START, "my")
-    sg.add_edge("my", END)
-    return sg.compile()
-```
+参考完整实现：
+- LangGraph 范式：`chameleon-agents/examples/echo_langgraph/`
+- Runnable 范式：`chameleon-agents/examples/echo_runnable/`
+- 纯 Python：`chameleon-agents/examples/echo_native/`
+- 真实业务（用全局 LLM）：`chameleon-agents/qwen_chat/`
 
 ### Step 5 - RAG（可选）
 
@@ -130,7 +136,7 @@ uv run uvicorn chameleon.app.main:app --reload
 启动日志应该出现：
 
 ```
-agent registered (local langgraph) | key=my-agent | module=chameleon.agents.my_agent
+agent registered (local) | key=my-agent | class=MyAgent | module=chameleon.agents.my_agent
 ```
 
 ### Step 7 - 调
@@ -140,6 +146,13 @@ curl -X POST http://localhost:8000/v1/agents/my-agent/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input":"hi","stream":true}'
 ```
+
+### 业务 agent vs 示例 agent 怎么分
+
+- 业务 agent（你真正用的）→ 放 `chameleon-agents/<key>/` 根目录
+- 示例 / 范式样板（教学性质）→ 放 `chameleon-agents/examples/<key>/`
+
+两者技术上完全一样，只是组织清晰度的约定。registry 扫 `chameleon.agents.*` namespace 时两层都扫得到。
 
 ### 依赖约束（铁律）
 

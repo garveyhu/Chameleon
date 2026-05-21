@@ -52,7 +52,7 @@ async def stream_client() -> AsyncIterator[AsyncClient]:
 
 async def test_echo_invoke_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/echo/invoke",
+        "/v1/agents/example-echo-langgraph/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "hello", "stream": False},
     )
@@ -70,10 +70,10 @@ async def test_echo_invoke_non_stream(client: AsyncClient, app_key: str) -> None
 async def test_echo_listed_in_agents(client: AsyncClient, app_key: str) -> None:
     r = await client.get("/v1/agents", headers={"Authorization": f"Bearer {app_key}"})
     items = r.json()["data"]
-    echo = next((a for a in items if a["key"] == "echo"), None)
+    echo = next((a for a in items if a["key"] == "example-echo-langgraph"), None)
     assert echo is not None
-    assert echo["provider"] == "langgraph"
-    assert "builtin" in echo["tags"]
+    assert echo["provider"] == "local"
+    assert "example" in echo["tags"]
 
 
 # ── 流式 ───────────────────────────────────────────────
@@ -83,7 +83,7 @@ async def test_echo_invoke_stream(stream_client: AsyncClient, app_key: str) -> N
     """流式：应收到 delta（按 chunk）+ step + done"""
     async with stream_client.stream(
         "POST",
-        "/v1/agents/echo/invoke",
+        "/v1/agents/example-echo-langgraph/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "hi there", "stream": True},
     ) as r:
@@ -144,7 +144,7 @@ async def test_echo_with_rag_doc_marker(client: AsyncClient, app_key: str) -> No
 
     # 调 echo agent，input 含 doc:e2e-echo-rag
     r = await client.post(
-        "/v1/agents/echo/invoke",
+        "/v1/agents/example-echo-langgraph/invoke",
         headers=headers,
         json={
             "input": "Chameleon 是什么？ doc:e2e-echo-rag",

@@ -114,9 +114,9 @@ from chameleon.core.utils.crypto import encrypt, decrypt, get_or_decrypt
 
 | 范式 | 何时用 | 依赖 | 样板 |
 |---|---|---|---|
-| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 想极致灵活 | 仅 chameleon-core + providers-base | `chameleon-agents/echo_native/` |
-| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式调用 | + langchain-core | `chameleon-agents/echo_runnable/` |
-| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | + langgraph | `chameleon-agents/echo/` |
+| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 想极致灵活 | 仅 chameleon-core + providers-base | `chameleon-agents/examples/echo_native/` |
+| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式调用 | + langchain-core | `chameleon-agents/examples/echo_runnable/` |
+| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | + langgraph | `chameleon-agents/examples/echo_langgraph/` |
 
 **统一契约**：三种范式产出的都是 Chameleon `StreamEvent`，对客户端**完全透明**——你的应用一行代码不改就能切换 agent 实现。
 
@@ -815,7 +815,7 @@ curl -X POST http://localhost:8000/v1/agents/echo/invoke \
 | ├ dify | `providers/dify/` | DIFY HTTP provider |
 | └ fastgpt | `providers/fastgpt/` | FastGPT HTTP provider |
 | **chameleon-agents** | `chameleon-agents/<key>/` | **你的智能体资产**（一个 agent 一个子包） |
-| └ echo | `chameleon-agents/echo/` | 范式样板（演示 step/delta/citation） |
+| └ echo | `chameleon-agents/examples/echo_langgraph/` | 范式样板（演示 step/delta/citation） |
 | **chameleon-app** | `chameleon-app/src/chameleon/app/` | FastAPI 入口 + 业务模块 |
 | ├ main.py | `app/main.py` | FastAPI app + lifespan + 异常 handler |
 | ├ cli.py | `app/cli.py` | `chameleon init-admin` 等命令 |

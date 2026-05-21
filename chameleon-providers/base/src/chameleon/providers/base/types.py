@@ -28,7 +28,7 @@ class AgentDef(BaseModel):
     """注册表里一个 agent 的"身份证"
 
     config 字段 provider-specific：
-      langgraph: {"module": "chameleon.agents.echo", "build_fn": "build_graph"}
+      local:    {"module": "chameleon.agents.qwen_chat", "agent_class": "QwenChatAgent"}
       dify:      {"endpoint", "app_id", "api_key_env", "mode": "chat|workflow"}
       fastgpt:   {"endpoint", "app_id", "api_key_env"}
     """

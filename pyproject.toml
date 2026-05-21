@@ -1,13 +1,24 @@
 # Chameleon workspace 根 —— virtual workspace（root 本身非 project）
-# 实际包：chameleon-core / chameleon-providers/* / chameleon-agents/* / chameleon-app
+# 包结构（清晰分层）：
+#   chameleon-core/                    基础设施 + AI infra + 共享 ORM
+#   chameleon-providers/base/          Provider 协议（types / registry）
+#   chameleon-providers/local/         本地 in-process provider（BaseAgent 子类）
+#   chameleon-providers/dify/          远程 SaaS provider
+#   chameleon-providers/fastgpt/       远程 SaaS provider
+#   chameleon-agents/<key>/            业务级本地 agent
+#   chameleon-agents/examples/<key>/   示例 / 范式样板 agent
+#   chameleon-app/                     FastAPI 入口 + 业务模块
 
 [tool.uv.workspace]
 members = [
     "chameleon-core",
     "chameleon-providers/*",
     "chameleon-agents/*",
+    "chameleon-agents/examples/*",
     "chameleon-app",
 ]
+# examples 目录本身不是包（无 pyproject.toml），用 exclude 防止 glob 把它当成 member
+exclude = ["chameleon-agents/examples"]
 
 [dependency-groups]
 dev = [

@@ -55,7 +55,7 @@ async def stream_client() -> AsyncIterator[AsyncClient]:
 
 async def test_echo_native_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/echo-native/invoke",
+        "/v1/agents/example-echo-native/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "hi", "stream": False},
     )
@@ -73,7 +73,7 @@ async def test_echo_native_non_stream(client: AsyncClient, app_key: str) -> None
 async def test_echo_native_stream(stream_client: AsyncClient, app_key: str) -> None:
     async with stream_client.stream(
         "POST",
-        "/v1/agents/echo-native/invoke",
+        "/v1/agents/example-echo-native/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "world", "stream": True},
     ) as r:
@@ -94,7 +94,7 @@ async def test_echo_native_stream(stream_client: AsyncClient, app_key: str) -> N
 
 async def test_echo_runnable_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/echo-runnable/invoke",
+        "/v1/agents/example-echo-runnable/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "abc", "stream": False},
     )
@@ -108,7 +108,7 @@ async def test_echo_runnable_non_stream(client: AsyncClient, app_key: str) -> No
 async def test_echo_runnable_stream(stream_client: AsyncClient, app_key: str) -> None:
     async with stream_client.stream(
         "POST",
-        "/v1/agents/echo-runnable/invoke",
+        "/v1/agents/example-echo-runnable/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
         json={"input": "lcel", "stream": True},
     ) as r:
@@ -131,7 +131,11 @@ async def test_three_paradigms_uniform_interface(
     """三种范式的 invoke 响应结构完全一致，客户端代码可以共用"""
     headers = {"Authorization": f"Bearer {app_key}"}
     results = {}
-    for key in ("echo", "echo-native", "echo-runnable"):
+    for key in (
+        "example-echo-langgraph",
+        "example-echo-native",
+        "example-echo-runnable",
+    ):
         r = await client.post(
             f"/v1/agents/{key}/invoke",
             headers=headers,
@@ -147,6 +151,6 @@ async def test_three_paradigms_uniform_interface(
         results[key] = data
 
     # 三种范式都成功，answer 各自独立但 schema 统一
-    assert results["echo"]["answer"].startswith("echo: ")
-    assert results["echo-native"]["answer"].startswith("echo(native): ")
-    assert results["echo-runnable"]["answer"].startswith("echo(runnable): ")
+    assert results["example-echo-langgraph"]["answer"].startswith("echo: ")
+    assert results["example-echo-native"]["answer"].startswith("echo(native): ")
+    assert results["example-echo-runnable"]["answer"].startswith("echo(runnable): ")

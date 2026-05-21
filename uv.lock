@@ -4,15 +4,15 @@ requires-python = ">=3.12"
 
 [manifest]
 members = [
-    "chameleon-agent-echo",
-    "chameleon-agent-echo-native",
-    "chameleon-agent-echo-runnable",
+    "chameleon-agent-example-echo-langgraph",
+    "chameleon-agent-example-echo-native",
+    "chameleon-agent-example-echo-runnable",
     "chameleon-agent-qwen-chat",
     "chameleon-app",
     "chameleon-core",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
-    "chameleon-provider-langgraph",
+    "chameleon-provider-local",
     "chameleon-providers-base",
 ]
 
@@ -178,9 +178,9 @@ wheels = [
 ]
 
 [[package]]
-name = "chameleon-agent-echo"
+name = "chameleon-agent-example-echo-langgraph"
 version = "0.1.0"
-source = { editable = "chameleon-agents/echo" }
+source = { editable = "chameleon-agents/examples/echo_langgraph" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },
@@ -195,9 +195,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "chameleon-agent-echo-native"
+name = "chameleon-agent-example-echo-native"
 version = "0.1.0"
-source = { editable = "chameleon-agents/echo_native" }
+source = { editable = "chameleon-agents/examples/echo_native" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },
@@ -210,9 +210,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "chameleon-agent-echo-runnable"
+name = "chameleon-agent-example-echo-runnable"
 version = "0.1.0"
-source = { editable = "chameleon-agents/echo_runnable" }
+source = { editable = "chameleon-agents/examples/echo_runnable" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },
@@ -248,11 +248,14 @@ name = "chameleon-app"
 version = "0.1.0"
 source = { editable = "chameleon-app" }
 dependencies = [
-    { name = "chameleon-agent-echo" },
+    { name = "chameleon-agent-example-echo-langgraph" },
+    { name = "chameleon-agent-example-echo-native" },
+    { name = "chameleon-agent-example-echo-runnable" },
+    { name = "chameleon-agent-qwen-chat" },
     { name = "chameleon-core" },
     { name = "chameleon-provider-dify" },
     { name = "chameleon-provider-fastgpt" },
-    { name = "chameleon-provider-langgraph" },
+    { name = "chameleon-provider-local" },
     { name = "chameleon-providers-base" },
     { name = "click" },
     { name = "fastapi" },
@@ -262,11 +265,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chameleon-agent-echo", editable = "chameleon-agents/echo" },
+    { name = "chameleon-agent-example-echo-langgraph", editable = "chameleon-agents/examples/echo_langgraph" },
+    { name = "chameleon-agent-example-echo-native", editable = "chameleon-agents/examples/echo_native" },
+    { name = "chameleon-agent-example-echo-runnable", editable = "chameleon-agents/examples/echo_runnable" },
+    { name = "chameleon-agent-qwen-chat", editable = "chameleon-agents/qwen_chat" },
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-provider-dify", editable = "chameleon-providers/dify" },
     { name = "chameleon-provider-fastgpt", editable = "chameleon-providers/fastgpt" },
-    { name = "chameleon-provider-langgraph", editable = "chameleon-providers/langgraph" },
+    { name = "chameleon-provider-local", editable = "chameleon-providers/local" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "click", specifier = ">=8" },
     { name = "fastapi", specifier = ">=0.115" },
@@ -346,9 +352,9 @@ requires-dist = [
 ]
 
 [[package]]
-name = "chameleon-provider-langgraph"
+name = "chameleon-provider-local"
 version = "0.1.0"
-source = { editable = "chameleon-providers/langgraph" }
+source = { editable = "chameleon-providers/local" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },

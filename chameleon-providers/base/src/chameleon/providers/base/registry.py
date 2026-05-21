@@ -74,6 +74,11 @@ def build_provider_registry() -> dict[str, Provider]:
             "provider registered | name={} | from={}", provider.name, mod_info.name
         )
 
+    # 向后兼容 alias：v0.1 的本地 agent 用 provider="langgraph"，现在 → "local"
+    if "local" in providers and "langgraph" not in providers:
+        providers["langgraph"] = providers["local"]
+        logger.debug("provider alias | langgraph → local（v0.1 向后兼容）")
+
     return providers
 
 
@@ -98,76 +103,49 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 message=f"failed to import agent package {mod_info.name}: {e}"
             ) from e
 
-        # 三种识别路径（按优先级）：
-        # 1) BaseAgent 子类 —— 模块顶层有 BaseAgent 派生类
-        # 2) 字典模式 build_graph —— 模块顶层有 AGENT_META + build_graph
-        # 3) 字典模式 build_runnable —— 模块顶层有 AGENT_META + build_runnable
+        # 本地 agent 统一一种范式：BaseAgent 子类
+        # （v0.2 删了字典模式 AGENT_META + build_graph，强制 BaseAgent 子类）
         agent_cls = _find_base_agent_class(mod)
-        has_build_graph = callable(getattr(mod, "build_graph", None))
-        has_build_runnable = callable(getattr(mod, "build_runnable", None))
-
-        if agent_cls is not None:
-            md = agent_cls.get_metadata()
-            meta = {
-                "key": md.id,
-                "description": md.description,
-                "version": md.version,
-                "tags": list(md.tags),
-            }
-            mode = "BaseAgent"
-        elif has_build_graph or has_build_runnable:
-            meta = getattr(mod, "AGENT_META", None)
-            mode = "build_graph" if has_build_graph else "build_runnable"
-        else:
-            # 占位空包（如 P0 阶段的 echo）—— 跳过
+        if agent_cls is None:
+            # 没找到 BaseAgent 子类 —— 跳过（视为占位空包）
             logger.debug(
-                "agent package {} has no BaseAgent / build_graph / build_runnable — skipped (placeholder)",
+                "agent package {} has no BaseAgent subclass — skipped",
                 mod_info.name,
             )
             continue
 
-        if meta is None:
-            raise RegistryError(
-                message=(
-                    f"agent package {mod_info.name} 字典模式必须 export AGENT_META "
-                    "（或改用 BaseAgent 子类）"
-                )
-            )
-
-        key = meta.get("key")
+        md = agent_cls.get_metadata()
+        key = md.id
         if not key:
             raise RegistryError(
-                message=f"agent package {mod_info.name} AGENT_META missing 'key'"
+                message=f"{agent_cls.__name__}.get_metadata().id 不能为空"
             )
-
-        # 构造 config（provider 内部用来分发执行路径）
-        cfg: dict = {"module": mod_info.name, "mode": mode}
-        if agent_cls is not None:
-            cfg["agent_class"] = agent_cls.__name__
 
         agents[key] = AgentDef(
             key=key,
-            provider="langgraph",
-            description=meta.get("description", ""),
-            version=meta.get("version"),
-            tags=meta.get("tags", []),
-            config=cfg,
+            provider="local",
+            description=md.description,
+            version=md.version,
+            tags=list(md.tags),
+            config={
+                "module": mod_info.name,
+                "agent_class": agent_cls.__name__,
+            },
         )
         logger.info(
-            "agent registered (local) | key={} | module={} | mode={}",
+            "agent registered (local) | key={} | class={} | module={}",
             key,
+            agent_cls.__name__,
             mod_info.name,
-            mode,
         )
 
-        # 同时注册到 agent_router（如果是 BaseAgent 子类）
-        if agent_cls is not None:
-            try:
-                from chameleon.core.base.agent_router import agent_router
+        # 同时注册到 agent_router（给 v0.2 admin UI 用）
+        try:
+            from chameleon.core.base.agent_router import agent_router
 
-                agent_router.register(agent_cls)
-            except Exception as e:
-                logger.warning("agent_router.register failed for {}: {}", key, e)
+            agent_router.register(agent_cls)
+        except Exception as e:
+            logger.warning("agent_router.register failed for {}: {}", key, e)
 
     return agents
 

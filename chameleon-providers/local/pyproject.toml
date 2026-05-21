@@ -1,0 +1,22 @@
+[project]
+name = "chameleon-provider-local"
+version = "0.1.0"
+description = "Chameleon 本地 in-process provider —— 支持 LangGraph / LangChain Runnable / 纯 Python 三范式"
+requires-python = ">=3.12"
+dependencies = [
+    "chameleon-core",
+    "chameleon-providers-base",
+    # langgraph 是可选范式之一；放这里因为我们的 bridges 默认要求 graph.astream_events 接口
+    "langgraph>=0.2",
+]
+
+[tool.uv.sources]
+chameleon-core = { workspace = true }
+chameleon-providers-base = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chameleon"]

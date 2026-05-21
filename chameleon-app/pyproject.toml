@@ -6,10 +6,15 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-providers-base",
-    "chameleon-provider-langgraph",
+    "chameleon-provider-local",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
-    "chameleon-agent-echo",
+    # 内置 agent 通过 namespace 自动发现；这里仅显式依赖业务级 agent
+    "chameleon-agent-qwen-chat",
+    # 示例 agent 也安装到 workspace（namespace 扫到，但不强制 app 依赖）
+    "chameleon-agent-example-echo-langgraph",
+    "chameleon-agent-example-echo-runnable",
+    "chameleon-agent-example-echo-native",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
@@ -19,10 +24,13 @@ dependencies = [
 [tool.uv.sources]
 chameleon-core = { workspace = true }
 chameleon-providers-base = { workspace = true }
-chameleon-provider-langgraph = { workspace = true }
+chameleon-provider-local = { workspace = true }
 chameleon-provider-dify = { workspace = true }
 chameleon-provider-fastgpt = { workspace = true }
-chameleon-agent-echo = { workspace = true }
+chameleon-agent-qwen-chat = { workspace = true }
+chameleon-agent-example-echo-langgraph = { workspace = true }
+chameleon-agent-example-echo-runnable = { workspace = true }
+chameleon-agent-example-echo-native = { workspace = true }
 
 [project.scripts]
 chameleon = "chameleon.app.cli:main"

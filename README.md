@@ -127,13 +127,17 @@ Chameleon/                              ← uv workspace 根
 │       ├── models/                     ← 共享 ORM（让 agent 可读 KB/messages）
 │       ├── embedding/ vector/ knowledge.py    ← AI primitives
 │       └── utils/snowflake.py
-├── chameleon-providers/                ← Provider 抽象 + 三类适配器
+├── chameleon-providers/                ← Provider 适配层
 │   ├── base/                           ← 协议 / types / registry
-│   ├── langgraph/                      ← LangGraph in-process
-│   ├── dify/                           ← DIFY HTTP
-│   └── fastgpt/                        ← FastGPT HTTP
+│   ├── local/                          ← 本地 in-process（BaseAgent 子类）
+│   ├── dify/                           ← 远程 DIFY HTTP
+│   └── fastgpt/                        ← 远程 FastGPT HTTP
 ├── chameleon-agents/                   ← 本地 agent 资产（你的 AI 飞轮）
-│   └── echo/                           ← 范式样板
+│   ├── qwen_chat/                      ← 业务级 agent（直接可用）
+│   └── examples/                       ← 范式样板分组
+│       ├── echo_langgraph/             ← LangGraph CompiledGraph 范式
+│       ├── echo_runnable/              ← LangChain Runnable 范式
+│       └── echo_native/                ← 纯 Python async generator 范式
 ├── chameleon-app/                      ← FastAPI 入口 + 业务模块
 │   └── src/chameleon/app/
 │       ├── main.py / cli.py
