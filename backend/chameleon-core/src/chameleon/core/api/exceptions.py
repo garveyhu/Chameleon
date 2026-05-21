@@ -28,15 +28,26 @@ class ResultCode(IntEnum):
     SessionIdInvalid = 40010
     InvalidStreamMode = 40020
 
-    # 鉴权
+    # 鉴权（API Key）
     MissingApiKey = 40101
     InvalidApiKey = 40102
     ApiKeyRevoked = 40103
+
+    # 鉴权（JWT / 登录）
+    JwtMissing = 40110
+    JwtExpired = 40111
+    JwtInvalid = 40112
+    RefreshTokenInvalid = 40113
+    LoginFailed = 40114
+    AccountDisabled = 40115
+    LoginRateLimit = 40116
+    PasswordChangeRequired = 40117
 
     # 授权
     AdminScopeRequired = 40301
     AgentNotInScope = 40302
     KbNotInScope = 40303
+    PermissionDenied = 40310
 
     # NotFound
     AgentNotFound = 40401
@@ -76,9 +87,18 @@ _CODE_MESSAGES: dict[ResultCode, str] = {
     ResultCode.MissingApiKey: "缺少 API Key",
     ResultCode.InvalidApiKey: "API Key 无效",
     ResultCode.ApiKeyRevoked: "API Key 已撤销",
+    ResultCode.JwtMissing: "缺少登录凭证",
+    ResultCode.JwtExpired: "登录已过期，请重新登录",
+    ResultCode.JwtInvalid: "登录凭证无效",
+    ResultCode.RefreshTokenInvalid: "refresh token 无效",
+    ResultCode.LoginFailed: "用户名或密码错误",
+    ResultCode.AccountDisabled: "账号已停用",
+    ResultCode.LoginRateLimit: "登录失败次数过多，请稍后再试",
+    ResultCode.PasswordChangeRequired: "首次登录需要修改密码",
     ResultCode.AdminScopeRequired: "需要 admin 权限",
     ResultCode.AgentNotInScope: "无权访问该 agent",
     ResultCode.KbNotInScope: "无权访问该知识库",
+    ResultCode.PermissionDenied: "权限不足",
     ResultCode.AgentNotFound: "agent 不存在",
     ResultCode.ConversationNotFound: "会话不存在",
     ResultCode.KnowledgeBaseNotFound: "知识库不存在",
@@ -124,8 +144,41 @@ class AuthError(BusinessError):
     code = ResultCode.InvalidApiKey
 
 
+# JWT / 登录相关
+class JwtMissingError(AuthError):
+    code = ResultCode.JwtMissing
+
+
+class JwtExpiredError(AuthError):
+    code = ResultCode.JwtExpired
+
+
+class JwtInvalidError(AuthError):
+    code = ResultCode.JwtInvalid
+
+
+class RefreshTokenInvalidError(AuthError):
+    code = ResultCode.RefreshTokenInvalid
+
+
+class LoginFailedError(AuthError):
+    code = ResultCode.LoginFailed
+
+
+class AccountDisabledError(AuthError):
+    code = ResultCode.AccountDisabled
+
+
+class LoginRateLimitError(AuthError):
+    code = ResultCode.LoginRateLimit
+
+
+class PasswordChangeRequiredError(AuthError):
+    code = ResultCode.PasswordChangeRequired
+
+
 class PermissionDeniedError(BusinessError):
-    code = ResultCode.AdminScopeRequired
+    code = ResultCode.PermissionDenied
 
 
 class NotFoundError(BusinessError):

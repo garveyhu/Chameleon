@@ -18,9 +18,10 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy import text
 
-from chameleon.system.admin import admin_router
 from chameleon.api.agent import agents_router
+from chameleon.system.admin import admin_router
 from chameleon.system.api_key import api_keys_router
+from chameleon.system.auth import auth_router
 from chameleon.api.conversation import conversations_router
 from chameleon.api.knowledge import knowledge_router
 from chameleon.api.task import tasks_router
@@ -76,9 +77,13 @@ def create_app() -> FastAPI:
 
 
 def _mount_routers(app: FastAPI) -> None:
-    """挂载业务模块 router（P3+ 渐次增加）"""
+    """挂载业务模块 router"""
+    # 鉴权
+    app.include_router(auth_router)
+    # 管理后台
     app.include_router(api_keys_router)
     app.include_router(admin_router)
+    # 业务接口
     app.include_router(conversations_router)
     app.include_router(agents_router)
     app.include_router(knowledge_router)

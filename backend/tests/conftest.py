@@ -11,6 +11,7 @@ import math
 import secrets
 from collections.abc import AsyncIterator
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
@@ -18,6 +19,8 @@ from sqlalchemy import delete
 from chameleon.app.main import create_app
 from chameleon.core.embedding import set_for_test as set_embedding_for_test
 from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.infra.jwt import init_jwt
+from chameleon.core.utils.crypto import init_crypto
 from chameleon.core.models import (
     ApiKey,
     App,
@@ -129,6 +132,13 @@ class _DeterministicHashEmbedding:
 
 
 # ── HTTP client fixtures ────────────────────────────────
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _init_crypto_jwt() -> None:
+    """ASGITransport 不触发 FastAPI lifespan，测试期显式初始化"""
+    init_crypto()
+    init_jwt()
 
 
 @pytest_asyncio.fixture
