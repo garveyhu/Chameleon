@@ -24,14 +24,17 @@ from chameleon.system.api_key import api_keys_router
 from chameleon.api.conversation import conversations_router
 from chameleon.api.knowledge import knowledge_router
 from chameleon.api.task import tasks_router
-from chameleon.core.infra.db import engine
 from chameleon.core.api.exceptions import (
     BusinessError,
     ResultCode,
     code_to_http_status,
 )
-from chameleon.core.infra.logger import setup_logger
 from chameleon.core.api.response import Result
+from chameleon.core.infra import redis as redis_infra
+from chameleon.core.infra.db import engine
+from chameleon.core.infra.jwt import init_jwt
+from chameleon.core.infra.logger import setup_logger
+from chameleon.core.utils.crypto import init_crypto
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -39,11 +42,23 @@ REQUEST_ID_HEADER = "X-Request-Id"
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """startup: 构建 registry + healthcheck warn-only；shutdown: 暂无清理"""
+    """startup: 加密 / JWT 初始化 → Redis ping → 构建 registry → healthcheck warn-only
+
+    crypto init / jwt init：production 缺 key/secret fail-fast；dev 缺则 warn + demo
+    Redis 不通 → fail-fast（JWT 黑名单 / 限流 / 配置缓存全靠它，缺则功能不可用）
+    """
+    init_crypto()
+    init_jwt()
+
+    await redis_infra.ping()
+    logger.info("Redis connected")
+
     init_registry()
     _log_registry_summary()
     await _trigger_healthchecks()
     yield
+
+    await redis_infra.aclose()
 
 
 def create_app() -> FastAPI:
