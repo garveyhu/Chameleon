@@ -60,7 +60,7 @@ uv run chameleon init-admin --name "links"
   KEY (仅一次回显，请立即保存)：
   chm_6d88WBWJy7kOV9myGYNpBp92tJtiydjA8codS6I7
 
-  用法： curl -H 'Authorization: Bearer <KEY>' http://localhost:8000/v1/...
+  用法： curl -H 'Authorization: Bearer <KEY>' http://localhost:7009/v1/...
 ```
 
 **幂等保护**：再次执行（无 `--force`）会被拒绝：
@@ -108,26 +108,26 @@ CLI 仅做 bootstrap；其它管理操作走 HTTP：
 ADMIN_KEY="chm_xxx..."
 
 # 发普通 app key
-curl -X POST http://localhost:8000/v1/admin/api-keys \
+curl -X POST http://localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer $ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"app_id":"my-app","name":"My App","scopes":[]}'
 
 # 列出 keys（不含明文）
 curl -H "Authorization: Bearer $ADMIN_KEY" \
-  http://localhost:8000/v1/admin/api-keys
+  http://localhost:7009/v1/admin/api-keys
 
 # 撤销
-curl -X POST http://localhost:8000/v1/admin/api-keys/{id}/revoke \
+curl -X POST http://localhost:7009/v1/admin/api-keys/{id}/revoke \
   -H "Authorization: Bearer $ADMIN_KEY"
 
 # 调用审计
 curl -H "Authorization: Bearer $ADMIN_KEY" \
-  "http://localhost:8000/v1/admin/call-logs?app_id=my-app&success=false"
+  "http://localhost:7009/v1/admin/call-logs?app_id=my-app&success=false"
 
 # Provider 健康状态
 curl -H "Authorization: Bearer $ADMIN_KEY" \
-  http://localhost:8000/v1/admin/providers/status
+  http://localhost:7009/v1/admin/providers/status
 ```
 
 ## 未来扩展点（v0.2+）

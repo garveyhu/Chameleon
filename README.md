@@ -87,25 +87,25 @@ uv run chameleon init-admin --name "your-name"
 ### 5. 起服务 + 第一个 curl
 
 ```bash
-uv run uvicorn chameleon.app.main:app --host 0.0.0.0 --port 8000
+uv run uvicorn chameleon.app.main:app --host 0.0.0.0 --port 7009
 ```
 
 在另一个终端：
 
 ```bash
 # 健康检查
-curl http://localhost:8000/ready
+curl http://localhost:7009/ready
 
 # 用 admin key 给应用发普通 key
 ADMIN_KEY="chm_xxx..."
-curl -X POST http://localhost:8000/v1/admin/api-keys \
+curl -X POST http://localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer $ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"app_id":"my-side-project","name":"My App","scopes":[]}'
 
 # 用普通 key 调内置 echo agent
 APP_KEY="chm_yyy..."
-curl -X POST http://localhost:8000/v1/agents/echo/invoke \
+curl -X POST http://localhost:7009/v1/agents/echo/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -H "Content-Type: application/json" \
   -d '{"input":"hello","stream":false}'
@@ -114,7 +114,7 @@ curl -X POST http://localhost:8000/v1/agents/echo/invoke \
 流式（SSE）：
 
 ```bash
-curl -N -X POST http://localhost:8000/v1/agents/echo/invoke \
+curl -N -X POST http://localhost:7009/v1/agents/echo/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -H "Content-Type: application/json" \
   -d '{"input":"流式回显","stream":true}'

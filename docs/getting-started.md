@@ -257,7 +257,7 @@ agent registered (local) | key=my-agent | module=chameleon.agents.my_agent | mod
 **外部应用立刻能调（无论你用哪种范式）**：
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/my-agent/invoke \
+curl -X POST http://localhost:7009/v1/agents/my-agent/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input": "嗨", "stream": true}'
 ```
@@ -296,7 +296,7 @@ agent registered (yaml) | key=customer-faq | provider=dify
 调用方式**和本地 agent 完全一样**：
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/customer-faq/invoke \
+curl -X POST http://localhost:7009/v1/agents/customer-faq/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input": "如何退货", "stream": true}'
 ```
@@ -599,7 +599,7 @@ asyncio.run(main())
 或者用内置 `qwen-chat` agent：
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/qwen-chat/invoke \
+curl -X POST http://localhost:7009/v1/agents/qwen-chat/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input":"你好","stream":true}'
 ```
@@ -634,7 +634,7 @@ curl -X POST http://localhost:8000/v1/agents/qwen-chat/invoke \
 ```bash
 ADMIN_KEY="chm_xxx..."   # 来自 chameleon init-admin 输出
 
-curl -X POST http://localhost:8000/v1/admin/api-keys \
+curl -X POST http://localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer $ADMIN_KEY" \
   -H "Content-Type: application/json" \
   -d '{"app_id":"my-side-project","name":"我的项目","scopes":[]}'
@@ -646,7 +646,7 @@ curl -X POST http://localhost:8000/v1/admin/api-keys \
 
 ```env
 CHAMELEON_API_KEY=chm_xxxxxxxxxxxxxxxxxxxx
-CHAMELEON_URL=http://localhost:8000
+CHAMELEON_URL=http://localhost:7009
 ```
 
 **Step 3**：在应用代码里调（任何语言都行——它就是个 HTTP API）：
@@ -723,12 +723,12 @@ while (true) {
 APP_KEY="chm_xxxxxxx"
 
 # 建 KB
-curl -X POST http://localhost:8000/v1/knowledge \
+curl -X POST http://localhost:7009/v1/knowledge \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"kb_key":"company-faq","name":"客服 FAQ"}'
 
 # 灌一段 FAQ 文本（异步处理）
-curl -X POST http://localhost:8000/v1/knowledge/company-faq/documents \
+curl -X POST http://localhost:7009/v1/knowledge/company-faq/documents \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{
     "title": "退货政策",
@@ -738,7 +738,7 @@ curl -X POST http://localhost:8000/v1/knowledge/company-faq/documents \
 
 # 返回 {task_id, document_id, status: "queued"}
 # 轮询任务进度
-curl http://localhost:8000/v1/tasks/<task_id> \
+curl http://localhost:7009/v1/tasks/<task_id> \
   -H "Authorization: Bearer $APP_KEY"
 # → {status: "success", progress: 100, result: {chunks: 3}}
 ```
@@ -746,7 +746,7 @@ curl http://localhost:8000/v1/tasks/<task_id> \
 ### Step 2：直接搜（不用 agent，纯 RAG）
 
 ```bash
-curl -X POST http://localhost:8000/v1/knowledge/company-faq/search \
+curl -X POST http://localhost:7009/v1/knowledge/company-faq/search \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"query":"怎么退货","top_k":3}'
 ```
@@ -758,7 +758,7 @@ curl -X POST http://localhost:8000/v1/knowledge/company-faq/search \
 echo agent 支持 `doc:<kb_key>` 关键字触发 RAG：
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/echo/invoke \
+curl -X POST http://localhost:7009/v1/agents/echo/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{
     "input": "怎么退货 doc:company-faq",

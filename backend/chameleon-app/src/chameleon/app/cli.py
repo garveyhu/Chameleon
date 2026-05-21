@@ -82,7 +82,7 @@ async def _init_admin_async(*, name: str, app_id: str, force: bool) -> None:
     click.echo(click.style(f"  {created.plain_key}", fg="cyan", bold=True))
     click.echo()
     click.echo(
-        "  用法： curl -H 'Authorization: Bearer <KEY>' http://localhost:8000/v1/..."
+        "  用法： curl -H 'Authorization: Bearer <KEY>' http://localhost:7009/v1/..."
     )
 
 

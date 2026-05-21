@@ -1,0 +1,113 @@
+/* ─────────────────────────────────────────────────────────────────
+ * Chameleon Admin · Tailwind v4 + design tokens
+ * 暖白基底 / 工程师感 / Inter + JetBrains Mono / blue primary
+ * ───────────────────────────────────────────────────────────────── */
+
+/* 字体（@fontsource 走 npm，woff2 静态打包，不依赖 CDN） */
+@import url('@fontsource/inter/400.css');
+@import url('@fontsource/inter/500.css');
+@import url('@fontsource/inter/600.css');
+@import url('@fontsource/inter/700.css');
+@import url('@fontsource/jetbrains-mono/400.css');
+@import url('@fontsource/jetbrains-mono/500.css');
+@import url('@fontsource/instrument-serif/400.css');
+
+@import url('tailwindcss');
+
+@theme {
+  /* ─── 主题色（blue primary，工程师感） ─── */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
+
+  /* ─── 工程师暖白基底（waveflow 风格） ─── */
+  --color-warm: #fafaf7;
+  --color-warm-2: #f4f3ee;
+  --color-paper: #fffefb;
+  --color-ink: #1c1917;
+
+  /* 语义色 */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
+
+  /* 字体 */
+  --font-sans:
+    'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono:
+    'JetBrains Mono', ui-monospace, sfmono-regular, 'SF Mono', menlo, consolas, monospace;
+  --font-serif: 'Instrument Serif', 'Songti SC', 'STSong', georgia, serif;
+
+  /* 阴影 */
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 12px rgb(0 0 0 / 3%);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 5%), 0 2px 8px rgb(0 0 0 / 3%);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 8%), 0 2px 8px rgb(0 0 0 / 4%);
+
+  /* Radix 动画（shadcn 约定） */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+}
+
+@keyframes accordion-down {
+  from { height: 0; }
+  to { height: var(--radix-accordion-content-height); }
+}
+
+@keyframes accordion-up {
+  from { height: var(--radix-accordion-content-height); }
+  to { height: 0; }
+}
+
+/* ─── 全局基础 ─── */
+
+* {
+  border-color: rgb(0 0 0 / 8%);
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-warm);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code, pre, kbd {
+  font-family: var(--font-mono);
+}
+
+/* 滚动条（细 / 暖灰） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(0 0 0 / 15%) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 15%);
+  border-radius: 4px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(0 0 0 / 25%);
+}

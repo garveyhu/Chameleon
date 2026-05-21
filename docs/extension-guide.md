@@ -142,7 +142,7 @@ agent registered (local) | key=my-agent | class=MyAgent | module=chameleon.agent
 ### Step 7 - 调
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/my-agent/invoke \
+curl -X POST http://localhost:7009/v1/agents/my-agent/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input":"hi","stream":true}'
 ```
@@ -212,7 +212,7 @@ agent registered (yaml) | key=customer-faq | provider=dify
 ### Step 4 - 调（与本地 agent 用法一致）
 
 ```bash
-curl -X POST http://localhost:8000/v1/agents/customer-faq/invoke \
+curl -X POST http://localhost:7009/v1/agents/customer-faq/invoke \
   -H "Authorization: Bearer $APP_KEY" \
   -d '{"input":"如何退货","stream":true}'
 ```

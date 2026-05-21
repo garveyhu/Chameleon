@@ -69,7 +69,7 @@ P4 与 P5 可并行（互不依赖），但都依赖 P3。
 
 **Goal**：把空目录变成"能 `uv sync` 通过 + 能起 FastAPI + 能连 PG + 能跑空 Alembic migration"的可运行壳。
 
-**Output**：所有顶级子包目录就位、`uvicorn chameleon.app.main:app` 起得来、`curl localhost:8000/health` 通、复用本机 `127.0.0.1:8103` PG 实例（镜像升 pgvector/pgvector:pg16）+ 新建 `chameleon` 库、Alembic baseline migration 落地。
+**Output**：所有顶级子包目录就位、`uvicorn chameleon.app.main:app` 起得来、`curl localhost:7009/health` 通、复用本机 `127.0.0.1:8103` PG 实例（镜像升 pgvector/pgvector:pg16）+ 新建 `chameleon` 库、Alembic baseline migration 落地。
 
 **估时**：1.5 天。
 
@@ -225,10 +225,10 @@ docker exec postgres pg_isready -U collector -d wave_obs
 
 **验收**：
 ```
-uvicorn chameleon.app.main:app --port 8000 &
-curl -s http://localhost:8000/health | jq .
+uvicorn chameleon.app.main:app --port 7009 &
+curl -s http://localhost:7009/health | jq .
 # → {"ok": true}
-curl -s http://localhost:8000/ready | jq .
+curl -s http://localhost:7009/ready | jq .
 # → DB 检查通过的响应
 ```
 
@@ -345,7 +345,7 @@ uv run python -c "from chameleon.core.config import inventory as cfg; print(cfg.
 
 **验收**：
 ```
-uvicorn chameleon.app.main:app --port 8000
+uvicorn chameleon.app.main:app --port 7009
 # 启动日志出现 loguru 格式（带时间 + 级别 + 文件位置）
 ls logs/
 # chameleon.log 存在
@@ -786,12 +786,12 @@ uvicorn chameleon.app.main:app
 chameleon init-admin --name links
 # 输出：[Admin Key Created] key=chm_xxxxxx...  (only shown once)
 
-curl -X POST localhost:8000/v1/admin/api-keys \
+curl -X POST localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer chm_<admin>" \
   -d '{"app_id":"my-app","name":"My App","scopes":[]}'
 # 返回 {"code":200, "data":{"key":"chm_xxxx", "key_prefix":"chm_xxxx12", ...}}
 
-curl -X GET localhost:8000/v1/admin/api-keys \
+curl -X GET localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer chm_<admin>"
 # 返回列表，不含明文
 ```
@@ -911,11 +911,11 @@ pytest chameleon-app/tests/modules/agent/ -v
 
 **验收**：
 ```
-curl "localhost:8000/v1/admin/call-logs?app_id=my-app&success=false" \
+curl "localhost:7009/v1/admin/call-logs?app_id=my-app&success=false" \
   -H "Authorization: Bearer chm_<admin>"
 # 返回该 app 的失败调用列表
 
-curl localhost:8000/v1/admin/providers/status \
+curl localhost:7009/v1/admin/providers/status \
   -H "Authorization: Bearer chm_<admin>"
 # 返回 [{"name":"langgraph","ok":true},{"name":"dify","ok":true},...]
 ```
@@ -1157,11 +1157,11 @@ async def test_search_kb_e2e(fixture_kb):
 
 **验收**：
 ```
-curl -X POST localhost:8000/v1/knowledge \
+curl -X POST localhost:7009/v1/knowledge \
   -H "Authorization: Bearer chm_<app>" \
   -d '{"kb_key":"sales-docs","name":"销售文档","embedding_model":"text-embedding-3-small"}'
 
-curl -X POST localhost:8000/v1/knowledge/sales-docs/search \
+curl -X POST localhost:7009/v1/knowledge/sales-docs/search \
   -d '{"query":"销售额","top_k":3}'
 ```
 
@@ -1183,7 +1183,7 @@ curl -X POST localhost:8000/v1/knowledge/sales-docs/search \
 
 **验收**：
 ```
-curl localhost:8000/v1/tasks/<id>
+curl localhost:7009/v1/tasks/<id>
 # 返回 {status, progress, message, ...}
 ```
 
@@ -1217,17 +1217,17 @@ curl localhost:8000/v1/tasks/<id>
 **验收**：
 ```
 # 创建 ingest
-curl -X POST localhost:8000/v1/knowledge/sales-docs/documents \
+curl -X POST localhost:7009/v1/knowledge/sales-docs/documents \
   -H "Authorization: Bearer chm_<app>" \
   -d '{"title":"Q1 报告","source_type":"text","content":"今年Q1销售额..."}'
 # → {data: {task_id, document_id, status:"queued"}}
 
 # 轮询直到完成
-curl localhost:8000/v1/tasks/<id>
+curl localhost:7009/v1/tasks/<id>
 # → status: success
 
 # search 检索得到
-curl -X POST localhost:8000/v1/knowledge/sales-docs/search \
+curl -X POST localhost:7009/v1/knowledge/sales-docs/search \
   -d '{"query":"Q1 销售"}'
 # → 含命中
 ```

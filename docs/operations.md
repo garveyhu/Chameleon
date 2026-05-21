@@ -29,7 +29,7 @@ Chameleon v1 是单进程 FastAPI app。生产部署：
 ### 开发模式
 
 ```bash
-uv run uvicorn chameleon.app.main:app --reload --host 127.0.0.1 --port 8000
+uv run uvicorn chameleon.app.main:app --reload --host 127.0.0.1 --port 7009
 ```
 
 启动后日志会显示已注册的 providers 和 agents：
@@ -47,7 +47,7 @@ Loaded N agents:
 
 ```bash
 uv run uvicorn chameleon.app.main:app \
-  --host 0.0.0.0 --port 8000 \
+  --host 0.0.0.0 --port 7009 \
   --workers 4 \
   --proxy-headers --forwarded-allow-ips='*'
 ```
@@ -169,11 +169,11 @@ uv run alembic upgrade head
 ```bash
 # 用 admin key 查
 curl -H "Authorization: Bearer $ADMIN_KEY" \
-  "http://localhost:8000/v1/admin/call-logs?success=false&page_size=50"
+  "http://localhost:7009/v1/admin/call-logs?success=false&page_size=50"
 
 # 按 app + 时间窗
 curl -H "Authorization: Bearer $ADMIN_KEY" \
-  "http://localhost:8000/v1/admin/call-logs?app_id=my-app&since=2026-05-01T00:00:00Z"
+  "http://localhost:7009/v1/admin/call-logs?app_id=my-app&since=2026-05-01T00:00:00Z"
 ```
 
 ### 清理（v1 暂不自动 TTL）
