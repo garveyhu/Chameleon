@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Database } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   DataTable,
@@ -26,6 +27,7 @@ import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
 export const KbsPage = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [viewKb, setViewKb] = useState<KbItem | null>(null);
@@ -35,11 +37,11 @@ export const KbsPage = () => {
   });
 
   const columns: DataTableColumn<KbItem>[] = [
-    { key: 'kb_key', header: 'kb_key', width: 160, render: k => <span className="font-mono text-[11.5px] text-stone-700">{k.kb_key}</span> },
-    { key: 'name', header: '名称', render: k => <span className="font-medium text-stone-900">{k.name}</span> },
+    { key: 'kb_key', header: t('table.kb_key'), width: 160, render: k => <span className="font-mono text-[11.5px] text-stone-700">{k.kb_key}</span> },
+    { key: 'name', header: t('common.name'), render: k => <span className="font-medium text-stone-900">{k.name}</span> },
     {
       key: 'embedding',
-      header: 'embedding',
+      header: t('table.embedding'),
       render: k => (
         <span className="text-[11.5px] text-stone-500">
           {k.embedding_model}
@@ -49,7 +51,7 @@ export const KbsPage = () => {
     },
     {
       key: 'stats',
-      header: '统计',
+      header: t('table.stats'),
       width: 160,
       render: k => (
         <span className="tnum font-mono text-[11.5px] text-stone-500">
@@ -59,13 +61,13 @@ export const KbsPage = () => {
     },
     {
       key: 'created_at',
-      header: '创建时间',
+      header: t('common.created_at'),
       width: 160,
       render: k => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(k.created_at)}</span>,
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 100,
       render: k => (
@@ -84,13 +86,13 @@ export const KbsPage = () => {
   return (
     <div>
       <SectionCard>
-        <TableToolbar title="知识库" />
+        <TableToolbar title={t('page.kbs_title')} />
         <DataTable
           columns={columns}
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="还没有知识库"
+          emptyText={t('empty.kbs')}
         />
         <TablePagination
           page={page}

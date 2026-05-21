@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -14,6 +15,7 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { Switch } from '@/core/components/ui/switch';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
@@ -36,6 +38,7 @@ import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
 
 export const ModelsPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [delModel, setDelModel] = useState<ModelItem | null>(null);
@@ -60,19 +63,25 @@ export const ModelsPage = () => {
     },
   });
 
+  const toggleMut = useMutation({
+    mutationFn: (args: { id: number; enabled: boolean }) =>
+      modelApi.update(args.id, { enabled: args.enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
+  });
+
   const columns: DataTableColumn<ModelItem>[] = [
-    { key: 'code', header: '模型', render: m => <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span> },
+    { key: 'code', header: t('table.code'), render: m => <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span> },
     {
       key: 'provider_code',
-      header: 'Provider',
+      header: t('table.provider'),
       width: 120,
       render: m => <Badge variant="primary">{m.provider_code || '?'}</Badge>,
     },
-    { key: 'kind', header: '类型', width: 100, render: m => <Badge>{m.kind}</Badge> },
-    { key: 'dim', header: '维度', width: 80, align: 'right', render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span> },
+    { key: 'kind', header: t('common.type'), width: 100, render: m => <Badge>{m.kind}</Badge> },
+    { key: 'dim', header: t('table.dim'), width: 80, align: 'right', render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span> },
     {
       key: 'defaults',
-      header: '默认参数',
+      header: t('table.defaults'),
       render: m => (
         <span className="font-mono text-[11.5px] text-stone-500">
           {m.defaults ? JSON.stringify(m.defaults).slice(0, 60) : '—'}
@@ -81,13 +90,18 @@ export const ModelsPage = () => {
     },
     {
       key: 'enabled',
-      header: '启用',
+      header: t('common.enabled'),
       width: 70,
-      render: m => m.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
+      render: m => (
+        <Switch
+          checked={m.enabled}
+          onCheckedChange={c => toggleMut.mutate({ id: m.id, enabled: c })}
+        />
+      ),
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 70,
       render: m => (
@@ -107,14 +121,14 @@ export const ModelsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="模型管理"
+          title={t('page.models_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有模型" />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.models')} />
       </SectionCard>
       <CreateModelSheet
         open={createOpen}

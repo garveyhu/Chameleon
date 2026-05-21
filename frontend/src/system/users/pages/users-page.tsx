@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
@@ -47,6 +48,7 @@ const resetSchema = z.object({
 type ResetForm = z.infer<typeof resetSchema>;
 
 export const UsersPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -99,12 +101,12 @@ export const UsersPage = () => {
   });
 
   const columns: DataTableColumn<UserItem>[] = [
-    { key: 'username', header: '用户名', render: u => <span className="font-medium text-stone-900">{u.username}</span> },
-    { key: 'display_name', header: '显示名', render: u => u.display_name || <span className="text-stone-400">—</span> },
-    { key: 'email', header: '邮箱', render: u => u.email || <span className="text-stone-400">—</span> },
+    { key: 'username', header: t('table.username'), render: u => <span className="font-medium text-stone-900">{u.username}</span> },
+    { key: 'display_name', header: t('table.display_name'), render: u => u.display_name || <span className="text-stone-400">—</span> },
+    { key: 'email', header: t('table.email'), render: u => u.email || <span className="text-stone-400">—</span> },
     {
       key: 'roles',
-      header: '角色',
+      header: t('table.roles'),
       render: u => (
         <div className="flex flex-wrap gap-1">
           {u.role_codes.map(r => (
@@ -117,23 +119,23 @@ export const UsersPage = () => {
     },
     {
       key: 'status',
-      header: '状态',
+      header: t('common.status'),
       width: 80,
       render: u => (
         <Badge variant={u.status === 'active' ? 'success' : 'danger'}>
-          {u.status === 'active' ? '活跃' : '禁用'}
+          {u.status === 'active' ? t('common.active') : t('common.disabled')}
         </Badge>
       ),
     },
     {
       key: 'last_login_at',
-      header: '最后登录',
+      header: t('table.last_login'),
       width: 160,
       render: u => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(u.last_login_at)}</span>,
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 100,
       render: u => (
@@ -164,10 +166,10 @@ export const UsersPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="用户管理"
+          title={t('page.users_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建用户
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
@@ -177,7 +179,7 @@ export const UsersPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="还没有用户"
+          emptyText={t('empty.users')}
         />
 
         <TablePagination

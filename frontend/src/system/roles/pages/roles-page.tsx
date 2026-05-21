@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -29,6 +30,7 @@ import { permissionApi, roleApi } from '@/system/roles/services/role';
 import type { RoleItem } from '@/system/roles/types/role';
 
 export const RolesPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [permRole, setPermRole] = useState<RoleItem | null>(null);
@@ -55,25 +57,25 @@ export const RolesPage = () => {
   });
 
   const columns: DataTableColumn<RoleItem>[] = [
-    { key: 'code', header: 'code', width: 140, render: r => <span className="font-mono text-[11.5px] text-stone-700">{r.code}</span> },
-    { key: 'name', header: '名称', render: r => <span className="font-medium text-stone-900">{r.name}</span> },
-    { key: 'description', header: '说明', render: r => r.description || <span className="text-stone-400">—</span> },
+    { key: 'code', header: t('table.code'), width: 140, render: r => <span className="font-mono text-[11.5px] text-stone-700">{r.code}</span> },
+    { key: 'name', header: t('common.name'), render: r => <span className="font-medium text-stone-900">{r.name}</span> },
+    { key: 'description', header: t('common.description'), render: r => r.description || <span className="text-stone-400">—</span> },
     {
       key: 'is_system',
-      header: '类型',
+      header: t('common.type'),
       width: 90,
       render: r => r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
     },
     {
       key: 'perms',
-      header: '权限数',
+      header: t('table.perm_count'),
       width: 80,
       align: 'right',
       render: r => <span className="tnum font-mono text-[11.5px]">{r.permission_codes.length}</span>,
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 110,
       render: r => (
@@ -104,14 +106,14 @@ export const RolesPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="角色管理"
+          title={t('page.roles_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建角色
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有角色" />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.roles')} />
       </SectionCard>
 
       <CreateRoleSheet

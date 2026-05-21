@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Code2, Copy, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -15,6 +16,7 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { Switch } from '@/core/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +48,7 @@ import { embedConfigApi } from '@/system/embed_configs/services/embed';
 import type { EmbedConfigItem } from '@/system/embed_configs/types/embed';
 
 export const EmbedConfigsPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -76,17 +79,23 @@ export const EmbedConfigsPage = () => {
     },
   });
 
+  const toggleMut = useMutation({
+    mutationFn: (args: { id: number; enabled: boolean }) =>
+      embedConfigApi.update(args.id, { enabled: args.enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['embed-configs'] }),
+  });
+
   const columns: DataTableColumn<EmbedConfigItem>[] = [
     {
       key: 'embed_key',
-      header: 'embed_key',
+      header: t('table.embed_key'),
       width: 200,
       render: e => <span className="font-mono text-[11.5px] text-stone-700">{e.embed_key}</span>,
     },
-    { key: 'name', header: '名称', render: e => <span className="font-medium text-stone-900">{e.name}</span> },
+    { key: 'name', header: t('common.name'), render: e => <span className="font-medium text-stone-900">{e.name}</span> },
     {
       key: 'allowed_origins',
-      header: 'origins',
+      header: t('table.origins'),
       render: e =>
         e.allowed_origins && e.allowed_origins.length ? (
           <div className="flex flex-wrap gap-1">
@@ -100,18 +109,23 @@ export const EmbedConfigsPage = () => {
             )}
           </div>
         ) : (
-          <Badge variant="warning">未配置</Badge>
+          <Badge variant="warning">{t('common.not_configured')}</Badge>
         ),
     },
     {
       key: 'enabled',
-      header: '启用',
+      header: t('common.enabled'),
       width: 70,
-      render: e => e.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
+      render: e => (
+        <Switch
+          checked={e.enabled}
+          onCheckedChange={c => toggleMut.mutate({ id: e.id, enabled: c })}
+        />
+      ),
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 130,
       render: e => (
@@ -141,10 +155,10 @@ export const EmbedConfigsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="嵌入式智能体"
+          title={t('page.embed_configs_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
@@ -153,7 +167,7 @@ export const EmbedConfigsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="还没有嵌入式配置"
+          emptyText={t('empty.embed_configs')}
         />
         <TablePagination
           page={page}

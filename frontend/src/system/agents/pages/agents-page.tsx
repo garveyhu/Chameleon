@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -37,6 +38,7 @@ import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
 
 export const AgentsPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [testAgent, setTestAgent] = useState<AgentItem | null>(null);
@@ -72,14 +74,14 @@ export const AgentsPage = () => {
   const columns: DataTableColumn<AgentItem>[] = [
     {
       key: 'agent_key',
-      header: 'agent_key',
+      header: t('table.agent_key'),
       width: 180,
       render: a => <span className="font-mono text-[11.5px] text-stone-700">{a.agent_key}</span>,
     },
-    { key: 'name', header: '名称', render: a => <span className="font-medium text-stone-900">{a.name}</span> },
+    { key: 'name', header: t('common.name'), render: a => <span className="font-medium text-stone-900">{a.name}</span> },
     {
       key: 'source',
-      header: '来源',
+      header: t('table.source'),
       width: 90,
       render: a => (
         <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>{a.source}</Badge>
@@ -87,7 +89,7 @@ export const AgentsPage = () => {
     },
     {
       key: 'tags',
-      header: '标签',
+      header: t('table.tags'),
       render: a =>
         a.tags && a.tags.length ? (
           <div className="flex gap-1">
@@ -103,7 +105,7 @@ export const AgentsPage = () => {
     },
     {
       key: 'enabled',
-      header: '启用',
+      header: t('common.enabled'),
       width: 70,
       render: a => (
         <Switch
@@ -114,18 +116,18 @@ export const AgentsPage = () => {
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 110,
       render: a => (
         <div className="inline-flex items-center gap-0.5">
           <button
             type="button"
-            title="测试"
+            title={t('common.test')}
             className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setTestAgent(a)}
           >
-            <Play className="h-3.5 w-3.5" /> 测试
+            <Play className="h-3.5 w-3.5" /> {t('common.test')}
           </button>
           <button
             type="button"
@@ -145,14 +147,14 @@ export const AgentsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="智能体"
+          title={t('page.agents_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建外部
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有智能体" />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.agents')} />
       </SectionCard>
 
       <CreateAgentSheet

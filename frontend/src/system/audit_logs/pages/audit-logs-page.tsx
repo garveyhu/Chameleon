@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   DataTable,
@@ -30,6 +31,7 @@ interface AuditLogItem {
 }
 
 export const AuditLogsPage = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [resourceInput, setResourceInput] = useState('');
@@ -79,10 +81,10 @@ export const AuditLogsPage = () => {
         </span>
       ),
     },
-    { key: 'ip', header: 'IP', width: 130, render: a => <span className="font-mono text-[11.5px] tnum">{a.ip || '—'}</span> },
+    { key: 'ip', header: t('table.ip'), width: 130, render: a => <span className="font-mono text-[11.5px] tnum">{a.ip || '—'}</span> },
     {
       key: 'request_id',
-      header: '请求 ID',
+      header: t('table.request_id'),
       width: 140,
       render: a => <span className="font-mono text-[11.5px] text-stone-400 tnum truncate">{a.request_id || '—'}</span>,
     },
@@ -92,7 +94,7 @@ export const AuditLogsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="审计日志"
+          title={t('page.audit_logs_title')}
           extra={
             <>
               <Input
@@ -129,7 +131,7 @@ export const AuditLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="暂无审计日志"
+          emptyText={t('empty.audit_logs')}
         />
         <TablePagination
           page={page}

@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -39,6 +40,7 @@ import { apiKeyApi, appApi } from '@/system/apps/services/app';
 import type { ApiKeyCreated, AppItem } from '@/system/apps/types/app';
 
 export const AppsPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -70,15 +72,15 @@ export const AppsPage = () => {
   });
 
   const columns: DataTableColumn<AppItem>[] = [
-    { key: 'app_key', header: 'app_key', render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span> },
-    { key: 'name', header: '名称', render: a => <span className="font-medium text-stone-900">{a.name}</span> },
+    { key: 'app_key', header: t('table.app_key'), render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span> },
+    { key: 'name', header: t('common.name'), render: a => <span className="font-medium text-stone-900">{a.name}</span> },
     {
       key: 'status',
-      header: '状态',
+      header: t('common.status'),
       width: 80,
       render: a => (
         <Badge variant={a.status === 'active' ? 'success' : 'warning'}>
-          {a.status === 'active' ? '活跃' : '挂起'}
+          {a.status === 'active' ? t('common.active') : t('common.suspended')}
         </Badge>
       ),
     },
@@ -94,13 +96,13 @@ export const AppsPage = () => {
     },
     {
       key: 'created_at',
-      header: '创建于',
+      header: t('common.created_at'),
       width: 160,
       render: a => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(a.created_at)}</span>,
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 130,
       render: a => (
@@ -130,10 +132,10 @@ export const AppsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="应用 & API Key"
+          title={t('page.apps_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建应用
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
@@ -142,7 +144,7 @@ export const AppsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="还没有应用"
+          emptyText={t('empty.apps')}
         />
         <TablePagination
           page={page}

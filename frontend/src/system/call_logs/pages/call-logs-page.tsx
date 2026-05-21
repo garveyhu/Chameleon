@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import {
   DataTable,
@@ -17,6 +18,7 @@ import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem } from '@/system/call_logs/types/call-log';
 
 export const CallLogsPage = () => {
+  const { t } = useTranslation();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [appIdInput, setAppIdInput] = useState('');
@@ -46,19 +48,19 @@ export const CallLogsPage = () => {
     },
     {
       key: 'app_id',
-      header: 'app',
+      header: t('table.app_key'),
       width: 140,
       render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.app_id}</span>,
     },
     {
       key: 'agent_key',
-      header: 'agent',
+      header: t('table.agent_key'),
       width: 160,
       render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.agent_key}</span>,
     },
     {
       key: 'status',
-      header: '状态',
+      header: t('common.status'),
       width: 80,
       render: l =>
         l.success ? (
@@ -69,14 +71,14 @@ export const CallLogsPage = () => {
     },
     {
       key: 'duration',
-      header: '耗时',
+      header: t('table.duration'),
       width: 90,
       align: 'right',
       render: l => <span className="tnum font-mono text-[11.5px]">{l.duration_ms} ms</span>,
     },
     {
       key: 'tokens',
-      header: 'Token',
+      header: t('table.tokens'),
       width: 90,
       align: 'right',
       render: l =>
@@ -101,7 +103,7 @@ export const CallLogsPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="调用日志"
+          title={t('page.call_logs_title')}
           filters={[
             {
               value: success,
@@ -109,7 +111,7 @@ export const CallLogsPage = () => {
                 setSuccess(v);
                 setPage(1);
               },
-              placeholder: '状态',
+              placeholder: t('common.status'),
               options: [
                 { value: 'true', label: '仅成功' },
                 { value: 'false', label: '仅失败' },
@@ -154,7 +156,7 @@ export const CallLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText="暂无调用日志"
+          emptyText={t('empty.call_logs')}
         />
 
         <TablePagination

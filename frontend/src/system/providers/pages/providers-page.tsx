@@ -1,8 +1,9 @@
 /** providers 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Plus, Trash2, Zap } from 'lucide-react';
+import { Plus, Trash2, Zap } from 'lucide-react';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -14,6 +15,7 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { Switch } from '@/core/components/ui/switch';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
@@ -35,6 +37,7 @@ import { providerApi } from '@/system/providers/services/provider';
 import type { ProviderItem } from '@/system/providers/types/provider';
 
 export const ProvidersPage = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [delProv, setDelProv] = useState<ProviderItem | null>(null);
@@ -64,39 +67,49 @@ export const ProvidersPage = () => {
     onSuccess: data => toast[data.ok ? 'success' : 'error'](data.detail),
   });
 
+  const toggleMut = useMutation({
+    mutationFn: (args: { id: number; enabled: boolean }) =>
+      providerApi.update(args.id, { enabled: args.enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+  });
+
   const columns: DataTableColumn<ProviderItem>[] = [
-    { key: 'code', header: 'code', width: 140, render: p => <span className="font-mono text-[11.5px] text-stone-700">{p.code}</span> },
-    { key: 'name', header: '名称', render: p => <span className="font-medium text-stone-900">{p.name}</span> },
-    { key: 'kind', header: '类型', width: 100, render: p => <Badge variant="primary">{p.kind}</Badge> },
-    { key: 'base_url', header: 'base_url', render: p => <span className="font-mono text-[11.5px] text-stone-600">{p.base_url || '—'}</span> },
+    { key: 'code', header: t('table.code'), width: 140, render: p => <span className="font-mono text-[11.5px] text-stone-700">{p.code}</span> },
+    { key: 'name', header: t('common.name'), render: p => <span className="font-medium text-stone-900">{p.name}</span> },
+    { key: 'kind', header: t('common.type'), width: 100, render: p => <Badge variant="primary">{p.kind}</Badge> },
+    { key: 'base_url', header: t('table.base_url'), render: p => <span className="font-mono text-[11.5px] text-stone-600">{p.base_url || '—'}</span> },
     {
       key: 'api_key',
-      header: 'API Key',
+      header: t('table.api_key'),
       width: 90,
-      render: p => p.has_api_key ? <Badge variant="success">已配置</Badge> : <Badge variant="warning">未配置</Badge>,
+      render: p => p.has_api_key ? <Badge variant="success">{t('common.configured')}</Badge> : <Badge variant="warning">{t('common.not_configured')}</Badge>,
     },
     {
       key: 'enabled',
-      header: '启用',
-      width: 60,
-      align: 'center',
-      render: p => p.enabled ? <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" /> : <span className="text-stone-400">—</span>,
+      header: t('common.enabled'),
+      width: 70,
+      render: p => (
+        <Switch
+          checked={p.enabled}
+          onCheckedChange={c => toggleMut.mutate({ id: p.id, enabled: c })}
+        />
+      ),
     },
     {
       key: 'actions',
-      header: '操作',
+      header: t('common.actions'),
       align: 'right',
       width: 110,
       render: p => (
         <div className="inline-flex items-center gap-0.5">
           <button
             type="button"
-            title="测试连通性"
+            title={t('common.test')}
             className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-50"
             onClick={() => testMut.mutate(p.id)}
             disabled={testMut.isPending}
           >
-            <Zap className="h-3.5 w-3.5" /> 测试
+            <Zap className="h-3.5 w-3.5" /> {t('common.test')}
           </button>
           <button
             type="button"
@@ -115,14 +128,14 @@ export const ProvidersPage = () => {
     <div>
       <SectionCard>
         <TableToolbar
-          title="Providers"
+          title={t('page.providers_title')}
           extra={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> 新建
+              <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有 Provider" />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.providers')} />
       </SectionCard>
       <CreateProviderSheet
         open={createOpen}
