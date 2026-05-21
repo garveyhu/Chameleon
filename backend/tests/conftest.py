@@ -78,7 +78,15 @@ async def _registry_with_mock() -> AsyncIterator[None]:
 
     autouse + session-scoped：所有跨包 tests 共享。
     """
-    init_registry()
+    # 让 seed 跑过让 agents 表有本地 agent 数据 → init_registry 能 load
+    from chameleon.system.seed import run_seed_if_empty
+
+    try:
+        await run_seed_if_empty()
+    except Exception:
+        pass
+
+    await init_registry()
     PROVIDERS["mock"] = _MockEchoProvider()
     AGENTS["mock-echo"] = AgentDef(
         key="mock-echo",
@@ -139,6 +147,38 @@ def _init_crypto_jwt() -> None:
     """ASGITransport 不触发 FastAPI lifespan，测试期显式初始化"""
     init_crypto()
     init_jwt()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reload_registry_each_test():
+    """LLM cache + AGENTS/PROVIDERS dict 每个 test 前 reload 保稳
+
+    每次 reset/init 后，需要重新注入 mock provider / mock-echo agent
+    （session 级 _registry_with_mock 只在最开始注入一次，会被 reset 清掉）
+    """
+    from chameleon.core.components.llms.factory import reload_llm_cache
+    from chameleon.providers.base import init_registry
+    from chameleon.providers.base.registry import reset_registry_for_test
+
+    try:
+        await reload_llm_cache()
+    except Exception:
+        pass
+    reset_registry_for_test()
+    try:
+        await init_registry()
+    except Exception as e:
+        from loguru import logger
+
+        logger.warning("init_registry in test fixture failed: {}", e)
+    # 重新注入 mock（被 reset 清掉了）
+    PROVIDERS["mock"] = _MockEchoProvider()
+    AGENTS["mock-echo"] = AgentDef(
+        key="mock-echo",
+        provider="mock",
+        description="mock echo agent for integration tests",
+    )
+    yield
 
 
 @pytest_asyncio.fixture

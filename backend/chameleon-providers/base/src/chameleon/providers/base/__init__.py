@@ -16,9 +16,10 @@ from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.registry import (
     AGENTS,
     PROVIDERS,
-    build_agent_registry,
+    build_agent_registry_from_db,
     build_provider_registry,
     init_registry,
+    reload_agent_registry,
     reset_registry_for_test,
 )
 from chameleon.providers.base.types import (
@@ -55,9 +56,10 @@ __all__ = [
     "StreamEventType",
     "ToolCallRecord",
     "Usage",
-    "build_agent_registry",
+    "build_agent_registry_from_db",
     "build_provider_registry",
     "init_registry",
+    "reload_agent_registry",
     "reset_registry_for_test",
 ]
 

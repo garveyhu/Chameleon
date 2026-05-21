@@ -1,31 +1,25 @@
-"""Provider + Agent 注册表构建
+"""Provider + Agent 注册表构建（v0.2 DB-driven）
 
-启动时执行一次，运行时只读。
-fail-fast：重复 key / 占位符未解析 / yaml 引用未注册的 provider —— 全报错退出。
+启动期 async 流程：
+  1. PROVIDERS：扫 chameleon.providers.* namespace，收 Provider 实例（不变）
+  2. namespace 扫 chameleon.agents.* import 模块（让 BaseAgent 子类落 agent_router）
+  3. AGENTS：从 DB agents 表（enabled=True, deleted_at IS NULL）读
 
-两个全局 dict：
-  PROVIDERS: dict[str, Provider]
-  AGENTS:    dict[str, AgentDef]
+业务热路径只读 AGENTS / PROVIDERS 两个 dict。
+admin 改 agent enabled / 加新外部 agent 后，调 reload_agent_registry() 让 dict 更新。
 """
 
 from __future__ import annotations
 
 import importlib
 import pkgutil
-from pathlib import Path
 from typing import Any
 
-import yaml
 from loguru import logger
+from sqlalchemy import select
 
-from chameleon.core.config.base_settings import (
-    ConfigError,
-    _resolve_placeholders,
-    make_default_resolver,
-)
-from chameleon.core.config.constants import CONFIG_PATH
-from chameleon.core.config.json_settings import url_settings
 from chameleon.core.api.exceptions import RegistryError
+from chameleon.core.models import Agent
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import AgentDef
 
@@ -39,15 +33,11 @@ _BUILT = False
 
 
 def build_provider_registry() -> dict[str, Provider]:
-    """扫 chameleon.providers.* namespace，找到每个子包的 PROVIDER 实例
-
-    base 子包跳过；其它每个子包 __init__.py 必须 export PROVIDER。
-    """
+    """扫 chameleon.providers.* namespace 找每个子包的 PROVIDER 实例"""
     import chameleon.providers as pkg
 
     providers: dict[str, Provider] = {}
     for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.providers."):
-        # base 自身不是 provider 实现
         if mod_info.name.endswith(".base"):
             continue
         try:
@@ -77,19 +67,25 @@ def build_provider_registry() -> dict[str, Provider]:
     return providers
 
 
-# ── Agent 注册（namespace 扫 + yaml 读，双源合并） ─────────
+# ── namespace 扫 chameleon.agents.* import 加载 BaseAgent 类 ─
 
 
-def _build_local_agents() -> dict[str, AgentDef]:
-    """扫 chameleon.agents.* namespace，每个子包必须 export 一个 BaseAgent 子类"""
+def _scan_local_agent_modules() -> dict[str, type]:
+    """扫 chameleon.agents.* 子包，import + 找 BaseAgent 子类
+
+    Returns:
+        {agent_key: agent_class}（提供给 AGENTS config["module"]/["agent_class"] fallback）
+    """
     try:
         import chameleon.agents as pkg
     except ImportError:
-        # 没有任何 agent 子包安装也允许（极端情况）
         logger.warning("chameleon.agents namespace not found — no local agents")
         return {}
 
-    agents: dict[str, AgentDef] = {}
+    from chameleon.core.base.agent_router import agent_router
+    from chameleon.core.base.base_agent import BaseAgent
+
+    found: dict[str, type] = {}
     for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.agents."):
         try:
             mod = importlib.import_module(mod_info.name)
@@ -97,157 +93,114 @@ def _build_local_agents() -> dict[str, AgentDef]:
             raise RegistryError(
                 message=f"failed to import agent package {mod_info.name}: {e}"
             ) from e
-
-        # 本地 agent 统一一种范式：BaseAgent 子类
-        agent_cls = _find_base_agent_class(mod)
+        agent_cls = _find_base_agent_class(mod, BaseAgent)
         if agent_cls is None:
-            # 没找到 BaseAgent 子类 —— 跳过（视为占位空包）
-            logger.debug(
-                "agent package {} has no BaseAgent subclass — skipped",
-                mod_info.name,
-            )
             continue
-
-        md = agent_cls.get_metadata()
-        key = md.id
-        if not key:
+        meta = agent_cls.get_metadata()
+        if not meta.id:
             raise RegistryError(
                 message=f"{agent_cls.__name__}.get_metadata().id 不能为空"
             )
-
-        agents[key] = AgentDef(
-            key=key,
-            provider="local",
-            description=md.description,
-            version=md.version,
-            tags=list(md.tags),
-            config={
-                "module": mod_info.name,
-                "agent_class": agent_cls.__name__,
-            },
-        )
-        logger.info(
-            "agent registered (local) | key={} | class={} | module={}",
-            key,
-            agent_cls.__name__,
-            mod_info.name,
-        )
-
-        # 同时注册到 agent_router（给 v0.2 admin UI 用）
+        found[meta.id] = agent_cls
         try:
-            from chameleon.core.base.agent_router import agent_router
-
             agent_router.register(agent_cls)
         except Exception as e:
-            logger.warning("agent_router.register failed for {}: {}", key, e)
+            logger.warning("agent_router.register failed for {}: {}", meta.id, e)
+    return found
 
-    return agents
 
-
-def _find_base_agent_class(module):
-    """在模块的顶层符号里找一个 BaseAgent 子类。约定：同一模块至多一个。"""
-    try:
-        from chameleon.core.base.base_agent import BaseAgent
-    except ImportError:
-        return None
-
+def _find_base_agent_class(module: Any, base_cls: type) -> type | None:
     for name in dir(module):
         obj = getattr(module, name, None)
         if (
             isinstance(obj, type)
-            and issubclass(obj, BaseAgent)
-            and obj is not BaseAgent
+            and issubclass(obj, base_cls)
+            and obj is not base_cls
             and obj.__module__.startswith(module.__name__)
         ):
             return obj
     return None
 
 
-def _build_yaml_agents(yaml_path: Path) -> dict[str, AgentDef]:
-    """读 config/agents.yaml，按 provider 字段注册外部 agent"""
-    if not yaml_path.exists():
-        logger.warning("agents.yaml not found at {} — no external agents", yaml_path)
-        return {}
+# ── Agent 注册（DB 读，agents 表是 SoT） ──────────────────
 
-    with open(yaml_path, encoding="utf-8") as f:
-        raw: Any = yaml.safe_load(f)
-    if raw is None:
-        return {}
-    if not isinstance(raw, list):
-        raise RegistryError(
-            message=f"agents.yaml must be a list, got {type(raw).__name__}"
+
+async def build_agent_registry_from_db(
+    providers: dict[str, Provider],
+    *,
+    local_class_index: dict[str, type] | None = None,
+) -> dict[str, AgentDef]:
+    """从 DB agents 表 + namespace import 结果合并产 AGENTS dict
+
+    Args:
+        providers: 已经 build 好的 PROVIDERS dict（用于校验 agent.source 存在）
+        local_class_index: namespace 扫到的 {agent_key: class}；DB 里 source='local'
+                          但 class 不在索引里时 → 跳过并 warn（agent 安装包未装）
+
+    DB 里的 source 字段映射 provider name：
+      'local' → providers["local"]
+      'dify'  → providers["dify"]
+      ...
+    """
+    from chameleon.core.infra.db import AsyncSessionLocal
+
+    if local_class_index is None:
+        local_class_index = {}
+
+    async with AsyncSessionLocal() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(Agent).where(
+                        Agent.enabled.is_(True),
+                        Agent.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-
-    # 占位符替换
-    resolver = make_default_resolver(baseurl_lookup=lambda k: url_settings.get(k))
-    try:
-        resolved = _resolve_placeholders(raw, resolver)
-    except ConfigError as e:
-        raise RegistryError(message=f"agents.yaml placeholder error: {e}") from e
 
     agents: dict[str, AgentDef] = {}
-    for i, entry in enumerate(resolved):
-        if not isinstance(entry, dict):
-            raise RegistryError(message=f"agents.yaml entry #{i} must be a dict")
-        key = entry.get("key")
-        provider = entry.get("provider")
-        if not key or not provider:
-            raise RegistryError(
-                message=f"agents.yaml entry #{i} missing 'key' or 'provider'"
+    for row in rows:
+        provider_name = row.source
+        if provider_name not in providers:
+            logger.warning(
+                "agent {} 引用未注册 provider {} —— 跳过",
+                row.agent_key,
+                provider_name,
             )
-        config = {
-            k: v
-            for k, v in entry.items()
-            if k not in {"key", "provider", "description", "version", "tags"}
-        }
-        agents[key] = AgentDef(
-            key=key,
-            provider=provider,
-            description=entry.get("description", ""),
-            version=entry.get("version"),
-            tags=entry.get("tags", []),
-            config=config,
+            continue
+
+        # 本地 agent：class 必须能从 namespace 扫到
+        if provider_name == "local" and row.agent_key not in local_class_index:
+            logger.warning(
+                "本地 agent {} 在 DB 中 enabled，但 chameleon.agents.* 未发现对应 class — 跳过",
+                row.agent_key,
+            )
+            continue
+
+        agents[row.agent_key] = AgentDef(
+            key=row.agent_key,
+            provider=provider_name,
+            description=row.description or "",
+            version=row.version,
+            tags=list(row.tags) if row.tags else [],
+            config=dict(row.config) if row.config else {},
         )
-        logger.info("agent registered (yaml) | key={} | provider={}", key, provider)
+        logger.info(
+            "agent registered (db) | key={} | provider={} | enabled=True",
+            row.agent_key,
+            provider_name,
+        )
     return agents
-
-
-def build_agent_registry(
-    providers: dict[str, Provider],
-    yaml_path: Path | None = None,
-) -> dict[str, AgentDef]:
-    """合并本地 + yaml，校验：provider 必须已注册；agent key 不可重复"""
-    if yaml_path is None:
-        yaml_path = CONFIG_PATH / "agents.yaml"
-
-    local = _build_local_agents()
-    yaml_agents = _build_yaml_agents(yaml_path)
-
-    duplicates = set(local) & set(yaml_agents)
-    if duplicates:
-        raise RegistryError(
-            message=f"agent key conflict (both local + yaml): {sorted(duplicates)}"
-        )
-
-    merged: dict[str, AgentDef] = {**local, **yaml_agents}
-
-    # 校验 provider 已注册
-    unknown_providers = {
-        agent.provider for agent in merged.values() if agent.provider not in providers
-    }
-    if unknown_providers:
-        raise RegistryError(
-            message=f"agents reference unregistered providers: {sorted(unknown_providers)}"
-        )
-
-    return merged
 
 
 # ── 启动钩子 ────────────────────────────────────────────
 
 
-def init_registry(yaml_path: Path | None = None) -> None:
-    """一次性构建全局 PROVIDERS / AGENTS"""
+async def init_registry() -> None:
+    """启动期入口（async）：build providers + 扫本地 import + DB 读 agents"""
     global _BUILT
     if _BUILT:
         logger.debug("registry already built — skip")
@@ -256,8 +209,14 @@ def init_registry(yaml_path: Path | None = None) -> None:
     PROVIDERS.clear()
     PROVIDERS.update(build_provider_registry())
 
+    local_class_index = _scan_local_agent_modules()
+
     AGENTS.clear()
-    AGENTS.update(build_agent_registry(PROVIDERS, yaml_path=yaml_path))
+    AGENTS.update(
+        await build_agent_registry_from_db(
+            PROVIDERS, local_class_index=local_class_index
+        )
+    )
 
     _BUILT = True
 
@@ -268,8 +227,22 @@ def init_registry(yaml_path: Path | None = None) -> None:
     )
 
 
+async def reload_agent_registry() -> None:
+    """admin 改 agents 表（enable/disable/add 外部）后调，让 AGENTS 更新
+
+    幂等；不重 import namespace（重复 import 副作用小，但慢）。
+    """
+    local_class_index = _scan_local_agent_modules()
+    new_agents = await build_agent_registry_from_db(
+        PROVIDERS, local_class_index=local_class_index
+    )
+    AGENTS.clear()
+    AGENTS.update(new_agents)
+    logger.info("agent registry reloaded | agents={}", list(AGENTS.keys()))
+
+
 def reset_registry_for_test() -> None:
-    """测试用：重置 built 标记"""
+    """测试用：重置 built 标记 + 清空 dict"""
     global _BUILT
     PROVIDERS.clear()
     AGENTS.clear()

@@ -1,18 +1,24 @@
-"""Registry 构建逻辑单测
+"""Registry 构建逻辑单测（v0.2 DB-driven）
 
-不实际启动 provider/agent —— 用 monkeypatch 替换扫描结果。
+测 build_agent_registry_from_db / reload_agent_registry 与 DB agents 表交互。
 """
 
+from __future__ import annotations
+
+import secrets
 from collections.abc import AsyncIterator
-from pathlib import Path
 
 import pytest
+from sqlalchemy import delete
 
-from chameleon.core.api.exceptions import RegistryError
+from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.models import Agent
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.registry import (
-    _build_yaml_agents,
-    build_agent_registry,
+    AGENTS,
+    PROVIDERS,
+    build_agent_registry_from_db,
+    reload_agent_registry,
 )
 from chameleon.providers.base.types import InvokeContext, StreamEvent
 
@@ -27,77 +33,116 @@ class _FakeProvider(Provider):
         raise NotImplementedError
 
 
-def test_build_agent_registry_with_yaml_file(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "agents.yaml"
-    yaml_path.write_text(
-        "- key: faq\n"
-        "  provider: dify\n"
-        "  description: customer faq\n"
-        "  endpoint: http://localhost/v1\n"
-        "  app_id: app-x\n"
-        "  api_key_env: TEST_KEY\n"
-    )
-    providers = {"dify": _FakeProvider("dify"), "local": _FakeProvider("local")}
-    agents = build_agent_registry(providers, yaml_path=yaml_path)
-    assert "faq" in agents
-    assert agents["faq"].provider == "dify"
-    assert agents["faq"].config["endpoint"] == "http://localhost/v1"
+@pytest.fixture
+async def cleanup_agents():
+    yield
+    async with AsyncSessionLocal() as s:
+        await s.execute(delete(Agent).where(Agent.agent_key.like("registry-test-%")))
+        await s.commit()
 
 
-def test_yaml_agents_unknown_provider_fail_fast(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "agents.yaml"
-    yaml_path.write_text("- key: x\n  provider: nonexistent\n  endpoint: http://x\n")
-    providers = {"dify": _FakeProvider("dify"), "local": _FakeProvider("local")}
-    with pytest.raises(RegistryError):
-        build_agent_registry(providers, yaml_path=yaml_path)
+async def test_db_agent_loaded_when_enabled(cleanup_agents) -> None:
+    """DB 里 enabled=True 的 external agent 被 build_agent_registry_from_db 加载"""
+    key = f"registry-test-{secrets.token_hex(3)}"
+    async with AsyncSessionLocal() as s:
+        s.add(
+            Agent(
+                agent_key=key,
+                name="t",
+                source="dify",
+                config={"endpoint": "https://x.example.com"},
+                enabled=True,
+            )
+        )
+        await s.commit()
+
+    providers = {"dify": _FakeProvider("dify")}
+    agents = await build_agent_registry_from_db(providers)
+    assert key in agents
+    assert agents[key].provider == "dify"
+    assert agents[key].config["endpoint"] == "https://x.example.com"
 
 
-def test_yaml_agents_placeholder_env(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("TEST_AGENT_APP_ID", "resolved-app-id")
-    yaml_path = tmp_path / "agents.yaml"
-    yaml_path.write_text(
-        "- key: y\n"
-        "  provider: dify\n"
-        "  endpoint: http://localhost\n"
-        "  app_id: ${env:TEST_AGENT_APP_ID}\n"
-    )
-    # 注：build_agent_registry 也扫 chameleon.agents.* namespace（含本地 agent, provider=local）
-    providers = {"dify": _FakeProvider("dify"), "local": _FakeProvider("local")}
-    agents = build_agent_registry(providers, yaml_path=yaml_path)
-    assert agents["y"].config["app_id"] == "resolved-app-id"
+async def test_db_agent_disabled_skipped(cleanup_agents) -> None:
+    key = f"registry-test-{secrets.token_hex(3)}"
+    async with AsyncSessionLocal() as s:
+        s.add(
+            Agent(
+                agent_key=key,
+                name="t",
+                source="dify",
+                enabled=False,
+            )
+        )
+        await s.commit()
+
+    providers = {"dify": _FakeProvider("dify")}
+    agents = await build_agent_registry_from_db(providers)
+    assert key not in agents
 
 
-def test_yaml_agents_placeholder_missing_env_fail_fast(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "agents.yaml"
-    yaml_path.write_text(
-        "- key: z\n"
-        "  provider: dify\n"
-        "  endpoint: http://localhost\n"
-        "  app_id: ${env:DEFINITELY_NOT_SET_VAR_XYZ}\n"
-    )
-    providers = {"dify": _FakeProvider("dify"), "local": _FakeProvider("local")}
-    with pytest.raises(RegistryError):
-        build_agent_registry(providers, yaml_path=yaml_path)
+async def test_agent_with_unregistered_provider_skipped(cleanup_agents) -> None:
+    key = f"registry-test-{secrets.token_hex(3)}"
+    async with AsyncSessionLocal() as s:
+        s.add(
+            Agent(
+                agent_key=key,
+                name="t",
+                source="unknown-provider",
+                enabled=True,
+            )
+        )
+        await s.commit()
+
+    providers = {"dify": _FakeProvider("dify")}  # 没 unknown-provider
+    agents = await build_agent_registry_from_db(providers)
+    assert key not in agents
 
 
-def test_yaml_empty_or_missing(tmp_path: Path) -> None:
-    """文件不存在 / 空 / 显式空数组 都返 {}"""
-    # 不存在
-    assert _build_yaml_agents(tmp_path / "missing.yaml") == {}
+async def test_local_agent_requires_class_in_index(cleanup_agents) -> None:
+    """DB 里 source='local' 但 class 不在 local_class_index → 跳过 + warn"""
+    key = f"registry-test-{secrets.token_hex(3)}"
+    async with AsyncSessionLocal() as s:
+        s.add(
+            Agent(
+                agent_key=key,
+                name="t",
+                source="local",
+                local_class_path="non.existent.Class",
+                enabled=True,
+            )
+        )
+        await s.commit()
 
-    # 空
-    empty = tmp_path / "empty.yaml"
-    empty.write_text("")
-    assert _build_yaml_agents(empty) == {}
-
-    # 空数组
-    empty_list = tmp_path / "empty-list.yaml"
-    empty_list.write_text("[]\n")
-    assert _build_yaml_agents(empty_list) == {}
+    providers = {"local": _FakeProvider("local")}
+    agents = await build_agent_registry_from_db(providers, local_class_index={})
+    assert key not in agents
 
 
-def test_yaml_invalid_format_fail_fast(tmp_path: Path) -> None:
-    yaml_path = tmp_path / "agents.yaml"
-    yaml_path.write_text("not_a_list: true\n")
-    with pytest.raises(RegistryError):
-        _build_yaml_agents(yaml_path)
+async def test_reload_agent_registry_picks_up_new_agent(cleanup_agents) -> None:
+    """reload 后 AGENTS dict 出现新 agent
+
+    本测试需要 init_registry 先跑过让 PROVIDERS 有 dify；
+    单元测试隔离运行时 PROVIDERS 为空 → 直接 import provider 实例填充。
+    """
+    if "dify" not in PROVIDERS:
+        from chameleon.providers.dify import PROVIDER as dify_provider
+
+        PROVIDERS["dify"] = dify_provider
+
+    key = f"registry-test-{secrets.token_hex(3)}"
+    async with AsyncSessionLocal() as s:
+        s.add(
+            Agent(
+                agent_key=key,
+                name="t",
+                source="dify",
+                config={"endpoint": "https://x"},
+                enabled=True,
+            )
+        )
+        await s.commit()
+
+    assert key not in AGENTS
+    await reload_agent_registry()
+    assert key in AGENTS

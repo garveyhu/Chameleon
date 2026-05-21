@@ -32,6 +32,7 @@ from chameleon.core.api.exceptions import (
     code_to_http_status,
 )
 from chameleon.core.api.response import Result
+from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.core.infra import redis as redis_infra
 from chameleon.core.infra.db import engine
 from chameleon.core.infra.jwt import init_jwt
@@ -59,7 +60,11 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # DB 空 → seed 默认 admin / 角色 / 权限 / 模型 / agents（幂等）
     await run_seed_if_empty()
 
-    init_registry()
+    # 从 DB 加载 LLM cache（业务热路径同步取）
+    await reload_llm_cache()
+
+    # 从 DB 加载 AGENTS / PROVIDERS dict
+    await init_registry()
     _log_registry_summary()
     await _trigger_healthchecks()
     yield
