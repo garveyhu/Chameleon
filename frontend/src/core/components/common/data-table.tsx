@@ -1,32 +1,16 @@
-/** 通用数据表格（分页 + 自定义列）
+/** 旧 DataTable —— 兼容层，代理到 core/components/table 的 waveflow 风格组件
  *
- * 使用：
- *   <DataTable
- *     columns={[
- *       { key: 'username', title: '用户名' },
- *       { key: 'created_at', title: '创建时间', render: (row) => formatDateTime(row.created_at) },
- *       { key: 'actions', title: '操作', render: (row) => <ActionButtons row={row} /> },
- *     ]}
- *     data={items}
- *     loading={isLoading}
- *     pagination={{ page, pageSize, total, onPageChange }}
- *   />
+ * 业务页可保持原用法 `<DataTable columns=[{key,title,render}] data />`，
+ * 同步走 waveflow 视觉。新页推荐直接 `import { DataTable } from '@/core/components/table'`。
  */
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { Spinner } from '@/core/components/common/spinner';
-import { Button } from '@/core/components/ui/button';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/core/components/ui/table';
-import { cn } from '@/core/lib/cn';
+  DataTable as WfDataTable,
+  type DataTableColumn as WfColumn,
+  TablePagination,
+} from '@/core/components/table';
 
 export interface DataTableColumn<T> {
   key: string;
@@ -60,92 +44,39 @@ export function DataTable<T>({
   rowKey = 'id' as keyof T,
   pagination,
 }: DataTableProps<T>) {
-  const getKey = (row: T, idx: number): string | number => {
-    if (typeof rowKey === 'function') return rowKey(row);
-    const v = (row as Record<string, unknown>)[rowKey as string];
-    return typeof v === 'string' || typeof v === 'number' ? v : idx;
-  };
+  const wfColumns: WfColumn<T>[] = columns.map(c => ({
+    key: c.key,
+    header: c.title,
+    width: c.width ? Number(c.width.replace(/[^\d]/g, '')) || undefined : undefined,
+    align: c.align,
+    render: c.render
+      ? c.render
+      : (row: T) => {
+          const v = (row as Record<string, unknown>)[c.key];
+          return v === null || v === undefined ? '—' : String(v);
+        },
+  }));
 
   return (
-    <div className="flex flex-col gap-3">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map(col => (
-              <TableHead
-                key={col.key}
-                style={col.width ? { width: col.width } : undefined}
-                className={cn(
-                  col.align === 'center' && 'text-center',
-                  col.align === 'right' && 'text-right',
-                )}
-              >
-                {col.title}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {loading ? (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="text-center py-12">
-                <Spinner size="md" className="mx-auto" />
-              </TableCell>
-            </TableRow>
-          ) : data.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="text-center py-12 text-stone-400">
-                {empty || '暂无数据'}
-              </TableCell>
-            </TableRow>
-          ) : (
-            data.map((row, idx) => (
-              <TableRow key={getKey(row, idx)}>
-                {columns.map(col => (
-                  <TableCell
-                    key={col.key}
-                    className={cn(
-                      col.align === 'center' && 'text-center',
-                      col.align === 'right' && 'text-right',
-                    )}
-                  >
-                    {col.render
-                      ? col.render(row, idx)
-                      : String((row as Record<string, unknown>)[col.key] ?? '—')}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-
+    <>
+      <WfDataTable
+        columns={wfColumns}
+        rows={data}
+        rowKey={rowKey}
+        loading={loading}
+        emptyText={empty || '暂无数据'}
+      />
       {pagination && pagination.total > 0 && (
-        <div className="flex items-center justify-between px-1 text-sm text-stone-600">
-          <span>
-            共 <b>{pagination.total}</b> 条，第 {pagination.page} /{' '}
-            {Math.max(1, Math.ceil(pagination.total / pagination.pageSize))} 页
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pagination.page <= 1}
-              onClick={() => pagination.onPageChange(pagination.page - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" /> 上一页
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={pagination.page * pagination.pageSize >= pagination.total}
-              onClick={() => pagination.onPageChange(pagination.page + 1)}
-            >
-              下一页 <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
+        <TablePagination
+          page={pagination.page}
+          pageSize={pagination.pageSize}
+          total={pagination.total}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={() => {
+            /* 老 API 不支持改 pageSize；新页迁移到 core/components/table 后启用 */
+          }}
+        />
       )}
-    </div>
+    </>
   );
 }

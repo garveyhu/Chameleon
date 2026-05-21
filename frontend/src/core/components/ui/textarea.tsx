@@ -1,3 +1,5 @@
+/** Textarea —— waveflow 紧凑风格 */
+
 import * as React from 'react';
 
 import { cn } from '@/core/lib/cn';
@@ -9,9 +11,9 @@ export const Textarea = React.forwardRef<
   <textarea
     ref={ref}
     className={cn(
-      'flex min-h-[80px] w-full rounded-md border border-stone-300 bg-[var(--color-paper)] px-3 py-2 text-sm transition-colors',
-      'placeholder:text-stone-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:border-primary-400',
-      'disabled:cursor-not-allowed disabled:opacity-50',
+      'w-full min-h-[72px] rounded-md border border-stone-300 bg-white px-3 py-1.5 text-[13px] outline-none transition placeholder:text-stone-400',
+      'focus:border-blue-500 focus:ring-2 focus:ring-blue-100',
+      'disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-500',
       className,
     )}
     {...props}

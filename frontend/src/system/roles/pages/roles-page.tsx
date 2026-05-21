@@ -6,8 +6,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -51,39 +55,46 @@ export const RolesPage = () => {
   });
 
   const columns: DataTableColumn<RoleItem>[] = [
-    { key: 'code', title: 'code', render: r => <span className="font-mono">{r.code}</span> },
-    { key: 'name', title: '名称' },
-    { key: 'description', title: '说明', render: r => r.description || '—' },
+    { key: 'code', header: 'code', width: 140, render: r => <span className="font-mono text-[11.5px] text-stone-700">{r.code}</span> },
+    { key: 'name', header: '名称', render: r => <span className="font-medium text-stone-900">{r.name}</span> },
+    { key: 'description', header: '说明', render: r => r.description || <span className="text-stone-400">—</span> },
     {
       key: 'is_system',
-      title: '类型',
-      render: r =>
-        r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
+      header: '类型',
+      width: 90,
+      render: r => r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
     },
     {
       key: 'perms',
-      title: '权限数',
-      render: r => <span className="font-mono text-sm">{r.permission_codes.length}</span>,
+      header: '权限数',
+      width: 80,
+      align: 'right',
+      render: r => <span className="tnum font-mono text-[11.5px]">{r.permission_codes.length}</span>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 110,
       render: r => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setPermRole(r)}>
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="权限"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setPermRole(r)}
+          >
             <ShieldCheck className="h-3.5 w-3.5" /> 权限
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
             disabled={r.is_system}
             onClick={() => setDelRole(r)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -91,16 +102,17 @@ export const RolesPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="角色管理"
-        description="自定义角色 + 权限点分配"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建角色
-          </Button>
-        }
-      />
-      <DataTable columns={columns} data={listQ.data || []} loading={listQ.isLoading} />
+      <SectionCard>
+        <TableToolbar
+          title="角色管理"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建角色
+            </Button>
+          }
+        />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有角色" />
+      </SectionCard>
 
       <CreateRoleSheet
         open={createOpen}

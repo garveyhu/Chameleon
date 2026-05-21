@@ -6,8 +6,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -68,20 +72,22 @@ export const AgentsPage = () => {
   const columns: DataTableColumn<AgentItem>[] = [
     {
       key: 'agent_key',
-      title: 'agent_key',
-      render: a => <span className="font-mono">{a.agent_key}</span>,
+      header: 'agent_key',
+      width: 180,
+      render: a => <span className="font-mono text-[11.5px] text-stone-700">{a.agent_key}</span>,
     },
-    { key: 'name', title: '名称' },
+    { key: 'name', header: '名称', render: a => <span className="font-medium text-stone-900">{a.name}</span> },
     {
       key: 'source',
-      title: '来源',
+      header: '来源',
+      width: 90,
       render: a => (
         <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>{a.source}</Badge>
       ),
     },
     {
       key: 'tags',
-      title: '标签',
+      header: '标签',
       render: a =>
         a.tags && a.tags.length ? (
           <div className="flex gap-1">
@@ -92,12 +98,13 @@ export const AgentsPage = () => {
             ))}
           </div>
         ) : (
-          '—'
+          <span className="text-stone-400">—</span>
         ),
     },
     {
       key: 'enabled',
-      title: '启用',
+      header: '启用',
+      width: 70,
       render: a => (
         <Switch
           checked={a.enabled}
@@ -107,23 +114,28 @@ export const AgentsPage = () => {
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 110,
       render: a => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setTestAgent(a)}>
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="测试"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setTestAgent(a)}
+          >
             <Play className="h-3.5 w-3.5" /> 测试
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
             disabled={a.source === 'local'}
             onClick={() => setDelAgent(a)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -131,16 +143,17 @@ export const AgentsPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="智能体"
-        description="本地 / 外部 agent 管理；本地仅启停，外部可 CRUD"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建外部
-          </Button>
-        }
-      />
-      <DataTable columns={columns} data={listQ.data || []} loading={listQ.isLoading} />
+      <SectionCard>
+        <TableToolbar
+          title="智能体"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建外部
+            </Button>
+          }
+        />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有智能体" />
+      </SectionCard>
 
       <CreateAgentSheet
         open={createOpen}

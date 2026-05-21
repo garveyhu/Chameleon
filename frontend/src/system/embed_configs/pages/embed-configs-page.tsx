@@ -6,8 +6,13 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import {
@@ -43,13 +48,14 @@ import type { EmbedConfigItem } from '@/system/embed_configs/types/embed';
 export const EmbedConfigsPage = () => {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [snippetCfg, setSnippetCfg] = useState<EmbedConfigItem | null>(null);
   const [delCfg, setDelCfg] = useState<EmbedConfigItem | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['embed-configs', page],
-    queryFn: () => embedConfigApi.list({ page, page_size: 20 }),
+    queryKey: ['embed-configs', page, pageSize],
+    queryFn: () => embedConfigApi.list({ page, page_size: pageSize }),
   });
 
   const createMut = useMutation({
@@ -73,13 +79,14 @@ export const EmbedConfigsPage = () => {
   const columns: DataTableColumn<EmbedConfigItem>[] = [
     {
       key: 'embed_key',
-      title: 'embed_key',
-      render: e => <span className="font-mono">{e.embed_key}</span>,
+      header: 'embed_key',
+      width: 200,
+      render: e => <span className="font-mono text-[11.5px] text-stone-700">{e.embed_key}</span>,
     },
-    { key: 'name', title: '名称' },
+    { key: 'name', header: '名称', render: e => <span className="font-medium text-stone-900">{e.name}</span> },
     {
       key: 'allowed_origins',
-      title: 'origins',
+      header: 'origins',
       render: e =>
         e.allowed_origins && e.allowed_origins.length ? (
           <div className="flex flex-wrap gap-1">
@@ -98,28 +105,33 @@ export const EmbedConfigsPage = () => {
     },
     {
       key: 'enabled',
-      title: '启用',
-      render: e =>
-        e.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
+      header: '启用',
+      width: 70,
+      render: e => e.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 130,
       render: e => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setSnippetCfg(e)}>
-            <Code2 className="h-3.5 w-3.5" /> 嵌入代码
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="嵌入代码"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setSnippetCfg(e)}
+          >
+            <Code2 className="h-3.5 w-3.5" /> 代码
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelCfg(e)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -127,21 +139,33 @@ export const EmbedConfigsPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="嵌入式智能体"
-        description="生成可嵌入业务方网页的对话 widget"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建
-          </Button>
-        }
-      />
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{ page, pageSize: 20, total: listQ.data?.total || 0, onPageChange: setPage }}
-      />
+      <SectionCard>
+        <TableToolbar
+          title="嵌入式智能体"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建
+            </Button>
+          }
+        />
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="还没有嵌入式配置"
+        />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
 
       <CreateEmbedSheet
         open={createOpen}

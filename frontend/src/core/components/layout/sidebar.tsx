@@ -356,9 +356,11 @@ const BottomUser = () => {
           title="账户菜单"
           className="group flex w-full items-center gap-2.5 border-t border-stone-200/70 bg-transparent p-2.5 text-left outline-none transition hover:bg-stone-200/40 focus-visible:bg-stone-200/40"
         >
-          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-stone-200 text-[11px] font-semibold uppercase text-stone-600">
-            {username.slice(0, 1)}
-          </div>
+          <img
+            src="/default-avatar.jpg"
+            alt={username}
+            className="h-7 w-7 flex-shrink-0 rounded-full object-cover"
+          />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12px] text-stone-800">{username}</div>
             <div className="flex items-center gap-1 text-[10px] text-stone-500">

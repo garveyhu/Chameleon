@@ -1,36 +1,36 @@
-/** 调用日志查询页 */
+/** 调用日志查询页 —— waveflow 风格 */
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Input } from '@/core/components/ui/input';
-import { Label } from '@/core/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/core/components/ui/select';
 import { formatDateTime, formatNumber } from '@/core/lib/format';
 import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem } from '@/system/call_logs/types/call-log';
 
 export const CallLogsPage = () => {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [appIdInput, setAppIdInput] = useState('');
+  const [agentKeyInput, setAgentKeyInput] = useState('');
   const [appId, setAppId] = useState('');
   const [agentKey, setAgentKey] = useState('');
   const [success, setSuccess] = useState<string>('all');
 
   const listQ = useQuery({
-    queryKey: ['call-logs', page, appId, agentKey, success],
+    queryKey: ['call-logs', page, pageSize, appId, agentKey, success],
     queryFn: () =>
       callLogApi.list({
         page,
-        page_size: 50,
+        page_size: pageSize,
         app_id: appId || undefined,
         agent_key: agentKey || undefined,
         success: success === 'all' ? undefined : success === 'true',
@@ -40,18 +40,26 @@ export const CallLogsPage = () => {
   const columns: DataTableColumn<CallLogItem>[] = [
     {
       key: 'created_at',
-      title: '时间',
-      render: l => <span className="text-xs text-stone-500">{formatDateTime(l.created_at)}</span>,
+      header: '时间',
+      width: 160,
+      render: l => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(l.created_at)}</span>,
     },
-    { key: 'app_id', title: 'app', render: l => <span className="font-mono text-xs">{l.app_id}</span> },
+    {
+      key: 'app_id',
+      header: 'app',
+      width: 140,
+      render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.app_id}</span>,
+    },
     {
       key: 'agent_key',
-      title: 'agent',
-      render: l => <span className="font-mono text-xs">{l.agent_key}</span>,
+      header: 'agent',
+      width: 160,
+      render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.agent_key}</span>,
     },
     {
       key: 'status',
-      title: '状态',
+      header: '状态',
+      width: 80,
       render: l =>
         l.success ? (
           <Badge variant="success">成功</Badge>
@@ -61,85 +69,105 @@ export const CallLogsPage = () => {
     },
     {
       key: 'duration',
-      title: '耗时',
-      render: l => <span className="font-mono text-xs">{l.duration_ms} ms</span>,
+      header: '耗时',
+      width: 90,
+      align: 'right',
+      render: l => <span className="tnum font-mono text-[11.5px]">{l.duration_ms} ms</span>,
     },
     {
       key: 'tokens',
-      title: 'Token',
+      header: 'Token',
+      width: 90,
+      align: 'right',
       render: l =>
         l.total_tokens ? (
-          <span className="font-mono text-xs text-stone-500">
+          <span className="tnum font-mono text-[11.5px] text-stone-500">
             {formatNumber(l.total_tokens)}
           </span>
         ) : (
-          '—'
+          <span className="text-stone-400">—</span>
         ),
     },
     {
       key: 'error',
-      title: '错误',
+      header: '错误',
       render: l => (
-        <span className="text-xs text-red-600">{l.error_message?.slice(0, 80) || '—'}</span>
+        <span className="text-[11.5px] text-red-600">{l.error_message?.slice(0, 80) || '—'}</span>
       ),
     },
   ];
 
   return (
     <div>
-      <PageHeader title="调用日志" description="实时查询 call_logs（含错误堆栈）" />
+      <SectionCard>
+        <TableToolbar
+          title="调用日志"
+          filters={[
+            {
+              value: success,
+              onChange: v => {
+                setSuccess(v);
+                setPage(1);
+              },
+              placeholder: '状态',
+              options: [
+                { value: 'true', label: '仅成功' },
+                { value: 'false', label: '仅失败' },
+              ],
+              width: 100,
+            },
+          ]}
+          extra={
+            <>
+              <Input
+                className="!h-7 !text-[12px]"
+                style={{ maxWidth: 140 }}
+                placeholder="app_id"
+                value={appIdInput}
+                onChange={e => setAppIdInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setAppId(appIdInput);
+                    setPage(1);
+                  }
+                }}
+              />
+              <Input
+                className="!h-7 !text-[12px]"
+                style={{ maxWidth: 160 }}
+                placeholder="agent_key"
+                value={agentKeyInput}
+                onChange={e => setAgentKeyInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setAgentKey(agentKeyInput);
+                    setPage(1);
+                  }
+                }}
+              />
+            </>
+          }
+        />
 
-      {/* 过滤栏 */}
-      <div className="mb-4 grid grid-cols-3 gap-3">
-        <div>
-          <Label className="text-xs">App ID</Label>
-          <Input
-            value={appId}
-            onChange={e => {
-              setAppId(e.target.value);
-              setPage(1);
-            }}
-            placeholder="过滤 app_id"
-          />
-        </div>
-        <div>
-          <Label className="text-xs">Agent Key</Label>
-          <Input
-            value={agentKey}
-            onChange={e => {
-              setAgentKey(e.target.value);
-              setPage(1);
-            }}
-            placeholder="过滤 agent_key"
-          />
-        </div>
-        <div>
-          <Label className="text-xs">状态</Label>
-          <Select
-            value={success}
-            onValueChange={v => {
-              setSuccess(v);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="true">仅成功</SelectItem>
-              <SelectItem value="false">仅失败</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="暂无调用日志"
+        />
 
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{ page, pageSize: 50, total: listQ.data?.total || 0, onPageChange: setPage }}
-      />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
     </div>
   );
 };

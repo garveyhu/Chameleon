@@ -6,8 +6,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -61,44 +65,47 @@ export const ProvidersPage = () => {
   });
 
   const columns: DataTableColumn<ProviderItem>[] = [
-    { key: 'code', title: 'code', render: p => <span className="font-mono">{p.code}</span> },
-    { key: 'name', title: '名称' },
-    { key: 'kind', title: '类型', render: p => <Badge variant="primary">{p.kind}</Badge> },
-    { key: 'base_url', title: 'base_url', render: p => <span className="font-mono text-xs">{p.base_url || '—'}</span> },
+    { key: 'code', header: 'code', width: 140, render: p => <span className="font-mono text-[11.5px] text-stone-700">{p.code}</span> },
+    { key: 'name', header: '名称', render: p => <span className="font-medium text-stone-900">{p.name}</span> },
+    { key: 'kind', header: '类型', width: 100, render: p => <Badge variant="primary">{p.kind}</Badge> },
+    { key: 'base_url', header: 'base_url', render: p => <span className="font-mono text-[11.5px] text-stone-600">{p.base_url || '—'}</span> },
     {
       key: 'api_key',
-      title: 'API Key',
-      render: p =>
-        p.has_api_key ? (
-          <Badge variant="success">已配置</Badge>
-        ) : (
-          <Badge variant="warning">未配置</Badge>
-        ),
+      header: 'API Key',
+      width: 90,
+      render: p => p.has_api_key ? <Badge variant="success">已配置</Badge> : <Badge variant="warning">未配置</Badge>,
     },
     {
       key: 'enabled',
-      title: '启用',
-      render: p =>
-        p.enabled ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <span className="text-stone-400">—</span>,
+      header: '启用',
+      width: 60,
+      align: 'center',
+      render: p => p.enabled ? <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" /> : <span className="text-stone-400">—</span>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 110,
       render: p => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => testMut.mutate(p.id)} disabled={testMut.isPending}>
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="测试连通性"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-50"
+            onClick={() => testMut.mutate(p.id)}
+            disabled={testMut.isPending}
+          >
             <Zap className="h-3.5 w-3.5" /> 测试
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelProv(p)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -106,16 +113,17 @@ export const ProvidersPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="Providers"
-        description="LLM / embedding / 外部平台连接"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建
-          </Button>
-        }
-      />
-      <DataTable columns={columns} data={listQ.data || []} loading={listQ.isLoading} />
+      <SectionCard>
+        <TableToolbar
+          title="Providers"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建
+            </Button>
+          }
+        />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有 Provider" />
+      </SectionCard>
       <CreateProviderSheet
         open={createOpen}
         onClose={() => setCreateOpen(false)}

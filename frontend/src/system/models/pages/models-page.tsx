@@ -6,8 +6,12 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -57,59 +61,61 @@ export const ModelsPage = () => {
   });
 
   const columns: DataTableColumn<ModelItem>[] = [
-    { key: 'code', title: '模型', render: m => <span className="font-mono">{m.code}</span> },
+    { key: 'code', header: '模型', render: m => <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span> },
     {
       key: 'provider_code',
-      title: 'Provider',
+      header: 'Provider',
+      width: 120,
       render: m => <Badge variant="primary">{m.provider_code || '?'}</Badge>,
     },
-    { key: 'kind', title: '类型', render: m => <Badge>{m.kind}</Badge> },
-    { key: 'dim', title: '维度', render: m => m.dim ?? '—' },
+    { key: 'kind', header: '类型', width: 100, render: m => <Badge>{m.kind}</Badge> },
+    { key: 'dim', header: '维度', width: 80, align: 'right', render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span> },
     {
       key: 'defaults',
-      title: '默认参数',
+      header: '默认参数',
       render: m => (
-        <span className="font-mono text-xs text-stone-500">
+        <span className="font-mono text-[11.5px] text-stone-500">
           {m.defaults ? JSON.stringify(m.defaults).slice(0, 60) : '—'}
         </span>
       ),
     },
     {
       key: 'enabled',
-      title: '启用',
-      render: m =>
-        m.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
+      header: '启用',
+      width: 70,
+      render: m => m.enabled ? <Badge variant="success">是</Badge> : <Badge variant="warning">否</Badge>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '100px',
+      width: 70,
       render: m => (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-red-600 hover:bg-red-50"
+        <button
+          type="button"
+          title="删除"
+          className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
           onClick={() => setDelModel(m)}
         >
           <Trash2 className="h-3.5 w-3.5" />
-        </Button>
+        </button>
       ),
     },
   ];
 
   return (
     <div>
-      <PageHeader
-        title="模型管理"
-        description="LLM / embedding 模型清单"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建
-          </Button>
-        }
-      />
-      <DataTable columns={columns} data={listQ.data || []} loading={listQ.isLoading} />
+      <SectionCard>
+        <TableToolbar
+          title="模型管理"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建
+            </Button>
+          }
+        />
+        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText="还没有模型" />
+      </SectionCard>
       <CreateModelSheet
         open={createOpen}
         providers={providersQ.data || []}

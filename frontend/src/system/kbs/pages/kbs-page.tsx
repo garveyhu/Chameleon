@@ -4,8 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Database } from 'lucide-react';
 import { useState } from 'react';
 
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import {
@@ -22,61 +27,82 @@ import type { KbItem } from '@/system/kbs/types/kb';
 
 export const KbsPage = () => {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [viewKb, setViewKb] = useState<KbItem | null>(null);
   const listQ = useQuery({
-    queryKey: ['kbs', page],
-    queryFn: () => kbApi.list({ page, page_size: 20 }),
+    queryKey: ['kbs', page, pageSize],
+    queryFn: () => kbApi.list({ page, page_size: pageSize }),
   });
 
   const columns: DataTableColumn<KbItem>[] = [
-    { key: 'kb_key', title: 'kb_key', render: k => <span className="font-mono">{k.kb_key}</span> },
-    { key: 'name', title: '名称' },
+    { key: 'kb_key', header: 'kb_key', width: 160, render: k => <span className="font-mono text-[11.5px] text-stone-700">{k.kb_key}</span> },
+    { key: 'name', header: '名称', render: k => <span className="font-medium text-stone-900">{k.name}</span> },
     {
       key: 'embedding',
-      title: 'embedding',
+      header: 'embedding',
       render: k => (
-        <span className="text-xs text-stone-500">
+        <span className="text-[11.5px] text-stone-500">
           {k.embedding_model}
-          <span className="ml-2 font-mono">d={k.embedding_dim}</span>
+          <span className="ml-2 font-mono tnum">d={k.embedding_dim}</span>
         </span>
       ),
     },
     {
       key: 'stats',
-      title: '统计',
+      header: '统计',
+      width: 160,
       render: k => (
-        <span className="text-xs text-stone-500">
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
           {k.document_count} 文档 · {k.chunk_count} 切块
         </span>
       ),
     },
     {
       key: 'created_at',
-      title: '创建时间',
-      render: k => <span className="text-xs text-stone-500">{formatDateTime(k.created_at)}</span>,
+      header: '创建时间',
+      width: 160,
+      render: k => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(k.created_at)}</span>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '120px',
+      width: 100,
       render: k => (
-        <Button size="sm" variant="ghost" onClick={() => setViewKb(k)}>
+        <button
+          type="button"
+          title="查看切块"
+          className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+          onClick={() => setViewKb(k)}
+        >
           <Database className="h-3.5 w-3.5" /> 切块
-        </Button>
+        </button>
       ),
     },
   ];
 
   return (
     <div>
-      <PageHeader title="知识库" description="业务方通过 /v1/knowledge 创建；这里查看与管理" />
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{ page, pageSize: 20, total: listQ.data?.total || 0, onPageChange: setPage }}
-      />
+      <SectionCard>
+        <TableToolbar title="知识库" />
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="还没有知识库"
+        />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
       <ChunksSheet kb={viewKb} onClose={() => setViewKb(null)} />
     </div>
   );

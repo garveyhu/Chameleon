@@ -9,8 +9,13 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -44,13 +49,13 @@ type ResetForm = z.infer<typeof resetSchema>;
 export const UsersPage = () => {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetUser, setResetUser] = useState<UserItem | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserItem | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['users', page],
+    queryKey: ['users', page, pageSize],
     queryFn: () => userApi.list({ page, page_size: pageSize }),
   });
 
@@ -94,12 +99,12 @@ export const UsersPage = () => {
   });
 
   const columns: DataTableColumn<UserItem>[] = [
-    { key: 'username', title: '用户名' },
-    { key: 'display_name', title: '显示名', render: u => u.display_name || '—' },
-    { key: 'email', title: '邮箱', render: u => u.email || '—' },
+    { key: 'username', header: '用户名', render: u => <span className="font-medium text-stone-900">{u.username}</span> },
+    { key: 'display_name', header: '显示名', render: u => u.display_name || <span className="text-stone-400">—</span> },
+    { key: 'email', header: '邮箱', render: u => u.email || <span className="text-stone-400">—</span> },
     {
       key: 'roles',
-      title: '角色',
+      header: '角色',
       render: u => (
         <div className="flex flex-wrap gap-1">
           {u.role_codes.map(r => (
@@ -112,7 +117,8 @@ export const UsersPage = () => {
     },
     {
       key: 'status',
-      title: '状态',
+      header: '状态',
+      width: 80,
       render: u => (
         <Badge variant={u.status === 'active' ? 'success' : 'danger'}>
           {u.status === 'active' ? '活跃' : '禁用'}
@@ -121,28 +127,34 @@ export const UsersPage = () => {
     },
     {
       key: 'last_login_at',
-      title: '最后登录',
-      render: u => <span className="text-xs text-stone-500">{formatDateTime(u.last_login_at)}</span>,
+      header: '最后登录',
+      width: 160,
+      render: u => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(u.last_login_at)}</span>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 100,
       render: u => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setResetUser(u)}>
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="重置密码"
+            className="rounded p-1 text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setResetUser(u)}
+          >
             <KeyRound className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
             onClick={() => setDeleteUser(u)}
             disabled={u.username === 'admin'}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -150,27 +162,35 @@ export const UsersPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="用户管理"
-        description="管理控制台用户账号 + 角色分配"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建用户
-          </Button>
-        }
-      />
+      <SectionCard>
+        <TableToolbar
+          title="用户管理"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建用户
+            </Button>
+          }
+        />
 
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{
-          page,
-          pageSize,
-          total: listQ.data?.total || 0,
-          onPageChange: setPage,
-        }}
-      />
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="还没有用户"
+        />
+
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
 
       {/* 创建抽屉 */}
       <CreateUserSheet

@@ -1,16 +1,20 @@
-/** 审计日志查询页 */
+/** 审计日志查询页 —— waveflow 风格 */
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Input } from '@/core/components/ui/input';
-import { Label } from '@/core/components/ui/label';
+import { formatDateTime } from '@/core/lib/format';
 import { get } from '@/core/lib/request';
 import type { PageResult } from '@/core/types/api';
-import { formatDateTime } from '@/core/lib/format';
 
 interface AuditLogItem {
   id: number;
@@ -27,16 +31,19 @@ interface AuditLogItem {
 
 export const AuditLogsPage = () => {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [resourceInput, setResourceInput] = useState('');
+  const [actionInput, setActionInput] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [action, setAction] = useState('');
 
   const listQ = useQuery({
-    queryKey: ['audit-logs', page, resourceType, action],
+    queryKey: ['audit-logs', page, pageSize, resourceType, action],
     queryFn: () =>
       get<PageResult<AuditLogItem>>('/v1/admin/audit-logs', {
         params: {
           page,
-          page_size: 50,
+          page_size: pageSize,
           resource_type: resourceType || undefined,
           action: action || undefined,
         },
@@ -46,66 +53,95 @@ export const AuditLogsPage = () => {
   const columns: DataTableColumn<AuditLogItem>[] = [
     {
       key: 'created_at',
-      title: '时间',
-      render: a => <span className="text-xs text-stone-500">{formatDateTime(a.created_at)}</span>,
+      header: '时间',
+      width: 160,
+      render: a => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(a.created_at)}</span>,
     },
     {
       key: 'actor',
-      title: '操作者',
-      render: a => <span className="font-mono">{a.actor_username || '?'}</span>,
+      header: '操作者',
+      width: 120,
+      render: a => <span className="font-mono text-[11.5px] text-stone-700">{a.actor_username || '?'}</span>,
     },
-    { key: 'action', title: '动作', render: a => <Badge variant="primary">{a.action}</Badge> },
+    {
+      key: 'action',
+      header: '动作',
+      width: 100,
+      render: a => <Badge variant="primary">{a.action}</Badge>,
+    },
     {
       key: 'resource',
-      title: '资源',
+      header: '资源',
       render: a => (
-        <span className="font-mono text-xs">
+        <span className="font-mono text-[11.5px] text-stone-700">
           {a.resource_type}
           {a.resource_id && `:${a.resource_id}`}
         </span>
       ),
     },
-    { key: 'ip', title: 'IP', render: a => a.ip || '—' },
+    { key: 'ip', header: 'IP', width: 130, render: a => <span className="font-mono text-[11.5px] tnum">{a.ip || '—'}</span> },
     {
       key: 'request_id',
-      title: '请求 ID',
-      render: a => <span className="font-mono text-xs text-stone-400">{a.request_id || '—'}</span>,
+      header: '请求 ID',
+      width: 140,
+      render: a => <span className="font-mono text-[11.5px] text-stone-400 tnum truncate">{a.request_id || '—'}</span>,
     },
   ];
 
   return (
     <div>
-      <PageHeader title="审计日志" description="所有 admin 写操作的痕迹" />
-      <div className="mb-4 grid grid-cols-2 gap-3">
-        <div>
-          <Label className="text-xs">资源类型</Label>
-          <Input
-            value={resourceType}
-            onChange={e => {
-              setResourceType(e.target.value);
-              setPage(1);
-            }}
-            placeholder="users / agents / ..."
-          />
-        </div>
-        <div>
-          <Label className="text-xs">动作</Label>
-          <Input
-            value={action}
-            onChange={e => {
-              setAction(e.target.value);
-              setPage(1);
-            }}
-            placeholder="create / update / delete ..."
-          />
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{ page, pageSize: 50, total: listQ.data?.total || 0, onPageChange: setPage }}
-      />
+      <SectionCard>
+        <TableToolbar
+          title="审计日志"
+          extra={
+            <>
+              <Input
+                className="!h-7 !text-[12px]"
+                style={{ maxWidth: 150 }}
+                placeholder="资源类型"
+                value={resourceInput}
+                onChange={e => setResourceInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setResourceType(resourceInput);
+                    setPage(1);
+                  }
+                }}
+              />
+              <Input
+                className="!h-7 !text-[12px]"
+                style={{ maxWidth: 130 }}
+                placeholder="动作"
+                value={actionInput}
+                onChange={e => setActionInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    setAction(actionInput);
+                    setPage(1);
+                  }
+                }}
+              />
+            </>
+          }
+        />
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="暂无审计日志"
+        />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
     </div>
   );
 };

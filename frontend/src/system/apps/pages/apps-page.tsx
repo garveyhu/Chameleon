@@ -6,8 +6,13 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { DataTable, type DataTableColumn } from '@/core/components/common/data-table';
-import { PageHeader } from '@/core/components/common/page-header';
+import {
+  DataTable,
+  type DataTableColumn,
+  SectionCard,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import {
@@ -36,13 +41,14 @@ import type { ApiKeyCreated, AppItem } from '@/system/apps/types/app';
 export const AppsPage = () => {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [keysApp, setKeysApp] = useState<AppItem | null>(null);
   const [delApp, setDelApp] = useState<AppItem | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['apps', page],
-    queryFn: () => appApi.list({ page, page_size: 20 }),
+    queryKey: ['apps', page, pageSize],
+    queryFn: () => appApi.list({ page, page_size: pageSize }),
   });
 
   const createMut = useMutation({
@@ -64,11 +70,12 @@ export const AppsPage = () => {
   });
 
   const columns: DataTableColumn<AppItem>[] = [
-    { key: 'app_key', title: 'app_key', render: a => <span className="font-mono">{a.app_key}</span> },
-    { key: 'name', title: '名称' },
+    { key: 'app_key', header: 'app_key', render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span> },
+    { key: 'name', header: '名称', render: a => <span className="font-medium text-stone-900">{a.name}</span> },
     {
       key: 'status',
-      title: '状态',
+      header: '状态',
+      width: 80,
       render: a => (
         <Badge variant={a.status === 'active' ? 'success' : 'warning'}>
           {a.status === 'active' ? '活跃' : '挂起'}
@@ -77,36 +84,43 @@ export const AppsPage = () => {
     },
     {
       key: 'limits',
-      title: '配额',
+      header: '配额',
+      width: 160,
       render: a => (
-        <span className="text-xs text-stone-500">
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
           QPM {a.qpm_limit ?? '∞'} · QPD {a.qpd_limit ?? '∞'}
         </span>
       ),
     },
     {
       key: 'created_at',
-      title: '创建于',
-      render: a => <span className="text-xs text-stone-500">{formatDateTime(a.created_at)}</span>,
+      header: '创建于',
+      width: 160,
+      render: a => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(a.created_at)}</span>,
     },
     {
       key: 'actions',
-      title: '操作',
+      header: '操作',
       align: 'right',
-      width: '180px',
+      width: 130,
       render: a => (
-        <div className="flex justify-end gap-1">
-          <Button size="sm" variant="ghost" onClick={() => setKeysApp(a)}>
-            <KeyRound className="h-3.5 w-3.5" /> API Keys
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600 hover:bg-red-50"
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="API Keys"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setKeysApp(a)}
+          >
+            <KeyRound className="h-3.5 w-3.5" /> Keys
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelApp(a)}
           >
             <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          </button>
         </div>
       ),
     },
@@ -114,21 +128,33 @@ export const AppsPage = () => {
 
   return (
     <div>
-      <PageHeader
-        title="应用 & API Key"
-        description="业务方应用与对外凭证管理"
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> 新建应用
-          </Button>
-        }
-      />
-      <DataTable
-        columns={columns}
-        data={listQ.data?.items || []}
-        loading={listQ.isLoading}
-        pagination={{ page, pageSize: 20, total: listQ.data?.total || 0, onPageChange: setPage }}
-      />
+      <SectionCard>
+        <TableToolbar
+          title="应用 & API Key"
+          extra={
+            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> 新建应用
+            </Button>
+          }
+        />
+        <DataTable
+          columns={columns}
+          rows={listQ.data?.items || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText="还没有应用"
+        />
+        <TablePagination
+          page={page}
+          pageSize={pageSize}
+          total={listQ.data?.total || 0}
+          onPageChange={setPage}
+          onPageSizeChange={s => {
+            setPageSize(s);
+            setPage(1);
+          }}
+        />
+      </SectionCard>
 
       <CreateAppSheet
         open={createOpen}

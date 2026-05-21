@@ -5,9 +5,8 @@ import { Download, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { PageHeader } from '@/core/components/common/page-header';
+import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
-import { Card, CardContent } from '@/core/components/ui/card';
 import { getRaw, postForm } from '@/core/lib/request';
 
 export const SettingsPage = () => {
@@ -63,37 +62,33 @@ export const SettingsPage = () => {
 
   return (
     <div>
-      <PageHeader title="系统配置" description="导入 / 导出 + 系统参数（未来）" />
-
-      <Card>
-        <CardContent className="pt-6">
-          <h3 className="mb-2 text-sm font-medium">配置备份</h3>
-          <p className="mb-4 text-xs text-stone-500">
-            导出 zip 含：apps / users / providers / models / agents / embed_configs。
-            providers.api_key 仍是加密文 —— 异机还原需要相同的 CHAMELEON_CRYPTO_KEY。
-          </p>
-          <div className="flex gap-3">
-            <Button onClick={() => exportMut.mutate()} disabled={exportMut.isPending}>
-              <Download className="h-4 w-4" />
-              {exportMut.isPending ? '导出中...' : '导出全部配置'}
-            </Button>
-            <Button variant="outline" onClick={() => fileRef.current?.click()} disabled={importing}>
-              <Upload className="h-4 w-4" />
-              {importing ? '导入中...' : '导入 zip'}
-            </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".zip"
-              className="hidden"
-              onChange={e => {
-                const file = e.target.files?.[0];
-                if (file) handleImport(file);
-              }}
-            />
-          </div>
-        </CardContent>
-      </Card>
+      <SectionCard>
+        <h3 className="mb-1 text-[13.5px] font-semibold text-stone-900">系统配置 · 配置备份</h3>
+        <p className="mb-4 text-[12px] text-stone-500">
+          导出 zip 含：apps / users / providers / models / agents / embed_configs。
+          providers.api_key 仍是加密文 —— 异机还原需要相同的 CHAMELEON_CRYPTO_KEY。
+        </p>
+        <div className="flex gap-2">
+          <Button variant="primary" size="sm" onClick={() => exportMut.mutate()} disabled={exportMut.isPending}>
+            <Download className="h-3.5 w-3.5" />
+            {exportMut.isPending ? '导出中...' : '导出全部配置'}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importing}>
+            <Upload className="h-3.5 w-3.5" />
+            {importing ? '导入中...' : '导入 zip'}
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".zip"
+            className="hidden"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (file) handleImport(file);
+            }}
+          />
+        </div>
+      </SectionCard>
     </div>
   );
 };
