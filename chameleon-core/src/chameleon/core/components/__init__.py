@@ -11,9 +11,6 @@
 - cache/       —— diskcache 单例
 - knowledge    —— in-process KB API（search_kb / get_kb_meta）
 - inventory    —— ★ 全局具名访问点（仿 sage 的 components/inventory.py）
-
-迁移说明：原 `chameleon.core.embedding` / `chameleon.core.vector` / `chameleon.core.knowledge`
-路径继续兼容（re-export 同样的符号）。新代码建议从 `chameleon.core.components.*` 走。
 """
 
 from chameleon.core.components.inventory import (

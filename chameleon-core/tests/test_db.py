@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import text
 
-from chameleon.core.db import AsyncSessionLocal, engine, get_session
+from chameleon.core.infra.db import AsyncSessionLocal, engine, get_session
 
 
 async def test_engine_connect() -> None:

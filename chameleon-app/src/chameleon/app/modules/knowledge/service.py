@@ -26,14 +26,14 @@ from chameleon.app.modules.knowledge.schemas import (
     UpdateKbRequest,
 )
 from chameleon.core.config import inventory
-from chameleon.core.exceptions import (
+from chameleon.core.api.exceptions import (
     DocumentNotFoundError,
     KnowledgeBaseNotFoundError,
     ValidationError,
 )
-from chameleon.core.knowledge import search_kb
+from chameleon.core.components.knowledge import search_kb
 from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
-from chameleon.core.response import PageParams, PageResult
+from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.vector import get_store
 
 # ── KB CRUD ─────────────────────────────────────────────

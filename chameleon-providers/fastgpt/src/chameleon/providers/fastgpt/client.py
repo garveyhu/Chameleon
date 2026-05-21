@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.core.exceptions import (
+from chameleon.core.api.exceptions import (
     ProviderAuthError,
     ProviderInputError,
     ProviderInternalError,

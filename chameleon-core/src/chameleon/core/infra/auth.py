@@ -21,8 +21,8 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.db import get_session
-from chameleon.core.exceptions import (
+from chameleon.core.infra.db import get_session
+from chameleon.core.api.exceptions import (
     BusinessError,
     PermissionDeniedError,
     ResultCode,

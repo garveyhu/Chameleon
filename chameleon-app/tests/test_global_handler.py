@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import BaseModel
 
 from chameleon.app.main import create_app
-from chameleon.core.exceptions import (
+from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
     ResultCode,

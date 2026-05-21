@@ -4,15 +4,15 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import delete
 
-from chameleon.core.auth import (
+from chameleon.core.infra.auth import (
     CurrentApp,
     current_app,
     generate_api_key,
     hash_api_key,
     require_scope,
 )
-from chameleon.core.db import AsyncSessionLocal, get_session
-from chameleon.core.exceptions import (
+from chameleon.core.infra.db import AsyncSessionLocal, get_session
+from chameleon.core.api.exceptions import (
     BusinessError,
     PermissionDeniedError,
     ResultCode,

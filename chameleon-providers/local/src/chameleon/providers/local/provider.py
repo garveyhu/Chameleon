@@ -21,7 +21,7 @@ from collections.abc import AsyncIterator
 
 from loguru import logger
 
-from chameleon.core.exceptions import ProviderInternalError, RegistryError
+from chameleon.core.api.exceptions import ProviderInternalError, RegistryError
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import InvokeContext, StreamEvent
 
@@ -30,8 +30,6 @@ class LocalProvider(Provider):
     """本地 in-process provider
 
     provider name = "local"（agents.yaml + AgentDef 用）
-    向后兼容：registry 同时把 "langgraph" 注册为本 provider 的 alias，
-    旧的 v0.1 agents.yaml 与 conversations 表里 provider="langgraph" 仍能找到。
     """
 
     name = "local"
@@ -73,7 +71,3 @@ class LocalProvider(Provider):
 
     async def healthcheck(self) -> bool:
         return True
-
-
-# 向后兼容别名（v0.1 历史包袱：原类名 LangGraphProvider）
-LangGraphProvider = LocalProvider

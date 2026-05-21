@@ -24,14 +24,14 @@ from chameleon.app.modules.api_key import api_keys_router
 from chameleon.app.modules.conversation import conversations_router
 from chameleon.app.modules.knowledge import knowledge_router
 from chameleon.app.modules.task import tasks_router
-from chameleon.core.db import engine
-from chameleon.core.exceptions import (
+from chameleon.core.infra.db import engine
+from chameleon.core.api.exceptions import (
     BusinessError,
     ResultCode,
     code_to_http_status,
 )
-from chameleon.core.logger import setup_logger
-from chameleon.core.response import Result
+from chameleon.core.infra.logger import setup_logger
+from chameleon.core.api.response import Result
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 
 REQUEST_ID_HEADER = "X-Request-Id"
@@ -76,7 +76,7 @@ def _log_registry_summary() -> None:
     logger.info("Loaded {} providers: {}", len(PROVIDERS), ", ".join(PROVIDERS.keys()))
     logger.info("Loaded {} agents:", len(AGENTS))
     for key, agent in AGENTS.items():
-        source = "(built-in)" if agent.provider == "langgraph" else "(from agents.yaml)"
+        source = "(built-in)" if agent.provider == "local" else "(from agents.yaml)"
         logger.info("  [{:<9}] {:<24} {}", agent.provider, key, source)
 
 

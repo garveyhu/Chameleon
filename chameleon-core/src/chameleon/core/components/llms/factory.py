@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.config import inventory
-from chameleon.core.exceptions import BusinessError, ResultCode
+from chameleon.core.api.exceptions import BusinessError, ResultCode
 
 _CACHE: dict[str, BaseLLM] = {}
 _OVERRIDE: BaseLLM | None = None

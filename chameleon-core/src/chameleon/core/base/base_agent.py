@@ -18,10 +18,6 @@ BaseAgent 提供：
 2. `get_metadata()` —— 元数据
 3. `from_langgraph_graph(ctx, graph)` —— LangGraph 桥的 classmethod 包装
 4. `from_runnable(ctx, runnable, ...)` —— LangChain Runnable 桥的 classmethod 包装
-
-向后兼容：
-- 字典模式（`AGENT_META + build_graph` 函数）仍被 registry 识别（不强制升级）
-- BaseAgent 子类可同时提供 `build_graph()` classmethod，默认 astream 自动用它（兼容旧写法）
 """
 
 from __future__ import annotations
@@ -175,16 +171,3 @@ class BaseAgent(ABC):
             extras=extras,
         ):
             yield ev
-
-    # ── 兼容性 helper ─────────────────────────────────
-
-    @classmethod
-    def to_legacy_meta(cls) -> dict[str, Any]:
-        """适配字典模式 AGENT_META（兼容 registry）"""
-        md = cls.get_metadata()
-        return {
-            "key": md.id,
-            "description": md.description,
-            "version": md.version,
-            "tags": list(md.tags),
-        }

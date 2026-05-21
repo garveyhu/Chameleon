@@ -42,7 +42,7 @@ async def _lookup_node(state: _State) -> dict[str, Any]:
     if not kb_key:
         return {"citations": []}
     # 延迟 import 避免循环
-    from chameleon.core.knowledge import search_kb
+    from chameleon.core.components.knowledge import search_kb
 
     query = _last_user_text(state["messages"]) or ""
     try:
@@ -84,7 +84,7 @@ def _should_lookup(state: _State) -> str:
 def build_graph():
     """sync function（裁决 A4），返回 CompiledGraph
 
-    LangGraphProvider 启动时调用一次，缓存编译产物。
+    EchoLangGraphAgent.build_graph() 通过 langgraph_bridge 调用一次后缓存。
     """
     sg = StateGraph(_State)
     sg.add_node("route", _route_node)

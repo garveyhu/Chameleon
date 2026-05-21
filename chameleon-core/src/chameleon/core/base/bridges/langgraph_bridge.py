@@ -40,7 +40,7 @@ async def astream_from_langgraph_graph(
         graph: LangGraph CompiledGraph（来自 `sg.compile()`）
         state_extras: 额外灌入 state 的字段（如自定义 citations / kb_key 等）
     """
-    from chameleon.core.exceptions import ProviderInternalError
+    from chameleon.core.api.exceptions import ProviderInternalError
 
     messages = ctx_to_langgraph_messages(ctx)
     state: dict[str, Any] = {"messages": messages, "context": ctx.context_vars}

@@ -159,7 +159,7 @@ async def test_cross_app_session_isolation(client: AsyncClient) -> None:
 
     from chameleon.app.modules.api_key.schemas import CreateApiKeyRequest
     from chameleon.app.modules.api_key.service import create_api_key
-    from chameleon.core.db import AsyncSessionLocal
+    from chameleon.core.infra.db import AsyncSessionLocal
 
     rand = secrets.token_hex(3)
     async with AsyncSessionLocal() as s:

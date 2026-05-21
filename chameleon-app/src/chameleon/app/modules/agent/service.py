@@ -28,9 +28,9 @@ from chameleon.app.modules.agent.schemas import (
 from chameleon.app.modules.api_key import service as api_key_service
 from chameleon.app.modules.conversation import service as conv_service
 from chameleon.app.modules.conversation.schemas import AppendMessageDraft
-from chameleon.core.auth import CurrentApp
-from chameleon.core.db import AsyncSessionLocal
-from chameleon.core.exceptions import (
+from chameleon.core.infra.auth import CurrentApp
+from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
     ProviderError,

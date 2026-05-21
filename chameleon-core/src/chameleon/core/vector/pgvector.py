@@ -13,7 +13,7 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.db import AsyncSessionLocal
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import Chunk
 from chameleon.core.vector.base import ChunkHit, ChunkPayload, VectorStore
 

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import delete, select
 
-from chameleon.core.db import AsyncSessionLocal
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import ApiKey, Conversation, Message
 from chameleon.core.utils.snowflake import next_id
 
@@ -51,7 +51,7 @@ async def test_conversation_with_messages() -> None:
         conv = Conversation(
             session_id=sid,
             agent_key="echo",
-            provider="langgraph",
+            provider="local",
             app_id=f"test-{rand}",
         )
         s.add(conv)

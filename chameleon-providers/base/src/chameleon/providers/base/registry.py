@@ -25,7 +25,7 @@ from chameleon.core.config.base_settings import (
 )
 from chameleon.core.config.constants import CONFIG_PATH
 from chameleon.core.config.json_settings import url_settings
-from chameleon.core.exceptions import RegistryError
+from chameleon.core.api.exceptions import RegistryError
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import AgentDef
 
@@ -74,11 +74,6 @@ def build_provider_registry() -> dict[str, Provider]:
             "provider registered | name={} | from={}", provider.name, mod_info.name
         )
 
-    # 向后兼容 alias：v0.1 的本地 agent 用 provider="langgraph"，现在 → "local"
-    if "local" in providers and "langgraph" not in providers:
-        providers["langgraph"] = providers["local"]
-        logger.debug("provider alias | langgraph → local（v0.1 向后兼容）")
-
     return providers
 
 
@@ -86,7 +81,7 @@ def build_provider_registry() -> dict[str, Provider]:
 
 
 def _build_local_agents() -> dict[str, AgentDef]:
-    """扫 chameleon.agents.* namespace，每个子包必须 export AGENT_META + build_graph"""
+    """扫 chameleon.agents.* namespace，每个子包必须 export 一个 BaseAgent 子类"""
     try:
         import chameleon.agents as pkg
     except ImportError:
@@ -104,7 +99,6 @@ def _build_local_agents() -> dict[str, AgentDef]:
             ) from e
 
         # 本地 agent 统一一种范式：BaseAgent 子类
-        # （v0.2 删了字典模式 AGENT_META + build_graph，强制 BaseAgent 子类）
         agent_cls = _find_base_agent_class(mod)
         if agent_cls is None:
             # 没找到 BaseAgent 子类 —— 跳过（视为占位空包）

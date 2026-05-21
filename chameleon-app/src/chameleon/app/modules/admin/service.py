@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.app.modules.admin.schemas import CallLogItem, ProviderStatusItem
 from chameleon.core.models import CallLog
-from chameleon.core.response import PageParams, PageResult
+from chameleon.core.api.response import PageParams, PageResult
 from chameleon.providers.base import PROVIDERS
 
 

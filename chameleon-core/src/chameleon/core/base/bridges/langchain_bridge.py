@@ -58,7 +58,7 @@ async def astream_from_runnable(
             - messages（裸 LLM 或 ChatModel）→ 传 list[BaseMessage]
             - auto（默认）：探测 runnable 是否含 BaseChatModel 顶层（裸 LLM），自动选 messages
     """
-    from chameleon.core.exceptions import ProviderInternalError
+    from chameleon.core.api.exceptions import ProviderInternalError
 
     mode = _resolve_input_mode(runnable, input_mode)
     if mode == "dict":

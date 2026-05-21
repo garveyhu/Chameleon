@@ -18,18 +18,18 @@ from chameleon.providers.base.types import (
 def test_agent_def_basic() -> None:
     ad = AgentDef(
         key="sql-qa",
-        provider="langgraph",
+        provider="local",
         description="SQL 问答",
         config={"module": "chameleon.agents.sql_qa"},
     )
     assert ad.key == "sql-qa"
-    assert ad.provider == "langgraph"
+    assert ad.provider == "local"
     assert ad.config["module"] == "chameleon.agents.sql_qa"
 
 
 def test_invoke_context_str_input() -> None:
     ctx = InvokeContext(
-        agent_def=AgentDef(key="x", provider="langgraph"),
+        agent_def=AgentDef(key="x", provider="local"),
         input="hi",
         session_id="sess_abc",
         app_id="app1",
@@ -39,7 +39,7 @@ def test_invoke_context_str_input() -> None:
 
 def test_invoke_context_messages_input() -> None:
     ctx = InvokeContext(
-        agent_def=AgentDef(key="x", provider="langgraph"),
+        agent_def=AgentDef(key="x", provider="local"),
         input=[Message(role="user", content="hi")],
         session_id="sess_abc",
         app_id="app1",

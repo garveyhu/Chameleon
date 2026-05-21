@@ -18,7 +18,7 @@ from loguru import logger
 from sqlalchemy import select
 
 from chameleon.app.modules.task import service as task_service
-from chameleon.core.db import AsyncSessionLocal
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.embedding import get_embedding_client
 from chameleon.core.models import Document, KnowledgeBase
 from chameleon.core.vector import ChunkPayload, get_store

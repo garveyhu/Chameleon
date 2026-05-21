@@ -12,9 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.app.modules.admin import service
 from chameleon.app.modules.admin.schemas import CallLogItem, ProviderStatusItem
-from chameleon.core.auth import CurrentApp, require_scope
-from chameleon.core.db import get_session
-from chameleon.core.response import PageParams, PageResult, Result
+from chameleon.core.infra.auth import CurrentApp, require_scope
+from chameleon.core.infra.db import get_session
+from chameleon.core.api.response import PageParams, PageResult, Result
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 

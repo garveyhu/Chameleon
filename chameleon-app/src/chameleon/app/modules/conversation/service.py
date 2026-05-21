@@ -19,15 +19,15 @@ from chameleon.app.modules.conversation.schemas import (
     ConversationItem,
     MessageItem,
 )
-from chameleon.core.auth import CurrentApp
+from chameleon.core.infra.auth import CurrentApp
 from chameleon.core.config import inventory
-from chameleon.core.exceptions import (
+from chameleon.core.api.exceptions import (
     BusinessError,
     ConversationNotFoundError,
     ResultCode,
 )
 from chameleon.core.models import Conversation, Message
-from chameleon.core.response import PageParams, PageResult
+from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.utils.snowflake import next_session_id
 from chameleon.providers.base.types import Message as ProviderMessage
 

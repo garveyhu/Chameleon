@@ -3,7 +3,7 @@
 import pytest
 from httpx import Response
 
-from chameleon.core.exceptions import ProviderConfigError
+from chameleon.core.api.exceptions import ProviderConfigError
 from chameleon.providers.base.types import AgentDef, InvokeContext, StreamEventType
 from chameleon.providers.dify.provider import DifyProvider
 
@@ -105,7 +105,7 @@ async def test_dify_chat_transmits_conv_id_when_present(respx_mock) -> None:
 
 
 async def test_dify_http_401_raises_auth_error(respx_mock) -> None:
-    from chameleon.core.exceptions import ProviderAuthError
+    from chameleon.core.api.exceptions import ProviderAuthError
 
     respx_mock.post("http://dify.test/v1/chat-messages").mock(
         return_value=Response(401, text='{"code":"invalid_api_key"}')

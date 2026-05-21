@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from chameleon.core.exceptions import RegistryError
+from chameleon.core.api.exceptions import RegistryError
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.registry import (
     _build_yaml_agents,
@@ -61,7 +61,7 @@ def test_yaml_agents_placeholder_env(tmp_path: Path, monkeypatch) -> None:
         "  endpoint: http://localhost\n"
         "  app_id: ${env:TEST_AGENT_APP_ID}\n"
     )
-    # 注：build_agent_registry 也扫 chameleon.agents.* namespace（含 echo, provider=langgraph）
+    # 注：build_agent_registry 也扫 chameleon.agents.* namespace（含本地 agent, provider=local）
     providers = {"dify": _FakeProvider("dify"), "local": _FakeProvider("local")}
     agents = build_agent_registry(providers, yaml_path=yaml_path)
     assert agents["y"].config["app_id"] == "resolved-app-id"

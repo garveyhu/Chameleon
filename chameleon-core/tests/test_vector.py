@@ -5,7 +5,7 @@ import secrets
 import pytest
 from sqlalchemy import delete
 
-from chameleon.core.db import AsyncSessionLocal
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import Chunk, Document, KnowledgeBase
 from chameleon.core.vector.base import ChunkPayload
 from chameleon.core.vector.pgvector import PgVectorStore

@@ -24,7 +24,7 @@ from chameleon.providers.base.types import (
 class Provider(ABC):
     """Provider 抽象基类"""
 
-    name: str  # 子类必须设置（"langgraph" / "dify" / ...）
+    name: str  # 子类必须设置（"local" / "dify" / "fastgpt" / ...）
 
     @abstractmethod
     def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
@@ -36,7 +36,7 @@ class Provider(ABC):
 
         中途遇到 error event → raise BusinessError（由全局 handler 兜）
         """
-        from chameleon.core.exceptions import (
+        from chameleon.core.api.exceptions import (
             BusinessError,
             ResultCode,
         )

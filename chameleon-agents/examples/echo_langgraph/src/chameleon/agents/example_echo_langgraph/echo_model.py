@@ -1,7 +1,7 @@
 """EchoChatModel —— 假装是 LLM，按字符 stream 回输入文本
 
 存在的意义：让 echo agent 能产 on_chat_model_stream 事件，
-LangGraphProvider 的 translate 已能识别为 delta。
+langgraph_bridge 的 translate 已能识别为 delta。
 """
 
 from __future__ import annotations

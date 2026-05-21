@@ -186,7 +186,7 @@ class _FailingProvider(Provider):
 
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         # 先 emit 一个 delta，再抛 ProviderError
-        from chameleon.core.exceptions import ProviderUnreachableError
+        from chameleon.core.api.exceptions import ProviderUnreachableError
 
         yield StreamEvent(type=StreamEventType.delta, data={"text": "partial..."})
         raise ProviderUnreachableError(message="mock upstream down")

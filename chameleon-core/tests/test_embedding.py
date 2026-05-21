@@ -66,7 +66,7 @@ async def test_embed_batch_splits(respx_mock) -> None:
 
 
 async def test_embed_401_raises_auth(respx_mock) -> None:
-    from chameleon.core.exceptions import ProviderAuthError
+    from chameleon.core.api.exceptions import ProviderAuthError
 
     respx_mock.post("https://api.test/v1/embeddings").mock(
         return_value=Response(401, text='{"err":"invalid"}')
@@ -87,7 +87,7 @@ async def test_embed_401_raises_auth(respx_mock) -> None:
 
 async def test_embed_dim_mismatch(respx_mock) -> None:
     """服务端返了 8 维但配置 4 维 → fail-fast"""
-    from chameleon.core.exceptions import ProviderInternalError
+    from chameleon.core.api.exceptions import ProviderInternalError
 
     respx_mock.post("https://api.test/v1/embeddings").mock(
         return_value=Response(200, json={"data": [{"embedding": [0.1] * 8}]})

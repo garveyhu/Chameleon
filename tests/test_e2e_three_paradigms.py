@@ -1,9 +1,9 @@
 """三种本地 agent 范式端到端验证
 
 本测试证明：
-- echo（字典模式 + build_graph） —— v0.1 兼容
-- echo-runnable（BaseAgent + LangChain Runnable） —— 范式 C
-- echo-native（BaseAgent + 纯 Python） —— 范式 B
+- example-echo-langgraph（BaseAgent + LangGraph CompiledGraph） —— 范式 A
+- example-echo-runnable（BaseAgent + LangChain Runnable） —— 范式 C
+- example-echo-native（BaseAgent + 纯 Python） —— 范式 B
 三种范式通过同一统一接口 POST /v1/agents/{key}/invoke 调用，对客户端完全透明。
 """
 

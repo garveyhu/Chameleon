@@ -93,7 +93,7 @@ async def test_fastgpt_chat_id_transmitted(respx_mock) -> None:
 
 
 async def test_fastgpt_429_raises(respx_mock) -> None:
-    from chameleon.core.exceptions import ProviderRateLimitError
+    from chameleon.core.api.exceptions import ProviderRateLimitError
 
     respx_mock.post("http://fastgpt.test/api/v1/chat/completions").mock(
         return_value=Response(429, text='{"err":"rate limit"}')

@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.app.modules.task.schemas import TaskItem
-from chameleon.core.auth import CurrentApp
-from chameleon.core.exceptions import TaskNotFoundError
+from chameleon.core.infra.auth import CurrentApp
+from chameleon.core.api.exceptions import TaskNotFoundError
 from chameleon.core.models import Task
 
 

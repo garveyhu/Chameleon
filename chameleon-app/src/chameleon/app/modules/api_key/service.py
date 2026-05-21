@@ -19,10 +19,10 @@ from chameleon.app.modules.api_key.schemas import (
     ApiKeyItem,
     CreateApiKeyRequest,
 )
-from chameleon.core.auth import generate_api_key
-from chameleon.core.exceptions import BusinessError, ResultCode, ValidationError
+from chameleon.core.infra.auth import generate_api_key
+from chameleon.core.api.exceptions import BusinessError, ResultCode, ValidationError
 from chameleon.core.models import ApiKey, CallLog
-from chameleon.core.response import PageParams, PageResult
+from chameleon.core.api.response import PageParams, PageResult
 
 
 async def create_api_key(

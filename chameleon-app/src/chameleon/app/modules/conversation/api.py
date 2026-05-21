@@ -12,9 +12,9 @@ from chameleon.app.modules.conversation.schemas import (
     ConversationItem,
     MessageItem,
 )
-from chameleon.core.auth import CurrentApp, current_app
-from chameleon.core.db import get_session
-from chameleon.core.response import PageParams, PageResult, Result
+from chameleon.core.infra.auth import CurrentApp, current_app
+from chameleon.core.infra.db import get_session
+from chameleon.core.api.response import PageParams, PageResult, Result
 
 router = APIRouter(prefix="/v1/conversations", tags=["conversations"])
 

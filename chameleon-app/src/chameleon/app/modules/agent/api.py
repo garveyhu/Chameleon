@@ -17,9 +17,9 @@ from chameleon.app.modules.agent.schemas import (
     InvokeResponse,
 )
 from chameleon.app.modules.agent.stream import sse_iter
-from chameleon.core.auth import CurrentApp, current_app
-from chameleon.core.db import get_session
-from chameleon.core.response import Result
+from chameleon.core.infra.auth import CurrentApp, current_app
+from chameleon.core.infra.db import get_session
+from chameleon.core.api.response import Result
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
 

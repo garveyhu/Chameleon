@@ -11,7 +11,7 @@ from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
-from chameleon.core.exceptions import ResultCode
+from chameleon.core.api.exceptions import ResultCode
 
 T = TypeVar("T")
 

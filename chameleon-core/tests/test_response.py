@@ -1,10 +1,10 @@
-from chameleon.core.exceptions import (
+from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
     ResultCode,
     code_to_http_status,
 )
-from chameleon.core.response import PageParams, PageResult, Result
+from chameleon.core.api.response import PageParams, PageResult, Result
 
 
 def test_result_ok_default() -> None:

@@ -18,7 +18,7 @@ from sqlalchemy import delete
 from chameleon.app.main import create_app
 from chameleon.app.modules.api_key.schemas import CreateApiKeyRequest
 from chameleon.app.modules.api_key.service import create_api_key
-from chameleon.core.db import AsyncSessionLocal
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.embedding import set_for_test as set_embedding_for_test
 from chameleon.core.models import (
     ApiKey,

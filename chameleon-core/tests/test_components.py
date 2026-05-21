@@ -115,14 +115,6 @@ def test_base_agent_metadata_to_dict():
     assert d["config_options"][0]["type"] == "toggle"
 
 
-def test_base_agent_to_legacy_meta():
-    """to_legacy_meta 输出与 v1 字典模式同源"""
-    legacy = _FakeBaseAgent.to_legacy_meta()
-    assert legacy["key"] == "fake-base-agent"
-    assert legacy["description"] == "测试用"
-    assert legacy["tags"] == ["test"]
-
-
 def test_agent_router_register_and_list():
     agent_router.clear_for_test()
     agent_router.register(_FakeBaseAgent)

@@ -102,10 +102,3 @@ async def test_local_provider_invoke_aggregates(fake_agent_def: AgentDef) -> Non
 async def test_local_provider_name() -> None:
     """LocalProvider.name = 'local'"""
     assert LocalProvider.name == "local"
-
-
-def test_langgraph_provider_alias() -> None:
-    """v0.1 兼容：LangGraphProvider 仍然指向 LocalProvider"""
-    from chameleon.providers.local.provider import LangGraphProvider
-
-    assert LangGraphProvider is LocalProvider

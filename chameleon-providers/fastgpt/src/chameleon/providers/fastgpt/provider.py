@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from loguru import logger
 
 from chameleon.core.config import inventory
-from chameleon.core.exceptions import ProviderConfigError
+from chameleon.core.api.exceptions import ProviderConfigError
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
     InvokeContext,
