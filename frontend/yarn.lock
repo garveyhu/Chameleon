@@ -2166,6 +2166,11 @@ react-hook-form@^7.76.0:
   resolved "https://registry.npmjs.org/react-hook-form/-/react-hook-form-7.76.0.tgz#b58036cabfac756500115a5a6bebc53a8314f05f"
   integrity sha512-eKtLGgFeSgkHqQD8J59AMZ9a4uD1D83iSIzt4YlTGD7liDen5rrjcUO1rVIGd9yC1gofryjtHbv+4ny4hkLWlw==
 
+react-is@^19.2.6:
+  version "19.2.6"
+  resolved "https://registry.npmjs.org/react-is/-/react-is-19.2.6.tgz#aeee6159b159eb7f520d672cffcc69e7052d288f"
+  integrity sha512-XjBR15BhXuylgWGuslhDKqlSayuqvqBX91BP8pauG8kd1zY8kotkNWbXksTCNRarse4kuGbe2kIY05ARtwNIvw==
+
 "react-redux@8.x.x || 9.x.x":
   version "9.3.0"
   resolved "https://registry.npmjs.org/react-redux/-/react-redux-9.3.0.tgz#a30113bb6d95c0a715d54dda4308d450fca6ce09"
