@@ -43,6 +43,7 @@ async def astream_from_runnable(
     input_key: str = "input",
     history_key: str | None = "history",
     extras: dict[str, Any] | None = None,
+    input_mode: str = "auto",
 ) -> AsyncIterator[StreamEvent]:
     """喂 ctx 给 LangChain Runnable，按 chunk 翻成 delta；end 时 metadata + done
 
@@ -52,12 +53,20 @@ async def astream_from_runnable(
         input_key: prompt 模板里"当前轮问题"的字段名（默认 "input"）
         history_key: prompt 模板里"历史消息"的字段名；None = 不传 history
         extras: 额外灌入 runnable input 的字段
+        input_mode: "auto" / "dict" / "messages"
+            - dict（含 prompt 模板的完整 chain）→ 传 {input_key, history_key, **extras}
+            - messages（裸 LLM 或 ChatModel）→ 传 list[BaseMessage]
+            - auto（默认）：探测 runnable 是否含 BaseChatModel 顶层（裸 LLM），自动选 messages
     """
     from chameleon.core.exceptions import ProviderInternalError
 
-    payload = _build_runnable_input(
-        ctx, input_key=input_key, history_key=history_key, extras=extras
-    )
+    mode = _resolve_input_mode(runnable, input_mode)
+    if mode == "dict":
+        payload: Any = _build_dict_input(
+            ctx, input_key=input_key, history_key=history_key, extras=extras
+        )
+    else:  # messages
+        payload = _build_messages_input(ctx)
 
     accumulated_usage: dict[str, int] | None = None
 
@@ -79,17 +88,76 @@ async def astream_from_runnable(
         )
 
 
+def _resolve_input_mode(runnable: Any, requested: str) -> str:
+    """auto 模式：识别裸 BaseChatModel 用 messages，其它默认 dict"""
+    if requested in ("dict", "messages"):
+        return requested
+    try:
+        from langchain_core.language_models.chat_models import BaseChatModel
+
+        if isinstance(runnable, BaseChatModel):
+            return "messages"
+    except ImportError:
+        pass
+    return "dict"
+
+
+def _build_messages_input(ctx: InvokeContext) -> list:
+    """裸 ChatModel 接收 messages 列表"""
+    try:
+        from langchain_core.messages import (
+            AIMessage,
+            HumanMessage,
+            SystemMessage,
+            ToolMessage,
+        )
+    except ImportError:
+        # 没装 langchain_core 时降级 dict 列表
+        msgs = [{"role": m.role, "content": m.content} for m in ctx.history]
+        if isinstance(ctx.input, str):
+            msgs.append({"role": "user", "content": ctx.input})
+        else:
+            msgs.extend({"role": m.role, "content": m.content} for m in ctx.input)
+        return msgs
+
+    out: list = []
+    for m in ctx.history:
+        out.append(
+            _to_lc_message(m, HumanMessage, AIMessage, SystemMessage, ToolMessage)
+        )
+    if isinstance(ctx.input, str):
+        out.append(HumanMessage(content=ctx.input))
+    else:
+        for m in ctx.input:
+            out.append(
+                _to_lc_message(m, HumanMessage, AIMessage, SystemMessage, ToolMessage)
+            )
+    return out
+
+
+def _to_lc_message(m, HumanMessage, AIMessage, SystemMessage, ToolMessage):
+    if m.role == "user":
+        return HumanMessage(content=m.content)
+    if m.role == "assistant":
+        return AIMessage(content=m.content)
+    if m.role == "system":
+        return SystemMessage(content=m.content)
+    if m.role == "tool":
+        return ToolMessage(content=m.content, tool_call_id=m.tool_call_id or "")
+    return HumanMessage(content=m.content)
+
+
 # ── helpers ─────────────────────────────────────────────
 
 
-def _build_runnable_input(
+def _build_dict_input(
     ctx: InvokeContext,
     *,
     input_key: str,
     history_key: str | None,
     extras: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """构造 chain.astream(payload) 的 payload"""
+    """含 prompt 模板的 chain 接收 dict payload"""
     payload: dict[str, Any] = {}
 
     if isinstance(ctx.input, str):

@@ -7,6 +7,7 @@ members = [
     "chameleon-agent-echo",
     "chameleon-agent-echo-native",
     "chameleon-agent-echo-runnable",
+    "chameleon-agent-qwen-chat",
     "chameleon-app",
     "chameleon-core",
     "chameleon-provider-dify",
@@ -212,6 +213,23 @@ requires-dist = [
 name = "chameleon-agent-echo-runnable"
 version = "0.1.0"
 source = { editable = "chameleon-agents/echo_runnable" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-providers-base" },
+    { name = "langchain-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+    { name = "langchain-core", specifier = ">=0.3" },
+]
+
+[[package]]
+name = "chameleon-agent-qwen-chat"
+version = "0.1.0"
+source = { editable = "chameleon-agents/qwen_chat" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },

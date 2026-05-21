@@ -505,6 +505,102 @@ async def test_retrieve_returns_citations():
 
 ---
 
+## 四点五、配置真实 LLM（实操）
+
+第三章的范式 A2/A3 都会用 `chameleon.core.components.llm()` 取 LLM 客户端。
+要让它真能拿到 LLM（不只是抽象工厂），需要 3 个文件配齐：
+
+### Step 1 — 选用的模型 + 厂商映射（`config/model.json`）
+
+`cases.llm` 是**全局默认模型名**。`providers.<name>` 把厂商名映射到"URL 别名 + env 名"：
+
+```json
+{
+  "cases": {
+    "llm": "qwen-plus",
+    "embedding": "text-embedding-3-small"
+  },
+  "providers": {
+    "openai":   { "url_alias": "openai",   "key_env": "OPENAI_API_KEY" },
+    "deepseek": { "url_alias": "deepseek", "key_env": "DEEPSEEK_API_KEY" },
+    "qwen":     { "url_alias": "qwen",     "key_env": "QWEN_API_KEY" }
+  },
+  "models": {
+    "llm": [
+      { "name": "qwen-plus",     "provider": "qwen",     "temperature": 0.7, "max_tokens": 8000 },
+      { "name": "deepseek-chat", "provider": "deepseek", "temperature": 0.5 }
+    ],
+    "embedding": [
+      { "name": "text-embedding-3-small", "provider": "openai", "dim": 1536 }
+    ]
+  }
+}
+```
+
+### Step 2 — 厂商 base URL（`config/baseurl.json`）
+
+```json
+{
+  "openai":   "https://api.openai.com/v1",
+  "deepseek": "https://api.deepseek.com/v1",
+  "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1"
+}
+```
+
+注意：通义千问用 OpenAI **兼容模式**（`/compatible-mode/v1`），不是原生 DashScope SDK。BaseLLM 就是 langchain_openai.ChatOpenAI，所有 OpenAI 兼容厂商都能直接用。
+
+### Step 3 — API key 实值（`config/.env`，**不进 git**）
+
+```env
+QWEN_API_KEY=sk-xxxxxxxxxxxxxx
+OPENAI_API_KEY=sk-xxx
+DEEPSEEK_API_KEY=sk-xxx
+```
+
+> 怎么把 .env 的值给到运行时？Chameleon 启动时调 `load_dotenv()` 把 .env 注入 `os.environ`，
+> `inventory.llm_provider_credential(provider)` 从 `os.environ.get(key_env)` 取。所以你**不要**
+> 把 key 写到 `model.json`（会进 git），始终写到 `.env`。
+
+### Step 4 — 验证
+
+最快：跑一段 Python 直接调：
+
+```bash
+uv run python -c "
+import asyncio
+from chameleon.core.components import llm
+
+async def main():
+    chat = llm()
+    resp = await chat.ainvoke([
+        {'role':'user','content':'一句话介绍 Chameleon'},
+    ])
+    print(resp.content)
+
+asyncio.run(main())
+"
+```
+
+或者用内置 `qwen-chat` agent（生产范式样板，对应 `chameleon-agents/qwen_chat/`）：
+
+```bash
+curl -X POST http://localhost:8000/v1/agents/qwen-chat/invoke \
+  -H "Authorization: Bearer $APP_KEY" \
+  -d '{"input":"你好","stream":true}'
+```
+
+### 切换厂商怎么做
+
+例如想从 Qwen 切到 DeepSeek：
+
+1. `config/model.json` 把 `cases.llm` 改成 `"deepseek-chat"`
+2. `config/.env` 确保 `DEEPSEEK_API_KEY` 有值
+3. 重启 Chameleon
+
+**业务代码 / agent 代码完全不动**——`llm()` 自动取新模型。
+
+---
+
 ## 五、外部应用怎么接 Chameleon？
 
 **Step 1**：管理员（你自己）用 admin key 发一个 app key：
