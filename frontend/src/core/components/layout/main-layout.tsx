@@ -1,11 +1,14 @@
-/** 主布局（侧边栏 + Topbar + content） */
+/** 主布局 —— waveflow 风格：sidebar + content（无 topbar）
+ *
+ * 用户菜单 / 语言切换 / 改密 / 登出 都收纳进 sidebar 底部 dropdown。
+ * 顶部留给页面 PageHeader 自由发挥。
+ */
 
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 
 import { RequireAuth } from '@/core/components/common/permission-guard';
 import { Sidebar } from '@/core/components/layout/sidebar';
-import { Topbar } from '@/core/components/layout/topbar';
 
 export const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -13,12 +16,9 @@ export const MainLayout = () => {
     <RequireAuth>
       <div className="flex h-screen bg-[var(--color-warm)]">
         <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
-        <div className="flex flex-1 flex-col">
-          <Topbar />
-          <main className="flex-1 overflow-auto p-8">
-            <Outlet />
-          </main>
-        </div>
+        <main className="flex-1 overflow-auto px-8 py-6">
+          <Outlet />
+        </main>
       </div>
     </RequireAuth>
   );

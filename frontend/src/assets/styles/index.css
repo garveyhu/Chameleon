@@ -10,7 +10,9 @@
 @import url('@fontsource/inter/700.css');
 @import url('@fontsource/jetbrains-mono/400.css');
 @import url('@fontsource/jetbrains-mono/500.css');
+@import url('@fontsource/jetbrains-mono/700.css');
 @import url('@fontsource/instrument-serif/400.css');
+@import url('@fontsource/instrument-serif/400-italic.css');
 
 @import url('tailwindcss');
 
@@ -110,4 +112,118 @@ code, pre, kbd {
 
 *::-webkit-scrollbar-thumb:hover {
   background: rgb(0 0 0 / 25%);
+}
+
+/* ─── 工程师细节：等宽数字（任务 ID / cron / 计数） ─── */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── kbd（快捷键提示） ─── */
+.kbd {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #78716c;
+  background: #fff;
+  border: 1px solid #e7e5e0;
+  border-radius: 4px;
+  box-shadow: 0 1px 0 #e7e5e0;
+}
+
+/* ─── 状态 dot（带 ring） ─── */
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot-running {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgb(16 185 129 / 15%);
+}
+
+.status-dot-stopped {
+  background: #d6d3d1;
+}
+
+.status-dot-error {
+  background: #ef4444;
+  box-shadow: 0 0 0 2px rgb(239 68 68 / 18%);
+}
+
+/* ─── pulse 呼吸动画 ─── */
+@keyframes ping-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.pulse-soft {
+  animation: ping-soft 2s ease-in-out infinite;
+}
+
+/* ─── shimmer skeleton ─── */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #ebe9e3 0%, #f5f4ee 50%, #ebe9e3 100%);
+  background-size: 400px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* ─── sidebar 子项 tree connector lines ─── */
+.tree-line {
+  position: relative;
+}
+.tree-line::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 14px;
+  width: 1px;
+  background: #d6d3d1;
+  content: '';
+}
+.tree-item {
+  position: relative;
+}
+.tree-item::before {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  width: 10px;
+  height: 1px;
+  background: #d6d3d1;
+  content: '';
+}
+
+/* ─── login 左侧装饰：几何浮件漂浮动画 ─── */
+@keyframes decor-drift-1 {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -12px; }
+}
+@keyframes decor-drift-2 {
+  0%, 100% { translate: 0 0; rotate: 0deg; }
+  50% { translate: 0 -8px; rotate: 8deg; }
+}
+@keyframes decor-drift-3 {
+  0%, 100% { translate: 0 0; rotate: 45deg; }
+  50% { translate: 0 -14px; rotate: 50deg; }
+}
+
+/* ─── Chrome / Safari 密码自动填充背景 ─── */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-ink) !important;
+  box-shadow: 0 0 0 1000px transparent inset !important;
+  caret-color: var(--color-ink);
+  transition:
+    background-color 600000s ease-in-out 0s,
+    color 600000s ease-in-out 0s;
 }
