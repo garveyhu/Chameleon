@@ -2,7 +2,7 @@
 
 > 个人 AI 中枢应用——任何外部应用通过统一 HTTP API 接入 AI 能力，无需自带 LangGraph/SDK。
 
-**v0.1.0**  ·  Python 3.12+  ·  FastAPI  ·  PostgreSQL + pgvector
+**v0.1.0** · Python 3.12+ · FastAPI · PostgreSQL + pgvector
 
 ## 定位
 
@@ -18,16 +18,16 @@ Chameleon 是 links 的"AI 飞轮"——把所有 AI 智能体作为可积累、
 
 ## 技术栈
 
-| 层 | 选型 |
-|---|---|
-| 语言 / 运行时 | Python 3.12 + uv workspace 多包 |
-| Web | FastAPI + StreamingResponse SSE |
-| ORM | SQLAlchemy 2.0 async（**单栈，禁用 SQLModel/Tortoise/raw SQL**） |
-| DB | PostgreSQL 16 + pgvector + HNSW |
-| 配置 | pydantic-settings (.env) + JSON 主题文件 |
-| 日志 | loguru（双 sink + 接管 stdlib logging） |
-| 测试 | pytest + pytest-asyncio + respx + httpx |
-| Lint | ruff（含 isort） |
+| 层            | 选型                                                             |
+| ------------- | ---------------------------------------------------------------- |
+| 语言 / 运行时 | Python 3.12 + uv workspace 多包                                  |
+| Web           | FastAPI + StreamingResponse SSE                                  |
+| ORM           | SQLAlchemy 2.0 async（**单栈，禁用 SQLModel/Tortoise/raw SQL**） |
+| DB            | PostgreSQL 16 + pgvector + HNSW                                  |
+| 配置          | pydantic-settings (.env) + JSON 主题文件                         |
+| 日志          | loguru（双 sink + 接管 stdlib logging）                          |
+| 测试          | pytest + pytest-asyncio + respx + httpx                          |
+| Lint          | ruff（含 isort）                                                 |
 
 ## 5 分钟 quickstart
 
@@ -183,18 +183,18 @@ Chameleon/                              ← 前后端 monorepo 根
 
 ## API 速查
 
-| 端点 | 用途 |
-|---|---|
-| `POST /v1/agents/{key}/invoke` | **核心**：调用 agent（非流 / SSE） |
-| `GET  /v1/agents` / `/{key}` | 列出 / 详情 |
-| `GET  /v1/conversations[/{sid}]` | 会话 |
-| `GET  /v1/conversations/{sid}/messages` | 历史 |
-| `POST /v1/conversations/{sid}/delete` | 软删 |
-| `POST /v1/knowledge` 等 | 知识库 CRUD + ingest + search |
-| `GET  /v1/tasks/{id}` | 异步任务进度 |
-| `POST /v1/admin/api-keys` | 管理 key（admin scope） |
-| `GET  /v1/admin/call-logs` | 调用审计 |
-| `GET  /health` / `/ready` | 探针 |
+| 端点                                    | 用途                               |
+| --------------------------------------- | ---------------------------------- |
+| `POST /v1/agents/{key}/invoke`          | **核心**：调用 agent（非流 / SSE） |
+| `GET  /v1/agents` / `/{key}`            | 列出 / 详情                        |
+| `GET  /v1/conversations[/{sid}]`        | 会话                               |
+| `GET  /v1/conversations/{sid}/messages` | 历史                               |
+| `POST /v1/conversations/{sid}/delete`   | 软删                               |
+| `POST /v1/knowledge` 等                 | 知识库 CRUD + ingest + search      |
+| `GET  /v1/tasks/{id}`                   | 异步任务进度                       |
+| `POST /v1/admin/api-keys`               | 管理 key（admin scope）            |
+| `GET  /v1/admin/call-logs`              | 调用审计                           |
+| `GET  /health` / `/ready`               | 探针                               |
 
 详见 [设计文档 S3](docs/plans/2026-05-20-chameleon-design.md#s3-对外-api-契约)。
 
