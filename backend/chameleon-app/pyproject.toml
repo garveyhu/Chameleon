@@ -19,6 +19,7 @@ dependencies = [
     "chameleon-agent-example-echo-runnable",
     "chameleon-agent-example-echo-native",
     "fastapi>=0.115",
+    "python-multipart>=0.0.9",        # /v1/admin/settings/import-json 用 File / Form
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "click>=8",
