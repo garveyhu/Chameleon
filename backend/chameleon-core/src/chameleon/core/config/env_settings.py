@@ -37,6 +37,12 @@ class EnvSettings(PydanticBaseSettings):
     # 数据库 URL override（如果设了就用这个，否则从 component.json 拼）
     DATABASE_URL: str | None = None
 
+    # Redis 连接 override（容器化部署时通过 env 注入；任一字段为 None → 走 component.json）
+    REDIS_HOST: str | None = None
+    REDIS_PORT: int | None = None
+    REDIS_DB: int | None = None
+    REDIS_PASSWORD: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=CONFIG_PATH / ".env",
         env_file_encoding="utf-8",

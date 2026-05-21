@@ -106,8 +106,20 @@ def database_url() -> str:
 
 
 def redis_config() -> dict:
-    """Redis 连接信息（v1 未启用 Redis，预留）"""
-    return component_settings.get("redis") or {}
+    """Redis 连接信息（env > component.json）
+
+    容器化部署：把连接信息放 env 即可，无需挂载 component.json
+    """
+    base = dict(component_settings.get("redis") or {})
+    if env_settings.REDIS_HOST is not None:
+        base["host"] = env_settings.REDIS_HOST
+    if env_settings.REDIS_PORT is not None:
+        base["port"] = env_settings.REDIS_PORT
+    if env_settings.REDIS_DB is not None:
+        base["db"] = env_settings.REDIS_DB
+    if env_settings.REDIS_PASSWORD is not None:
+        base["password"] = env_settings.REDIS_PASSWORD
+    return base
 
 
 # ── 会话 ─────────────────────────────────────────────────

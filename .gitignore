@@ -55,3 +55,10 @@ backend/logs/
 .vscode/
 *.swp
 .DS_Store
+
+# Docker 三区运行时数据 / 凭据（绝不入 git）
+docker/containers/data/
+docker/containers/.env
+docker/containers/prod/.env
+docker/images/.env
+docker/scripts/.registry.env

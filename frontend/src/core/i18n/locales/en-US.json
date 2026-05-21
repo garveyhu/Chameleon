@@ -1,0 +1,44 @@
+{
+  "menu": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "roles": "Roles",
+    "apps": "Apps",
+    "providers": "Providers",
+    "models": "Models",
+    "agents": "Agents",
+    "kbs": "Knowledge Bases",
+    "embed_configs": "Embedded Agents",
+    "call_logs": "Call Logs",
+    "audit_logs": "Audit Logs",
+    "settings": "Settings",
+    "group": {
+      "overview": "Overview",
+      "access": "Access Control",
+      "ai": "AI Config",
+      "ops": "Ops",
+      "system": "System"
+    }
+  },
+  "topbar": {
+    "logout": "Sign Out",
+    "change_password": "Change Password",
+    "language": "Language"
+  },
+  "common": {
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "no_data": "No data",
+    "search": "Search",
+    "actions": "Actions"
+  },
+  "page": {
+    "dashboard_title": "Dashboard",
+    "dashboard_desc": "System usage & resource overview"
+  }
+}

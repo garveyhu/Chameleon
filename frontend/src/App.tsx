@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 import { Spinner } from '@/core/components/common/spinner';
+import '@/core/i18n';
 import { router } from '@/router';
 
 import '@/assets/styles/index.css';

@@ -1,0 +1,52 @@
+# syntax=docker/dockerfile:1.7
+#
+# chameleon-ui —— 前端 nginx 镜像（多阶段构建）
+#
+# 阶段：
+#   builder-main    ：node yarn build 主 frontend
+#   builder-widget  ：node yarn build 嵌入式 widget
+#   runtime         ：nginx:alpine，serve dist/ + reverse proxy /v1 → backend
+
+# ── Stage 1: 主 frontend build ───────────────────────────────
+FROM node:20-alpine AS builder-main
+
+WORKDIR /build
+
+# 先拷锁文件 + 元数据 让 yarn install 命中缓存
+COPY frontend/package.json frontend/yarn.lock ./
+RUN --mount=type=cache,target=/root/.yarn-cache \
+    yarn install --frozen-lockfile --cache-folder /root/.yarn-cache
+
+# 源码
+COPY frontend/ ./
+
+RUN yarn build
+
+# ── Stage 2: widget build ────────────────────────────────────
+FROM node:20-alpine AS builder-widget
+
+WORKDIR /build
+
+COPY frontend/embed/package.json frontend/embed/yarn.lock ./
+RUN --mount=type=cache,target=/root/.yarn-cache \
+    yarn install --frozen-lockfile --cache-folder /root/.yarn-cache
+
+COPY frontend/embed/ ./
+
+# embed build 默认会 cp 到 ../public/widget.js（这里 public 不存在）
+# 用单独命令绕过 postbuild cp
+RUN yarn tsc -b --noEmit && yarn vite build
+
+# ── Stage 3: runtime ─────────────────────────────────────────
+FROM nginx:1.27-alpine AS runtime
+
+# 把主 frontend dist + widget bundle 合并到同一 nginx serve 目录
+COPY --from=builder-main /build/dist /usr/share/nginx/html
+COPY --from=builder-widget /build/dist/widget.js /usr/share/nginx/html/widget.js
+
+COPY docker/images/nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/healthz || exit 1

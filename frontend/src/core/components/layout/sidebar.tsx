@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 
 import { cn } from '@/core/lib/cn';
@@ -26,53 +27,54 @@ import { useAuthStore } from '@/core/stores/auth-store';
 
 interface MenuItem {
   path: string;
-  title: string;
+  i18nKey: string;
+  fallbackTitle: string;
   icon: ComponentType<{ className?: string }>;
   perm?: string;
 }
 
 interface MenuGroup {
-  label: string;
+  i18nLabel: string;
+  fallbackLabel: string;
   items: MenuItem[];
 }
 
 const GROUPS: MenuGroup[] = [
   {
-    label: '总览',
+    i18nLabel: 'menu.group.overview',
+    fallbackLabel: '总览',
     items: [
-      { path: '/dashboard', title: 'Dashboard', icon: LayoutDashboard, perm: 'dashboard:read' },
+      { path: '/dashboard', i18nKey: 'menu.dashboard', fallbackTitle: '仪表盘', icon: LayoutDashboard, perm: 'dashboard:read' },
     ],
   },
   {
-    label: 'AI 能力',
+    i18nLabel: 'menu.group.ai',
+    fallbackLabel: 'AI 能力',
     items: [
-      { path: '/agents', title: '智能体', icon: Bot, perm: 'agents:read' },
-      { path: '/providers', title: 'Providers', icon: Globe, perm: 'providers:read' },
-      { path: '/models', title: '模型', icon: Sparkles, perm: 'models:read' },
-      { path: '/kbs', title: '知识库', icon: Database, perm: 'kbs:read' },
-      { path: '/embed-configs', title: '嵌入式', icon: Cpu, perm: 'embed_configs:read' },
+      { path: '/agents', i18nKey: 'menu.agents', fallbackTitle: '智能体', icon: Bot, perm: 'agents:read' },
+      { path: '/providers', i18nKey: 'menu.providers', fallbackTitle: 'Providers', icon: Globe, perm: 'providers:read' },
+      { path: '/models', i18nKey: 'menu.models', fallbackTitle: '模型', icon: Sparkles, perm: 'models:read' },
+      { path: '/kbs', i18nKey: 'menu.kbs', fallbackTitle: '知识库', icon: Database, perm: 'kbs:read' },
+      { path: '/embed-configs', i18nKey: 'menu.embed_configs', fallbackTitle: '嵌入式', icon: Cpu, perm: 'embed_configs:read' },
     ],
   },
   {
-    label: '应用 & 调用',
+    i18nLabel: 'menu.group.access',
+    fallbackLabel: '应用 & 调用',
     items: [
-      { path: '/apps', title: '应用 & API Key', icon: KeySquare, perm: 'apps:read' },
-      { path: '/call-logs', title: '调用日志', icon: Activity, perm: 'call_logs:read' },
+      { path: '/apps', i18nKey: 'menu.apps', fallbackTitle: '应用 & API Key', icon: KeySquare, perm: 'apps:read' },
+      { path: '/call-logs', i18nKey: 'menu.call_logs', fallbackTitle: '调用日志', icon: Activity, perm: 'call_logs:read' },
+      { path: '/users', i18nKey: 'menu.users', fallbackTitle: '用户', icon: Users2, perm: 'users:read' },
+      { path: '/roles', i18nKey: 'menu.roles', fallbackTitle: '角色', icon: ShieldCheck, perm: 'roles:read' },
     ],
   },
   {
-    label: '账户体系',
+    i18nLabel: 'menu.group.system',
+    fallbackLabel: '系统',
     items: [
-      { path: '/users', title: '用户', icon: Users2, perm: 'users:read' },
-      { path: '/roles', title: '角色', icon: ShieldCheck, perm: 'roles:read' },
-    ],
-  },
-  {
-    label: '系统',
-    items: [
-      { path: '/audit-logs', title: '审计日志', icon: Newspaper, perm: 'audit_logs:read' },
-      { path: '/settings', title: '系统配置', icon: Settings, perm: 'settings:read' },
-      { path: '/system-info', title: '关于', icon: FileCog },
+      { path: '/audit-logs', i18nKey: 'menu.audit_logs', fallbackTitle: '审计日志', icon: Newspaper, perm: 'audit_logs:read' },
+      { path: '/settings', i18nKey: 'menu.settings', fallbackTitle: '系统配置', icon: Settings, perm: 'settings:read' },
+      { path: '/system-info', i18nKey: 'menu.about', fallbackTitle: '关于', icon: FileCog },
     ],
   },
 ];
@@ -84,6 +86,7 @@ interface SidebarProps {
 
 export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const location = useLocation();
+  const { t } = useTranslation();
   const hasPermission = useAuthStore(s => s.hasPermission);
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
@@ -115,16 +118,18 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
             return null;
           }
           if (visible.length === 0) return null;
+          const groupLabel = t(group.i18nLabel, group.fallbackLabel);
           return (
-            <div key={group.label} className="mb-4">
+            <div key={group.i18nLabel} className="mb-4">
               {!collapsed && (
                 <div className="px-4 mb-1 text-[10px] font-semibold uppercase tracking-wider text-stone-400">
-                  {group.label}
+                  {groupLabel}
                 </div>
               )}
               {visible.map(item => {
                 const active = location.pathname.startsWith(item.path);
                 const Icon = item.icon;
+                const itemLabel = t(item.i18nKey, item.fallbackTitle);
                 return (
                   <Link
                     key={item.path}
@@ -136,10 +141,10 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
                         : 'text-stone-700 hover:bg-stone-100',
                       collapsed && 'justify-center px-0',
                     )}
-                    title={collapsed ? item.title : undefined}
+                    title={collapsed ? itemLabel : undefined}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-                    {!collapsed && <span>{item.title}</span>}
+                    {!collapsed && <span>{itemLabel}</span>}
                   </Link>
                 );
               })}

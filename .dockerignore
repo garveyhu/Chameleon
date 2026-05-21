@@ -1,0 +1,52 @@
+# 排除：跟 build context 无关 / 体积大 / 敏感
+# 注意：docker build context 是仓库根，因此这里写的是相对仓库根的路径
+
+# 运行时数据（绝不进 build context）
+docker/containers/data/
+docker/containers/.env
+docker/containers/prod/.env
+docker/images/.env
+docker/scripts/.registry.env
+
+# Python 缓存 / venv
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/.uv-cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/*.egg-info/
+
+# Node
+**/node_modules/
+**/dist/
+**/.next/
+
+# Logs / temp
+**/logs/
+**/*.log
+**/*.tmp
+**/.DS_Store
+
+# Git / IDE
+.git/
+.idea/
+.vscode/
+*.swp
+
+# Backend 业务配置（避免把本地敏感 JSON 打进镜像；运维通过 bind mount 注入）
+backend/config/.env
+backend/config/component.json
+backend/config/model.json
+backend/config/chameleon.json
+backend/config/agents.yaml
+
+# Tests / docs
+**/tests/__pycache__/
+docs/
+**/*.md
+!**/README.md
+
+# CI
+.github/

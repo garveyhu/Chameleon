@@ -22,9 +22,11 @@ from chameleon.core.config import inventory
 
 def _build_client() -> Redis:
     cfg: dict[str, Any] = inventory.redis_config()
-    if not cfg:
+    if not cfg or "host" not in cfg:
         raise RuntimeError(
-            "component.json 缺 redis 段 —— 请按 config/example/component.example.json 补齐"
+            "Redis 连接未配置 —— 任选一种方式："
+            "(1) 容器化部署 env: REDIS_HOST/REDIS_PORT/REDIS_DB/REDIS_PASSWORD；"
+            "(2) 本地开发 config/component.json 的 redis 段"
         )
 
     host = cfg.get("host", "127.0.0.1")
