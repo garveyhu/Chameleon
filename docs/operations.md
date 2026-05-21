@@ -36,9 +36,9 @@ uv run uvicorn chameleon.app.main:app --reload --host 127.0.0.1 --port 8000
 
 ```
 ─── Chameleon Registry ───
-Loaded 3 providers: dify, fastgpt, langgraph
+Loaded 3 providers: local, dify, fastgpt
 Loaded N agents:
-  [langgraph] echo                       (built-in)
+  [local    ] qwen-chat                  (built-in)
   [dify     ] customer-faq               (from agents.yaml)
   ...
 ```

@@ -49,7 +49,7 @@
 | 🟢 `sage-core/complex/utils/crypto_util.py` | `chameleon-core/.../core/utils/crypto.py` | AES-256-GCM 敏感数据加密 |
 | 🟢 `sage-core/complex/utils/snowflake.py` | `chameleon-core/.../core/utils/snowflake.py` | 雪花 ID |
 | `sage-core/complex/config/` | `chameleon-core/.../core/config/`（pydantic-settings + BaseSettings + inventory） | 配置 |
-| `sage-core/complex/response/` | `chameleon-core/.../core/response.py` + `exceptions.py` | Result + 业务错误码 |
+| `sage-core/complex/response/` | `chameleon-core/.../core/api/` (response.py + exceptions.py) | Result + 业务错误码 |
 | `sage-core/components/skill/` | （v1 占位 `function/`；v0.2 接） | 技能注册 |
 | `sage-core/components/audio/` | （v1 不做） | 语音模型 |
 | `sage-core/components/memory/` | 部分由 conversations + messages 表实现；ES/Redis v1 不做 | 历史 |
@@ -84,7 +84,7 @@ from chameleon.core.utils.crypto import encrypt, decrypt, get_or_decrypt
 
 1. **配置存哪**：sage 走 DB（`ai_models` 表 + AiModel ORM）；chameleon 走 `config/model.json`——理念是"个人项目配置即代码"，DB-driven 配置等多用户场景再加
 2. **agent 注册**：sage 用 `agent_router.register(MyAgent)` 显式调用；chameleon 通过 namespace 扫描自动注册（写 `chameleon-agents/<key>/` 子包即可），同时 BaseAgent 子类也会自动注册到 `agent_router`
-3. **流式协议**：sage agent 自己产 SSE event；chameleon 通过 LangGraphProvider 统一 `astream_events` 自动翻译，agent 只写 graph 节点
+3. **流式协议**：sage agent 自己产 SSE event；chameleon 通过 langgraph_bridge 统一 `astream_events` 自动翻译，agent 只写 graph 节点
 4. **session 概念**：sage 有 space_id / user_id 多租户；chameleon v1 简化为 app_id 单租户（多 app 通过 API key 隔离）
 
 ### v1 故意没做的（v0.2+ 按需）
@@ -322,7 +322,7 @@ data_qa_v2/
         └── ...                 ← 一节点一文件
 ```
 
-**这个范式可以直接搬到 Chameleon**，只需要去掉 `agent.py` 那层（v1 Chameleon 不需要 BaseAgent 包装——`build_graph()` 直接被 LangGraphProvider 调用）。
+**这个范式可以直接搬到 Chameleon**：保留 `agent.py` 作为 BaseAgent 子类入口（实现 `build_graph()` classmethod），子节点文件按 sage 习惯一节点一文件即可。
 
 ### 推荐结构（复杂 agent）
 
@@ -351,15 +351,13 @@ chameleon-agents/my_complex/
 
 ```python
 # deps_factory.py
-from chameleon.core.embedding import get_embedding_client
-from chameleon.core.knowledge import search_kb
-from chameleon.core.vector import get_store
+from chameleon.core.components import embedding, search_kb, vector
 
 def build_deps(*, app_id: str, kb_key: str | None = None) -> dict:
     """每个请求一份；可以注入 mock 做单测"""
     return {
-        "embed": get_embedding_client(),
-        "vector": get_store(),
+        "embed": embedding(),
+        "vector": vector(),
         "search_kb": search_kb,
         "kb_key": kb_key,
         # 你的 SQL executor / 业务 service / LLM client
@@ -419,7 +417,7 @@ def _route_after_classify(state: AgentState) -> str:
     return "retrieve" if state["intent"] == "qa" else "generate"
 
 def build_workflow():
-    """sync function（A4 裁决）。LangGraphProvider 首次 invoke 时调一次。
+    """sync function（A4 裁决）。BaseAgent.build_graph() 首次被调用时执行一次。
 
     注意：build 时不知道 app_id / kb_key 等运行时上下文，
          所以 deps_factory 在节点内部按需调（参考下方 partial 用法）。
@@ -456,33 +454,20 @@ AGENT_META = {"key": "my-complex", "description": "...", "version": "0.1"}
 
 ### 关键模式 5：让 citations 自动出现在响应里
 
-LangGraphProvider 翻译层已经做了：**graph 最终 state 里的 `citations` 字段会被自动 emit 为 citation 事件**。你只要在 state 里放好即可，外部应用收到的 invoke 响应自动含 `citations: [...]`。
+langgraph_bridge 翻译层已经做了：**graph 最终 state 里的 `citations` 字段会被自动 emit 为 citation 事件**。你只要在 state 里放好即可，外部应用收到的 invoke 响应自动含 `citations: [...]`。
 
-### 关键模式 6：调 LLM（v1 简化）
+### 关键模式 6：调 LLM
 
-v1 Chameleon 没把 sage 的 `BaseLLM` + 多厂商类搬过来，但你可以**直接用 langchain_openai**（sage 也是这么做的，`BaseLLM` 继承 `BaseChatOpenAI`）：
+Chameleon 已经搬来了 sage 的 `BaseLLM` 体系（`chameleon-core/.../core/components/llms/`），含 `ChatQwen` / `ChatDeepSeek` / `ChatOpenAI` 等子类 + `LLMFactory`。**最简用法**走全局 `llm()` 即可：
 
 ```python
-# deps_factory.py
-from langchain_openai import ChatOpenAI
-from chameleon.core.config import inventory
+from chameleon.core.components import llm
 
-def make_llm():
-    """读 config/model.json + .env 构造 LLM client"""
-    name = inventory.case_llm()  # 默认模型名
-    cfg = inventory.llm_model_config(name)
-    base_url, api_key = inventory.llm_provider_credential(cfg["provider"])
-    return ChatOpenAI(
-        model=name,
-        openai_api_base=base_url,
-        openai_api_key=api_key,
-        temperature=cfg.get("temperature", 0.7),
-        max_tokens=cfg.get("max_tokens"),
-        stream_usage=True,
-    )
+model = llm()              # 默认模型（model.json 配的 default）
+model = llm("qwen-max")    # 指定模型 key
 ```
 
-> **想要 sage 完整 `BaseLLM` 体系？** 把 `sage-core/components/llms/` 整个目录 copy 到 `chameleon-core/.../core/components/llms/`，去掉 sage db 模型依赖，改用 chameleon `inventory.llm_provider_credential()`。这是 v0.2 候选项。
+`llm()` 会读 `config/model.json`，按 provider 解析 `base_url + api_key`，组装出 `BaseLLM` 子类实例，可直接 `.ainvoke()` / `.astream()` 或塞进 LCEL 链。
 
 ### 关键模式 7：节点单测
 
@@ -799,21 +784,15 @@ curl -X POST http://localhost:8000/v1/agents/echo/invoke \
 | 模块 | 路径 | 干啥 |
 |---|---|---|
 | **chameleon-core** | `chameleon-core/src/chameleon/core/` | 所有 agent / 业务模块共用的基础设施 |
+| ├ infra | `core/infra/` | 运行时基础设施（`db.py` / `logger.py` / `auth.py`） |
+| ├ api | `core/api/` | API 契约层（`response.py` Result[T] + `exceptions.py` 业务错误码/异常家族） |
 | ├ config | `core/config/` | 读 .env + JSON 配置，提供 `inventory` 具名 getter |
-| ├ logger | `core/logger.py` | loguru 配置 |
-| ├ db | `core/db.py` | SQLAlchemy 异步 engine + session |
-| ├ auth | `core/auth.py` | API Key 鉴权 |
-| ├ response | `core/response.py` | `Result[T]` / `PageResult[T]` |
-| ├ exceptions | `core/exceptions.py` | 业务错误码 + 异常家族 |
 | ├ models | `core/models/` | 共享 ORM（api_key / conversation / knowledge / task） |
-| ├ embedding | `core/embedding/` | embedding 客户端（OpenAI 兼容） |
-| ├ vector | `core/vector/` | 向量存储抽象 + pgvector 实现 |
-| └ knowledge | `core/knowledge.py` | `search_kb()` in-process API（给 agent 用） |
-| **chameleon-providers** | `chameleon-providers/*/` | 三类编排平台的适配器 |
-| ├ base | `providers/base/` | Provider 协议 + StreamEvent + registry |
-| ├ langgraph | `providers/langgraph/` | 本地 LangGraph in-process provider |
-| ├ dify | `providers/dify/` | DIFY HTTP provider |
-| └ fastgpt | `providers/fastgpt/` | FastGPT HTTP provider |
+| ├ components | `core/components/` | AI 工具箱（llms / embeddings / vector / cache / knowledge + inventory 顶层入口） |
+| ├ base | `core/base/` | agent 抽象（BaseAgent + bridges） |
+| ├ function | `core/function/` | prompt 模板 + Runnable 工厂占位 |
+| └ utils | `core/utils/` | 通用工具（crypto / snowflake / convert / time） |
+| **chameleon-providers** | `chameleon-providers/*/` | agent 执行方式抽象层（local / dify / fastgpt）。**写本地 agent 不用管**，原理详见 [providers.md](providers.md) |
 | **chameleon-agents** | `chameleon-agents/<key>/` | **你的智能体资产**（一个 agent 一个子包） |
 | └ echo | `chameleon-agents/examples/echo_langgraph/` | 范式样板（演示 step/delta/citation） |
 | **chameleon-app** | `chameleon-app/src/chameleon/app/` | FastAPI 入口 + 业务模块 |
@@ -833,7 +812,7 @@ curl -X POST http://localhost:8000/v1/agents/echo/invoke \
 chameleon-core
     ↑              ← 谁都依赖它
 chameleon-providers-base
-    ↑              ← langgraph/dify/fastgpt 都依赖
+    ↑              ← local/dify/fastgpt 都依赖
 chameleon-providers/*
     ↑              ← chameleon-app 依赖三个具体 provider
 chameleon-app
@@ -895,7 +874,6 @@ A: 改 `config/model.json` 的 `cases.llm` 字段 + 确保对应 provider 的 `k
 1. 跟着"第六节实操"做一遍——把 FAQ agent 跑通
 2. 你现在已经有 sage 的 data_qa_v2，可以参考"复杂 agent 范式"章节，把它搬到 `chameleon-agents/data_qa/`
 3. 看 `docs/extension-guide.md` —— 8 个扩展场景 step-by-step
-4. 出现 v0.2 需求时再从 sage 搬 components
 
 ---
 

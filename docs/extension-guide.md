@@ -2,8 +2,8 @@
 
 Chameleon 设计上有两条**对称的资产积累轴**：
 
-- **Agent 资产**：你的具体智能体（`chameleon-agents/<key>/`）
-- **Provider 资产**：你接入的编排平台（`chameleon-providers/<name>/`）
+- **Agent 资产**：你的具体智能体（`chameleon-agents/<key>/`）—— **90% 的人只动这里**
+- **Provider 资产**：你接入的编排平台（`chameleon-providers/<name>/`）—— **只在加新平台时动**，原理 + 接入 step 全在 [providers.md](providers.md)
 
 加东西的标准动作都很短——下面是 step-by-step。
 
@@ -113,7 +113,7 @@ __all__ = ["MyAgent"]
 ### Step 5 - RAG（可选）
 
 ```python
-from chameleon.core.knowledge import search_kb
+from chameleon.core.components import search_kb
 
 async def lookup_node(state):
     hits = await search_kb("my-kb", query, top_k=5, min_score=0.3)
@@ -124,7 +124,7 @@ async def lookup_node(state):
     return {"citations": citations}   # citations 字段在 state 里
 ```
 
-返回 state 的 `citations` 字段会被 LangGraphProvider 翻译层自动 emit 为 citation event。
+返回 state 的 `citations` 字段会被 langgraph_bridge 翻译层自动 emit 为 citation event。
 
 ### Step 6 - 装 + 重启
 
@@ -161,7 +161,7 @@ chameleon-agents/<x>  →  chameleon-core    （仅！）
 ```
 
 **agent 子包只能依赖 chameleon-core**。这保证你的 AI 资产可独立迁移。
-RAG 通过 `chameleon.core.knowledge.search_kb` 访问，知识库 ORM 不暴露。
+RAG 通过 `chameleon.core.components.search_kb` 访问，知识库 ORM 不暴露。
 
 ---
 
@@ -170,6 +170,8 @@ RAG 通过 `chameleon.core.knowledge.search_kb` 访问，知识库 ORM 不暴露
 **场景**：你在 DIFY 平台编排好了一个 agent，想让 Chameleon 接入。
 
 **总耗时**：~5 分钟（纯配置）
+
+> DIFY agent 怎么被调用 / SSE 怎么翻译 / 错误怎么映射 → 见 [providers.md](providers.md) 的 "DifyProvider" 节
 
 ### Step 1 - 在 `config/agents.yaml` 加条目
 
@@ -221,7 +223,9 @@ DIFY 的 `conversation_id` 会被 Chameleon 自动双写到 `conversations.provi
 
 ## 3. 加一个外部 FastGPT agent
 
-形态与 DIFY 完全对称：
+形态与 DIFY 完全对称。原理见 [providers.md](providers.md) 的 "FastGPTProvider" 节。
+
+```yaml
 
 ```yaml
 - key: order-analyst
@@ -241,133 +245,9 @@ FastGPT 的 `chatId` 同样被双写。
 
 ## 4. 加一类全新 provider（如 Coze、n8n、自研编排）
 
-**场景**：你想接入一个 Chameleon 还没支持的编排平台。
+整章 step-by-step 已搬到 [providers.md](providers.md) 的 "如何加一个新 Provider" 节。
 
-**总耗时**：~1-2 天（含适配 + 单测）
-
-### Step 1 - 建子包
-
-```bash
-mkdir -p chameleon-providers/coze/src/chameleon/providers/coze
-mkdir -p chameleon-providers/coze/tests
-```
-
-### Step 2 - `pyproject.toml`
-
-```toml
-[project]
-name = "chameleon-provider-coze"
-version = "0.1.0"
-description = "Chameleon Coze provider"
-requires-python = ">=3.12"
-dependencies = [
-    "chameleon-core",
-    "chameleon-providers-base",
-    "httpx>=0.27",
-]
-
-[tool.uv.sources]
-chameleon-core = { workspace = true }
-chameleon-providers-base = { workspace = true }
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/chameleon"]
-```
-
-### Step 3 - 实现 Provider 协议
-
-`provider.py`：
-
-```python
-from chameleon.providers.base.protocol import Provider
-from chameleon.providers.base.types import (
-    InvokeContext, StreamEvent, StreamEventType,
-)
-
-
-class CozeProvider(Provider):
-    name = "coze"
-
-    async def stream(self, ctx: InvokeContext):
-        # 1. 从 ctx.agent_def.config 取 endpoint / api_key_env
-        # 2. 翻译 ctx.history + ctx.input → Coze 入参格式
-        # 3. 调 Coze HTTP API（流式或非流）
-        # 4. 把 Coze 事件翻成 StreamEvent 并 yield
-        yield StreamEvent(type=StreamEventType.delta, data={"text": "..."})
-        # ...
-```
-
-**最小要求**：只实现 `stream()` 即可。`invoke()` 默认聚合（providers-base 内置 `_StreamAggregator`）。
-
-### Step 4 - export PROVIDER 实例
-
-`__init__.py`：
-
-```python
-from chameleon.providers.coze.provider import CozeProvider
-
-PROVIDER = CozeProvider()                  # ★ registry 扫这个名字
-
-__all__ = ["PROVIDER", "CozeProvider"]
-```
-
-### Step 5 - 错误映射
-
-provider 内部 catch 原生异常 → raise `chameleon.providers.base.errors` 里的对应错误：
-
-```python
-from chameleon.providers.base.errors import (
-    ProviderUnreachableError,    # 网络 / 超时
-    ProviderAuthError,           # 401 / 403
-    ProviderRateLimitError,      # 429
-    ProviderInputError,          # 4xx 业务错误
-    ProviderInternalError,       # 5xx 兜底
-)
-
-try:
-    resp = await client.post(...)
-except httpx.TimeoutException as e:
-    raise ProviderUnreachableError(message=str(e)) from e
-```
-
-全局 handler 会自动翻成 `Result.fail()` 响应。
-
-### Step 6 - 流式翻译
-
-参考 `chameleon-providers/dify/src/chameleon/providers/dify/stream.py`：把 Coze 的事件流翻成 StreamEvent。封闭事件集：
-
-```
-delta | step | citation | tool_call | tool_result | metadata | done | error
-```
-
-不在这 8 种里的概念要 hack 进 `metadata` 或 `step.thinking` 字段。
-
-### Step 7 - 装 + 重启
-
-```bash
-uv sync --all-packages
-uvicorn chameleon.app.main:app
-```
-
-启动日志：
-
-```
-provider registered | name=coze | from=chameleon.providers.coze
-```
-
-### Step 8 - 加 agent（yaml）
-
-```yaml
-- key: my-coze-agent
-  provider: coze
-  endpoint: https://api.coze.cn/v1
-  api_key_env: COZE_KEY
-  # provider-specific config 字段...
-```
+该文档还讲了 Provider 抽象层的整体原理 / 调用链 / 三个内置 provider 的内部实现，加新 provider 前建议先读一遍。
 
 ---
 
@@ -525,7 +405,7 @@ def _mount_routers(app: FastAPI) -> None:
 
 ## 8. 加新错误码
 
-`chameleon-core/src/chameleon/core/exceptions.py` 加 enum 成员：
+`chameleon-core/src/chameleon/core/api/exceptions.py` 加 enum 成员：
 
 ```python
 class ResultCode(IntEnum):
@@ -563,5 +443,5 @@ HTTP status 推断：`code_to_http_status` 自动按段位映射（42910 → 429
 | 新 vector store | `core/vector/<name>.py` + factory | 单文件 |
 | 新 LLM 厂商（兼容） | `baseurl.json` + `model.json` + `.env` | 仅配置 |
 | 新业务模块 | `chameleon-app/.../modules/<name>/` + main.py 挂载 | app 包内 |
-| 新错误码 | `core/exceptions.py` 加 enum | 单文件 |
+| 新错误码 | `core/api/exceptions.py` 加 enum | 单文件 |
 | 新 StreamEvent 类型 | `providers/base/types.py` + 所有 provider 同步 | 横切 |

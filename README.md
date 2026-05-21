@@ -123,16 +123,20 @@ curl -N -X POST http://localhost:8000/v1/agents/echo/invoke \
 Chameleon/                              ← uv workspace 根
 ├── chameleon-core/                     ← 基础设施 + AI infra + 共享 ORM
 │   └── src/chameleon/core/
-│       ├── config/ logger.py db.py auth.py exceptions.py response.py
+│       ├── infra/                      ← 运行时基础设施（db / logger / auth）
+│       ├── api/                        ← API 契约层（Result[T] + 业务异常体系）
+│       ├── config/                     ← 配置加载（pydantic-settings + inventory）
 │       ├── models/                     ← 共享 ORM（让 agent 可读 KB/messages）
-│       ├── embedding/ vector/ knowledge.py    ← AI primitives
-│       └── utils/snowflake.py
-├── chameleon-providers/                ← Provider 适配层
+│       ├── components/                 ← AI 工具箱（llms / embeddings / vector / cache / knowledge）
+│       ├── base/                       ← agent 抽象（BaseAgent + bridges）
+│       ├── function/                   ← prompt 模板 + Runnable 工厂占位
+│       └── utils/                      ← 通用工具（crypto / snowflake / convert / time）
+├── chameleon-providers/                ← Provider 适配层（**对写 agent 的人透明，正常不用动**）
 │   ├── base/                           ← 协议 / types / registry
-│   ├── local/                          ← 本地 in-process（BaseAgent 子类）
-│   ├── dify/                           ← 远程 DIFY HTTP
-│   └── fastgpt/                        ← 远程 FastGPT HTTP
-├── chameleon-agents/                   ← 本地 agent 资产（你的 AI 飞轮）
+│   ├── local/                          ← 本地执行器：import BaseAgent 子类 + 调 astream
+│   ├── dify/                           ← 远程 DIFY HTTP 适配
+│   └── fastgpt/                        ← 远程 FastGPT HTTP 适配
+├── chameleon-agents/                   ← 本地 agent 资产（**你的 AI 飞轮，主要在这里写**）
 │   ├── qwen_chat/                      ← 业务级 agent（直接可用）
 │   └── examples/                       ← 范式样板分组
 │       ├── echo_langgraph/             ← LangGraph CompiledGraph 范式
@@ -163,7 +167,8 @@ Chameleon/                              ← uv workspace 根
 - 🛠️ [实施计划](docs/plans/2026-05-20-chameleon-impl-plan.md)
 - 🚀 [部署运维](docs/operations.md)
 - ⚡ [CLI 指南](docs/cli.md)
-- 🧩 [扩展指南](docs/extension-guide.md) ——加 agent / provider / vector store
+- 🧩 [扩展指南](docs/extension-guide.md) ——加 agent / vector store / 业务模块
+- 🔌 [Provider 适配层](docs/providers.md) ——agent 执行抽象层的原理 + 接入新平台 step
 - ✅ [v1 验收报告](docs/plans/2026-05-20-chameleon-v1-acceptance-report.md)
 
 ## API 速查
