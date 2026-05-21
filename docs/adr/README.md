@@ -19,6 +19,7 @@
 | [0009](./0009-sage-layered-frontend.md) | 前端 sage 分层 + 动态路由发现 | Accepted |
 | [0010](./0010-docker-hybrid-config.md) | Docker 部署采用混合配置策略 | Accepted |
 | [0011](./0011-pgvector-vs-dedicated-vectordb.md) | 知识库选 pgvector 而非独立向量 DB | Accepted |
+| [0012](./0012-multi-image-split.md) | Docker 镜像 4 层拆分（base / venv / code / ui） | Accepted |
 
 ## 状态约定
 

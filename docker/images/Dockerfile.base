@@ -2,40 +2,40 @@
 #
 # chameleon-base —— Python 3.12 + uv + 系统运行时
 #
-# 只装 OS 包和 uv 工具链，**不装** Python 依赖（让 code 层利用 BuildKit cache）。
-# 该镜像稳定，变动频率 << code 层。
+# 该镜像作为主 backend 容器的运行环境：
+#   - 装系统包（libpq5 等 asyncpg 运行时依赖）
+#   - 装 uv 二进制（venv-init / 调试用）
+#   - 烧入 entrypoint.sh（主容器 ENTRYPOINT）
+#   - **不装** Python 依赖 / 不带源码 —— 这些走 venv / code 镜像 + init 容器 cp
 #
-# 体积优化：
-#   - python:3.12-slim（基于 debian-slim，~120MB）
-#   - 单层 RUN apt-get install + rm /var/lib/apt/lists/*
-#   - 不装 build-essential（由 code 层多阶段 builder 处理）
+# 变更频率：极低。修改触发：升级 Python 大版本 / 加系统包 / 改 entrypoint
 
-FROM python:3.12-slim AS chameleon-base
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
-    PATH="/app/.venv/bin:/usr/local/bin:${PATH}"
+    PATH="/app/.venv/bin:/usr/local/bin:${PATH}" \
+    TZ=UTC
 
-# 系统依赖：libpq5 = asyncpg 运行时；ca-certificates / tzdata = HTTPS / 时区
+# 系统依赖：libpq5 = asyncpg 运行时；ca-certificates = HTTPS
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         tzdata \
         libpq5 \
         curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r chameleon \
-    && useradd -r -g chameleon -d /app -s /sbin/nologin chameleon
+    && rm -rf /var/lib/apt/lists/*
 
-# 装 uv（pin 版本避免 layer cache 失效）
+# uv 二进制（pin 版本避免 layer cache 失效）
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# 时区默认 UTC，运维可通过 env TZ=Asia/Shanghai 覆盖
-ENV TZ=UTC
+# entrypoint 烧入 base（主容器跑它，所有 init 完成后启动 uvicorn）
+COPY docker/images/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-CMD ["python", "-c", "print('chameleon-base ready')"]
+EXPOSE 7009
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["serve"]

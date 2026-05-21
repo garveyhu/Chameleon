@@ -2,12 +2,12 @@
 # push-images.sh —— 推到内网 registry（支持多架构）
 #
 # 参数协议：
-#   不传参 = push 全部（base / code / ui）
+#   不传参 = push 全部（base / venv / code / ui）
 #   传参   = 只 push 指定的子集
 #
-# 凭据：docker/scripts/.registry.env（gitignored）
+# 日常运维最常用：./push-images.sh code（代码改了，base/venv/ui 不动）
 #
-# 注意：本脚本不自动创建 buildx builder——尊重用户当前激活的（可能配过 HTTP registry）
+# 注意：本脚本不自动创建 buildx builder——尊重用户当前激活的
 
 set -euo pipefail
 
@@ -36,7 +36,7 @@ PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 echo "[push] login ${REGISTRY_URL}"
 echo "${REGISTRY_PASSWORD}" | docker login "${REGISTRY_URL}" -u "${REGISTRY_USER}" --password-stdin
 
-ALL_TARGETS=(base code ui)
+ALL_TARGETS=(base venv code ui)
 TARGETS=("${@:-${ALL_TARGETS[@]}}")
 if [ "${#TARGETS[@]}" -eq 0 ]; then
   TARGETS=("${ALL_TARGETS[@]}")
@@ -60,10 +60,14 @@ for t in "${TARGETS[@]}"; do
     base)
       push_one base "${CHAMELEON_BASE_TAG}" Dockerfile.base
       ;;
-    code)
-      push_one code "${CHAMELEON_CODE_TAG}" Dockerfile.code \
+    venv)
+      # 多架构 venv build 必须能从 registry 拉对应架构的 base
+      push_one venv "${CHAMELEON_VENV_TAG}" Dockerfile.venv \
         --build-arg BASE_IMAGE="${REGISTRY_URL}/${REGISTRY_NAMESPACE}/chameleon-base" \
         --build-arg BASE_TAG="${CHAMELEON_BASE_TAG}"
+      ;;
+    code)
+      push_one code "${CHAMELEON_CODE_TAG}" Dockerfile.code
       ;;
     ui)
       push_one ui "${CHAMELEON_UI_TAG}" Dockerfile.ui

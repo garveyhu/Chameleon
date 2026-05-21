@@ -1,15 +1,16 @@
 # ─────────────────────────────────────────────────────────────
 # Chameleon 生产环境 compose（image-only，无 build 块）
 #
-# 运维使用：
-#   1. 这份 compose 文件 + 同目录 .env（含镜像 tag + DB/Redis/JWT 密钥）
-#   2. docker login {registry}
-#   3. docker compose pull && docker compose up -d
-#
-# 跟 dev compose 的差异：
+# 与 dev compose 的差异：
 #   - 不含 build profiles
-#   - 不挂载 backend 源码 config/（生产应该把业务 seed 也归 DB）
-#   - 默认走 internal-only PG（不暴露 5432）
+#   - venv-init / code-init 带 `.version` skip 逻辑（避免每次 restart 重 cp）
+#   - PG / Redis 不暴露 ports（只走容器内网）
+#   - 用 named volume 而非 bind mount（生产更标准）
+#
+# 运维使用：
+#   /apps/chameleon/
+#     docker-compose.yml + .env + initdb/
+#   docker login {registry} && docker compose pull && docker compose up -d
 # ─────────────────────────────────────────────────────────────
 
 name: chameleon
@@ -48,14 +49,54 @@ services:
     networks:
       - chameleon-net
 
-  chameleon-backend:
+  # init 容器（生产带 .version skip：tag 没变就跳过重 cp）
+  venv-init:
+    image: ${REGISTRY_PREFIX}/chameleon-venv:${CHAMELEON_VENV_TAG:?}
+    restart: "no"
+    environment:
+      - TAG=${CHAMELEON_VENV_TAG}
+    volumes:
+      - venv-data:/target
+    command: >
+      sh -c '
+        if [ "$$(cat /target/.version 2>/dev/null)" = "$$TAG" ]; then
+          echo "venv $$TAG already synced, skip";
+        else
+          rm -rf /target/* /target/.[!.]* 2>/dev/null || true;
+          cp -a /export/.venv/. /target/;
+          echo "$$TAG" > /target/.version;
+          echo "venv $$TAG synced";
+        fi
+      '
+
+  code-init:
     image: ${REGISTRY_PREFIX}/chameleon-code:${CHAMELEON_CODE_TAG:?}
+    restart: "no"
+    environment:
+      - TAG=${CHAMELEON_CODE_TAG}
+    volumes:
+      - code-data:/target
+    # code 层每次都重 cp（小，几十 MB；代码改动必须立即生效）
+    # 若生产严格按 tag 升级，可加 .version skip；这里默认不加，更稳
+    command: >
+      sh -c '
+        rm -rf /target/* /target/.[!.]* 2>/dev/null || true;
+        cp -a /export/. /target/;
+        echo "code $$TAG synced";
+      '
+
+  chameleon-backend:
+    image: ${REGISTRY_PREFIX}/chameleon-base:${CHAMELEON_BASE_TAG:?}
     restart: always
     depends_on:
       chameleon-pg:
         condition: service_healthy
       chameleon-redis:
         condition: service_healthy
+      venv-init:
+        condition: service_completed_successfully
+      code-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@chameleon-pg:5432/${PG_DB}
       REDIS_HOST: chameleon-redis
@@ -71,8 +112,16 @@ services:
       CHAMELEON_LOG_LEVEL: ${CHAMELEON_LOG_LEVEL:-info}
       TZ: ${TZ:-UTC}
     volumes:
+      - code-data:/app
+      - venv-data:/app/.venv
       - backend-resources:/app/resources
       - backend-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7009/docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
     networks:
       - chameleon-net
 
@@ -90,6 +139,8 @@ services:
 volumes:
   pg-data:
   redis-data:
+  venv-data:
+  code-data:
   backend-resources:
   backend-logs:
 

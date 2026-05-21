@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# run-local.sh —— 本地全栈拉起（PG + Redis + backend + ui）
+# run-local.sh —— 本地全栈拉起（PG + Redis + venv-init + code-init + backend + ui）
 #
 # 参数协议：
-#   不传参 = 全量 build + up（base + code + ui）
+#   不传参 = 全量 build + up（base + venv + code + ui）
 #   传参   = 只 rebuild 指定子集 + up
 #
 # 例：
 #   ./run-local.sh                    # 全部
-#   ./run-local.sh code               # 只 rebuild code
-#   ./run-local.sh code ui            # code + ui
+#   ./run-local.sh code               # 改了代码 → 重 build code（最常见，最快）
+#   ./run-local.sh venv code          # 改了 pyproject.toml → 重 build venv + code
+#   ./run-local.sh ui                 # 改了前端
 
 set -euo pipefail
 

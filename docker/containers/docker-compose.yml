@@ -1,21 +1,21 @@
 # ─────────────────────────────────────────────────────────────
-# Chameleon 本地开发 + 全量自部署 compose
+# Chameleon 本地开发 + 全栈自部署 compose
 #
-# 5 个服务：
-#   chameleon-pg       PostgreSQL 16 + pgvector
-#   chameleon-redis    Redis 7（密码可关）
-#   chameleon-backend  FastAPI 应用（auto-migrate）
-#   chameleon-ui       Nginx serve frontend + reverse proxy /v1
+# 镜像拆分（参考 sage 4 镜像模式）：
+#   chameleon-base  python + uv + os deps + entrypoint（主容器跑它）
+#   chameleon-venv  data-only：仅 .venv 目录（依赖变更才换）
+#   chameleon-code  data-only：源码 + migrations（每次代码改）
+#   chameleon-ui    nginx + frontend dist + widget.js
 #
-# 配置策略（混合）：
-#   - 连接信息 / 密钥 / 端口 / 日志级别 → 走 environment（运维改 .env 即可）
-#   - 业务 seed (config/model.json / agents.yaml / chameleon.json) → bind mount /app/config
-#   - 业务运行时（Provider/Agent/User…） → DB（admin UI 实时改）
+# init 容器：
+#   venv-init   cp /export/.venv → venv-data volume → 挂到 /app/.venv
+#   code-init   cp /export/      → code-data volume → 挂到 /app
 #
-# 运维步骤：
-#   1. cp ../images/.env.example ../images/.env  # 镜像 tag
-#   2. cp .env.example .env                       # 运行时配置（DB 密码 / JWT secret 等）
-#   3. ./docker/scripts/run-local.sh
+# dev 场景：init 容器**不带 .version skip**，每次 up 都重 cp，避免改代码不生效。
+# 生产 prod compose 保留 .version skip，避免每次 restart 重 cp 大文件。
+#
+# 服务清单：
+#   chameleon-pg / chameleon-redis / venv-init / code-init / chameleon-backend / chameleon-ui
 # ─────────────────────────────────────────────────────────────
 
 name: chameleon
@@ -69,9 +69,39 @@ services:
     networks:
       - chameleon-net
 
-  # ── Backend ─────────────────────────────────────────────
+  # ── init 容器：venv ─────────────────────────────────────
+  # dev 场景：每次都重 cp（不带 .version skip），保证依赖更新立即生效。
+  # 生产场景：带 .version skip，避免每次重 cp 几百 MB venv。
+  venv-init:
+    image: chameleon/chameleon-venv:${CHAMELEON_VENV_TAG:-latest}
+    container_name: chameleon-venv-init
+    restart: "no"
+    volumes:
+      - venv-data:/target
+    command: >
+      sh -c '
+        rm -rf /target/* /target/.[!.]* 2>/dev/null || true;
+        cp -a /export/.venv/. /target/;
+        echo "venv synced";
+      '
+
+  # ── init 容器：code ─────────────────────────────────────
+  code-init:
+    image: chameleon/chameleon-code:${CHAMELEON_CODE_TAG:-latest}
+    container_name: chameleon-code-init
+    restart: "no"
+    volumes:
+      - code-data:/target
+    command: >
+      sh -c '
+        rm -rf /target/* /target/.[!.]* 2>/dev/null || true;
+        cp -a /export/. /target/;
+        echo "code synced";
+      '
+
+  # ── 主后端容器（跑 base 镜像 + 挂 venv/code volume） ───
   chameleon-backend:
-    image: ${REGISTRY_PREFIX:-chameleon}/chameleon-code:${CHAMELEON_CODE_TAG:-latest}
+    image: chameleon/chameleon-base:${CHAMELEON_BASE_TAG:-latest}
     container_name: chameleon-backend
     restart: unless-stopped
     depends_on:
@@ -79,41 +109,48 @@ services:
         condition: service_healthy
       chameleon-redis:
         condition: service_healthy
+      venv-init:
+        condition: service_completed_successfully
+      code-init:
+        condition: service_completed_successfully
     environment:
-      # 数据库 / Redis 连接（高优先级，覆盖 component.json）
       DATABASE_URL: postgresql+asyncpg://${PG_USER:-chameleon}:${PG_PASSWORD}@chameleon-pg:5432/${PG_DB:-chameleon}
       REDIS_HOST: chameleon-redis
       REDIS_PORT: 6379
       REDIS_DB: 0
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-
-      # 安全密钥
       CHAMELEON_JWT_SECRET: ${CHAMELEON_JWT_SECRET:?CHAMELEON_JWT_SECRET 未设置}
       CHAMELEON_CRYPTO_KEY: ${CHAMELEON_CRYPTO_KEY:?CHAMELEON_CRYPTO_KEY 未设置}
-
-      # 应用配置
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       CHAMELEON_INSTANCE_ID: ${CHAMELEON_INSTANCE_ID:-0}
       CHAMELEON_PORT: 7009
       CHAMELEON_WORKERS: ${CHAMELEON_WORKERS:-2}
       CHAMELEON_LOG_LEVEL: ${CHAMELEON_LOG_LEVEL:-info}
-
       TZ: ${TZ:-UTC}
     volumes:
-      # 业务 seed：首次启动会从这里读 model.json / agents.yaml 灌 DB
+      # 镜像挂载顺序：浅 → 深（Docker 支持嵌套挂载）
+      - code-data:/app
+      - venv-data:/app/.venv
+      # 业务 seed（首启灌 DB 用；运行时若想热改也行）
       - ../../backend/config:/app/config:ro
-      # 知识库 embedding 模型 / 上传素材
+      # 知识库 embedding / 上传素材
       - ./data/resources:/app/resources
       # 容器日志（含 initial-admin-credentials.txt）
       - ./data/logs:/app/logs
     ports:
       - "${BACKEND_HOST_PORT:-7009}:7009"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7009/docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 30s
     networks:
       - chameleon-net
 
   # ── Frontend nginx ──────────────────────────────────────
   chameleon-ui:
-    image: ${REGISTRY_PREFIX:-chameleon}/chameleon-ui:${CHAMELEON_UI_TAG:-latest}
+    image: chameleon/chameleon-ui:${CHAMELEON_UI_TAG:-latest}
     container_name: chameleon-ui
     restart: unless-stopped
     depends_on:
@@ -124,7 +161,7 @@ services:
     networks:
       - chameleon-net
 
-  # ── build profiles（本地 dev 用） ───────────────────────
+  # ── build profiles（本地 dev 用，docker compose build chameleon-*-build） ──
   chameleon-base-build:
     profiles: ["build"]
     image: chameleon/chameleon-base:${CHAMELEON_BASE_TAG:-latest}
@@ -132,15 +169,22 @@ services:
       context: ../..
       dockerfile: docker/images/Dockerfile.base
 
+  chameleon-venv-build:
+    profiles: ["build"]
+    image: chameleon/chameleon-venv:${CHAMELEON_VENV_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: docker/images/Dockerfile.venv
+      args:
+        BASE_IMAGE: chameleon/chameleon-base
+        BASE_TAG: ${CHAMELEON_BASE_TAG:-latest}
+
   chameleon-code-build:
     profiles: ["build"]
     image: chameleon/chameleon-code:${CHAMELEON_CODE_TAG:-latest}
     build:
       context: ../..
       dockerfile: docker/images/Dockerfile.code
-      args:
-        BASE_IMAGE: chameleon/chameleon-base
-        BASE_TAG: ${CHAMELEON_BASE_TAG:-latest}
 
   chameleon-ui-build:
     profiles: ["build"]
@@ -148,6 +192,10 @@ services:
     build:
       context: ../..
       dockerfile: docker/images/Dockerfile.ui
+
+volumes:
+  venv-data:
+  code-data:
 
 networks:
   chameleon-net:

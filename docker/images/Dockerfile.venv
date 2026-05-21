@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7
+#
+# chameleon-venv —— Python 虚拟环境（仅 .venv 目录）
+#
+# 关键设计：
+#   - builder 阶段 FROM chameleon-base（拿 uv + libpq-dev）跑 uv sync
+#   - 最终镜像 FROM busybox:musl —— 只装 sh + cp，data-only
+#     * 不能 FROM scratch：tar 离线场景需要 sh + cp（参考 sage 经验）
+#     * 不继承 base：否则 docker save 会带上 base 层，拆分失效
+#   - builder WORKDIR = /app（与运行时挂载路径一致；venv shebang 是绝对路径）
+#
+# 变更频率：低。修改触发：pyproject.toml / uv.lock 改
+
+ARG BASE_IMAGE=chameleon-base
+ARG BASE_TAG=latest
+
+# ── Stage 1: builder ─────────────────────────────────────────
+FROM ${BASE_IMAGE}:${BASE_TAG} AS builder
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpq-dev \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 一次性拷进源码树（仅 builder 阶段用，不进最终镜像）
+COPY backend/ /src/
+
+# 动态发现 workspace 成员：每个子包至少需要 pyproject.toml + src/ + README.md（uv 要求）
+# 把 root + 子包元数据复制到 /app，并对每个子包建占位的 src/ 让 uv resolve 通过
+# 之后 sync 进 .venv（只装依赖，不装项目本身）
+RUN cp /src/pyproject.toml /src/uv.lock . && \
+    find /src -maxdepth 4 -name "pyproject.toml" -not -path "/src/pyproject.toml" | \
+    while read f; do \
+      pkg_dir=$(dirname "$f" | sed 's|^/src/||'); \
+      mkdir -p "$pkg_dir/src/chameleon"; \
+      cp "$f" "$pkg_dir/"; \
+      touch "$pkg_dir/README.md"; \
+      touch "$pkg_dir/src/chameleon/__init__.py"; \
+    done
+
+# 只装依赖、不装项目本身（项目源码由 code 镜像挂载）
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
+
+# ── Stage 2: 最终 data-only ──────────────────────────────────
+FROM busybox:musl
+COPY --from=builder /app/.venv /export/.venv

@@ -1,84 +1,42 @@
 # syntax=docker/dockerfile:1.7
 #
-# chameleon-code —— FastAPI 后端运行镜像（多阶段构建）
+# chameleon-code —— 后端源码 + 迁移 + alembic.ini （data-only 镜像）
 #
-# 阶段：
-#   builder  ：装 build-essential + libpq-dev，uv sync 进 /app/.venv
-#   runtime  ：FROM chameleon-base，拷 venv + 源码，drop privilege 跑
+# 关键设计：
+#   - FROM busybox:musl，只产 /export/* 目录，run-local 时由 code-init 容器 cp 进 named volume
+#   - 不含 .venv（走 chameleon-venv 镜像）
+#   - 不含系统运行时（走 chameleon-base 镜像）
 #
-# 关键：
-#   - venv 路径 /app/.venv 与 base 镜像 ENV UV_PROJECT_ENVIRONMENT 对齐
-#   - 不在镜像内带 config/*.json（除 example/）—— 运维通过 bind mount 注入业务 seed
-#   - 资源（resources/）也走挂载，方便 hot-swap embedding model
+# 变更频率：每次代码 push。镜像体积小（几十 MB），CI 推送快
 
-ARG BASE_IMAGE=chameleon-base
-ARG BASE_TAG=latest
+FROM busybox:musl
 
-# ── Stage 1: builder ─────────────────────────────────────────
-FROM ${BASE_IMAGE}:${BASE_TAG} AS builder
+# 后端各子包源码
+COPY backend/chameleon-core/src              /export/chameleon-core/src
+COPY backend/chameleon-providers/base/src    /export/chameleon-providers/base/src
+COPY backend/chameleon-providers/local/src   /export/chameleon-providers/local/src
+COPY backend/chameleon-providers/dify/src    /export/chameleon-providers/dify/src
+COPY backend/chameleon-providers/fastgpt/src /export/chameleon-providers/fastgpt/src
+COPY backend/chameleon-api/src               /export/chameleon-api/src
+COPY backend/chameleon-system/src            /export/chameleon-system/src
+COPY backend/chameleon-app/src               /export/chameleon-app/src
 
-# uv sync 阶段需要的编译头
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        libpq-dev \
-        git \
-    && rm -rf /var/lib/apt/lists/*
+# agent 包整体拷贝（含 examples）
+COPY backend/chameleon-agents                /export/chameleon-agents
 
-WORKDIR /app
+# 各子包 pyproject.toml —— alembic 等运行时可能要读
+COPY backend/chameleon-core/pyproject.toml              /export/chameleon-core/
+COPY backend/chameleon-providers/base/pyproject.toml    /export/chameleon-providers/base/
+COPY backend/chameleon-providers/local/pyproject.toml   /export/chameleon-providers/local/
+COPY backend/chameleon-providers/dify/pyproject.toml    /export/chameleon-providers/dify/
+COPY backend/chameleon-providers/fastgpt/pyproject.toml /export/chameleon-providers/fastgpt/
+COPY backend/chameleon-api/pyproject.toml               /export/chameleon-api/
+COPY backend/chameleon-system/pyproject.toml            /export/chameleon-system/
+COPY backend/chameleon-app/pyproject.toml               /export/chameleon-app/
 
-# 先 copy 元数据让 BuildKit cache 锁依赖层
-COPY backend/pyproject.toml backend/uv.lock ./
-COPY backend/chameleon-core/pyproject.toml ./chameleon-core/
-COPY backend/chameleon-providers/base/pyproject.toml ./chameleon-providers/base/
-COPY backend/chameleon-providers/local/pyproject.toml ./chameleon-providers/local/
-COPY backend/chameleon-providers/dify/pyproject.toml ./chameleon-providers/dify/
-COPY backend/chameleon-providers/fastgpt/pyproject.toml ./chameleon-providers/fastgpt/
-COPY backend/chameleon-api/pyproject.toml ./chameleon-api/
-COPY backend/chameleon-system/pyproject.toml ./chameleon-system/
-COPY backend/chameleon-app/pyproject.toml ./chameleon-app/
-# agent 包 pyproject 也要 — 否则 workspace 解析失败
-COPY backend/chameleon-agents ./chameleon-agents
+# 根 pyproject + lock（启动期 chameleon 命令需要）
+COPY backend/pyproject.toml backend/uv.lock /export/
 
-# 源码（依赖元数据已就位，sync 后再拷源码以最大化 cache）
-COPY backend/chameleon-core ./chameleon-core
-COPY backend/chameleon-providers ./chameleon-providers
-COPY backend/chameleon-api ./chameleon-api
-COPY backend/chameleon-system ./chameleon-system
-COPY backend/chameleon-app ./chameleon-app
-
-# 同步依赖到 /app/.venv（frozen 防意外升级）
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-# 编译期目标：alembic 迁移文件也带上
-COPY backend/migrations ./migrations
-COPY backend/alembic.ini ./alembic.ini
-
-
-# ── Stage 2: runtime ─────────────────────────────────────────
-FROM ${BASE_IMAGE}:${BASE_TAG} AS runtime
-
-WORKDIR /app
-
-# 从 builder 拷 venv + 源码 + migration
-COPY --from=builder --chown=chameleon:chameleon /app /app
-
-# 配置/资源/日志目录（运维 bind mount 到这些路径）
-RUN mkdir -p /app/config /app/resources /app/logs \
-    && chown -R chameleon:chameleon /app/config /app/resources /app/logs
-
-USER chameleon
-
-# 默认端口（compose 会复写 --port）
-EXPOSE 7009
-
-# Healthcheck —— 后端起来后用 /docs 探活（FastAPI 内置；轻量）
-HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=4 \
-    CMD curl -fsS http://127.0.0.1:7009/docs >/dev/null || exit 1
-
-# entrypoint：runs alembic + 起 uvicorn
-COPY --chown=chameleon:chameleon docker/images/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["serve"]
+# 迁移文件 + alembic 配置
+COPY backend/alembic.ini   /export/alembic.ini
+COPY backend/migrations    /export/migrations
