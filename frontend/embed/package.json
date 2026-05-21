@@ -1,0 +1,15 @@
+{
+  "name": "@chameleon/embed-widget",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b --noEmit && vite build && cp dist/widget.js ../public/widget.js",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2",
+    "vite": "^5.4.10"
+  }
+}

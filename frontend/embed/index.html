@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chameleon Widget · Dev</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%);
+        min-height: 100vh;
+        margin: 0;
+        padding: 40px;
+        color: #1f2937;
+      }
+      h1 { margin: 0 0 8px; font-size: 22px; }
+      p { color: #475569; line-height: 1.6; }
+      code {
+        background: #0f172a;
+        color: #67e8f9;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+      }
+      .card {
+        max-width: 760px;
+        background: #fff;
+        border-radius: 14px;
+        padding: 24px 28px;
+        box-shadow: 0 4px 16px rgba(0,0,0,.05);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Chameleon Embed Widget · 本地预览</h1>
+      <p>
+        修改 <code>?embed_key=xxx</code> 切换嵌入配置；右下角应当出现浮动气泡。
+      </p>
+      <p>默认 API base 为 <code>http://localhost:7009</code>，可通过 URL <code>?api=...</code> 覆盖。</p>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        const params = new URLSearchParams(window.location.search);
+        const embedKey = params.get('embed_key') || 'demo';
+        const apiBase = params.get('api') || 'http://localhost:7009';
+        window.ChameleonWidget.init({ embedKey, apiBase });
+      });
+    </script>
+  </body>
+</html>

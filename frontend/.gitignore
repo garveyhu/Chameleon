@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# embed widget build artifact（由 frontend/embed/ build 生成）
+public/widget.js
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
