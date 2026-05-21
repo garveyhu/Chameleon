@@ -52,7 +52,7 @@ interface DataTableProps<T> {
   pagination?: DataTablePagination;
 }
 
-export function DataTable<T extends Record<string, unknown>>({
+export function DataTable<T>({
   columns,
   data,
   loading,
@@ -62,7 +62,7 @@ export function DataTable<T extends Record<string, unknown>>({
 }: DataTableProps<T>) {
   const getKey = (row: T, idx: number): string | number => {
     if (typeof rowKey === 'function') return rowKey(row);
-    const v = row[rowKey];
+    const v = (row as Record<string, unknown>)[rowKey as string];
     return typeof v === 'string' || typeof v === 'number' ? v : idx;
   };
 
@@ -109,7 +109,9 @@ export function DataTable<T extends Record<string, unknown>>({
                       col.align === 'right' && 'text-right',
                     )}
                   >
-                    {col.render ? col.render(row, idx) : String(row[col.key] ?? '—')}
+                    {col.render
+                      ? col.render(row, idx)
+                      : String((row as Record<string, unknown>)[col.key] ?? '—')}
                   </TableCell>
                 ))}
               </TableRow>

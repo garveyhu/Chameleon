@@ -19,7 +19,7 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   variant?: 'default' | 'danger';
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => unknown;
   onCancel: () => void;
 }
 
