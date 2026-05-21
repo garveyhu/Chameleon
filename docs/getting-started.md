@@ -505,14 +505,12 @@ async def test_retrieve_returns_citations():
 
 ---
 
-## 四点五、配置真实 LLM（实操）
+## 四点五、配置真实 LLM（实操）—— sage 风格
 
 第三章的范式 A2/A3 都会用 `chameleon.core.components.llm()` 取 LLM 客户端。
-要让它真能拿到 LLM（不只是抽象工厂），需要 3 个文件配齐：
+**所有 AI 相关配置全在一个文件**：`config/model.json`（sage 习惯：AI 全包）。
 
-### Step 1 — 选用的模型 + 厂商映射（`config/model.json`）
-
-`cases.llm` 是**全局默认模型名**。`providers.<name>` 把厂商名映射到"URL 别名 + env 名"：
+### 全部 AI 配置：`config/model.json`
 
 ```json
 {
@@ -521,9 +519,18 @@ async def test_retrieve_returns_citations():
     "embedding": "text-embedding-3-small"
   },
   "providers": {
-    "openai":   { "url_alias": "openai",   "key_env": "OPENAI_API_KEY" },
-    "deepseek": { "url_alias": "deepseek", "key_env": "DEEPSEEK_API_KEY" },
-    "qwen":     { "url_alias": "qwen",     "key_env": "QWEN_API_KEY" }
+    "openai": {
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "sk-..."
+    },
+    "deepseek": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "sk-..."
+    },
+    "qwen": {
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "sk-7f51fa77603e4c0da2b54fad614deb94"
+    }
   },
   "models": {
     "llm": [
@@ -537,33 +544,57 @@ async def test_retrieve_returns_citations():
 }
 ```
 
-### Step 2 — 厂商 base URL（`config/baseurl.json`）
+**就这一个文件**。`api_key` 直接写在 `providers.<name>.api_key`——`model.json` 已被 `.gitignore` 排除，不会泄漏。
+
+> 与 sage 的差异：sage 用 `keys: {openai: {OPENAI_API_KEY: "sk-..."}}` 命名空间嵌套；
+> chameleon 简化为 `providers.<name>` 内 `api_key + base_url` 平铺——更直观，与
+> `BaseLLM(api_key=, api_base=)` 参数一一对应。
+
+注意：通义千问用 OpenAI **兼容模式**（`/compatible-mode/v1`），不是原生 DashScope SDK。BaseLLM 继承 `langchain_openai.ChatOpenAI`，所有 OpenAI 兼容厂商都能直接用。
+
+### 中间件配置：`config/component.json`
+
+数据库 / Redis 等连接信息（仿 sage `component.json`）：
 
 ```json
 {
-  "openai":   "https://api.openai.com/v1",
-  "deepseek": "https://api.deepseek.com/v1",
-  "qwen":     "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  "database": {
+    "type": "postgres",
+    "driver": "asyncpg",
+    "host": "127.0.0.1",
+    "port": 8103,
+    "user": "collector",
+    "password": "030317Archer",
+    "db": "chameleon"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 0,
+    "password": ""
+  }
 }
 ```
 
-注意：通义千问用 OpenAI **兼容模式**（`/compatible-mode/v1`），不是原生 DashScope SDK。BaseLLM 就是 langchain_openai.ChatOpenAI，所有 OpenAI 兼容厂商都能直接用。
+`inventory.database_url()` 自动从这里拼成 `postgresql+asyncpg://collector:xxx@127.0.0.1:8103/chameleon`。`type: postgres` 自动映射为 SQLAlchemy 的 `postgresql` dialect。
 
-### Step 3 — API key 实值（`config/.env`，**不进 git**）
+### `.env` 的归宿
+
+`.env` 仅留**部署级 override**——单机场景下可以**几乎为空**：
 
 ```env
-QWEN_API_KEY=sk-xxxxxxxxxxxxxx
-OPENAI_API_KEY=sk-xxx
-DEEPSEEK_API_KEY=sk-xxx
+CHAMELEON_INSTANCE_ID=0
+
+# 按需 override（容器化部署常用）
+# LOG_LEVEL=DEBUG
+# DATABASE_URL=postgresql+asyncpg://...    ← override component.json database.*
 ```
 
-> 怎么把 .env 的值给到运行时？Chameleon 启动时调 `load_dotenv()` 把 .env 注入 `os.environ`，
-> `inventory.llm_provider_credential(provider)` 从 `os.environ.get(key_env)` 取。所以你**不要**
-> 把 key 写到 `model.json`（会进 git），始终写到 `.env`。
+`agents.yaml` 引用的外部 agent api_key（如 `DIFY_FAQ_KEY`）也可以放 .env，但**不再**用 .env 放 LLM 厂商 key（那些已经在 model.json 里）。
 
-### Step 4 — 验证
+### 验证
 
-最快：跑一段 Python 直接调：
+最快方式 —— Python 直调：
 
 ```bash
 uv run python -c "
@@ -572,16 +603,14 @@ from chameleon.core.components import llm
 
 async def main():
     chat = llm()
-    resp = await chat.ainvoke([
-        {'role':'user','content':'一句话介绍 Chameleon'},
-    ])
+    resp = await chat.ainvoke([{'role':'user','content':'你好'}])
     print(resp.content)
 
 asyncio.run(main())
 "
 ```
 
-或者用内置 `qwen-chat` agent（生产范式样板，对应 `chameleon-agents/qwen_chat/`）：
+或者用内置 `qwen-chat` agent：
 
 ```bash
 curl -X POST http://localhost:8000/v1/agents/qwen-chat/invoke \
@@ -591,13 +620,24 @@ curl -X POST http://localhost:8000/v1/agents/qwen-chat/invoke \
 
 ### 切换厂商怎么做
 
-例如想从 Qwen 切到 DeepSeek：
+从 Qwen 切到 DeepSeek：
 
 1. `config/model.json` 把 `cases.llm` 改成 `"deepseek-chat"`
-2. `config/.env` 确保 `DEEPSEEK_API_KEY` 有值
+2. 确保 `providers.deepseek.api_key` 已填
 3. 重启 Chameleon
 
 **业务代码 / agent 代码完全不动**——`llm()` 自动取新模型。
+
+### 配置文件总览
+
+| 文件 | 内容 | 谁会改 |
+|---|---|---|
+| `model.json` | AI 全包（cases / providers / models） | **AI 工程师** —— 调模型、换 LLM 厂商时 |
+| `component.json` | DB / Redis 等中间件连接 | **运维** —— 部署 / 迁移时 |
+| `chameleon.json` | 业务参数（log_level / session / knowledge / stream / timeouts） | **应用开发** —— 调业务行为时 |
+| `baseurl.json` | 外部 agent 平台 URL（DIFY/FastGPT 实例地址）—— 仅给 agents.yaml `${baseurl:x}` 占位符引用 | 接外部 agent 时 |
+| `agents.yaml` | 外部 agent 注册条目（DIFY/FastGPT app） | 加外部 agent 时 |
+| `.env` | 部署级 env override（容器化必备；本地几乎空） | **运维** —— 容器化部署时 |
 
 ---
 

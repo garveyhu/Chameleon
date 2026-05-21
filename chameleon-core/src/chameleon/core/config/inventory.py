@@ -1,19 +1,25 @@
 """具名 getter —— 业务代码统一从这里取配置
 
 不暴露 setter（运行时不可变）。改配置走编辑文件 + 重启。
-"""
 
-import os
+sage 风格分层：
+- AI 相关 → model_settings（含 provider api_key + base_url）
+- 中间件 → component_settings（DB / Redis）
+- 业务参数 → chameleon_settings
+- 部署级 override → env_settings
+- 外部 agent URL → url_settings
+"""
 
 from chameleon.core.config.base_settings import ConfigError
 from chameleon.core.config.env_settings import env_settings
 from chameleon.core.config.json_settings import (
     chameleon_settings,
+    component_settings,
     model_settings,
     url_settings,
 )
 
-# ── 模型相关 ─────────────────────────────────────────────
+# ── 模型相关（全从 model.json） ─────────────────────────
 
 
 def case_llm() -> str | None:
@@ -43,28 +49,65 @@ def embedding_model_config(name: str) -> dict:
 
 
 def llm_provider_credential(provider: str) -> tuple[str, str]:
-    """返回 (base_url, api_key)。fail-fast。"""
+    """返回 (base_url, api_key) —— 全部从 model.json 取（sage 风格）"""
     cfg = model_settings.get(f"providers.{provider}")
     if not cfg:
-        raise ConfigError(f"provider not configured: {provider}")
-    url_alias = cfg.get("url_alias")
-    key_env = cfg.get("key_env")
-    if not url_alias or not key_env:
+        raise ConfigError(f"provider not configured in model.json: {provider}")
+
+    base_url = cfg.get("base_url")
+    api_key = cfg.get("api_key")
+    if not base_url:
+        raise ConfigError(f"providers.{provider}.base_url 缺失（model.json）")
+    if not api_key:
         raise ConfigError(
-            f"provider {provider} missing url_alias / key_env in model.json"
+            f"providers.{provider}.api_key 缺失（model.json）—— "
+            "请把 API key 填进 config/model.json"
         )
-    url = url_settings.get(url_alias)
-    if not url:
-        raise ConfigError(f"url alias not found in baseurl.json: {url_alias}")
-    key = os.environ.get(key_env)
-    if not key:
-        raise ConfigError(f"env not set: {key_env}")
-    return url, key
+    return base_url, api_key
 
 
 def embedding_dim() -> int:
     """v1 全局固定（与 chunks.embedding 列匹配）"""
     return chameleon_settings.get("knowledge.embedding_dim") or 1536
+
+
+# ── 中间件（DB / Redis 等，从 component.json） ─────────
+
+
+def database_url() -> str:
+    """组装数据库 URL
+
+    优先级（高→低）：
+    1. env DATABASE_URL（容器化部署 override）
+    2. component.json database.* 字段拼接
+    """
+    override = env_settings.DATABASE_URL
+    if override:
+        return override
+
+    db = component_settings.get("database") or {}
+    if not db:
+        raise ConfigError("component.json database.* 未配置且无 DATABASE_URL env")
+
+    # SQLAlchemy dialect 名映射（sage 习惯用 "postgres" 简写）
+    db_type_raw = db.get("type", "postgresql")
+    db_type = {"postgres": "postgresql", "mysql": "mysql", "sqlite": "sqlite"}.get(
+        db_type_raw, db_type_raw
+    )
+    driver = db.get("driver", "asyncpg")
+    user = db.get("user", "")
+    pwd = db.get("password", "")
+    host = db.get("host", "localhost")
+    port = db.get("port", 5432)
+    name = db.get("db", "")
+
+    auth = f"{user}:{pwd}@" if user else ""
+    return f"{db_type}+{driver}://{auth}{host}:{port}/{name}"
+
+
+def redis_config() -> dict:
+    """Redis 连接信息（v1 未启用 Redis，预留）"""
+    return component_settings.get("redis") or {}
 
 
 # ── 会话 ─────────────────────────────────────────────────
@@ -130,16 +173,21 @@ def call_log_retention_days() -> int | None:
     return chameleon_settings.get("call_log.retention_days")
 
 
-# ── env 快捷 ────────────────────────────────────────────
-
-
-def database_url() -> str:
-    return env_settings.DATABASE_URL
+# ── 全局 ────────────────────────────────────────────────
 
 
 def log_level() -> str:
-    return env_settings.LOG_LEVEL
+    """日志级别：env override 优先，否则 chameleon.json，最后默认 INFO"""
+    return env_settings.LOG_LEVEL or chameleon_settings.get("log_level") or "INFO"
 
 
 def chameleon_instance_id() -> int:
     return env_settings.CHAMELEON_INSTANCE_ID
+
+
+# ── 外部 agent 平台 URL（baseurl.json） ────────────────
+
+
+def external_platform_url(alias: str) -> str | None:
+    """如 `dify-default` / `fastgpt-default` —— agents.yaml `${baseurl:x}` 占位符引用"""
+    return url_settings.get(alias)

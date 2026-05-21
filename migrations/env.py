@@ -1,32 +1,21 @@
 import asyncio
-import os
 from logging.config import fileConfig
-from pathlib import Path
 
 from alembic import context
-from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
-
-# 加载 config/.env（仅本地开发；生产由部署系统注入 env）
-_root = Path(__file__).resolve().parents[1]
-_env_file = _root / "config" / ".env"
-if _env_file.exists():
-    load_dotenv(_env_file)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-# 从 DATABASE_URL 环境变量取连接串（覆盖 alembic.ini 的空值）
-_db_url = os.environ.get("DATABASE_URL")
-if not _db_url:
-    raise RuntimeError(
-        "DATABASE_URL not set. Set in config/.env or as env var. "
-        "Example: postgresql+asyncpg://collector:xxx@127.0.0.1:8103/chameleon"
-    )
-config.set_main_option("sqlalchemy.url", _db_url)
+# 通过 chameleon-core inventory 拼接 DB URL：
+# 优先 env DATABASE_URL（容器化部署 override）；否则从 component.json 拼
+# chameleon.core.config 加载时会自动 load_dotenv(.env)
+from chameleon.core.config import inventory  # noqa: E402
+
+config.set_main_option("sqlalchemy.url", inventory.database_url())
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

@@ -1,0 +1,19 @@
+{
+  "database": {
+    "type": "postgres",
+    "driver": "asyncpg",
+    "host": "127.0.0.1",
+    "port": 8103,
+    "user": "collector",
+    "password": "",
+    "db": "chameleon"
+  },
+
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379,
+    "db": 0,
+    "password": "",
+    "socket_timeout": 0.5
+  }
+}
