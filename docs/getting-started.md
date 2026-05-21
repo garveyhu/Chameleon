@@ -53,7 +53,8 @@
 | `sage-core/components/skill/` | （v1 占位 `function/`；v0.2 接） | 技能注册 |
 | `sage-core/components/audio/` | （v1 不做） | 语音模型 |
 | `sage-core/components/memory/` | 部分由 conversations + messages 表实现；ES/Redis v1 不做 | 历史 |
-| `sage-system/modules/chat/` | `chameleon-app/.../modules/agent/` | HTTP 入口 + 会话编排 |
+| `sage-system/modules/chat/` | `chameleon-api/.../api/agent/` | 对外 AI 服务入口（业务方调） |
+| `sage-system/api/admin/` | `chameleon-system/.../system/admin/` | 内部管理接口（前端面板调） |
 | `sage-agents/data_qa_v2/` | `chameleon-agents/<your_agent>/` 子包 | 具体 agent 实现 |
 | `sage-agents/data_qa_v2/deps_factory.py` | 你 agent 子包里的 `deps_factory.py` | 依赖注入工厂 |
 | `sage-agents/data_qa_v2/function/graph/` | 你 agent 子包里的 `function/graph/`（含 `nodes/`） | LangGraph 图与节点 |
@@ -795,16 +796,17 @@ curl -X POST http://localhost:8000/v1/agents/echo/invoke \
 | **chameleon-providers** | `chameleon-providers/*/` | agent 执行方式抽象层（local / dify / fastgpt）。**写本地 agent 不用管**，原理详见 [providers.md](providers.md) |
 | **chameleon-agents** | `chameleon-agents/<key>/` | **你的智能体资产**（一个 agent 一个子包） |
 | └ echo | `chameleon-agents/examples/echo_langgraph/` | 范式样板（演示 step/delta/citation） |
-| **chameleon-app** | `chameleon-app/src/chameleon/app/` | FastAPI 入口 + 业务模块 |
+| **chameleon-api** | `chameleon-api/src/chameleon/api/` | ★ 对外 AI 服务能力（业务方调）—— 平台"能力清单" |
+| ├ agent | `api/agent/` | `/v1/agents/{key}/invoke` 路由 + 9 步编排 |
+| ├ conversation | `api/conversation/` | `/v1/conversations/*` 会话管理 |
+| ├ knowledge | `api/knowledge/` | `/v1/knowledge/*` 知识库 CRUD + ingest |
+| └ task | `api/task/` | `/v1/tasks/{id}` 异步任务进度 |
+| **chameleon-system** | `chameleon-system/src/chameleon/system/` | ★ 内部管理接口（前端面板调） |
+| ├ api_key | `system/api_key/` | `/v1/admin/api-keys/*` |
+| └ admin | `system/admin/` | `/v1/admin/call-logs` + `/providers/status` |
+| **chameleon-app** | `chameleon-app/src/chameleon/app/` | FastAPI 启动器（薄，仅装配 + 中间件） |
 | ├ main.py | `app/main.py` | FastAPI app + lifespan + 异常 handler |
-| ├ cli.py | `app/cli.py` | `chameleon init-admin` 等命令 |
-| └ modules/ | `app/modules/` | 业务模块 |
-| └ modules/agent | `app/modules/agent/` | `/v1/agents/{key}/invoke` 路由 + 9 步编排 |
-| └ modules/conversation | `app/modules/conversation/` | `/v1/conversations/*` 会话管理 |
-| └ modules/knowledge | `app/modules/knowledge/` | `/v1/knowledge/*` 知识库 CRUD + ingest |
-| └ modules/task | `app/modules/task/` | `/v1/tasks/{id}` 异步任务进度 |
-| └ modules/api_key | `app/modules/api_key/` | `/v1/admin/api-keys/*` |
-| └ modules/admin | `app/modules/admin/` | `/v1/admin/call-logs` + `/providers/status` |
+| └ cli.py | `app/cli.py` | `chameleon init-admin` 等命令 |
 
 **关键依赖方向**（铁律，不可破）：
 
@@ -814,9 +816,11 @@ chameleon-core
 chameleon-providers-base
     ↑              ← local/dify/fastgpt 都依赖
 chameleon-providers/*
-    ↑              ← chameleon-app 依赖三个具体 provider
-chameleon-app
-                   
+    ↑              
+chameleon-api / chameleon-system    ← 业务路由两个独立包
+    ↑
+chameleon-app                       ← 仅装配 + 中间件，不写业务
+
 chameleon-agents/* → chameleon-core（仅！）
                    ← agent 子包是独立资产，可以剥离出去复用
 ```

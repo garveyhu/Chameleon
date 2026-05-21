@@ -358,12 +358,18 @@ MOONSHOT_API_KEY=ms-xxx
 
 ## 7. 加一个业务模块（如 admin 面板、外部 webhook）
 
-业务模块都在 `chameleon-app/src/chameleon/app/modules/`。
+业务模块按"对外 / 对内"分两个包：
+
+- **对外能力**（业务方调，前缀通常 `/v1/<resource>`）→ 放 `chameleon-api/src/chameleon/api/<name>/`
+- **内部管理**（前端 admin 面板调，前缀 `/v1/admin/*`）→ 放 `chameleon-system/src/chameleon/system/<name>/`
 
 ### Step 1 - 建模块目录
 
 ```bash
-mkdir -p chameleon-app/src/chameleon/app/modules/my_module
+# 对外能力示例
+mkdir -p chameleon-api/src/chameleon/api/my_module
+# 或：内部管理示例
+mkdir -p chameleon-system/src/chameleon/system/my_module
 ```
 
 ### Step 2 - 标准文件
@@ -376,7 +382,9 @@ my_module/
 └── api.py             # FastAPI router
 ```
 
-参考已有模块的范式（`conversation/`、`knowledge/`）。
+参考已有模块的范式：
+- 对外：`chameleon-api/.../conversation/`、`chameleon-api/.../knowledge/`
+- 对内：`chameleon-system/.../api_key/`、`chameleon-system/.../admin/`
 
 ### Step 3 - 挂到 main.py
 
@@ -442,6 +450,6 @@ HTTP status 推断：`code_to_http_status` 自动按段位映射（42910 → 429
 | 新 provider | `chameleon-providers/<name>/` | 仅新子包 |
 | 新 vector store | `core/vector/<name>.py` + factory | 单文件 |
 | 新 LLM 厂商（兼容） | `baseurl.json` + `model.json` + `.env` | 仅配置 |
-| 新业务模块 | `chameleon-app/.../modules/<name>/` + main.py 挂载 | app 包内 |
+| 新业务模块 | `chameleon-api/.../<name>/` 或 `chameleon-system/.../<name>/` + main.py 挂载 | 按"对外/对内"选包 |
 | 新错误码 | `core/api/exceptions.py` 加 enum | 单文件 |
 | 新 StreamEvent 类型 | `providers/base/types.py` + 所有 provider 同步 | 横切 |

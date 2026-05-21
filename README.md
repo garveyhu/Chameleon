@@ -42,9 +42,11 @@ Chameleon 是 links 的"AI 飞轮"——把所有 AI 智能体作为可积累、
 ### 1. clone + 装依赖
 
 ```bash
-git clone <repo> Chameleon && cd Chameleon
+git clone <repo> Chameleon && cd Chameleon/backend
 uv sync --all-packages
 ```
+
+> 后端所有命令都在 `Chameleon/backend/` 下执行；`Chameleon/frontend/` 为前端项目（待实现）。
 
 ### 2. 准备 PG（首次部署）
 
@@ -59,13 +61,14 @@ docker exec postgres psql -U collector -d postgres \
   -c "CREATE DATABASE chameleon OWNER collector;"
 
 # 应用迁移
-cd <Chameleon repo>
+cd <Chameleon repo>/backend
 uv run alembic upgrade head
 ```
 
 ### 3. 拷配置（可选——example 已含合理默认）
 
 ```bash
+# 在 backend/ 下
 cp config/example/.env.example config/.env
 cp config/example/chameleon.example.json config/chameleon.json
 cp config/example/model.example.json config/model.json
@@ -120,43 +123,50 @@ curl -N -X POST http://localhost:8000/v1/agents/echo/invoke \
 ## 项目结构
 
 ```
-Chameleon/                              ← uv workspace 根
-├── chameleon-core/                     ← 基础设施 + AI infra + 共享 ORM
-│   └── src/chameleon/core/
-│       ├── infra/                      ← 运行时基础设施（db / logger / auth）
-│       ├── api/                        ← API 契约层（Result[T] + 业务异常体系）
-│       ├── config/                     ← 配置加载（pydantic-settings + inventory）
-│       ├── models/                     ← 共享 ORM（让 agent 可读 KB/messages）
-│       ├── components/                 ← AI 工具箱（llms / embeddings / vector / cache / knowledge）
-│       ├── base/                       ← agent 抽象（BaseAgent + bridges）
-│       ├── function/                   ← prompt 模板 + Runnable 工厂占位
-│       └── utils/                      ← 通用工具（crypto / snowflake / convert / time）
-├── chameleon-providers/                ← Provider 适配层（**对写 agent 的人透明，正常不用动**）
-│   ├── base/                           ← 协议 / types / registry
-│   ├── local/                          ← 本地执行器：import BaseAgent 子类 + 调 astream
-│   ├── dify/                           ← 远程 DIFY HTTP 适配
-│   └── fastgpt/                        ← 远程 FastGPT HTTP 适配
-├── chameleon-agents/                   ← 本地 agent 资产（**你的 AI 飞轮，主要在这里写**）
-│   ├── qwen_chat/                      ← 业务级 agent（直接可用）
-│   └── examples/                       ← 范式样板分组
-│       ├── echo_langgraph/             ← LangGraph CompiledGraph 范式
-│       ├── echo_runnable/              ← LangChain Runnable 范式
-│       └── echo_native/                ← 纯 Python async generator 范式
-├── chameleon-app/                      ← FastAPI 入口 + 业务模块
-│   └── src/chameleon/app/
-│       ├── main.py / cli.py
-│       └── modules/
-│           ├── agent/ conversation/ knowledge/ task/ api_key/ admin/
-├── config/                             ← 配置（实例已 gitignore，example 在 example/）
-├── migrations/                         ← Alembic
+Chameleon/                              ← 前后端 monorepo 根
+├── backend/                            ← uv workspace 根（Python 后端）
+│   ├── chameleon-core/                 ← 基础设施 + AI infra + 共享 ORM
+│   │   └── src/chameleon/core/
+│   │       ├── infra/                  ← 运行时基础设施（db / logger / auth）
+│   │       ├── api/                    ← API 契约层（Result[T] + 业务异常体系）
+│   │       ├── config/                 ← 配置加载（pydantic-settings + inventory）
+│   │       ├── models/                 ← 共享 ORM
+│   │       ├── components/             ← AI 工具箱（llms / embeddings / vector / cache / knowledge）
+│   │       ├── base/                   ← agent 抽象（BaseAgent + bridges）
+│   │       ├── function/               ← prompt 模板 + Runnable 工厂占位
+│   │       └── utils/                  ← 通用工具
+│   ├── chameleon-providers/            ← Provider 适配层（**对写 agent 的人透明**）
+│   │   ├── base/ local/ dify/ fastgpt/
+│   ├── chameleon-agents/               ← 本地 agent 资产（**你的 AI 飞轮**）
+│   │   ├── qwen_chat/                  ← 业务级 agent（直接可用）
+│   │   └── examples/                   ← 三种范式样板（langgraph / runnable / native）
+│   ├── chameleon-api/                  ← ★ 对外 AI 服务能力（业务方调）
+│   │   └── src/chameleon/api/
+│   │       └── agent/ knowledge/ conversation/ task/
+│   ├── chameleon-system/               ← ★ 内部管理接口（前端 admin 面板调）
+│   │   └── src/chameleon/system/
+│   │       └── api_key/ admin/
+│   ├── chameleon-app/                  ← FastAPI 启动器（薄：仅 lifespan + 中间件 + 装配）
+│   │   └── src/chameleon/app/
+│   │       └── main.py / cli.py
+│   ├── config/                         ← 配置（实例已 gitignore，example 在 example/）
+│   ├── migrations/                     ← Alembic（formatted SQL）
+│   ├── tests/                          ← 跨包集成测试（E2E）
+│   └── pyproject.toml                  ← workspace 配置
+├── frontend/                           ← React + Vite + TS + Tailwind 管理面板（待实现）
 ├── docs/
-│   ├── plans/                          ← 设计稿 + 实施计划 + 验收报告
-│   ├── operations.md                   ← 部署 / 备份 / 升级
-│   ├── cli.md                          ← CLI 命令清单
-│   └── extension-guide.md              ← 加 agent / provider / vector 范式
-├── tests/                              ← 跨包集成测试（E2E）
-└── pyproject.toml                      ← workspace 配置
+│   ├── plans/                          ← v0.1 设计稿 + 实施计划 + 验收报告
+│   ├── providers.md                    ← Provider 适配层原理 + 接入新平台
+│   ├── extension-guide.md / operations.md / cli.md
+│   └── getting-started.md              ← 入门指南
+└── README.md
 ```
+
+### 后端三层包定位
+
+- **`chameleon-api/`** — 对外 AI 服务能力。业务方应用直调，前缀 `/v1/{agents,knowledge,conversations,tasks}`。**这个包是 Chameleon 的"能力清单"**：读完它的 router 就知道平台对外提供什么。
+- **`chameleon-system/`** — 内部管理接口。前端管理面板专用，前缀 `/v1/admin/*`，需要 admin scope 鉴权。
+- **`chameleon-app/`** — 启动器。把 `chameleon-api` + `chameleon-system` 的 router 装配到 FastAPI，挂中间件 / 全局异常 handler / lifespan，不含任何业务逻辑。
 
 ## 文档
 

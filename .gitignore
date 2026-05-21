@@ -19,30 +19,35 @@ venv/
 env/
 .uv-cache/
 
+# Node / frontend
+node_modules/
+.next/
+.cache/
+
 # 配置（敏感 + 实例化）—— 见 docs/getting-started.md 四点五节
 # .gitignore 不支持行内注释，每条规则单独占一行
 
 # 部署级 env override
-config/.env
+backend/config/.env
 
 # 业务参数
-config/chameleon.json
+backend/config/chameleon.json
 
 # AI 全包（含 LLM api_key）—— sage 风格
-config/model.json
+backend/config/model.json
 
 # 中间件连接（含 DB password 等）
-config/component.json
+backend/config/component.json
 
 # 外部 agent 注册（含 app_id 等）
-config/agents.yaml
+backend/config/agents.yaml
 
 # baseurl.json 一般不含秘钥，按需放行；如需隐藏，取消下一行注释
-# config/baseurl.json
+# backend/config/baseurl.json
 
 # 资源 / 数据
-resources/
-logs/
+backend/resources/
+backend/logs/
 *.log
 
 # IDE
