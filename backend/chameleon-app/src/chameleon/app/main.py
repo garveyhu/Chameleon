@@ -19,6 +19,7 @@ from loguru import logger
 from sqlalchemy import text
 
 from chameleon.api.agent import agents_router
+from chameleon.api.embed import embed_router
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
 from chameleon.system.api_key import api_keys_router
@@ -26,6 +27,7 @@ from chameleon.system.apps import apps_router
 from chameleon.system.audit_logs import audit_logs_router
 from chameleon.system.auth import auth_router
 from chameleon.system.dashboard import dashboard_router
+from chameleon.system.embed_configs import embed_configs_router
 from chameleon.system.kbs import kbs_admin_router
 from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
@@ -114,6 +116,9 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(kbs_admin_router)
     app.include_router(dashboard_router)
     app.include_router(audit_logs_router)
+    app.include_router(embed_configs_router)
+    # 嵌入式业务
+    app.include_router(embed_router)
     # 业务接口
     app.include_router(conversations_router)
     app.include_router(agents_router)
@@ -146,6 +151,20 @@ async def _trigger_healthchecks() -> None:
 
 
 def _register_middleware(app: FastAPI) -> None:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    # CORS：admin / business API 默认仅同源；嵌入式路径 /v1/embed/*
+    # 的跨域校验在 router 内动态做（按 embed_config.allowed_origins）。
+    # 这里放开 /v1/embed/* 的 preflight，origin 白名单 router 内独立验。
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=False,  # embed 不带 cookie，避免 wildcard origin 冲突
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=600,
+    )
+
     @app.middleware("http")
     async def request_id_middleware(
         request: Request,
