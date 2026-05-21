@@ -1,29 +1,43 @@
-"""BaseAgent —— 仿 sage core/base/base_agent.py
+"""BaseAgent —— Chameleon 本地 agent 抽象基类
 
-简化版（v1）：
-- 只保留 get_metadata + build_graph 抽象（不强制 process()，因为 Chameleon 流式由
-  LangGraphProvider 通过 astream_events 统一处理；不像 sage 让 agent 自己产 SSE event）
-- agent 子包 __init__.py 仍兼容 v1 最简模式（直接 export AGENT_META + build_graph 函数）
-- 选择继承 BaseAgent 的 agent，可以多拿到：
-  · AgentMetadata 结构化对象（含 config_options 用于前端渲染）
-  · 与 sage 一致的 AgentRouter 注册接口（v0.2 admin UI 可消费）
+★ 关键设计：**框架不锁死 LangGraph**
+
+本地 agent 的契约就是一个 async generator：
+
+    async def astream(ctx) -> AsyncIterator[StreamEvent]:
+        yield ...
+
+具体怎么产生 StreamEvent，**agent 自由选择**：
+- **范式 A**（最灵活）：直接 yield —— 纯 Python 异步循环
+- **范式 B**（适合复杂流程）：用 LangGraph CompiledGraph，配合 bridges 工具
+- **范式 C**（适合 LCEL 链式）：用 LangChain Runnable，配合 bridges 工具
+- **混合**：astream 内自由组合，比如先 LangGraph 跑前置节点，再纯 Python yield 收尾
+
+BaseAgent 提供：
+1. 抽象 `astream(cls, ctx)` —— 必须实现
+2. `get_metadata()` —— 元数据
+3. `from_langgraph_graph(ctx, graph)` —— LangGraph 桥的 classmethod 包装
+4. `from_runnable(ctx, runnable, ...)` —— LangChain Runnable 桥的 classmethod 包装
+
+向后兼容：
+- 字典模式（`AGENT_META + build_graph` 函数）仍被 registry 识别（不强制升级）
+- BaseAgent 子类可同时提供 `build_graph()` classmethod，默认 astream 自动用它（兼容旧写法）
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chameleon.providers.base.types import InvokeContext, StreamEvent
 
 
 @dataclass
 class AgentConfigOption:
-    """智能体配置选项（与 sage AgentConfigOption 同源）
-
-    可让前端渲染配置面板：开关、选择、数据源选择等。
-    v1 后端不消费这些（agent 自行从 ctx.context_vars 取）；
-    给 v0.2 admin UI 留接口。
-    """
+    """agent 配置选项（前端可渲染配置面板）"""
 
     id: str
     type: str  # toggle / select / button / datasource / number / text
@@ -35,23 +49,22 @@ class AgentConfigOption:
     icon: str | None = None
     icon_only: bool = False
     hide_tooltip: bool = False
-    options: list[dict[str, str]] | None = None  # select 类型可选项
+    options: list[dict[str, str]] | None = None
 
 
 @dataclass
 class AgentMetadata:
-    """智能体元数据（与 sage AgentMetadata 同源 + Chameleon 扩展）"""
+    """agent 元数据"""
 
-    id: str  # 唯一 agent key（对外 agent_key）
-    name: str  # 显示名称
-    description: str  # 一句话描述
-    icon: str | None = None  # 图标（Lucide）
+    id: str
+    name: str
+    description: str
+    icon: str | None = None
     version: str = "1.0.0"
     tags: list[str] = field(default_factory=list)
     config_options: list[AgentConfigOption] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        """便于 JSON 序列化（admin UI 用）"""
         return {
             "id": self.id,
             "name": self.name,
@@ -78,13 +91,18 @@ class AgentMetadata:
 
 
 class BaseAgent(ABC):
-    """本地 LangGraph agent 可继承的基类（可选）
+    """Chameleon 本地 agent 基类
 
-    与 sage BaseAgent 差异：
-    - sage 让 agent 自己实现 process() 产 SSE event；Chameleon 统一由
-      LangGraphProvider 跑 astream_events，所以这里没有 process()
-    - agent 只要实现 build_graph()（sync，返 CompiledGraph）+ get_metadata()
-      LangGraphProvider 通过 namespace 扫描自动注册
+    必须实现：
+    - get_metadata() classmethod
+    - astream(ctx) classmethod —— async generator 产 StreamEvent
+
+    可选实现（用于自动 fallback）：
+    - build_graph() classmethod —— LangGraph CompiledGraph（默认 astream 用它）
+    - build_runnable() classmethod —— LangChain Runnable（默认 astream 用它）
+
+    如果只实现 build_graph 或 build_runnable 之一，BaseAgent 默认的 astream
+    会自动调用对应的桥工具——你完全不写 astream 代码也能跑。
     """
 
     @classmethod
@@ -93,18 +111,76 @@ class BaseAgent(ABC):
         """返 AgentMetadata；id 即 agent_key"""
 
     @classmethod
-    @abstractmethod
-    def build_graph(cls):
-        """返 LangGraph CompiledGraph（sync function，A4 裁决）"""
+    async def astream(cls, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
+        """产生 StreamEvent 流。
 
-    # ── helpers ───────────────────────────────────────
+        默认实现：
+        - 如果子类有 build_graph() → 调 LangGraph 桥
+        - 如果子类有 build_runnable() → 调 LangChain Runnable 桥
+        - 否则 NotImplementedError
+
+        子类可自由 override 此方法做完全自定义流式输出。
+        """
+        if hasattr(cls, "build_graph") and callable(cls.build_graph):
+            async for ev in cls.from_langgraph_graph(ctx, cls.build_graph()):
+                yield ev
+            return
+
+        if hasattr(cls, "build_runnable") and callable(cls.build_runnable):
+            async for ev in cls.from_runnable(ctx, cls.build_runnable()):
+                yield ev
+            return
+
+        raise NotImplementedError(
+            f"{cls.__name__} must implement astream() OR build_graph() OR build_runnable()"
+        )
+
+    # ── 内置范式桥（classmethod 形式，方便子类直接 yield from） ─
+
+    @classmethod
+    async def from_langgraph_graph(
+        cls, ctx: InvokeContext, graph: Any, **kwargs: Any
+    ) -> AsyncIterator[StreamEvent]:
+        """LangGraph 桥（agent 直接用）
+
+        用法：
+            async def astream(cls, ctx):
+                graph = cls._build()
+                async for ev in cls.from_langgraph_graph(ctx, graph):
+                    yield ev
+        """
+        from chameleon.core.base.bridges import astream_from_langgraph_graph
+
+        async for ev in astream_from_langgraph_graph(ctx, graph, **kwargs):
+            yield ev
+
+    @classmethod
+    async def from_runnable(
+        cls,
+        ctx: InvokeContext,
+        runnable: Any,
+        *,
+        input_key: str = "input",
+        history_key: str | None = "history",
+        extras: dict[str, Any] | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """LangChain Runnable 桥"""
+        from chameleon.core.base.bridges import astream_from_runnable
+
+        async for ev in astream_from_runnable(
+            ctx,
+            runnable,
+            input_key=input_key,
+            history_key=history_key,
+            extras=extras,
+        ):
+            yield ev
+
+    # ── 兼容性 helper ─────────────────────────────────
 
     @classmethod
     def to_legacy_meta(cls) -> dict[str, Any]:
-        """适配现有 registry 的 AGENT_META 字典格式（兼容 v1 最简模式）
-
-        让 BaseAgent 子类与 echo agent 的 AGENT_META 字典等价。
-        """
+        """适配字典模式 AGENT_META（兼容 registry）"""
         md = cls.get_metadata()
         return {
             "key": md.id,

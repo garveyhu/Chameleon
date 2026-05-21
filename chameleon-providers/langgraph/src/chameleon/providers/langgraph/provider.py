@@ -1,76 +1,164 @@
-"""LangGraphProvider —— in-process 调用本地 LangGraph agent
+"""本地 in-process Provider —— 统一调用本地 agent
 
-约定：
-- agent 子包 __init__.py export build_graph() —— sync function 返 CompiledGraph
-- build_graph 仅在首次调用时执行，结果缓存于 GraphBuilder
-- ctx.history + ctx.input 翻成 langgraph 消息列表喂入 graph
-- graph.astream_events(version="v2") 输出 → stream.translate → StreamEvent
+★ v0.1.x 重大重构：从"只支持 LangGraph"→"本地 agent 框架不限制"
+
+支持的 agent 形态（**registry 启动时自动识别**）：
+
+1. **BaseAgent 子类（推荐）**：实现 `astream(ctx)` async generator
+   - 内部可以用 LangGraph / LangChain / 纯 Python / 混合
+   - 通过 `from chameleon.core.base.bridges import ...` 桥工具用 LangGraph/Runnable
+
+2. **字典模式（兼容现有 echo 等）**：模块顶层 `AGENT_META + build_graph` 函数
+   - LocalProvider 走 langgraph 桥（与 v0.1 行为一致）
+
+3. **build_runnable() 字典模式**：模块顶层 `AGENT_META + build_runnable` 函数
+   - LocalProvider 走 langchain 桥
+
+provider name 保留为 "langgraph"——向后兼容 agents.yaml 与现有 ORM 数据。
+未来若有 v0.2 admin UI 需要更准确命名，再加 "local" alias。
 """
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import AsyncIterator
+from typing import Any
 
 from loguru import logger
 
-from chameleon.core.exceptions import ProviderInternalError
+from chameleon.core.exceptions import ProviderInternalError, RegistryError
 from chameleon.providers.base.protocol import Provider
-from chameleon.providers.base.types import (
-    InvokeContext,
-    Message,
-    StreamEvent,
-)
-from chameleon.providers.langgraph.builder import GraphBuilder
-from chameleon.providers.langgraph.stream import translate
+from chameleon.providers.base.types import InvokeContext, StreamEvent
 
 
 class LangGraphProvider(Provider):
+    """本地 in-process provider（保留命名兼容 v0.1）"""
+
     name = "langgraph"
 
-    def __init__(self) -> None:
-        self._builder = GraphBuilder()
-
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
-        graph = await self._builder.get_or_build(ctx.agent_def)
+        cfg = ctx.agent_def.config
+        module_path = cfg.get("module")
+        if not module_path:
+            raise RegistryError(
+                message=f"agent {ctx.agent_def.key} missing config.module"
+            )
 
-        messages = _build_messages(ctx)
-        state_input = {"messages": messages, "context": ctx.context_vars}
-
-        # graph.astream_events 返回 async iterator
         try:
-            async for ev in graph.astream_events(state_input, version="v2"):
-                for out in translate(ev):
-                    yield out
+            mod = importlib.import_module(module_path)
         except Exception as e:
-            logger.exception("langgraph stream failed | agent={}", ctx.agent_def.key)
-            raise ProviderInternalError(message=f"langgraph runtime error: {e}") from e
+            raise RegistryError(message=f"failed to import {module_path}: {e}") from e
+
+        # ── 路径 1：BaseAgent 子类 → 调 cls.astream() ─────
+        agent_cls_name = cfg.get("agent_class")
+        if agent_cls_name:
+            agent_cls = getattr(mod, agent_cls_name, None)
+            if agent_cls is None:
+                raise RegistryError(message=f"{module_path}.{agent_cls_name} not found")
+            logger.debug(
+                "local provider | agent={} | mode=BaseAgent.astream",
+                ctx.agent_def.key,
+            )
+            try:
+                async for ev in agent_cls.astream(ctx):
+                    yield ev
+            except Exception as e:
+                if (
+                    "ProviderError" in type(e).__name__
+                    or "Provider" in type(e).__name__
+                ):
+                    raise
+                raise ProviderInternalError(
+                    message=f"local agent {ctx.agent_def.key} astream failed: {e}"
+                ) from e
+            return
+
+        # ── 路径 2：字典模式 build_graph（v0.1 兼容） ──────
+        if hasattr(mod, "build_graph"):
+            from chameleon.core.base.bridges import astream_from_langgraph_graph
+
+            logger.debug(
+                "local provider | agent={} | mode=build_graph(dict)",
+                ctx.agent_def.key,
+            )
+            graph = _get_or_build_dict_graph(ctx.agent_def.key, mod)
+            try:
+                async for ev in astream_from_langgraph_graph(ctx, graph):
+                    yield ev
+            except Exception as e:
+                if "ProviderError" in type(e).__name__:
+                    raise
+                raise ProviderInternalError(
+                    message=f"langgraph runtime error: {e}"
+                ) from e
+            return
+
+        # ── 路径 3：字典模式 build_runnable ────────────────
+        if hasattr(mod, "build_runnable"):
+            from chameleon.core.base.bridges import astream_from_runnable
+
+            logger.debug(
+                "local provider | agent={} | mode=build_runnable(dict)",
+                ctx.agent_def.key,
+            )
+            runnable = _get_or_build_dict_runnable(ctx.agent_def.key, mod)
+            try:
+                async for ev in astream_from_runnable(ctx, runnable):
+                    yield ev
+            except Exception as e:
+                if "ProviderError" in type(e).__name__:
+                    raise
+                raise ProviderInternalError(
+                    message=f"runnable runtime error: {e}"
+                ) from e
+            return
+
+        raise RegistryError(
+            message=(
+                f"local agent {ctx.agent_def.key} ({module_path}) provides none of: "
+                "BaseAgent subclass / build_graph() / build_runnable()"
+            )
+        )
 
     async def healthcheck(self) -> bool:
-        # in-process —— 总是 True
         return True
 
 
-def _build_messages(ctx: InvokeContext) -> list[dict]:
-    """把 ctx.history + 当前 input 翻成 langgraph dict-form messages
-
-    LangGraph MessagesState 接受 dict {"role": ..., "content": ...} 或
-    LangChain BaseMessage —— dict 形式最通用。
-    """
-    msgs: list[dict] = [_msg_to_dict(m) for m in ctx.history]
-
-    if isinstance(ctx.input, str):
-        msgs.append({"role": "user", "content": ctx.input})
-    else:
-        # list[Message] —— 当前轮 = 整个 list（client 自管历史时 history 应为空）
-        msgs.extend(_msg_to_dict(m) for m in ctx.input)
-
-    return msgs
+# ── 字典模式产物缓存（v0.1 兼容路径） ────────────────────
 
 
-def _msg_to_dict(m: Message) -> dict:
-    d: dict = {"role": m.role, "content": m.content}
-    if m.name:
-        d["name"] = m.name
-    if m.tool_call_id:
-        d["tool_call_id"] = m.tool_call_id
-    return d
+_dict_graph_cache: dict[str, Any] = {}
+_dict_runnable_cache: dict[str, Any] = {}
+
+
+def _get_or_build_dict_graph(key: str, mod: Any) -> Any:
+    cached = _dict_graph_cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        graph = mod.build_graph()
+    except Exception as e:
+        raise RegistryError(message=f"{mod.__name__}.build_graph() failed: {e}") from e
+    _dict_graph_cache[key] = graph
+    logger.info("local langgraph compiled (dict mode) | agent={}", key)
+    return graph
+
+
+def _get_or_build_dict_runnable(key: str, mod: Any) -> Any:
+    cached = _dict_runnable_cache.get(key)
+    if cached is not None:
+        return cached
+    try:
+        runnable = mod.build_runnable()
+    except Exception as e:
+        raise RegistryError(
+            message=f"{mod.__name__}.build_runnable() failed: {e}"
+        ) from e
+    _dict_runnable_cache[key] = runnable
+    logger.info("local runnable built (dict mode) | agent={}", key)
+    return runnable
+
+
+def _clear_caches_for_test() -> None:
+    _dict_graph_cache.clear()
+    _dict_runnable_cache.clear()

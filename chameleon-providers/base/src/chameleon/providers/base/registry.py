@@ -98,8 +98,14 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 message=f"failed to import agent package {mod_info.name}: {e}"
             ) from e
 
-        # 优先 BaseAgent 子类（sage 风格）；fallback 到 AGENT_META + build_graph 字典模式
+        # 三种识别路径（按优先级）：
+        # 1) BaseAgent 子类 —— 模块顶层有 BaseAgent 派生类
+        # 2) 字典模式 build_graph —— 模块顶层有 AGENT_META + build_graph
+        # 3) 字典模式 build_runnable —— 模块顶层有 AGENT_META + build_runnable
         agent_cls = _find_base_agent_class(mod)
+        has_build_graph = callable(getattr(mod, "build_graph", None))
+        has_build_runnable = callable(getattr(mod, "build_runnable", None))
+
         if agent_cls is not None:
             md = agent_cls.get_metadata()
             meta = {
@@ -108,22 +114,24 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 "version": md.version,
                 "tags": list(md.tags),
             }
-            build_fn = agent_cls.build_graph
-        else:
+            mode = "BaseAgent"
+        elif has_build_graph or has_build_runnable:
             meta = getattr(mod, "AGENT_META", None)
-            build_fn = getattr(mod, "build_graph", None)
-
-        if meta is None and build_fn is None:
+            mode = "build_graph" if has_build_graph else "build_runnable"
+        else:
             # 占位空包（如 P0 阶段的 echo）—— 跳过
             logger.debug(
-                "agent package {} has no AGENT_META/build_graph — skipped (placeholder)",
+                "agent package {} has no BaseAgent / build_graph / build_runnable — skipped (placeholder)",
                 mod_info.name,
             )
             continue
 
-        if meta is None or build_fn is None:
+        if meta is None:
             raise RegistryError(
-                message=f"agent package {mod_info.name} must export both AGENT_META and build_graph"
+                message=(
+                    f"agent package {mod_info.name} 字典模式必须 export AGENT_META "
+                    "（或改用 BaseAgent 子类）"
+                )
             )
 
         key = meta.get("key")
@@ -132,18 +140,10 @@ def _build_local_agents() -> dict[str, AgentDef]:
                 message=f"agent package {mod_info.name} AGENT_META missing 'key'"
             )
 
-        # 区分 BaseAgent 子类（agent_cls 已找到）vs 字典模式（用模块路径 build_graph）
+        # 构造 config（provider 内部用来分发执行路径）
+        cfg: dict = {"module": mod_info.name, "mode": mode}
         if agent_cls is not None:
-            cfg = {
-                "module": mod_info.name,
-                "build_fn": "build_graph",
-                "agent_class": agent_cls.__name__,  # 仅记录用
-            }
-        else:
-            cfg = {
-                "module": mod_info.name,
-                "build_fn": "build_graph",
-            }
+            cfg["agent_class"] = agent_cls.__name__
 
         agents[key] = AgentDef(
             key=key,
@@ -154,10 +154,10 @@ def _build_local_agents() -> dict[str, AgentDef]:
             config=cfg,
         )
         logger.info(
-            "agent registered (local langgraph) | key={} | module={} | mode={}",
+            "agent registered (local) | key={} | module={} | mode={}",
             key,
             mod_info.name,
-            "BaseAgent" if agent_cls is not None else "dict",
+            mode,
         )
 
         # 同时注册到 agent_router（如果是 BaseAgent 子类）

@@ -5,6 +5,8 @@ requires-python = ">=3.12"
 [manifest]
 members = [
     "chameleon-agent-echo",
+    "chameleon-agent-echo-native",
+    "chameleon-agent-echo-runnable",
     "chameleon-app",
     "chameleon-core",
     "chameleon-provider-dify",
@@ -189,6 +191,38 @@ requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "langgraph", specifier = ">=0.2" },
+]
+
+[[package]]
+name = "chameleon-agent-echo-native"
+version = "0.1.0"
+source = { editable = "chameleon-agents/echo_native" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-providers-base" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+]
+
+[[package]]
+name = "chameleon-agent-echo-runnable"
+version = "0.1.0"
+source = { editable = "chameleon-agents/echo_runnable" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-providers-base" },
+    { name = "langchain-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+    { name = "langchain-core", specifier = ">=0.3" },
 ]
 
 [[package]]

@@ -98,7 +98,13 @@ async def test_langgraph_invoke_returns_aggregated_result(
 
 
 async def test_graph_cache_reused(fake_agent_def: AgentDef) -> None:
-    """第二次调用同一 agent 不应重新 build"""
+    """字典模式（build_graph）二次调用复用编译产物"""
+    from chameleon.providers.langgraph.provider import (
+        _clear_caches_for_test,
+        _dict_graph_cache,
+    )
+
+    _clear_caches_for_test()
     provider = LangGraphProvider()
     ctx = InvokeContext(
         agent_def=fake_agent_def,
@@ -107,9 +113,9 @@ async def test_graph_cache_reused(fake_agent_def: AgentDef) -> None:
         app_id="a",
     )
     await provider.invoke(ctx)
-    graph_first = provider._builder._cache.get(fake_agent_def.key)
+    graph_first = _dict_graph_cache.get(fake_agent_def.key)
 
     await provider.invoke(ctx)
-    graph_second = provider._builder._cache.get(fake_agent_def.key)
+    graph_second = _dict_graph_cache.get(fake_agent_def.key)
 
     assert graph_first is graph_second

@@ -9,11 +9,23 @@ Chameleon 设计上有两条**对称的资产积累轴**：
 
 ---
 
-## 1. 加一个本地 LangGraph agent
+## 1. 加一个本地 agent（**三种范式任选**）
 
-**场景**：你要写一个新智能体，自己用 Python 编排（LangGraph），让它走 Chameleon 统一入口对外。
+**场景**：你要写一个新智能体，让它走 Chameleon 统一入口对外。
 
-**总耗时**：~30 分钟（含写 graph 逻辑）
+**总耗时**：~10-30 分钟（看选哪种范式 + 业务逻辑复杂度）
+
+★ Chameleon 本地 agent **不锁死编排框架**。三种范式：
+
+| 范式 | 何时用 | 样板 |
+|---|---|---|
+| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 极致灵活 | `chameleon-agents/echo_native/` |
+| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式 | `chameleon-agents/echo_runnable/` |
+| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | `chameleon-agents/echo/` |
+
+完整三范式代码示例 + 选择指南见 [docs/getting-started.md 第三章 A 节](getting-started.md#a-自己写的本地-agent--三种范式任选)。
+
+下面继续讲共用脚手架：
 
 ### Step 1 - 建子包目录
 

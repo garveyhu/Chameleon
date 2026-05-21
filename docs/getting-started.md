@@ -22,6 +22,14 @@
 
 **核心承诺**：你的应用只学**一个**调用方式（`POST /v1/agents/{key}/invoke`），背后的智能体来源（自己写的 / DIFY 编排的 / FastGPT 编排的 / 未来 Coze 的）随便换，**消费者代码不动**。
 
+**对 agent 作者的承诺**：本地 agent 框架**不锁死编排库**——你可以用：
+- 纯 Python 异步生成器（最自由，可接 Anthropic SDK / 自研 client）
+- LangChain Runnable / LCEL（链式简单调用）
+- LangGraph CompiledGraph（复杂多节点）
+- 三种混合
+
+三种范式产出的事件流统一为 Chameleon `StreamEvent`，对客户端完全透明。
+
 ---
 
 ## 二、项目模块大白话对照（已系统融合 sage 习惯）
@@ -100,16 +108,115 @@ from chameleon.core.utils.crypto import encrypt, decrypt, get_or_decrypt
                          → 走"外部 agent"路径（B）
 ```
 
-### A. 自己写的本地 LangGraph agent
+### A. 自己写的本地 agent —— **三种范式任选**
 
-**最少 5 分钟，最简版**（参考已实现的 `chameleon-agents/echo/`）：
+★ Chameleon 本地 agent **不强制 LangGraph**。任选一种范式：
+
+| 范式 | 何时用 | 依赖 | 样板 |
+|---|---|---|---|
+| **A1. 纯 Python async generator** | 简单逻辑 / 用 Anthropic SDK / 想极致灵活 | 仅 chameleon-core + providers-base | `chameleon-agents/echo_native/` |
+| **A2. LangChain Runnable (LCEL)** | `prompt \| llm \| parser` 链式调用 | + langchain-core | `chameleon-agents/echo_runnable/` |
+| **A3. LangGraph CompiledGraph** | 多节点状态机 / 复杂编排 | + langgraph | `chameleon-agents/echo/` |
+
+**统一契约**：三种范式产出的都是 Chameleon `StreamEvent`，对客户端**完全透明**——你的应用一行代码不改就能切换 agent 实现。
+
+#### A1. 纯 Python async generator（最自由）
+
+```python
+# chameleon-agents/my_agent/src/chameleon/agents/my_agent/agent.py
+from collections.abc import AsyncIterator
+from chameleon.core.base import AgentMetadata, BaseAgent
+from chameleon.providers.base.types import InvokeContext, StreamEvent, StreamEventType
+
+
+class MyAgent(BaseAgent):
+    @classmethod
+    def get_metadata(cls) -> AgentMetadata:
+        return AgentMetadata(id="my-agent", name="My", description="...")
+
+    @classmethod
+    async def astream(cls, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
+        # 完全自由：调任何 LLM SDK，自己 yield 任意 event
+        text = ctx.input if isinstance(ctx.input, str) else ctx.input[-1].content
+
+        yield StreamEvent(type=StreamEventType.step,
+                          data={"name": "thinking", "status": "success"})
+
+        # 比如调 Anthropic SDK 流式：
+        # async for chunk in anthropic_client.messages.stream(...):
+        #     yield StreamEvent(type=StreamEventType.delta, data={"text": chunk.text})
+
+        for ch in f"echo: {text}":
+            yield StreamEvent(type=StreamEventType.delta, data={"text": ch})
+```
+
+```python
+# __init__.py
+from chameleon.agents.my_agent.agent import MyAgent
+__all__ = ["MyAgent"]
+```
+
+#### A2. LangChain Runnable / LCEL
+
+```python
+# agent.py
+from chameleon.core.base import AgentMetadata, BaseAgent
+from chameleon.core.components import llm
+from langchain_core.prompts import ChatPromptTemplate
+
+
+class MyAgent(BaseAgent):
+    @classmethod
+    def get_metadata(cls) -> AgentMetadata:
+        return AgentMetadata(id="my-agent", name="My", description="...")
+
+    @classmethod
+    def build_runnable(cls):
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "你是一个有用的助手。"),
+            ("placeholder", "{history}"),
+            ("user", "{input}"),
+        ])
+        return prompt | llm()
+
+    # 不写 astream() —— BaseAgent 默认实现自动用 from_runnable() 桥
+```
+
+#### A3. LangGraph CompiledGraph（复杂多节点）
+
+```python
+# agent.py
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import MessagesState
+from chameleon.core.base import AgentMetadata, BaseAgent
+
+
+class MyAgent(BaseAgent):
+    @classmethod
+    def get_metadata(cls) -> AgentMetadata:
+        return AgentMetadata(id="my-agent", name="My", description="...")
+
+    @classmethod
+    def build_graph(cls):
+        sg = StateGraph(MessagesState)
+        # 加节点 / 加边...
+        return sg.compile()
+
+    # 不写 astream() —— BaseAgent 默认实现自动用 from_langgraph_graph() 桥
+```
+
+或者混合：自己 override `astream()` 并在内部既用 LangGraph 又自己 yield 收尾事件——完全自由组合。
+
+#### 三种范式共用的脚手架（5 分钟模板）
 
 ```bash
 # 1. 建子包
 mkdir -p chameleon-agents/my_agent/src/chameleon/agents/my_agent
+mkdir -p chameleon-agents/my_agent/tests
+```
 
-# 2. pyproject.toml（5 行模板，照抄 echo 改名）
-cat > chameleon-agents/my_agent/pyproject.toml <<EOF
+```toml
+# 2. pyproject.toml（按范式选依赖）
 [project]
 name = "chameleon-agent-my-agent"
 version = "0.1.0"
@@ -117,7 +224,10 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-providers-base",
-    "langgraph>=0.2",
+    # 按范式选：
+    # "langgraph>=0.2"        # 范式 A3
+    # "langchain-core>=0.3"   # 范式 A2（chameleon-core 已含 langchain-openai，按需补）
+    # 范式 A1 啥都不用加
 ]
 
 [tool.uv.sources]
@@ -130,24 +240,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chameleon"]
-EOF
 ```
-
-**关键：注册接口**——`__init__.py` 必须有两样：
-
-```python
-# chameleon-agents/my_agent/src/chameleon/agents/my_agent/__init__.py
-from .graph import build_graph
-
-AGENT_META = {
-    "key": "my-agent",            # 外部应用通过这个 key 调用：POST /v1/agents/my-agent/invoke
-    "description": "干啥的一句话",
-    "version": "0.1",
-    "tags": ["domain"],
-}
-```
-
-然后 `graph.py` 是真正的智能体逻辑（一个 LangGraph CompiledGraph）。
 
 ```bash
 # 3. 装并启动
@@ -155,12 +248,12 @@ uv sync --all-packages
 uv run uvicorn chameleon.app.main:app
 ```
 
-启动日志会自动出现：
+启动日志自动出现（`mode` 字段标识哪种范式）：
 ```
-agent registered (local langgraph) | key=my-agent | module=chameleon.agents.my_agent
+agent registered (local) | key=my-agent | module=chameleon.agents.my_agent | mode=BaseAgent
 ```
 
-**外部应用立刻能调**：
+**外部应用立刻能调（无论你用哪种范式）**：
 
 ```bash
 curl -X POST http://localhost:8000/v1/agents/my-agent/invoke \
@@ -168,7 +261,7 @@ curl -X POST http://localhost:8000/v1/agents/my-agent/invoke \
   -d '{"input": "嗨", "stream": true}'
 ```
 
-➡️ **复杂 agent 怎么写？** 看下面"sage 风格范式"章节。
+➡️ **复杂 agent 怎么组织？** 看下面"sage 风格范式"章节（适用所有三种范式）。
 
 ### B. 外部 DIFY/FastGPT agent
 
