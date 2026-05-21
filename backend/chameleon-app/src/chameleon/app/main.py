@@ -20,9 +20,19 @@ from sqlalchemy import text
 
 from chameleon.api.agent import agents_router
 from chameleon.system.admin import admin_router
+from chameleon.system.agents import agents_admin_router
 from chameleon.system.api_key import api_keys_router
+from chameleon.system.apps import apps_router
+from chameleon.system.audit_logs import audit_logs_router
 from chameleon.system.auth import auth_router
+from chameleon.system.dashboard import dashboard_router
+from chameleon.system.kbs import kbs_admin_router
+from chameleon.system.models import models_router
+from chameleon.system.permissions import permissions_router
+from chameleon.system.providers import providers_admin_router
+from chameleon.system.roles import roles_router
 from chameleon.system.settings import settings_router
+from chameleon.system.users import users_router
 from chameleon.api.conversation import conversations_router
 from chameleon.api.knowledge import knowledge_router
 from chameleon.api.task import tasks_router
@@ -94,6 +104,16 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(api_keys_router)
     app.include_router(admin_router)
     app.include_router(settings_router)
+    app.include_router(users_router)
+    app.include_router(roles_router)
+    app.include_router(permissions_router)
+    app.include_router(apps_router)
+    app.include_router(providers_admin_router)
+    app.include_router(models_router)
+    app.include_router(agents_admin_router)
+    app.include_router(kbs_admin_router)
+    app.include_router(dashboard_router)
+    app.include_router(audit_logs_router)
     # 业务接口
     app.include_router(conversations_router)
     app.include_router(agents_router)

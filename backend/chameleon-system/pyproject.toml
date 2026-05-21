@@ -7,7 +7,7 @@ dependencies = [
     "chameleon-core",
     "chameleon-providers-base",
     "fastapi>=0.115",
-    "pydantic>=2.7",
+    "pydantic[email]>=2.7",
 ]
 
 [tool.uv.sources]
