@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 
 import { CommandPalette, pushRecent } from '@/core/components/command/command-palette';
+import { NavProgressBar } from '@/core/components/common/nav-progress-bar';
 import { RequireAuth } from '@/core/components/common/permission-guard';
 import { Sidebar } from '@/core/components/layout/sidebar';
 
@@ -45,6 +46,7 @@ export const MainLayout = () => {
         </main>
       </div>
       <CommandPalette />
+      <NavProgressBar />
     </RequireAuth>
   );
 };

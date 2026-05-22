@@ -1,10 +1,9 @@
 /** 知识库管理页 */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Library } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 
 import { EmptyState } from '@/core/components/common/empty-state';
 import {
@@ -14,13 +13,16 @@ import {
   TablePagination,
   TableToolbar,
 } from '@/core/components/table';
+import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
 import { formatDateTime } from '@/core/lib/format';
+import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
 export const KbsPage = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const smartNav = useSmartNavigate();
+  const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const listQ = useQuery({
@@ -94,7 +96,22 @@ export const KbsPage = () => {
         emptyText={
           <EmptyState icon={<Library strokeWidth={1.5} />} title={t('empty.kbs')} />
         }
-        onRowClick={k => navigate(`/kbs/${k.id}`)}
+        onRowClick={k =>
+          smartNav(`/kbs/${k.id}`, {
+            prefetch: () =>
+              Promise.all([
+                qc.prefetchQuery({
+                  queryKey: ['kb', k.id],
+                  queryFn: () => kbApi.get(k.id),
+                }),
+                qc.prefetchQuery({
+                  queryKey: ['kb-documents', k.id, 1, 20],
+                  queryFn: () =>
+                    documentApi.list(k.id, { page: 1, page_size: 20 }),
+                }),
+              ]),
+          })
+        }
       />
       <TablePagination
         page={page}

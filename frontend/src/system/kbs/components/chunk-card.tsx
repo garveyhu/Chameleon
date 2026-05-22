@@ -13,7 +13,7 @@ import type { ChunkItem } from '@/system/kbs/types/kb';
 interface Props {
   chunk: ChunkItem;
   /** 编辑保存的回调；暂未提供后端编辑端点时设 undefined → 卡片隐藏编辑入口 */
-  onSave?: (chunkId: number, content: string) => Promise<void>;
+  onSave?: (chunkId: import('@/core/types/api').EntityId, content: string) => Promise<void>;
 }
 
 const MAX_PREVIEW_CHARS = 480;

@@ -156,7 +156,7 @@ const HitCard = ({
   hit: SearchHitItem;
   rank: number;
   query: string;
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
 }) => {
   const pct = Math.max(0, Math.min(100, Math.round(hit.score * 100)));
   return (

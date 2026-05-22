@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+
+import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
 
 import {
   DataTable,
@@ -29,7 +30,7 @@ import type {
 } from '@/system/kbs/types/kb';
 
 interface Props {
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
 }
 
 const SOURCE_ICON: Record<DocumentItem['source_type'], ReactElement> = {
@@ -54,7 +55,7 @@ const formatBytes = (n: number | null): string => {
 
 export const DocumentTable = ({ kbId }: Props) => {
   const qc = useQueryClient();
-  const navigate = useNavigate();
+  const smartNav = useSmartNavigate();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -82,7 +83,8 @@ export const DocumentTable = ({ kbId }: Props) => {
   }, [hasInflight, kbId, qc]);
 
   const deleteMut = useMutation({
-    mutationFn: (docId: number) => documentApi.delete(kbId, docId),
+    mutationFn: (docId: import('@/core/types/api').EntityId) =>
+      documentApi.delete(kbId, docId),
     onSuccess: () => {
       toast.success('文档已删除');
       qc.invalidateQueries({ queryKey: ['kb-documents', kbId] });
@@ -193,7 +195,22 @@ export const DocumentTable = ({ kbId }: Props) => {
         rowKey="id"
         loading={listQ.isLoading}
         emptyText="还没有文档，先上传一份吧"
-        onRowClick={d => navigate(`/kbs/${kbId}/documents/${d.id}`)}
+        onRowClick={d =>
+          smartNav(`/kbs/${kbId}/documents/${d.id}`, {
+            prefetch: () =>
+              Promise.all([
+                qc.prefetchQuery({
+                  queryKey: ['kb-doc', kbId, d.id],
+                  queryFn: () => documentApi.get(kbId, d.id),
+                }),
+                qc.prefetchQuery({
+                  queryKey: ['kb-doc-chunks', kbId, d.id],
+                  queryFn: () =>
+                    documentApi.listChunks(kbId, d.id, { page: 1, page_size: 200 }),
+                }),
+              ]),
+          })
+        }
       />
       <TablePagination
         page={page}

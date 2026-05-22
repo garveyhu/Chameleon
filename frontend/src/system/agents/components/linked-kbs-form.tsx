@@ -14,7 +14,7 @@ import type { LinkedKbItem } from '@/system/agents/types/agent';
 import { kbApi } from '@/system/kbs/services/kb';
 
 interface Props {
-  agentId: number;
+  agentId: import('@/core/types/api').EntityId;
 }
 
 export const LinkedKbsForm = ({ agentId }: Props) => {
@@ -57,7 +57,7 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
     onError: () => toast.error('保存失败'),
   });
 
-  const remove = (id: number) =>
+  const remove = (id: import('@/core/types/api').EntityId) =>
     setSelected(selected.filter(k => k.id !== id));
 
   const add = (kb: LinkedKbItem) => {
@@ -138,14 +138,14 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
 
 interface AutocompleteProps {
   options: Array<{
-    id: number;
+    id: import('@/core/types/api').EntityId;
     kb_key: string;
     name: string;
     description: string | null;
     embedding_model: string;
     embedding_dim: number;
   }>;
-  excludeIds: Set<number>;
+  excludeIds: Set<import('@/core/types/api').EntityId>;
   onPick: (kb: LinkedKbItem) => void;
 }
 

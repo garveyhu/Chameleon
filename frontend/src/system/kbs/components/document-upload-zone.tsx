@@ -20,7 +20,7 @@ import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
 
 interface Props {
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
 }
 
 export const DocumentUploadZone = ({ kbId }: Props) => {
@@ -124,7 +124,7 @@ export const DocumentUploadZone = ({ kbId }: Props) => {
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
   onDone: () => void;
 }
 

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
 import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -49,7 +49,7 @@ import type { AgentItem } from '@/system/agents/types/agent';
 
 export const AgentsPage = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
+  const smartNav = useSmartNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [testAgent, setTestAgent] = useState<AgentItem | null>(null);
@@ -58,7 +58,7 @@ export const AgentsPage = () => {
   const listQ = useQuery({ queryKey: ['agents'], queryFn: () => agentApi.list() });
 
   const toggleMut = useMutation({
-    mutationFn: (args: { id: number; enabled: boolean }) =>
+    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
       args.enabled ? agentApi.enable(args.id) : agentApi.disable(args.id),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['agents'] });
@@ -82,7 +82,7 @@ export const AgentsPage = () => {
     },
   });
   const delMut = useMutation({
-    mutationFn: (id: number) => agentApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => agentApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['agents'] });
@@ -186,7 +186,21 @@ export const AgentsPage = () => {
           rows={listQ.data || []}
           rowKey="id"
           loading={listQ.isLoading}
-          onRowClick={a => navigate(`/agents/${a.id}`)}
+          onRowClick={a =>
+            smartNav(`/agents/${a.id}`, {
+              prefetch: () =>
+                Promise.all([
+                  qc.prefetchQuery({
+                    queryKey: ['agent', a.id],
+                    queryFn: () => agentApi.get(a.id),
+                  }),
+                  qc.prefetchQuery({
+                    queryKey: ['agent-linked-kbs', a.id],
+                    queryFn: () => agentApi.linkedKbs(a.id),
+                  }),
+                ]),
+            })
+          }
           emptyText={
             <EmptyState
               icon={<Bot strokeWidth={1.5} />}

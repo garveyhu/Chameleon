@@ -208,7 +208,7 @@ const KvCard = ({
   </div>
 );
 
-const DocumentsTab = ({ kbId }: { kbId: number }) => (
+const DocumentsTab = ({ kbId }: { kbId: import('@/core/types/api').EntityId }) => (
   <div className="space-y-4">
     <DocumentUploadZone kbId={kbId} />
     <DocumentTable kbId={kbId} />

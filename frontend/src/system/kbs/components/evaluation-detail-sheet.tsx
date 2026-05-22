@@ -15,8 +15,8 @@ import { evaluationApi } from '@/system/kbs/services/evaluation';
 import type { Evaluation } from '@/system/kbs/types/evaluation';
 
 interface Props {
-  kbId: number;
-  evalId: number | null;
+  kbId: import('@/core/types/api').EntityId;
+  evalId: import('@/core/types/api').EntityId | null;
   onClose: () => void;
 }
 

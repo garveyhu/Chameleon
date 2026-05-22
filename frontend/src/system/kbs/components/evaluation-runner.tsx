@@ -31,7 +31,7 @@ import type { RecallMode } from '@/system/kbs/types/kb';
 interface Props {
   open: boolean;
   onClose: () => void;
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
 }
 
 interface QueryRow {

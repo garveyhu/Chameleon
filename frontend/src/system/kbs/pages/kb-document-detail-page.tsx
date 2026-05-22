@@ -91,7 +91,7 @@ const Breadcrumb = ({
   kbId,
   doc,
 }: {
-  kbId: number;
+  kbId: string | number;
   doc: DocumentItem | null;
 }) => (
   <div className="flex items-center gap-2 text-[12.5px] text-stone-500">

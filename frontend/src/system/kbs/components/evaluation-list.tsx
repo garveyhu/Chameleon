@@ -22,7 +22,7 @@ import type {
 } from '@/system/kbs/types/evaluation';
 
 interface Props {
-  kbId: number;
+  kbId: import('@/core/types/api').EntityId;
 }
 
 const STATUS_BADGE: Record<EvaluationStatus, { label: string; cls: string }> = {
@@ -37,7 +37,7 @@ export const EvaluationListTab = ({ kbId }: Props) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [runnerOpen, setRunnerOpen] = useState(false);
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<import('@/core/types/api').EntityId | null>(null);
 
   const listQ = useQuery({
     queryKey: ['kb-evaluations', kbId, page, pageSize],
@@ -62,7 +62,7 @@ export const EvaluationListTab = ({ kbId }: Props) => {
   }, [hasInflight, kbId, qc]);
 
   const deleteMut = useMutation({
-    mutationFn: (evalId: number) => evaluationApi.delete(kbId, evalId),
+    mutationFn: (evalId: import('@/core/types/api').EntityId) => evaluationApi.delete(kbId, evalId),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['kb-evaluations', kbId] });

@@ -1,3 +1,5 @@
+import type { EntityId } from '@/core/types/api';
+
 export type PlaygroundRole = 'user' | 'assistant' | 'system';
 
 export interface PlaygroundMessage {
@@ -18,24 +20,24 @@ export interface PlaygroundUsage {
 }
 
 export interface PlaygroundParams {
-  model_id?: number;
+  model_id?: EntityId;
   model_name?: string;
   system_prompt: string;
   temperature: number;
   top_p: number | null;
   max_tokens: number | null;
-  kb_ids: number[];
+  kb_ids: EntityId[];
 }
 
 export interface InvokeRequest {
-  model_id?: number;
+  model_id?: EntityId;
   model_name?: string;
   system_prompt?: string;
   temperature: number;
   top_p?: number | null;
   max_tokens?: number | null;
   messages: Array<{ role: PlaygroundRole; content: string }>;
-  kb_ids?: number[];
+  kb_ids?: EntityId[];
 }
 
 export interface InvokeChunk {
