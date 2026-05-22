@@ -1,27 +1,19 @@
 import { get, post } from '@/core/lib/request';
 import { streamSSE } from '@/core/lib/sse';
+import type { FlatSSEEvent } from '@/core/lib/sse-events';
 import type { EntityId } from '@/core/types/api';
 import type { CreateModelRequest, ModelItem } from '@/system/models/types/model';
 
-export interface TestStreamChunk {
+/** model test 的流事件 —— 在 FlatSSEEvent 基础上 narrow meta 字段 + 注明 end 扩展字段 */
+export interface TestStreamChunk extends FlatSSEEvent {
   meta?: {
     kind: 'chat' | 'embedding';
     model: string;
     provider: string;
   };
-  delta?: string;
-  end?: boolean;
+  /** 流末 end 携带 */
   latency_ms?: number;
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-    total_tokens: number;
-  } | null;
   sample?: string;
-  error?: {
-    type: string;
-    message: string;
-  };
 }
 
 export const modelApi = {

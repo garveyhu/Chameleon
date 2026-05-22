@@ -40,9 +40,4 @@ export interface InvokeRequest {
   kb_ids?: EntityId[];
 }
 
-export interface InvokeChunk {
-  delta?: string;
-  end?: boolean;
-  usage?: PlaygroundUsage | null;
-  error?: { type: string; message: string };
-}
+export type InvokeChunk = import('@/core/lib/sse-events').FlatSSEEvent;

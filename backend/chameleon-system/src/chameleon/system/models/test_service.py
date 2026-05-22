@@ -17,6 +17,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.api.sse_events import (
+    UsagePayload,
+    event_delta,
+    event_end,
+    event_error,
+    event_meta,
+)
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.core.models import LLMModel, Provider
@@ -59,21 +66,10 @@ async def stream_test(
     """
     m, p = await _load_model_and_provider(session, model_id)
 
-    yield {
-        "meta": {
-            "kind": m.kind,
-            "model": m.code,
-            "provider": p.code,
-        }
-    }
+    yield event_meta(kind=m.kind, model=m.code, provider=p.code)
 
     if not p.base_url:
-        yield {
-            "error": {
-                "type": "ConfigError",
-                "message": f"provider {p.code} 未配置 base_url",
-            }
-        }
+        yield event_error("ConfigError", f"provider {p.code} 未配置 base_url")
         return
 
     api_key = get_or_decrypt(p.api_key_encrypted) or ""
@@ -91,27 +87,18 @@ async def stream_test(
             )
             messages = [HumanMessage(content=prompt or PING_PROMPT)]
             collected: list[str] = []
-            usage: dict | None = None
+            usage: UsagePayload | None = None
             async for chunk in llm.astream(messages):
                 text = getattr(chunk, "content", None)
                 if text:
                     collected.append(text)
-                    yield {"delta": text}
+                    yield event_delta(text)
                 u = getattr(chunk, "usage_metadata", None)
                 if u:
-                    usage = {
-                        "input_tokens": int(u.get("input_tokens") or 0),
-                        "output_tokens": int(u.get("output_tokens") or 0),
-                        "total_tokens": int(u.get("total_tokens") or 0),
-                    }
+                    usage = UsagePayload.from_dict(u)
             latency_ms = int((time.monotonic() - start) * 1000)
             sample = "".join(collected)[:120] or "(空回复)"
-            yield {
-                "end": True,
-                "latency_ms": latency_ms,
-                "usage": usage,
-                "sample": sample,
-            }
+            yield event_end(usage=usage, latency_ms=latency_ms, sample=sample)
         elif m.kind == "embedding":
             dim = m.dim or 1536
             client = OpenAICompatEmbedding(
@@ -126,25 +113,14 @@ async def stream_test(
             preview = (
                 ", ".join(f"{v:.4f}" for v in vectors[0][:5]) if vectors else ""
             )
-            yield {"delta": f"vector[dim={real_dim}] 前 5 维: [{preview}, ...]\n"}
-            yield {
-                "end": True,
-                "latency_ms": latency_ms,
-                "usage": None,
-                "sample": f"dim={real_dim}",
-            }
+            yield event_delta(
+                f"vector[dim={real_dim}] 前 5 维: [{preview}, ...]\n"
+            )
+            yield event_end(
+                usage=None, latency_ms=latency_ms, sample=f"dim={real_dim}"
+            )
         else:
-            yield {
-                "error": {
-                    "type": "UnsupportedKind",
-                    "message": f"未支持的 model.kind: {m.kind}",
-                }
-            }
+            yield event_error("UnsupportedKind", f"未支持的 model.kind: {m.kind}")
     except Exception as e:  # noqa: BLE001
         logger.exception("stream model test failed | model_id={}", model_id)
-        yield {
-            "error": {
-                "type": type(e).__name__,
-                "message": str(e)[:300],
-            }
-        }
+        yield event_error(e)

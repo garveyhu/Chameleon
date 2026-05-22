@@ -17,6 +17,11 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
+from chameleon.core.api.sse_events import (
+    UsagePayload,
+    event_delta,
+    event_end,
+)
 from chameleon.core.components.llms.factory import LLMFactory
 from chameleon.core.models import KnowledgeBase, LLMModel
 from chameleon.system.kbs.document_service import search_chunks
@@ -173,17 +178,13 @@ async def _stream_llm(
         bound_kwargs["max_tokens"] = max_tokens
     bound = llm.bind(**bound_kwargs)
 
-    usage: dict | None = None
+    usage: UsagePayload | None = None
     async for chunk in bound.astream(messages):
         text = getattr(chunk, "content", None)
         if text:
-            yield {"delta": text}
+            yield event_delta(text)
         # langchain_openai 流末带 usage_metadata
         u = getattr(chunk, "usage_metadata", None)
         if u:
-            usage = {
-                "input_tokens": int(u.get("input_tokens") or 0),
-                "output_tokens": int(u.get("output_tokens") or 0),
-                "total_tokens": int(u.get("total_tokens") or 0),
-            }
-    yield {"end": True, "usage": usage}
+            usage = UsagePayload.from_dict(u)
+    yield event_end(usage=usage)

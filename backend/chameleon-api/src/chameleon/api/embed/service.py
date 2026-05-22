@@ -20,6 +20,14 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
+from chameleon.core.api.sse_events import (
+    UsagePayload,
+    event_citation,
+    event_delta,
+    event_end,
+    event_error,
+    event_meta,
+)
 from chameleon.core.models import Agent, App, EmbedConfig
 from chameleon.core.utils.snowflake import next_session_id
 from chameleon.providers.base import AGENTS, PROVIDERS
@@ -27,7 +35,6 @@ from chameleon.providers.base.errors import ProviderError
 from chameleon.providers.base.types import (
     InvokeContext,
     InvokeResult,
-    StreamEvent,
     StreamEventType,
     _StreamAggregator,
 )
@@ -256,13 +263,11 @@ async def stream_invoke(
     )
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
-    yield {
-        "meta": {
-            "agent": agent.agent_key,
-            "session_id": ctx.session_id,
-            "request_id": rid,
-        }
-    }
+    yield event_meta(
+        agent=agent.agent_key,
+        session_id=ctx.session_id,
+        request_id=rid,
+    )
 
     agg = _StreamAggregator(session_id=ctx.session_id, request_id=rid)
     start = time.monotonic()
@@ -274,30 +279,36 @@ async def stream_invoke(
             if ev.type == StreamEventType.delta:
                 text = ev.data.get("text")
                 if text:
-                    yield {"delta": text}
+                    yield event_delta(text)
             elif ev.type == StreamEventType.citation and show_citations:
-                yield {"citation": ev.data}
+                yield event_citation(ev.data)
             elif ev.type == StreamEventType.error:
                 err = {
                     "type": ev.data.get("type", "ProviderError"),
                     "message": ev.data.get("message", "provider stream error"),
                 }
-                yield {"error": err}
+                yield event_error(err["type"], err["message"])
                 return
     except Exception as e:  # noqa: BLE001
         logger.exception("embed stream failed | embed={}", embed.embed_key)
         err = {"type": type(e).__name__, "message": str(e)[:300]}
-        yield {"error": err}
+        yield event_error(e)
     finally:
         duration_ms = int((time.monotonic() - start) * 1000)
         agg_result = agg.result()
         success = err is None
         if success:
-            yield {
-                "end": True,
-                "usage": agg_result.usage.model_dump() if agg_result.usage else None,
-                "answer": agg_result.answer,
-            }
+            # Provider Usage 是 prompt_tokens/completion_tokens（OpenAI 命名）；
+            # SSE 层统一用 input_tokens/output_tokens（LangFuse 命名）—— 边界翻译
+            sse_usage: UsagePayload | None = None
+            if agg_result.usage:
+                pu = agg_result.usage
+                sse_usage = UsagePayload(
+                    input_tokens=pu.prompt_tokens or 0,
+                    output_tokens=pu.completion_tokens or 0,
+                    total_tokens=pu.total_tokens or 0,
+                )
+            yield event_end(usage=sse_usage, answer=agg_result.answer)
         await _write_log(
             session,
             request_id=rid,
