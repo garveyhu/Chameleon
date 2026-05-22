@@ -9,6 +9,7 @@ from chameleon.core.models.api_key import ApiKey, CallLog
 from chameleon.core.models.app import App, AppAgent
 from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
+from chameleon.core.models.channel import Channel, ChannelStatus
 from chameleon.core.models.conversation import Conversation, Message
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
@@ -39,6 +40,8 @@ __all__ = [
     "ApiKey",
     # 模型域
     "Provider",
+    "Channel",
+    "ChannelStatus",
     "LLMModel",
     "ModelDefault",
     "Agent",
