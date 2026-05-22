@@ -153,6 +153,40 @@ code, pre, kbd {
   box-shadow: 0 0 0 2px rgb(239 68 68 / 18%);
 }
 
+/* ─── cmdk 命令面板样式 ─── */
+[cmdk-list] {
+  scroll-behavior: smooth;
+}
+.cmdk-group {
+  padding: 4px 0;
+}
+.cmdk-group [cmdk-group-heading] {
+  padding: 6px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(120 113 108);
+}
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.cmdk-item[data-selected='true'] {
+  background: rgb(239 246 255);
+  color: rgb(29 78 216);
+}
+.cmdk-item:hover {
+  background: rgb(245 244 238);
+}
+
 /* ─── modal 动画（fade + scale）─── */
 @keyframes modal-overlay-in {
   from { opacity: 0; }

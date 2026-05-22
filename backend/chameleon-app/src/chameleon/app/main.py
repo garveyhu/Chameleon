@@ -33,6 +33,7 @@ from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
 from chameleon.system.providers import providers_admin_router
 from chameleon.system.roles import roles_router
+from chameleon.system.search import search_router
 from chameleon.system.settings import settings_router
 from chameleon.system.users import users_router
 from chameleon.api.conversation import conversations_router
@@ -117,6 +118,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(dashboard_router)
     app.include_router(audit_logs_router)
     app.include_router(embed_configs_router)
+    app.include_router(search_router)
     # 嵌入式业务
     app.include_router(embed_router)
     # 业务接口
