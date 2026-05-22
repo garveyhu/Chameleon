@@ -232,8 +232,17 @@ const CreateAppModal = ({
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div className="space-y-1.5">
-            <Label>app_key（唯一标识，业务方调用用）</Label>
-            <Input value={k} onChange={e => setK(e.target.value)} placeholder="my-side-project" />
+            <Label>应用标识</Label>
+            <Input
+              value={k}
+              onChange={e => setK(e.target.value)}
+              placeholder="my-side-project"
+              className="font-mono text-[12.5px]"
+            />
+            <p className="text-[11px] text-stone-500">
+              业务方调用时作为 <code className="font-mono">app_id</code> 传入；建议
+              kebab-case，创建后不可改。
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>名称</Label>
@@ -312,23 +321,34 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
           <SheetBody className="space-y-6">
             {/* 新建 key */}
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-              <div className="mb-3 text-xs font-semibold uppercase text-stone-500">签发新 key</div>
+              <div className="mb-1 text-xs font-semibold uppercase text-stone-500">
+                签发新 API Key
+              </div>
+              <p className="mb-3 text-[11.5px] text-stone-500">
+                密钥由系统随机生成，签发完成后会弹一次明文，请立即复制保存（之后只能看到前缀）。
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Key 名称</Label>
+                  <Label className="text-xs">标识名</Label>
                   <Input
                     value={newKeyName}
                     onChange={e => setNewKeyName(e.target.value)}
-                    placeholder="prod-key"
+                    placeholder="prod / ci / mobile-app"
                   />
+                  <p className="mt-1 text-[10.5px] text-stone-400">
+                    只用于识别和撤销，不是密钥本身
+                  </p>
                 </div>
                 <div>
-                  <Label className="text-xs">scopes（逗号分隔，留空仅业务）</Label>
+                  <Label className="text-xs">scopes（逗号分隔）</Label>
                   <Input
                     value={newScopes}
                     onChange={e => setNewScopes(e.target.value)}
-                    placeholder="admin"
+                    placeholder="留空 = 仅业务接口；admin = 含管理接口"
                   />
+                  <p className="mt-1 text-[10.5px] text-stone-400">
+                    例：<code className="font-mono">admin</code> 给后台脚本用
+                  </p>
                 </div>
               </div>
               <Button
@@ -337,7 +357,7 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
                 disabled={!newKeyName || createKeyMut.isPending}
                 onClick={() => createKeyMut.mutate()}
               >
-                {createKeyMut.isPending ? '签发中...' : '签发'}
+                {createKeyMut.isPending ? '签发中...' : '签发并生成密钥'}
               </Button>
             </div>
 
