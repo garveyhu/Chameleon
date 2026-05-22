@@ -1,12 +1,13 @@
 /** models 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Cpu, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -66,7 +67,18 @@ export const ModelsPage = () => {
   const toggleMut = useMutation({
     mutationFn: (args: { id: number; enabled: boolean }) =>
       modelApi.update(args.id, { enabled: args.enabled }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
+    onMutate: async args => {
+      await qc.cancelQueries({ queryKey: ['models'] });
+      const prev = qc.getQueryData<ModelItem[]>(['models']);
+      qc.setQueryData<ModelItem[]>(['models'], old =>
+        old?.map(m => (m.id === args.id ? { ...m, enabled: args.enabled } : m)),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['models'], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['models'] }),
   });
 
   const columns: DataTableColumn<ModelItem>[] = [
@@ -128,7 +140,23 @@ export const ModelsPage = () => {
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.models')} />
+        <DataTable
+          columns={columns}
+          rows={listQ.data || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText={
+            <EmptyState
+              icon={<Cpu strokeWidth={1.5} />}
+              title={t('empty.models')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
+        />
       </SectionCard>
       <CreateModelModal
         open={createOpen}

@@ -1,12 +1,13 @@
 /** providers 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Zap } from 'lucide-react';
+import { Cloud, Plus, Trash2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -70,7 +71,18 @@ export const ProvidersPage = () => {
   const toggleMut = useMutation({
     mutationFn: (args: { id: number; enabled: boolean }) =>
       providerApi.update(args.id, { enabled: args.enabled }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['providers'] }),
+    onMutate: async args => {
+      await qc.cancelQueries({ queryKey: ['providers'] });
+      const prev = qc.getQueryData<ProviderItem[]>(['providers']);
+      qc.setQueryData<ProviderItem[]>(['providers'], old =>
+        old?.map(p => (p.id === args.id ? { ...p, enabled: args.enabled } : p)),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['providers'], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['providers'] }),
   });
 
   const columns: DataTableColumn<ProviderItem>[] = [
@@ -135,7 +147,23 @@ export const ProvidersPage = () => {
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.providers')} />
+        <DataTable
+          columns={columns}
+          rows={listQ.data || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText={
+            <EmptyState
+              icon={<Cloud strokeWidth={1.5} />}
+              title={t('empty.providers')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
+        />
       </SectionCard>
       <CreateProviderModal
         open={createOpen}

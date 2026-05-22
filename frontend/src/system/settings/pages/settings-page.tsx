@@ -3,7 +3,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { Download, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';

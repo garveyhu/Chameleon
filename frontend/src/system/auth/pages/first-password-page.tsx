@@ -5,7 +5,7 @@ import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 import { z } from 'zod';
 
 import { Spinner } from '@/core/components/common/spinner';

@@ -6,6 +6,8 @@ export {
   type DataTableProps,
   type SortOrder,
 } from './data-table';
+export { ColumnHeader } from './column-header';
+export { InlineEditCell } from './inline-edit-cell';
 export { SectionCard } from './section-card';
 export {
   TablePagination,

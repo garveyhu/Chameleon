@@ -4,6 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { FileText } from 'lucide-react';
+
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -156,7 +159,12 @@ export const CallLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText={t('empty.call_logs')}
+          emptyText={
+            <EmptyState
+              icon={<FileText strokeWidth={1.5} />}
+              title={t('empty.call_logs')}
+            />
+          }
         />
 
         <TablePagination

@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { Toaster } from 'sonner';
 
 import { Spinner } from '@/core/components/common/spinner';
+import { TooltipProvider } from '@/core/components/ui/tooltip';
 import '@/core/i18n';
 import { router } from '@/router';
 
@@ -30,10 +31,12 @@ const FullscreenLoading = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <Suspense fallback={<FullscreenLoading />}>
-      <RouterProvider router={router} />
-    </Suspense>
-    <Toaster position="top-right" richColors closeButton />
+    <TooltipProvider delayDuration={250} skipDelayDuration={100}>
+      <Suspense fallback={<FullscreenLoading />}>
+        <RouterProvider router={router} />
+      </Suspense>
+      <Toaster position="top-right" richColors closeButton />
+    </TooltipProvider>
   </QueryClientProvider>
 );
 

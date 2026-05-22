@@ -1,12 +1,13 @@
 /** 角色管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Plus, Shield, ShieldCheck, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -121,7 +122,23 @@ export const RolesPage = () => {
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.roles')} />
+        <DataTable
+          columns={columns}
+          rows={listQ.data || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText={
+            <EmptyState
+              icon={<Shield strokeWidth={1.5} />}
+              title={t('empty.roles')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
+        />
       </SectionCard>
 
       <CreateRoleModal

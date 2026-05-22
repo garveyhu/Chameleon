@@ -2,14 +2,15 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Trash2 } from 'lucide-react';
+import { KeyRound, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 import { z } from 'zod';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -179,7 +180,17 @@ export const UsersPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText={t('empty.users')}
+          emptyText={
+            <EmptyState
+              icon={<UsersIcon strokeWidth={1.5} />}
+              title={t('empty.users')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
         />
 
         <TablePagination

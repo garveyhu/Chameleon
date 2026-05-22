@@ -13,7 +13,7 @@ import axios, {
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { STORAGE_KEY } from '@/core/constants/app';
 import type { Result } from '@/core/types/api';

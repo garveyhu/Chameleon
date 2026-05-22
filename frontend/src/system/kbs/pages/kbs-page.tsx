@@ -1,10 +1,11 @@
 /** 知识库管理页 */
 
 import { useQuery } from '@tanstack/react-query';
-import { Database } from 'lucide-react';
+import { Database, Library } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -92,7 +93,12 @@ export const KbsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText={t('empty.kbs')}
+          emptyText={
+            <EmptyState
+              icon={<Library strokeWidth={1.5} />}
+              title={t('empty.kbs')}
+            />
+          }
         />
         <TablePagination
           page={page}

@@ -1,12 +1,13 @@
 /** 嵌入式配置管理页 + 嵌入代码生成器 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Code2, Copy, Plus, Trash2 } from 'lucide-react';
+import { Code2, Copy, Plus, Puzzle, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -82,7 +83,26 @@ export const EmbedConfigsPage = () => {
   const toggleMut = useMutation({
     mutationFn: (args: { id: number; enabled: boolean }) =>
       embedConfigApi.update(args.id, { enabled: args.enabled }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['embed-configs'] }),
+    onMutate: async args => {
+      await qc.cancelQueries({ queryKey: ['embed-configs'] });
+      const queries = qc.getQueriesData<{ items: EmbedConfigItem[]; total: number }>({
+        queryKey: ['embed-configs'],
+      });
+      queries.forEach(([key, data]) => {
+        if (!data) return;
+        qc.setQueryData(key, {
+          ...data,
+          items: data.items.map(e =>
+            e.id === args.id ? { ...e, enabled: args.enabled } : e,
+          ),
+        });
+      });
+      return { prev: queries };
+    },
+    onError: (_e, _v, ctx) => {
+      ctx?.prev?.forEach(([key, data]) => qc.setQueryData(key, data));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['embed-configs'] }),
   });
 
   const columns: DataTableColumn<EmbedConfigItem>[] = [
@@ -167,7 +187,17 @@ export const EmbedConfigsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          emptyText={t('empty.embed_configs')}
+          emptyText={
+            <EmptyState
+              icon={<Puzzle strokeWidth={1.5} />}
+              title={t('empty.embed_configs')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
         />
         <TablePagination
           page={page}

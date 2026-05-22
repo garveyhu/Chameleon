@@ -1,12 +1,13 @@
 /** agents 管理页：启停 + 测试 invoke */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, Plus, Trash2 } from 'lucide-react';
+import { Bot, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
+import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
   type DataTableColumn,
@@ -54,13 +55,21 @@ export const AgentsPage = () => {
 
   const listQ = useQuery({ queryKey: ['agents'], queryFn: () => agentApi.list() });
 
-  const enableMut = useMutation({
-    mutationFn: (id: number) => agentApi.enable(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
-  });
-  const disableMut = useMutation({
-    mutationFn: (id: number) => agentApi.disable(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+  const toggleMut = useMutation({
+    mutationFn: (args: { id: number; enabled: boolean }) =>
+      args.enabled ? agentApi.enable(args.id) : agentApi.disable(args.id),
+    onMutate: async args => {
+      await qc.cancelQueries({ queryKey: ['agents'] });
+      const prev = qc.getQueryData<AgentItem[]>(['agents']);
+      qc.setQueryData<AgentItem[]>(['agents'], old =>
+        old?.map(a => (a.id === args.id ? { ...a, enabled: args.enabled } : a)),
+      );
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['agents'], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   });
   const createMut = useMutation({
     mutationFn: agentApi.create,
@@ -118,7 +127,7 @@ export const AgentsPage = () => {
       render: a => (
         <Switch
           checked={a.enabled}
-          onCheckedChange={c => (c ? enableMut.mutate(a.id) : disableMut.mutate(a.id))}
+          onCheckedChange={c => toggleMut.mutate({ id: a.id, enabled: c })}
         />
       ),
     },
@@ -162,7 +171,23 @@ export const AgentsPage = () => {
             </Button>
           }
         />
-        <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.agents')} />
+        <DataTable
+          columns={columns}
+          rows={listQ.data || []}
+          rowKey="id"
+          loading={listQ.isLoading}
+          emptyText={
+            <EmptyState
+              icon={<Bot strokeWidth={1.5} />}
+              title={t('empty.agents')}
+              action={
+                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+                </Button>
+              }
+            />
+          }
+        />
       </SectionCard>
 
       <CreateAgentModal
