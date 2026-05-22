@@ -22,13 +22,13 @@ import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
 import { formatDateTime } from '@/core/lib/format';
 import { userApi } from '@/system/users/services/user';
 import type { UserItem } from '@/system/users/types/user';
@@ -194,16 +194,14 @@ export const UsersPage = () => {
         />
       </SectionCard>
 
-      {/* 创建抽屉 */}
-      <CreateUserSheet
+      <CreateUserModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={data => createMut.mutate(data)}
         loading={createMut.isPending}
       />
 
-      {/* 重置密码 */}
-      <ResetPasswordSheet
+      <ResetPasswordModal
         user={resetUser}
         onClose={() => setResetUser(null)}
         onSubmit={data =>
@@ -228,7 +226,7 @@ export const UsersPage = () => {
 
 // ── 局部子组件 ─────────────────────────────────────────────
 
-const CreateUserSheet = ({
+const CreateUserModal = ({
   open,
   onClose,
   onSubmit,
@@ -246,7 +244,7 @@ const CreateUserSheet = ({
     formState: { errors },
   } = useForm<CreateForm>({ resolver: zodResolver(createSchema) });
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -255,18 +253,18 @@ const CreateUserSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建用户</SheetTitle>
-        </SheetHeader>
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>新建用户</ModalTitle>
+        </ModalHeader>
         <form
           onSubmit={handleSubmit(d => {
             onSubmit(d);
             reset();
           })}
-          className="flex flex-1 flex-col"
+          className="flex flex-1 flex-col overflow-hidden"
         >
-          <SheetBody className="space-y-4">
+          <ModalBody className="space-y-4">
             <Field label="用户名 *" error={errors.username?.message}>
               <Input {...register('username')} />
             </Field>
@@ -282,22 +280,22 @@ const CreateUserSheet = ({
             <Field label="角色（逗号分隔，如 admin,developer）">
               <Input {...register('role_codes_raw')} placeholder="viewer" />
             </Field>
-          </SheetBody>
-          <SheetFooter>
+          </ModalBody>
+          <ModalFooter>
             <Button variant="ghost" type="button" onClick={onClose}>
               取消
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? '创建中...' : '创建'}
             </Button>
-          </SheetFooter>
+          </ModalFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </ModalContent>
+    </Modal>
   );
 };
 
-const ResetPasswordSheet = ({
+const ResetPasswordModal = ({
   user,
   onClose,
   onSubmit,
@@ -315,7 +313,7 @@ const ResetPasswordSheet = ({
     formState: { errors },
   } = useForm<ResetForm>({ resolver: zodResolver(resetSchema) });
   return (
-    <Sheet
+    <Modal
       open={!!user}
       onOpenChange={o => {
         if (!o) {
@@ -324,36 +322,36 @@ const ResetPasswordSheet = ({
         }
       }}
     >
-      <SheetContent width="w-[400px]">
-        <SheetHeader>
-          <SheetTitle>重置密码 · {user?.username}</SheetTitle>
-        </SheetHeader>
+      <ModalContent size="sm">
+        <ModalHeader>
+          <ModalTitle>重置密码 · {user?.username}</ModalTitle>
+        </ModalHeader>
         <form
           onSubmit={handleSubmit(d => {
             onSubmit(d);
             reset();
           })}
-          className="flex flex-1 flex-col"
+          className="flex flex-1 flex-col overflow-hidden"
         >
-          <SheetBody className="space-y-4">
+          <ModalBody className="space-y-4">
             <Field label="新密码（至少 8 位）" error={errors.new_password?.message}>
               <Input type="password" {...register('new_password')} />
             </Field>
             <p className="text-xs text-amber-700">
               重置后用户会被强制下次登录改密；旧 token 立即失效。
             </p>
-          </SheetBody>
-          <SheetFooter>
+          </ModalBody>
+          <ModalFooter>
             <Button variant="ghost" type="button" onClick={onClose}>
               取消
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? '提交中...' : '确认重置'}
             </Button>
-          </SheetFooter>
+          </ModalFooter>
         </form>
-      </SheetContent>
-    </Sheet>
+      </ModalContent>
+    </Modal>
   );
 };
 

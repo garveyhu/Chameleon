@@ -25,6 +25,14 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
+import {
   Sheet,
   SheetBody,
   SheetContent,
@@ -157,7 +165,7 @@ export const AgentsPage = () => {
         <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.agents')} />
       </SectionCard>
 
-      <CreateAgentSheet
+      <CreateAgentModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
@@ -177,7 +185,7 @@ export const AgentsPage = () => {
   );
 };
 
-const CreateAgentSheet = ({
+const CreateAgentModal = ({
   open,
   onClose,
   onSubmit,
@@ -210,7 +218,7 @@ const CreateAgentSheet = ({
   };
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -221,11 +229,11 @@ const CreateAgentSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建外部 Agent</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>新建外部 Agent</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>agent_key</Label>
             <Input value={key} onChange={e => setKey(e.target.value)} placeholder="customer-faq" />
@@ -256,17 +264,17 @@ const CreateAgentSheet = ({
               onChange={e => setConfigRaw(e.target.value)}
             />
           </div>
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
           <Button disabled={loading || !key || !name} onClick={submit}>
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 

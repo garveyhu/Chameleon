@@ -27,6 +27,14 @@ import {
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
+import {
   Sheet,
   SheetBody,
   SheetContent,
@@ -158,7 +166,7 @@ export const AppsPage = () => {
         />
       </SectionCard>
 
-      <CreateAppSheet
+      <CreateAppModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
@@ -180,7 +188,7 @@ export const AppsPage = () => {
 
 // ── 创建应用 ───────────────────────────────────────────────
 
-const CreateAppSheet = ({
+const CreateAppModal = ({
   open,
   onClose,
   onSubmit,
@@ -196,7 +204,7 @@ const CreateAppSheet = ({
   const [d, setD] = useState('');
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -207,11 +215,11 @@ const CreateAppSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建应用</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>新建应用</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>app_key（唯一标识，业务方调用用）</Label>
             <Input value={k} onChange={e => setK(e.target.value)} placeholder="my-side-project" />
@@ -224,8 +232,8 @@ const CreateAppSheet = ({
             <Label>描述</Label>
             <Textarea value={d} onChange={e => setD(e.target.value)} rows={3} />
           </div>
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
@@ -235,9 +243,9 @@ const CreateAppSheet = ({
           >
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 

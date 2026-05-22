@@ -26,13 +26,13 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
@@ -130,7 +130,7 @@ export const ModelsPage = () => {
         />
         <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.models')} />
       </SectionCard>
-      <CreateModelSheet
+      <CreateModelModal
         open={createOpen}
         providers={providersQ.data || []}
         onClose={() => setCreateOpen(false)}
@@ -150,7 +150,7 @@ export const ModelsPage = () => {
   );
 };
 
-const CreateModelSheet = ({
+const CreateModelModal = ({
   open,
   providers,
   onClose,
@@ -169,7 +169,7 @@ const CreateModelSheet = ({
   const [dim, setDim] = useState<string>('');
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -181,11 +181,11 @@ const CreateModelSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建模型</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>新建模型</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>Provider</Label>
             <Select value={providerId} onValueChange={setProviderId}>
@@ -228,8 +228,8 @@ const CreateModelSheet = ({
               />
             </div>
           )}
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
@@ -246,8 +246,8 @@ const CreateModelSheet = ({
           >
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };

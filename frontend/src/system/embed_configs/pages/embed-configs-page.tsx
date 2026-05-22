@@ -34,13 +34,13 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
 import { Textarea } from '@/core/components/ui/textarea';
 import { agentApi } from '@/system/agents/services/agent';
 import { appApi } from '@/system/apps/services/app';
@@ -181,7 +181,7 @@ export const EmbedConfigsPage = () => {
         />
       </SectionCard>
 
-      <CreateEmbedSheet
+      <CreateEmbedModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
@@ -201,7 +201,7 @@ export const EmbedConfigsPage = () => {
   );
 };
 
-const CreateEmbedSheet = ({
+const CreateEmbedModal = ({
   open,
   onClose,
   onSubmit,
@@ -229,7 +229,7 @@ const CreateEmbedSheet = ({
   });
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -241,11 +241,11 @@ const CreateEmbedSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建嵌入配置</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="lg">
+        <ModalHeader>
+          <ModalTitle>新建嵌入配置</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>名称</Label>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="官网客服" />
@@ -290,8 +290,8 @@ const CreateEmbedSheet = ({
               className="font-mono text-xs"
             />
           </div>
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
@@ -313,9 +313,9 @@ const CreateEmbedSheet = ({
           >
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 

@@ -26,13 +26,13 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
 import { providerApi } from '@/system/providers/services/provider';
 import type { ProviderItem } from '@/system/providers/types/provider';
 
@@ -137,7 +137,7 @@ export const ProvidersPage = () => {
         />
         <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.providers')} />
       </SectionCard>
-      <CreateProviderSheet
+      <CreateProviderModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
@@ -156,7 +156,7 @@ export const ProvidersPage = () => {
   );
 };
 
-const CreateProviderSheet = ({
+const CreateProviderModal = ({
   open,
   onClose,
   onSubmit,
@@ -180,7 +180,7 @@ const CreateProviderSheet = ({
   const [apiKey, setApiKey] = useState('');
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -193,11 +193,11 @@ const CreateProviderSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建 Provider</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="lg">
+        <ModalHeader>
+          <ModalTitle>新建 Provider</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>code（唯一标识）</Label>
             <Input value={code} onChange={e => setCode(e.target.value)} placeholder="qwen" />
@@ -238,8 +238,8 @@ const CreateProviderSheet = ({
               placeholder="sk-xxxxx"
             />
           </div>
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
@@ -257,8 +257,8 @@ const CreateProviderSheet = ({
           >
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };

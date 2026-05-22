@@ -18,6 +18,14 @@ import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
+import {
   Sheet,
   SheetBody,
   SheetContent,
@@ -116,7 +124,7 @@ export const RolesPage = () => {
         <DataTable columns={columns} rows={listQ.data || []} rowKey="id" loading={listQ.isLoading} emptyText={t('empty.roles')} />
       </SectionCard>
 
-      <CreateRoleSheet
+      <CreateRoleModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
@@ -136,7 +144,7 @@ export const RolesPage = () => {
   );
 };
 
-const CreateRoleSheet = ({
+const CreateRoleModal = ({
   open,
   onClose,
   onSubmit,
@@ -152,7 +160,7 @@ const CreateRoleSheet = ({
   const [desc, setDesc] = useState('');
 
   return (
-    <Sheet
+    <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
@@ -163,11 +171,11 @@ const CreateRoleSheet = ({
         }
       }}
     >
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle>新建角色</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>新建角色</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
           <div className="space-y-1.5">
             <Label>code（英文唯一标识）</Label>
             <Input value={code} onChange={e => setCode(e.target.value)} placeholder="developer" />
@@ -180,8 +188,8 @@ const CreateRoleSheet = ({
             <Label>说明</Label>
             <Textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} />
           </div>
-        </SheetBody>
-        <SheetFooter>
+        </ModalBody>
+        <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
@@ -191,9 +199,9 @@ const CreateRoleSheet = ({
           >
             {loading ? '创建中...' : '创建'}
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 
