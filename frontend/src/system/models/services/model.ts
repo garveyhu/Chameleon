@@ -10,4 +10,8 @@ export const modelApi = {
     req: { dim?: number; defaults?: Record<string, unknown>; enabled?: boolean },
   ) => post<ModelItem>(`/v1/admin/models/${id}/update`, req),
   delete: (id: number) => post<void>(`/v1/admin/models/${id}/delete`),
+  test: (id: number) =>
+    post<{ ok: boolean; latency_ms: number; sample: string; detail: string }>(
+      `/v1/admin/models/${id}/test`,
+    ),
 };

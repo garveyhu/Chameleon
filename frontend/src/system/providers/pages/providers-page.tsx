@@ -1,7 +1,7 @@
 /** providers 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cloud, Plus, Trash2, Zap } from 'lucide-react';
+import { Cloud, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/core/lib/toast';
@@ -63,11 +63,6 @@ export const ProvidersPage = () => {
     },
   });
 
-  const testMut = useMutation({
-    mutationFn: (id: number) => providerApi.test(id),
-    onSuccess: data => toast[data.ok ? 'success' : 'error'](data.detail),
-  });
-
   const toggleMut = useMutation({
     mutationFn: (args: { id: number; enabled: boolean }) =>
       providerApi.update(args.id, { enabled: args.enabled }),
@@ -111,27 +106,16 @@ export const ProvidersPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 110,
+      width: 70,
       render: p => (
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            title={t('common.test')}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-50"
-            onClick={() => testMut.mutate(p.id)}
-            disabled={testMut.isPending}
-          >
-            <Zap className="h-3.5 w-3.5" /> {t('common.test')}
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
-            onClick={() => setDelProv(p)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <button
+          type="button"
+          title="删除"
+          className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+          onClick={() => setDelProv(p)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       ),
     },
   ];

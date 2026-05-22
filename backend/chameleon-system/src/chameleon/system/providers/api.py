@@ -197,34 +197,5 @@ async def delete_provider(
     return Result.ok(None)
 
 
-@router.post("/{provider_id}/test", response_model=Result[dict])
-async def test_provider(
-    provider_id: int,
-    session: AsyncSession = Depends(get_session),
-    _: object = Depends(require_permission("providers:read")),
-) -> Result[dict]:
-    """快速连通性测试：仅尝试用 base_url + api_key 起一个 client
-
-    不发实际请求（避免计费）；只校验 url + key 配置完整。
-    """
-    p = (
-        await session.execute(select(Provider).where(Provider.id == provider_id))
-    ).scalar_one_or_none()
-    if p is None:
-        raise BusinessError(
-            ResultCode.AgentNotFound, message=f"provider 不存在: {provider_id}"
-        )
-
-    ok = True
-    detail = ""
-    if not p.base_url:
-        ok = False
-        detail = "base_url 未配置"
-    elif not p.api_key_encrypted:
-        ok = False
-        detail = "api_key 未配置"
-    elif not p.enabled:
-        ok = False
-        detail = "provider 已禁用"
-
-    return Result.ok({"ok": ok, "detail": detail or "配置完整（未发实际请求）"})
+# provider test 已迁移到 model 级 —— 见 chameleon.system.models.api.test_model
+# provider 只是凭证容器，是否真正可用要看具体模型能不能调起来。

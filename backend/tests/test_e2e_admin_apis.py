@@ -235,14 +235,5 @@ async def test_agent_disable_enable_loop(
     assert r.json()["data"]["enabled"] is True
 
 
-async def test_provider_test_connectivity(
-    client: AsyncClient, admin_token: str
-):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    r = await client.get("/v1/admin/providers", headers=headers)
-    qwen = next(p for p in r.json()["data"] if p["code"] == "qwen")
-    pid = qwen["id"]
-
-    r = await client.post(f"/v1/admin/providers/{pid}/test", headers=headers)
-    assert r.status_code == 200
-    assert r.json()["data"]["ok"] is True
+# 注：provider 级 test 端点已移除 —— provider 只是凭证容器，可用性测试改在 model 级。
+# 见 chameleon.system.models.api.test_model（POST /v1/admin/models/{id}/test）。
