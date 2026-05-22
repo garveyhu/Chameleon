@@ -19,10 +19,36 @@ import { STORAGE_KEY } from '@/core/constants/app';
 import type { Result } from '@/core/types/api';
 import type { TokenPair } from '@/core/types/auth';
 
+/** 后端走雪花 ID（64-bit），> Number.MAX_SAFE_INTEGER (2^53) 直接 JSON.parse
+ *  会丢精度（51207513349029888 → 51207513349029890）。把所有 > 2^53 的纯整数
+ *  在解析前包成字符串，业务层一致按 string | number 处理 id。
+ */
+const MAX_SAFE = Number.MAX_SAFE_INTEGER;
+const BIG_INT_PATTERN = /([:[,\s])(-?\d{16,})(?=\s*[,\]}\n])/g;
+function preserveBigIntIds(raw: string): string {
+  return raw.replace(BIG_INT_PATTERN, (_m, prefix, num: string) => {
+    const n = Number(num);
+    if (Number.isFinite(n) && Math.abs(n) <= MAX_SAFE) return `${prefix}${num}`;
+    return `${prefix}"${num}"`;
+  });
+}
+
 const http: AxiosInstance = axios.create({
   baseURL: '/',
   timeout: 30_000,
   withCredentials: true, // refresh_token cookie 需要
+  transformResponse: [
+    (data, headers) => {
+      if (typeof data !== 'string') return data;
+      const ct = (headers?.['content-type'] || '') as string;
+      if (!ct.includes('application/json')) return data;
+      try {
+        return JSON.parse(preserveBigIntIds(data));
+      } catch {
+        return data;
+      }
+    },
+  ],
 });
 
 // ── token 管理（in-memory + localStorage） ─────────────────

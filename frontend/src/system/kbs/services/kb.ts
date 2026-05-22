@@ -1,5 +1,5 @@
 import { get, post } from '@/core/lib/request';
-import type { PageResult } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   ChunkItem,
   KbChunkStrategy,
@@ -17,9 +17,9 @@ export interface UpdateKbAdminRequest {
 export const kbApi = {
   list: (params?: { page?: number; page_size?: number }) =>
     get<PageResult<KbItem>>('/v1/admin/kbs', { params }),
-  get: (id: number) => get<KbItem>(`/v1/admin/kbs/${id}`),
-  update: (id: number, req: UpdateKbAdminRequest) =>
+  get: (id: EntityId) => get<KbItem>(`/v1/admin/kbs/${id}`),
+  update: (id: EntityId, req: UpdateKbAdminRequest) =>
     post<KbItem>(`/v1/admin/kbs/${id}/update`, req),
-  listChunks: (id: number, params?: { page?: number; page_size?: number }) =>
+  listChunks: (id: EntityId, params?: { page?: number; page_size?: number }) =>
     get<PageResult<ChunkItem>>(`/v1/admin/kbs/${id}/chunks`, { params }),
 };

@@ -1,25 +1,25 @@
 import { get, post } from '@/core/lib/request';
-import type { PageResult } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
+  CreateEvaluationRequest,
   Evaluation,
   EvaluationListItem,
-  CreateEvaluationRequest,
 } from '@/system/kbs/types/evaluation';
 
 export const evaluationApi = {
-  create: (kbId: number, req: CreateEvaluationRequest) =>
+  create: (kbId: EntityId, req: CreateEvaluationRequest) =>
     post<Evaluation>(`/v1/admin/kbs/${kbId}/evaluations`, req),
 
-  list: (kbId: number, params?: { page?: number; page_size?: number }) =>
+  list: (kbId: EntityId, params?: { page?: number; page_size?: number }) =>
     get<PageResult<EvaluationListItem>>(
       `/v1/admin/kbs/${kbId}/evaluations`,
       { params },
     ),
 
-  get: (kbId: number, evalId: number) =>
+  get: (kbId: EntityId, evalId: EntityId) =>
     get<Evaluation>(`/v1/admin/kbs/${kbId}/evaluations/${evalId}`),
 
-  delete: (kbId: number, evalId: number) =>
+  delete: (kbId: EntityId, evalId: EntityId) =>
     post<Evaluation>(
       `/v1/admin/kbs/${kbId}/evaluations/${evalId}/delete`,
       {},

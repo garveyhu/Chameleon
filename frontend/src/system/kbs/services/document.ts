@@ -1,18 +1,19 @@
 import { get, post, postForm } from '@/core/lib/request';
-import type { PageResult } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   ChunkItem,
   DocumentItem,
   DocumentStatus,
   DocumentStatusInfo,
   IngestQueued,
+  KbChunkStrategy,
   SearchHitItem,
   SearchRequest,
 } from '@/system/kbs/types/kb';
 
 export const documentApi = {
   list: (
-    kbId: number,
+    kbId: EntityId,
     params?: {
       page?: number;
       page_size?: number;
@@ -24,13 +25,13 @@ export const documentApi = {
       params,
     }),
 
-  get: (kbId: number, docId: number) =>
+  get: (kbId: EntityId, docId: EntityId) =>
     get<DocumentItem>(`/v1/admin/kbs/${kbId}/documents/${docId}`),
 
-  status: (kbId: number, docId: number) =>
+  status: (kbId: EntityId, docId: EntityId) =>
     get<DocumentStatusInfo>(`/v1/admin/kbs/${kbId}/documents/${docId}/status`),
 
-  upload: (kbId: number, files: File[]) => {
+  upload: (kbId: EntityId, files: File[]) => {
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
     return postForm<IngestQueued[]>(
@@ -39,24 +40,24 @@ export const documentApi = {
     );
   },
 
-  fromUrl: (kbId: number, url: string, name?: string) =>
+  fromUrl: (kbId: EntityId, url: string, name?: string) =>
     post<IngestQueued>(`/v1/admin/kbs/${kbId}/documents/url`, { url, name }),
 
-  fromText: (kbId: number, name: string, content: string) =>
+  fromText: (kbId: EntityId, name: string, content: string) =>
     post<IngestQueued>(`/v1/admin/kbs/${kbId}/documents/text`, {
       name,
       content,
     }),
 
-  delete: (kbId: number, docId: number) =>
+  delete: (kbId: EntityId, docId: EntityId) =>
     post<DocumentItem>(
       `/v1/admin/kbs/${kbId}/documents/${docId}/delete`,
       {},
     ),
 
   listChunks: (
-    kbId: number,
-    docId: number,
+    kbId: EntityId,
+    docId: EntityId,
     params?: { page?: number; page_size?: number },
   ) =>
     get<PageResult<ChunkItem>>(
@@ -64,16 +65,16 @@ export const documentApi = {
       { params },
     ),
 
-  search: (kbId: number, req: SearchRequest) =>
+  search: (kbId: EntityId, req: SearchRequest) =>
     post<SearchHitItem[]>(`/v1/admin/kbs/${kbId}/search`, req),
 
   update: (
-    kbId: number,
-    docId: number,
+    kbId: EntityId,
+    docId: EntityId,
     req: {
       tags?: string[];
       meta?: Record<string, unknown>;
-      chunk_strategy?: import('@/system/kbs/types/kb').KbChunkStrategy;
+      chunk_strategy?: KbChunkStrategy;
     },
   ) =>
     post<DocumentItem>(
@@ -81,12 +82,12 @@ export const documentApi = {
       req,
     ),
 
-  reindex: (kbId: number, docId: number) =>
+  reindex: (kbId: EntityId, docId: EntityId) =>
     post<IngestQueued>(
       `/v1/admin/kbs/${kbId}/documents/${docId}/reindex`,
       {},
     ),
 
-  reindexAll: (kbId: number) =>
+  reindexAll: (kbId: EntityId) =>
     post<IngestQueued[]>(`/v1/admin/kbs/${kbId}/reindex-all`, {}),
 };

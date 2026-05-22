@@ -31,9 +31,9 @@ const VIRTUAL_THRESHOLD = 60; // chunk 数超过这个值启用窗口虚拟化
 
 export const KbDocumentDetailPage = () => {
   const { id, docId } = useParams<{ id: string; docId: string }>();
-  const kbId = Number(id);
-  const docIdNum = Number(docId);
-  const valid = Number.isFinite(kbId) && Number.isFinite(docIdNum);
+  const kbId = id ?? '';
+  const docIdNum = docId ?? '';
+  const valid = !!kbId && !!docIdNum;
 
   const docQ = useQuery({
     queryKey: ['kb-doc', kbId, docIdNum],

@@ -1,3 +1,5 @@
+import type { EntityId } from '@/core/types/api';
+
 export interface KbChunkStrategy {
   mode: 'fixed' | 'paragraph' | 'sentence' | 'regex';
   chunk_size?: number;
@@ -6,7 +8,7 @@ export interface KbChunkStrategy {
 }
 
 export interface KbItem {
-  id: number;
+  id: EntityId;
   kb_key: string;
   name: string;
   description: string | null;
@@ -24,8 +26,8 @@ export interface KbItem {
 }
 
 export interface ChunkItem {
-  id: number;
-  doc_id: number;
+  id: EntityId;
+  doc_id: EntityId;
   seq: number;
   content: string;
   token_count: number | null;
@@ -40,8 +42,8 @@ export type DocumentStatus =
   | 'failed';
 
 export interface DocumentItem {
-  id: number;
-  kb_id: number;
+  id: EntityId;
+  kb_id: EntityId;
   title: string;
   source_type: 'upload' | 'url' | 'text';
   source_uri: string | null;
@@ -59,18 +61,18 @@ export interface DocumentItem {
 }
 
 export interface DocumentStatusInfo {
-  document_id: number;
+  document_id: EntityId;
   status: DocumentStatus;
   progress: number;
   message: string | null;
   chunk_count: number;
   token_count: number;
-  task_id: number | null;
+  task_id: EntityId | null;
 }
 
 export interface IngestQueued {
-  document_id: number;
-  task_id: number;
+  document_id: EntityId;
+  task_id: EntityId;
 }
 
 export type RecallMode = 'vector' | 'hybrid' | 'keyword';
@@ -79,14 +81,14 @@ export interface SearchRequest {
   query: string;
   top_k?: number;
   min_score?: number;
-  doc_ids?: number[];
+  doc_ids?: EntityId[];
   tags?: string[];
   mode?: RecallMode;
 }
 
 export interface SearchHitItem {
-  chunk_id: number;
-  doc_id: number;
+  chunk_id: EntityId;
+  doc_id: EntityId;
   seq: number;
   content: string;
   score: number;

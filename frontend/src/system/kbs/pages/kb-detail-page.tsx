@@ -45,16 +45,16 @@ const TABS: TabDef[] = [
 
 export const KbDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const kbId = Number(id);
+  const kbId = id ?? '';
   const [tab, setTab] = useState<TabKey>('documents');
 
   const kbQ = useQuery({
     queryKey: ['kb', kbId],
     queryFn: () => kbApi.get(kbId),
-    enabled: Number.isFinite(kbId),
+    enabled: !!kbId,
   });
 
-  if (!Number.isFinite(kbId)) {
+  if (!kbId) {
     return (
       <SectionCard>
         <div className="p-6 text-sm text-stone-500">非法的 KB 编号</div>

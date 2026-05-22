@@ -1,16 +1,17 @@
+import type { EntityId } from '@/core/types/api';
 import type { RecallMode } from '@/system/kbs/types/kb';
 
 export type EvaluationStatus = 'pending' | 'running' | 'done' | 'failed';
 
 export interface EvaluationQuery {
   query: string;
-  expected_chunk_ids: number[];
+  expected_chunk_ids: EntityId[];
 }
 
 export interface EvaluationPerQuery {
   query: string;
-  hits: number[];
-  expected: number[];
+  hits: EntityId[];
+  expected: EntityId[];
   first_hit_rank: number | null;
   latency_ms: number;
 }
@@ -24,8 +25,8 @@ export interface EvaluationResults {
 }
 
 export interface Evaluation {
-  id: number;
-  kb_id: number;
+  id: EntityId;
+  kb_id: EntityId;
   name: string;
   recall_mode: RecallMode;
   top_k: number;
@@ -37,8 +38,8 @@ export interface Evaluation {
 }
 
 export interface EvaluationListItem {
-  id: number;
-  kb_id: number;
+  id: EntityId;
+  kb_id: EntityId;
   name: string;
   recall_mode: RecallMode;
   top_k: number;

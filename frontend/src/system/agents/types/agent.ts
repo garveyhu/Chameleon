@@ -1,13 +1,15 @@
+import type { EntityId } from '@/core/types/api';
+
 export interface AgentItem {
-  id: number;
+  id: EntityId;
   agent_key: string;
   name: string;
   description: string | null;
   source: 'local' | 'dify' | 'fastgpt' | 'coze' | string;
-  provider_id: number | null;
+  provider_id: EntityId | null;
   local_class_path: string | null;
   config: Record<string, unknown> | null;
-  default_model_id: number | null;
+  default_model_id: EntityId | null;
   tags: string[] | null;
   enabled: boolean;
   version: string | null;
@@ -20,13 +22,13 @@ export interface CreateAgentRequest {
   name: string;
   description?: string;
   source: 'dify' | 'fastgpt' | 'coze';
-  provider_id?: number;
+  provider_id?: EntityId;
   config?: Record<string, unknown>;
   tags?: string[];
 }
 
 export interface LinkedKbItem {
-  id: number;
+  id: EntityId;
   kb_key: string;
   name: string;
   description: string | null;

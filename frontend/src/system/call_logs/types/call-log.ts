@@ -1,9 +1,11 @@
+import type { EntityId } from '@/core/types/api';
+
 export interface CallLogItem {
-  id: number;
+  id: EntityId;
   request_id: string;
   app_id: string;
   agent_key: string;
-  api_key_id?: number | null;
+  api_key_id?: EntityId | null;
   session_id: string | null;
   stream: boolean;
   success: boolean;

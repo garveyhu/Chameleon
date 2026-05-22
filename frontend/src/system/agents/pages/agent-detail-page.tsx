@@ -31,16 +31,16 @@ const TABS: TabDef[] = [
 
 export const AgentDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const agentId = Number(id);
+  const agentId = id ?? '';
   const [tab, setTab] = useState<TabKey>('info');
 
   const agentQ = useQuery({
     queryKey: ['agent', agentId],
     queryFn: () => agentApi.get(agentId),
-    enabled: Number.isFinite(agentId),
+    enabled: !!agentId,
   });
 
-  if (!Number.isFinite(agentId)) {
+  if (!agentId) {
     return (
       <SectionCard>
         <div className="p-6 text-sm text-stone-500">非法的 agent 编号</div>

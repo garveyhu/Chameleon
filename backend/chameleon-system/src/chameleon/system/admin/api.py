@@ -1,8 +1,9 @@
 """admin 模块 HTTP 路由
 
 挂点：
-  GET /v1/admin/call-logs           —— 四维过滤
-  GET /v1/admin/providers/status    —— 实时探活
+  GET /v1/admin/call-logs               —— 四维过滤
+  GET /v1/admin/call-logs/{id}          —— 详情含 spans + payload
+  GET /v1/admin/providers/status        —— 实时探活
 """
 
 from datetime import datetime
@@ -10,15 +11,15 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.core.infra.db import get_session
 from chameleon.system.admin import service
 from chameleon.system.admin.schemas import (
     CallLogDetailItem,
     CallLogItem,
     ProviderStatusItem,
 )
-from chameleon.core.infra.auth import CurrentApp, require_scope
-from chameleon.core.infra.db import get_session
-from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.system.auth.dependencies import require_permission
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -33,7 +34,7 @@ async def list_call_logs(
     until: datetime | None = Query(None, description="ISO8601 结束（含）"),
     success: bool | None = Query(None),
     session: AsyncSession = Depends(get_session),
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[PageResult[CallLogItem]]:
     result = await service.list_call_logs(
         session,
@@ -53,7 +54,7 @@ async def list_call_logs(
 async def get_call_log(
     call_log_id: int,
     session: AsyncSession = Depends(get_session),
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[CallLogDetailItem]:
     item = await service.get_call_log(session, call_log_id)
     return Result.ok(item)
@@ -61,7 +62,7 @@ async def get_call_log(
 
 @router.get("/providers/status", response_model=Result[list[ProviderStatusItem]])
 async def providers_status(
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("providers:read")),
 ) -> Result[list[ProviderStatusItem]]:
     items = await service.providers_status()
     return Result.ok(items)

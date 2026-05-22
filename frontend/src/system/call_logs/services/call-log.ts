@@ -1,5 +1,5 @@
 import { get } from '@/core/lib/request';
-import type { PageResult } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   CallLogDetail,
   CallLogItem,
@@ -16,5 +16,5 @@ export const callLogApi = {
     until?: string;
   }) => get<PageResult<CallLogItem>>('/v1/admin/call-logs', { params }),
 
-  get: (id: number) => get<CallLogDetail>(`/v1/admin/call-logs/${id}`),
+  get: (id: EntityId) => get<CallLogDetail>(`/v1/admin/call-logs/${id}`),
 };
