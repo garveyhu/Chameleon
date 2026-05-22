@@ -1,18 +1,38 @@
-/** 嵌入式 widget 共享类型 */
+/** 嵌入式 widget 共享类型 —— 与 admin 端 schema 1:1 对齐 */
+
+export type ThemeMode = 'light' | 'dark' | 'auto';
+export type BubblePosition = 'right-bottom' | 'left-bottom' | 'right-top' | 'left-top';
+export type BubbleIcon = 'chat' | 'sparkles' | 'help-circle' | 'message-circle' | 'bot';
+export type FontSize = 'sm' | 'md' | 'lg';
+export type ShadowLevel = 'none' | 'sm' | 'md' | 'lg';
 
 export interface UiConfig {
+  theme_color?: string;
+  icon_emoji?: string;
   title?: string;
   subtitle?: string;
-  primary_color?: string;
-  position?: 'bottom-right' | 'bottom-left';
-  width?: number;
-  height?: number;
-  bubble_icon?: string;
+  greeting?: string;
+  placeholder?: string;
+  bubble_position?: BubblePosition;
+  bubble_color?: string;
+  bubble_icon?: BubbleIcon;
+  mode?: ThemeMode;
+  border_radius?: number;
+  font_size?: FontSize;
+  panel_width?: number;
+  panel_height?: number;
+  header_bg?: string;
+  shadow?: ShadowLevel;
 }
 
 export interface BehaviorConfig {
-  welcome_message?: string;
-  placeholder?: string;
+  auto_open?: boolean;
+  auto_open_delay_ms?: number;
+  suggested_questions?: string[];
+  show_feedback?: boolean;
+  show_citations?: boolean;
+  allow_file_upload?: boolean;
+  streaming?: boolean;
 }
 
 export interface EmbedPublicConfig {
@@ -21,7 +41,6 @@ export interface EmbedPublicConfig {
   description: string | null;
   ui_config: UiConfig | null;
   behavior: BehaviorConfig | null;
-  welcome_message: string | null;
 }
 
 export interface CreateSessionResponse {
@@ -42,11 +61,29 @@ export interface ApiResult<T> {
   success: boolean;
 }
 
+export interface StreamChunk {
+  meta?: { agent: string; session_id: string; request_id: string };
+  delta?: string;
+  citation?: {
+    source?: string;
+    title?: string;
+    snippet?: string;
+    [k: string]: unknown;
+  };
+  end?: boolean;
+  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } | null;
+  answer?: string;
+  error?: { type: string; message: string };
+}
+
 export interface WidgetMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  /** assistant 的内联引用列表（show_citations=true 时渲染） */
+  citations?: { title?: string; source?: string; snippet?: string }[];
   pending?: boolean;
+  streaming?: boolean;
   error?: boolean;
 }
 

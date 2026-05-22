@@ -1,10 +1,9 @@
 /** 嵌入式配置管理页 + 嵌入代码生成器 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Code2, Copy, Plus, Puzzle, Trash2 } from 'lucide-react';
+import { Code2, Pencil, Plus, Puzzle, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -17,7 +16,6 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
-import { Switch } from '@/core/components/ui/switch';
 import {
   Dialog,
   DialogContent,
@@ -25,35 +23,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/core/components/ui/dialog';
-import { Input } from '@/core/components/ui/input';
-import { Label } from '@/core/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/core/components/ui/select';
-import {
-  Modal,
-  ModalBody,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from '@/core/components/ui/modal';
-import { Textarea } from '@/core/components/ui/textarea';
-import { agentApi } from '@/system/agents/services/agent';
-import { appApi } from '@/system/apps/services/app';
+import { Switch } from '@/core/components/ui/switch';
+import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
+import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-modal';
 import { embedConfigApi } from '@/system/embed_configs/services/embed';
-import type { EmbedConfigItem } from '@/system/embed_configs/types/embed';
+import type {
+  CreateEmbedConfigRequest,
+  EmbedConfigItem,
+  UpdateEmbedConfigRequest,
+} from '@/system/embed_configs/types/embed';
 
 export const EmbedConfigsPage = () => {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [createOpen, setCreateOpen] = useState(false);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<EmbedConfigItem | null>(null);
   const [snippetCfg, setSnippetCfg] = useState<EmbedConfigItem | null>(null);
   const [delCfg, setDelCfg] = useState<EmbedConfigItem | null>(null);
 
@@ -62,17 +50,32 @@ export const EmbedConfigsPage = () => {
     queryFn: () => embedConfigApi.list({ page, page_size: pageSize }),
   });
 
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditTarget(null);
+  };
+
   const createMut = useMutation({
-    mutationFn: embedConfigApi.create,
+    mutationFn: (req: CreateEmbedConfigRequest) => embedConfigApi.create(req),
     onSuccess: () => {
       toast.success('嵌入配置已创建');
       qc.invalidateQueries({ queryKey: ['embed-configs'] });
-      setCreateOpen(false);
+      closeForm();
+    },
+  });
+
+  const updateMut = useMutation({
+    mutationFn: (args: { id: EntityId; req: UpdateEmbedConfigRequest }) =>
+      embedConfigApi.update(args.id, args.req),
+    onSuccess: () => {
+      toast.success('已保存');
+      qc.invalidateQueries({ queryKey: ['embed-configs'] });
+      closeForm();
     },
   });
 
   const delMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => embedConfigApi.delete(id),
+    mutationFn: (id: EntityId) => embedConfigApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['embed-configs'] });
@@ -81,7 +84,7 @@ export const EmbedConfigsPage = () => {
   });
 
   const toggleMut = useMutation({
-    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
+    mutationFn: (args: { id: EntityId; enabled: boolean }) =>
       embedConfigApi.update(args.id, { enabled: args.enabled }),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['embed-configs'] });
@@ -112,7 +115,11 @@ export const EmbedConfigsPage = () => {
       width: 200,
       render: e => <span className="font-mono text-[11.5px] text-stone-700">{e.embed_key}</span>,
     },
-    { key: 'name', header: t('common.name'), render: e => <span className="font-medium text-stone-900">{e.name}</span> },
+    {
+      key: 'name',
+      header: t('common.name'),
+      render: e => <span className="font-medium text-stone-900">{e.name}</span>,
+    },
     {
       key: 'allowed_origins',
       header: t('table.origins'),
@@ -147,9 +154,20 @@ export const EmbedConfigsPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 130,
+      width: 180,
       render: e => (
         <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="编辑"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => {
+              setEditTarget(e);
+              setFormOpen(true);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5" /> 编辑
+          </button>
           <button
             type="button"
             title="嵌入代码"
@@ -177,7 +195,14 @@ export const EmbedConfigsPage = () => {
         <TableToolbar
           title={t('page.embed_configs_title')}
           extra={
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setEditTarget(null);
+                setFormOpen(true);
+              }}
+            >
               <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
@@ -192,7 +217,14 @@ export const EmbedConfigsPage = () => {
               icon={<Puzzle strokeWidth={1.5} />}
               title={t('empty.embed_configs')}
               action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setEditTarget(null);
+                    setFormOpen(true);
+                  }}
+                >
                   <Plus className="h-3.5 w-3.5" /> {t('common.create')}
                 </Button>
               }
@@ -211,141 +243,25 @@ export const EmbedConfigsPage = () => {
         />
       </SectionCard>
 
-      <CreateEmbedModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={createMut.mutate}
-        loading={createMut.isPending}
+      <EmbedFormModal
+        open={formOpen}
+        initial={editTarget}
+        loading={createMut.isPending || updateMut.isPending}
+        onClose={closeForm}
+        onSubmitCreate={req => createMut.mutate(req)}
+        onSubmitUpdate={(id, req) => updateMut.mutate({ id, req })}
       />
       <SnippetDialog cfg={snippetCfg} onClose={() => setSnippetCfg(null)} />
       <ConfirmDialog
         open={!!delCfg}
         title="删除嵌入配置"
-        description={`删除后业务方网页里的 widget 立即失效。`}
+        description="删除后业务方网页里的 widget 立即失效。"
         variant="danger"
         confirmText="删除"
         onConfirm={() => delCfg && delMut.mutate(delCfg.id)}
         onCancel={() => setDelCfg(null)}
       />
     </div>
-  );
-};
-
-const CreateEmbedModal = ({
-  open,
-  onClose,
-  onSubmit,
-  loading,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (req: {
-    name: string;
-    agent_id: import('@/core/types/api').EntityId;
-    app_id: import('@/core/types/api').EntityId;
-    allowed_origins?: string[];
-  }) => void;
-  loading: boolean;
-}) => {
-  const [name, setName] = useState('');
-  const [agentId, setAgentId] = useState('');
-  const [appId, setAppId] = useState('');
-  const [origins, setOrigins] = useState('');
-
-  const agentsQ = useQuery({ queryKey: ['agents', 'all'], queryFn: () => agentApi.list() });
-  const appsQ = useQuery({
-    queryKey: ['apps', 'all'],
-    queryFn: () => appApi.list({ page: 1, page_size: 100 }),
-  });
-
-  return (
-    <Modal
-      open={open}
-      onOpenChange={o => {
-        if (!o) {
-          setName('');
-          setAgentId('');
-          setAppId('');
-          setOrigins('');
-          onClose();
-        }
-      }}
-    >
-      <ModalContent size="lg">
-        <ModalHeader>
-          <ModalTitle>新建嵌入配置</ModalTitle>
-        </ModalHeader>
-        <ModalBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>名称</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="官网客服" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>关联 Agent</Label>
-            <Select value={agentId} onValueChange={setAgentId}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择 agent" />
-              </SelectTrigger>
-              <SelectContent>
-                {(agentsQ.data || []).map(a => (
-                  <SelectItem key={a.id} value={String(a.id)}>
-                    {a.agent_key} · {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>关联 App</Label>
-            <Select value={appId} onValueChange={setAppId}>
-              <SelectTrigger>
-                <SelectValue placeholder="选择 app" />
-              </SelectTrigger>
-              <SelectContent>
-                {(appsQ.data?.items || []).map(a => (
-                  <SelectItem key={a.id} value={String(a.id)}>
-                    {a.app_key} · {a.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Origin 白名单（每行一个，留空拒绝所有跨域）</Label>
-            <Textarea
-              value={origins}
-              onChange={e => setOrigins(e.target.value)}
-              rows={4}
-              placeholder="https://example.com&#10;https://app.example.com"
-              className="font-mono text-xs"
-            />
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="ghost" onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            disabled={loading || !name || !agentId || !appId}
-            onClick={() =>
-              onSubmit({
-                name,
-                agent_id: agentId,
-                app_id: appId,
-                allowed_origins: origins
-                  ? origins
-                      .split('\n')
-                      .map(o => o.trim())
-                      .filter(Boolean)
-                  : [],
-              })
-            }
-          >
-            {loading ? '创建中...' : '创建'}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
   );
 };
 
@@ -371,16 +287,8 @@ const SnippetDialog = ({
           <DialogTitle>嵌入代码 · {cfg?.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <CodeSnippet
-            label="JS Widget"
-            hint="推荐：右下角浮动气泡"
-            code={widget}
-          />
-          <CodeSnippet
-            label="iframe"
-            hint="嵌入到页面内某个区域"
-            code={iframe}
-          />
+          <CodeSnippet label="JS Widget" hint="推荐：右下角浮动气泡" code={widget} />
+          <CodeSnippet label="iframe" hint="嵌入到页面内某个区域" code={iframe} />
           <p className="rounded-md border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-[11.5px] text-amber-800">
             ⚠️ 业务方网页的 Origin 必须在白名单内才能加载，否则返回 403。
           </p>
@@ -411,7 +319,6 @@ const CodeSnippet = ({
   };
   return (
     <div className="overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
-      {/* 顶部条：标签 + 复制按钮，不与代码区重叠 */}
       <div className="flex items-center justify-between border-b border-stone-200/70 bg-white/40 px-3 py-1.5">
         <div className="flex items-baseline gap-2">
           <span className="text-[12px] font-medium text-stone-800">{label}</span>
@@ -422,7 +329,6 @@ const CodeSnippet = ({
           onClick={onCopy}
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-stone-500 transition hover:bg-stone-100 hover:text-stone-900"
         >
-          <Copy className="h-3 w-3" />
           {copied ? '已复制' : '复制'}
         </button>
       </div>
