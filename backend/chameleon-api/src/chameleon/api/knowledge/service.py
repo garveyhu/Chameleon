@@ -76,6 +76,12 @@ async def create_kb(
         embedding_dim=dim,
         chunk_size=req.chunk_size,
         chunk_overlap=req.chunk_overlap,
+        chunk_strategy=req.chunk_strategy
+        or {
+            "mode": "fixed",
+            "chunk_size": req.chunk_size,
+            "overlap": req.chunk_overlap,
+        },
     )
     session.add(row)
     await session.flush()
@@ -94,6 +100,8 @@ async def update_kb(session: AsyncSession, kb_key: str, req: UpdateKbRequest) ->
         row.chunk_size = req.chunk_size
     if req.chunk_overlap is not None:
         row.chunk_overlap = req.chunk_overlap
+    if req.chunk_strategy is not None:
+        row.chunk_strategy = req.chunk_strategy
     await session.flush()
     await session.refresh(row)
     return KbItem.model_validate(row)

@@ -40,6 +40,11 @@ const MODES: { value: KbChunkStrategy['mode']; label: string; desc: string }[] =
   { value: 'paragraph', label: '按段落', desc: '双换行切；单段超长再 fixed 二次切' },
   { value: 'sentence', label: '按句子', desc: '中英文句末标点切；单句超长再 fixed 二次切' },
   { value: 'regex', label: '自定义正则', desc: '用 separator_regex 切；单段超长再 fixed' },
+  {
+    value: 'token',
+    label: '按 Token',
+    desc: '模型感知 tiktoken 编码；chunk_size/overlap 单位为 token',
+  },
 ];
 
 export const KbConfigForm = ({ kb }: Props) => {
@@ -86,7 +91,7 @@ export const KbConfigForm = ({ kb }: Props) => {
     <div className="max-w-[640px] space-y-5">
       <section>
         <h3 className="mb-2 text-[13.5px] font-medium text-stone-900">分块策略</h3>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {MODES.map(m => (
             <button
               key={m.value}
@@ -111,14 +116,17 @@ export const KbConfigForm = ({ kb }: Props) => {
       <section className="grid grid-cols-2 gap-4">
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">
-            chunk_size = <span className="font-mono tnum">{strategy.chunk_size ?? 800}</span>
+            chunk_size = <span className="font-mono tnum">{strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}</span>
+            <span className="ml-1 text-[10.5px] text-stone-400">
+              {strategy.mode === 'token' ? 'token' : '字符'}
+            </span>
           </label>
           <input
             type="range"
-            min={100}
-            max={4000}
-            step={100}
-            value={strategy.chunk_size ?? 800}
+            min={strategy.mode === 'token' ? 64 : 100}
+            max={strategy.mode === 'token' ? 2000 : 4000}
+            step={strategy.mode === 'token' ? 32 : 100}
+            value={strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}
             onChange={e =>
               setStrategy(s => ({ ...s, chunk_size: Number(e.target.value) }))
             }
@@ -127,14 +135,17 @@ export const KbConfigForm = ({ kb }: Props) => {
         </div>
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">
-            overlap = <span className="font-mono tnum">{strategy.overlap ?? 100}</span>
+            overlap = <span className="font-mono tnum">{strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}</span>
+            <span className="ml-1 text-[10.5px] text-stone-400">
+              {strategy.mode === 'token' ? 'token' : '字符'}
+            </span>
           </label>
           <input
             type="range"
             min={0}
-            max={500}
-            step={10}
-            value={strategy.overlap ?? 100}
+            max={strategy.mode === 'token' ? 300 : 500}
+            step={strategy.mode === 'token' ? 8 : 10}
+            value={strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}
             onChange={e =>
               setStrategy(s => ({ ...s, overlap: Number(e.target.value) }))
             }
@@ -142,6 +153,25 @@ export const KbConfigForm = ({ kb }: Props) => {
           />
         </div>
       </section>
+
+      {strategy.mode === 'token' && (
+        <section>
+          <label className="mb-1 block text-[12px] text-stone-600">
+            模型编码器 (model)
+          </label>
+          <Input
+            value={strategy.model ?? ''}
+            onChange={e =>
+              setStrategy(s => ({ ...s, model: e.target.value || undefined }))
+            }
+            placeholder="留空使用 KB 的 embedding_model；可填 gpt-4o / qwen-plus 等"
+            className="h-8 font-mono text-[12.5px]"
+          />
+          <div className="mt-1 text-[10.5px] text-stone-500">
+            未知模型自动落回 cl100k_base 编码器（差异 ±5% 可忽略）
+          </div>
+        </section>
+      )}
 
       {strategy.mode === 'regex' && (
         <section>

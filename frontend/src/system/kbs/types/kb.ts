@@ -1,10 +1,19 @@
 import type { EntityId } from '@/core/types/api';
 
+export type KbChunkMode =
+  | 'fixed'
+  | 'paragraph'
+  | 'sentence'
+  | 'regex'
+  | 'token';
+
 export interface KbChunkStrategy {
-  mode: 'fixed' | 'paragraph' | 'sentence' | 'regex';
+  mode: KbChunkMode;
   chunk_size?: number;
   overlap?: number;
   separator_regex?: string;
+  /** token 模式：编码器锚定模型（缺省走 cl100k_base） */
+  model?: string;
 }
 
 export interface KbItem {

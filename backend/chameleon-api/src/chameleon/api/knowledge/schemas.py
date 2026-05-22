@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 # ── KB ──────────────────────────────────────────────────
 
 
+ChunkMode = Literal["fixed", "paragraph", "sentence", "regex", "token"]
+
+
 class CreateKbRequest(BaseModel):
     kb_key: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
     name: str = Field(..., min_length=1, max_length=128)
@@ -17,6 +20,13 @@ class CreateKbRequest(BaseModel):
     )
     chunk_size: int = Field(800, ge=10, le=4000)
     chunk_overlap: int = Field(100, ge=0, le=500)
+    chunk_strategy: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "切块策略 dict；不传则按 mode=fixed + chunk_size/overlap 默认。"
+            "token 模式样例：{mode: 'token', chunk_size: 512, overlap: 50}"
+        ),
+    )
 
 
 class UpdateKbRequest(BaseModel):
@@ -24,6 +34,7 @@ class UpdateKbRequest(BaseModel):
     description: str | None = None
     chunk_size: int | None = Field(None, ge=10, le=4000)
     chunk_overlap: int | None = Field(None, ge=0, le=500)
+    chunk_strategy: dict[str, Any] | None = None
 
 
 class KbItem(BaseModel):
@@ -35,6 +46,7 @@ class KbItem(BaseModel):
     embedding_dim: int
     chunk_size: int
     chunk_overlap: int
+    chunk_strategy: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
 

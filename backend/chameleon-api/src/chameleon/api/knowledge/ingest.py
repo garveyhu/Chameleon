@@ -91,6 +91,11 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
             active_strategy["separator_regex"] = doc_chunk_strategy[
                 "separator_regex"
             ]
+        # token 模式自动回填 model（embedding_model 或显式传入的 model）
+        if active_strategy["mode"] == "token":
+            active_strategy["model"] = (
+                doc_chunk_strategy.get("model") or kb.embedding_model
+            )
         source_type = doc.source_type
         source_uri = doc.source_uri
         mime_type = doc.mime_type
