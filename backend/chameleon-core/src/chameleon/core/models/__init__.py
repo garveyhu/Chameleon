@@ -18,6 +18,7 @@ from chameleon.core.models.model_def import LLMModel
 from chameleon.core.models.model_default import ModelDefault
 from chameleon.core.models.provider import Provider
 from chameleon.core.models.retrieval_evaluation import RetrievalEvaluation
+from chameleon.core.models.score import Score
 from chameleon.core.models.setting import Setting
 from chameleon.core.models.task import Task
 from chameleon.core.models.user import (
@@ -57,6 +58,7 @@ __all__ = [
     "RetrievalEvaluation",
     "Task",
     "CallLog",
+    "Score",
     # 嵌入域
     "EmbedConfig",
     # 杂项

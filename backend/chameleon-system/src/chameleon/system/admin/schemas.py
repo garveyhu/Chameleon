@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from chameleon.system.scores.schemas import ScoreItem
+
 
 class CallLogItem(BaseModel):
     id: int
@@ -61,6 +63,7 @@ class TraceTreeNode(BaseModel):
     completion_tokens: int | None = None
     total_tokens: int | None = None
     created_at: datetime
+    scores: list[ScoreItem] = []
     children: list["TraceTreeNode"] = []
 
 

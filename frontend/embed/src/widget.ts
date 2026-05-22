@@ -293,7 +293,7 @@ export class ChameleonWidget {
         inner.appendChild(c);
       }
       if (this.behavior.show_feedback && !msg.streaming) {
-        inner.appendChild(this.buildFeedbackTools(msg.id));
+        inner.appendChild(this.buildFeedbackTools(msg));
       }
     }
 
@@ -301,7 +301,7 @@ export class ChameleonWidget {
     return wrap;
   }
 
-  private buildFeedbackTools(messageId: string): HTMLDivElement {
+  private buildFeedbackTools(msg: WidgetMessage): HTMLDivElement {
     const tools = document.createElement('div');
     tools.className = 'msg-tools';
     const up = document.createElement('button');
@@ -312,15 +312,36 @@ export class ChameleonWidget {
     down.type = 'button';
     down.title = '没帮助';
     down.innerHTML = thumbsDownIcon;
-    const handle = (positive: boolean, btn: HTMLButtonElement) => {
+    if (msg.feedback === 1) up.classList.add('active');
+    if (msg.feedback === -1) down.classList.add('active');
+
+    // 没有 requestId（极少数后端老分支 / 错误响应）→ 禁用反馈按钮
+    if (!msg.requestId) {
+      up.disabled = true;
+      down.disabled = true;
+      tools.appendChild(up);
+      tools.appendChild(down);
+      return tools;
+    }
+
+    const submit = (positive: boolean, btn: HTMLButtonElement) => {
       const other = positive ? down : up;
-      btn.classList.toggle('active');
+      // 二次点击同一个 = 撤销（视为新反馈值的语义；当前后端 append-only，简化为：始终发送一条 score）
+      const willActive = !btn.classList.contains('active');
+      btn.classList.toggle('active', willActive);
       other.classList.remove('active');
-      // feedback 上报接口待补；先本地标记
-      console.debug('[ChameleonWidget] feedback', { messageId, positive });
+      const value: 1 | -1 | null = willActive ? (positive ? 1 : -1) : null;
+      this.updateMessage(msg.id, { feedback: value });
+      if (willActive && msg.requestId) {
+        void this.api.feedback({
+          trace_id: msg.requestId,
+          name: 'thumbs',
+          value: positive ? 1 : -1,
+        });
+      }
     };
-    up.addEventListener('click', () => handle(true, up));
-    down.addEventListener('click', () => handle(false, down));
+    up.addEventListener('click', () => submit(true, up));
+    down.addEventListener('click', () => submit(false, down));
     tools.appendChild(up);
     tools.appendChild(down);
     return tools;
@@ -383,6 +404,7 @@ export class ChameleonWidget {
     const res = await this.session.invokeWithRetry(input);
     this.updateMessage(pendingId, {
       content: res.answer,
+      requestId: res.request_id ?? undefined,
       pending: false,
       streaming: false,
     });
@@ -392,6 +414,7 @@ export class ChameleonWidget {
     const ctrl = new AbortController();
     this.currentAbort = ctrl;
     let buf = '';
+    let requestId: string | undefined;
     const citations: { title?: string; source?: string; snippet?: string }[] = [];
     let errorChunk: { type: string; message: string } | null = null;
 
@@ -402,6 +425,9 @@ export class ChameleonWidget {
           if (chunk.error) {
             errorChunk = chunk.error;
             return;
+          }
+          if (chunk.meta?.request_id) {
+            requestId = chunk.meta.request_id;
           }
           if (chunk.delta) {
             buf += chunk.delta;
@@ -423,6 +449,7 @@ export class ChameleonWidget {
             this.updateMessage(pendingId, {
               content: chunk.answer || buf,
               citations: citations.length ? citations : undefined,
+              requestId,
               pending: false,
               streaming: false,
             });
@@ -447,6 +474,7 @@ export class ChameleonWidget {
       this.updateMessage(pendingId, {
         content: buf,
         citations: citations.length ? citations : undefined,
+        requestId,
         pending: false,
         streaming: false,
       });

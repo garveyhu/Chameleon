@@ -23,7 +23,7 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "agents": ("read", "write", "delete"),
     "kbs": ("read", "write", "delete"),
     "embed_configs": ("read", "write", "delete"),
-    "call_logs": ("read",),
+    "call_logs": ("read", "write"),
     "audit_logs": ("read",),
     "dashboard": ("read",),
     "settings": ("read", "write"),

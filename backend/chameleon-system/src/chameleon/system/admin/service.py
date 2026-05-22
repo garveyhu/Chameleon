@@ -18,9 +18,10 @@ from chameleon.system.admin.schemas import (
     TraceTreeNode,
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import CallLog
+from chameleon.core.models import CallLog, Score
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.providers.base import PROVIDERS
+from chameleon.system.scores.schemas import ScoreItem
 
 
 async def list_call_logs(
@@ -125,9 +126,27 @@ async def get_trace_tree(
             next_frontier.append(c.request_id)
         frontier = next_frontier
 
+    # 一次性把树上所有 score 拉回来按 call_log_id 分桶
+    score_rows = (
+        (
+            await session.execute(
+                select(Score).where(Score.call_log_id.in_(all_logs.keys()))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    scores_by_rid: dict[str, list[ScoreItem]] = {}
+    for s in score_rows:
+        scores_by_rid.setdefault(s.call_log_id, []).append(
+            ScoreItem.model_validate(s)
+        )
+
     # 组装树
     def to_node(row: CallLog) -> TraceTreeNode:
-        return TraceTreeNode.model_validate(row)
+        node = TraceTreeNode.model_validate(row)
+        node.scores = scores_by_rid.get(row.request_id, [])
+        return node
 
     nodes: dict[str, TraceTreeNode] = {
         rid: to_node(row) for rid, row in all_logs.items()

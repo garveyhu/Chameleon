@@ -17,6 +17,8 @@ import {
   Layers,
   ShieldCheck,
   Sparkles,
+  ThumbsDown,
+  ThumbsUp,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -26,6 +28,7 @@ import { cn } from '@/core/lib/cn';
 import { formatNumber } from '@/core/lib/format';
 import type {
   ObservationType,
+  ScoreItem,
   TraceTreeNode,
 } from '@/system/call_logs/types/call-log';
 
@@ -134,6 +137,20 @@ const TreeRow: React.FC<TreeRowProps> = ({
           )}
         </span>
 
+        {/* scores 徽章（来自 widget / 人工 / eval） */}
+        {node.scores && node.scores.length > 0 ? (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {node.scores.slice(0, 3).map(s => (
+              <ScoreBadge key={String(s.id)} score={s} />
+            ))}
+            {node.scores.length > 3 ? (
+              <span className="text-[10px] text-stone-400">
+                +{node.scores.length - 3}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* tokens（generation 才有） */}
         {node.total_tokens ? (
           <Badge variant="outline" className="font-mono text-[10px]">
@@ -171,6 +188,52 @@ const TreeRow: React.FC<TreeRowProps> = ({
           ))
         : null}
     </>
+  );
+};
+
+const SCORE_SOURCE_COLOR: Record<ScoreItem['source'], string> = {
+  feedback: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  annotation: 'bg-amber-50 text-amber-700 border-amber-200',
+  eval: 'bg-violet-50 text-violet-700 border-violet-200',
+  api: 'bg-blue-50 text-blue-700 border-blue-200',
+};
+
+const ScoreBadge: React.FC<{ score: ScoreItem }> = ({ score }) => {
+  const colorCls =
+    SCORE_SOURCE_COLOR[score.source] ?? 'bg-stone-50 text-stone-700';
+  // 👍/👎 特殊渲染
+  if (score.name === 'thumbs' || score.name === 'thumbs_up') {
+    const isPositive = (score.value ?? 0) > 0;
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center rounded border px-1 py-0.5',
+          colorCls,
+        )}
+        title={`${score.source} · ${score.comment ?? ''}`}
+      >
+        {isPositive ? (
+          <ThumbsUp className="h-3 w-3" />
+        ) : (
+          <ThumbsDown className="h-3 w-3" />
+        )}
+      </span>
+    );
+  }
+  const display = score.value != null ? score.value : score.string_value;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded border px-1 py-0.5 text-[10px]',
+        colorCls,
+      )}
+      title={`${score.name} · ${score.source}${
+        score.comment ? ' · ' + score.comment : ''
+      }`}
+    >
+      <span className="font-medium">{score.name}</span>
+      <span className="tnum">{display}</span>
+    </span>
   );
 };
 

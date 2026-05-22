@@ -2,7 +2,7 @@
 
 import type { EmbedApi } from './api';
 import { EmbedError } from './api';
-import type { StreamChunk } from './types';
+import type { InvokeResponse, StreamChunk } from './types';
 
 interface SessionState {
   token: string;
@@ -37,7 +37,7 @@ export class SessionManager {
     return this.getToken();
   }
 
-  async invokeWithRetry(input: string): Promise<{ answer: string; session_id: string }> {
+  async invokeWithRetry(input: string): Promise<InvokeResponse> {
     const token = await this.getToken();
     try {
       return await this.api.invoke(token, input);

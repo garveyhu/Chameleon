@@ -82,6 +82,10 @@ export interface WidgetMessage {
   content: string;
   /** assistant 的内联引用列表（show_citations=true 时渲染） */
   citations?: { title?: string; source?: string; snippet?: string }[];
+  /** 后端 SSE meta 透出的 request_id（= trace_id），用于反馈定位 */
+  requestId?: string;
+  /** 用户当前反馈：1 = 👍，-1 = 👎，null/undefined = 未点 */
+  feedback?: 1 | -1 | null;
   pending?: boolean;
   streaming?: boolean;
   error?: boolean;

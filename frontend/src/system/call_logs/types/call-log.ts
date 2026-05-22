@@ -34,6 +34,22 @@ export interface CallLogItem {
   created_at: string;
 }
 
+export type ScoreDataType = 'numeric' | 'categorical' | 'boolean' | 'text';
+export type ScoreSource = 'annotation' | 'api' | 'eval' | 'feedback';
+
+export interface ScoreItem {
+  id: EntityId;
+  call_log_id: string;
+  trace_id: string | null;
+  name: string;
+  value: number | null;
+  string_value: string | null;
+  data_type: ScoreDataType;
+  source: ScoreSource;
+  comment: string | null;
+  created_at: string;
+}
+
 export interface TraceTreeNode {
   id: EntityId;
   request_id: string;
@@ -52,6 +68,7 @@ export interface TraceTreeNode {
   completion_tokens: number | null;
   total_tokens: number | null;
   created_at: string;
+  scores: ScoreItem[];
   children: TraceTreeNode[];
 }
 

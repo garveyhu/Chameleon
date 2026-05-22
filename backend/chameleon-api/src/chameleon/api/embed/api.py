@@ -20,6 +20,8 @@ from chameleon.api.embed import session as embed_session
 from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
+from chameleon.system.scores import service as score_service
+from chameleon.system.scores.schemas import FeedbackRequest, ScoreItem
 
 
 # ── DTO ────────────────────────────────────────────────────
@@ -117,6 +119,24 @@ async def invoke(
             request_id=result.request_id,
         )
     )
+
+
+@router.post("/{embed_key}/feedback", response_model=Result[ScoreItem])
+async def submit_feedback(
+    embed_key: str,
+    req: FeedbackRequest,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Result[ScoreItem]:
+    """业务方 widget 反馈入口（👍 / 👎 / 评分 / 评语）
+
+    校验 embed_key 合法 + origin 白名单后写入 scores 表，
+    source 固定 'feedback' 与人工标注 / eval 区分。
+    """
+    e = await embed_service.resolve_embed(session, embed_key)
+    embed_service.check_origin(e.allowed_origins, origin)
+    item = await score_service.record_feedback(session, req, source="feedback")
+    return Result.ok(item)
 
 
 @router.post("/{embed_key}/invoke/stream")

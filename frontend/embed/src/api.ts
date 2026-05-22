@@ -47,6 +47,25 @@ export class EmbedApi {
     );
   }
 
+  /** 反馈：write-only，不接 ApiResult，失败仅 console.warn（不打断会话） */
+  async feedback(payload: {
+    trace_id: string;
+    name: string;
+    value?: number;
+    string_value?: string;
+    comment?: string;
+  }): Promise<void> {
+    try {
+      await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/feedback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (err) {
+      console.warn('[ChameleonWidget] feedback POST failed', err);
+    }
+  }
+
   async invokeStream(
     sessionToken: string,
     input: string,
