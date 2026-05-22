@@ -13,6 +13,7 @@ from chameleon.core.models.base import Base
 from chameleon.core.models.channel import Channel, ChannelStatus
 from chameleon.core.models.conversation import Conversation, Message
 from chameleon.core.models.embed_config import EmbedConfig
+from chameleon.core.models.graph import Graph, GraphNodeRun, GraphRun
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
 from chameleon.core.models.model_def import LLMModel
 from chameleon.core.models.model_default import ModelDefault
@@ -61,6 +62,10 @@ __all__ = [
     "Score",
     # 嵌入域
     "EmbedConfig",
+    # 工作流
+    "Graph",
+    "GraphRun",
+    "GraphNodeRun",
     # 杂项
     "AuditLog",
     "Setting",
