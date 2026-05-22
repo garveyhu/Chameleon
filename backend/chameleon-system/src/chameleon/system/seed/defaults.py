@@ -25,6 +25,7 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "audit_logs": ("read",),
     "dashboard": ("read",),
     "settings": ("read", "write"),
+    "playground": ("invoke",),
 }
 
 
@@ -56,7 +57,7 @@ _ADMIN_PERMS = ["*:*"]
 # developer：业务资源 CRUD + 看 dashboard + call_logs，不能管 users / roles / permissions / settings
 _DEVELOPER_RESOURCES = {
     "apps", "api_keys", "providers", "models", "agents",
-    "kbs", "embed_configs", "call_logs", "dashboard",
+    "kbs", "embed_configs", "call_logs", "dashboard", "playground",
 }
 _DEVELOPER_PERMS = sorted(
     c for c, r, _, _ in all_permissions() if r in _DEVELOPER_RESOURCES

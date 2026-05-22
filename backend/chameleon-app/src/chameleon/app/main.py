@@ -31,6 +31,7 @@ from chameleon.system.embed_configs import embed_configs_router
 from chameleon.system.kbs import kbs_admin_router
 from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
+from chameleon.system.playground import playground_router
 from chameleon.system.providers import providers_admin_router
 from chameleon.system.roles import roles_router
 from chameleon.system.search import search_router
@@ -123,6 +124,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(agents_admin_router)
     app.include_router(kbs_admin_router)
     app.include_router(dashboard_router)
+    app.include_router(playground_router)
     app.include_router(audit_logs_router)
     app.include_router(embed_configs_router)
     app.include_router(search_router)
