@@ -27,6 +27,7 @@ from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Agent
 from chameleon.providers.base import AGENTS, reload_agent_registry
+from chameleon.system.agents import agent_kb_service
 from chameleon.system.auth.dependencies import require_permission
 
 
@@ -73,6 +74,21 @@ class UpdateAgentRequest(BaseModel):
 
 class TestInvokeRequest(BaseModel):
     input: str = Field(min_length=1, max_length=8000)
+
+
+class LinkedKbItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kb_key: str
+    name: str
+    description: str | None = None
+    embedding_model: str
+    embedding_dim: int
+
+
+class UpdateLinkedKbsRequest(BaseModel):
+    kb_ids: list[int]
 
 
 # ── helpers ───────────────────────────────────────────────
@@ -261,3 +277,35 @@ async def test_agent(
     )
     result = await provider.invoke(ctx)
     return Result.ok(result.model_dump())
+
+
+# ── 关联 KB ───────────────────────────────────────────────
+
+
+@router.get(
+    "/{agent_id}/linked-kbs", response_model=Result[list[LinkedKbItem]]
+)
+async def list_agent_linked_kbs(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[list[LinkedKbItem]]:
+    kbs = await agent_kb_service.list_linked_kbs(session, agent_id=agent_id)
+    return Result.ok([LinkedKbItem.model_validate(k) for k in kbs])
+
+
+@router.post(
+    "/{agent_id}/linked-kbs/update",
+    response_model=Result[list[LinkedKbItem]],
+)
+async def update_agent_linked_kbs(
+    agent_id: int,
+    req: UpdateLinkedKbsRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[list[LinkedKbItem]]:
+    kbs = await agent_kb_service.replace_linked_kbs(
+        session, agent_id=agent_id, kb_ids=req.kb_ids
+    )
+    await session.commit()
+    return Result.ok([LinkedKbItem.model_validate(k) for k in kbs])
