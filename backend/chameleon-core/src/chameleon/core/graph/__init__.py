@@ -23,6 +23,9 @@ from chameleon.core.graph.types import (
     NodeSpec,
 )
 
+# 触发内置节点（kb / llm 等）注册到全局 registry
+from chameleon.core.graph import nodes  # noqa: F401
+
 __all__ = [
     "EdgeSpec",
     "GraphExecutor",
