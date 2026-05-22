@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
@@ -48,6 +49,7 @@ import type { AgentItem } from '@/system/agents/types/agent';
 
 export const AgentsPage = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [testAgent, setTestAgent] = useState<AgentItem | null>(null);
@@ -125,10 +127,12 @@ export const AgentsPage = () => {
       header: t('common.enabled'),
       width: 70,
       render: a => (
-        <Switch
-          checked={a.enabled}
-          onCheckedChange={c => toggleMut.mutate({ id: a.id, enabled: c })}
-        />
+        <span onClick={e => e.stopPropagation()}>
+          <Switch
+            checked={a.enabled}
+            onCheckedChange={c => toggleMut.mutate({ id: a.id, enabled: c })}
+          />
+        </span>
       ),
     },
     {
@@ -142,7 +146,10 @@ export const AgentsPage = () => {
             type="button"
             title={t('common.test')}
             className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setTestAgent(a)}
+            onClick={e => {
+              e.stopPropagation();
+              setTestAgent(a);
+            }}
           >
             <Play className="h-3.5 w-3.5" /> {t('common.test')}
           </button>
@@ -151,7 +158,10 @@ export const AgentsPage = () => {
             title="删除"
             className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
             disabled={a.source === 'local'}
-            onClick={() => setDelAgent(a)}
+            onClick={e => {
+              e.stopPropagation();
+              setDelAgent(a);
+            }}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -176,6 +186,7 @@ export const AgentsPage = () => {
           rows={listQ.data || []}
           rowKey="id"
           loading={listQ.isLoading}
+          onRowClick={a => navigate(`/agents/${a.id}`)}
           emptyText={
             <EmptyState
               icon={<Bot strokeWidth={1.5} />}

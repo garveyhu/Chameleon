@@ -12,6 +12,13 @@ const module: ModuleRouteConfig = {
         return { Component: m.AgentsPage };
       },
     },
+    {
+      path: '/agents/:id',
+      lazy: async () => {
+        const m = await import('@/system/agents/pages/agent-detail-page');
+        return { Component: m.AgentDetailPage };
+      },
+    },
   ],
 };
 

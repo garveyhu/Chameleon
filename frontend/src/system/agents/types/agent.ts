@@ -24,3 +24,12 @@ export interface CreateAgentRequest {
   config?: Record<string, unknown>;
   tags?: string[];
 }
+
+export interface LinkedKbItem {
+  id: number;
+  kb_key: string;
+  name: string;
+  description: string | null;
+  embedding_model: string;
+  embedding_dim: number;
+}
