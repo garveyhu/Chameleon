@@ -1,10 +1,13 @@
 import { get, post, postForm } from '@/core/lib/request';
 import type { PageResult } from '@/core/types/api';
 import type {
+  ChunkItem,
   DocumentItem,
   DocumentStatus,
   DocumentStatusInfo,
   IngestQueued,
+  SearchHitItem,
+  SearchRequest,
 } from '@/system/kbs/types/kb';
 
 export const documentApi = {
@@ -50,4 +53,17 @@ export const documentApi = {
       `/v1/admin/kbs/${kbId}/documents/${docId}/delete`,
       {},
     ),
+
+  listChunks: (
+    kbId: number,
+    docId: number,
+    params?: { page?: number; page_size?: number },
+  ) =>
+    get<PageResult<ChunkItem>>(
+      `/v1/admin/kbs/${kbId}/documents/${docId}/chunks`,
+      { params },
+    ),
+
+  search: (kbId: number, req: SearchRequest) =>
+    post<SearchHitItem[]>(`/v1/admin/kbs/${kbId}/search`, req),
 };

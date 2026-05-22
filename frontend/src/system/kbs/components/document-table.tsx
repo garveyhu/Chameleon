@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import {
   DataTable,
@@ -53,6 +54,7 @@ const formatBytes = (n: number | null): string => {
 
 export const DocumentTable = ({ kbId }: Props) => {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -170,7 +172,8 @@ export const DocumentTable = ({ kbId }: Props) => {
           type="button"
           title="删除"
           className="rounded p-1 text-stone-500 hover:bg-rose-50 hover:text-rose-600"
-          onClick={() => {
+          onClick={e => {
+            e.stopPropagation();
             if (window.confirm(`删除 "${d.title}"？此操作会同步清理切块与对象存储。`)) {
               deleteMut.mutate(d.id);
             }
@@ -190,6 +193,7 @@ export const DocumentTable = ({ kbId }: Props) => {
         rowKey="id"
         loading={listQ.isLoading}
         emptyText="还没有文档，先上传一份吧"
+        onRowClick={d => navigate(`/kbs/${kbId}/documents/${d.id}`)}
       />
       <TablePagination
         page={page}

@@ -72,3 +72,23 @@ export interface IngestQueued {
   document_id: number;
   task_id: number;
 }
+
+export type RecallMode = 'vector' | 'hybrid' | 'keyword';
+
+export interface SearchRequest {
+  query: string;
+  top_k?: number;
+  min_score?: number;
+  doc_ids?: number[];
+  tags?: string[];
+  mode?: RecallMode;
+}
+
+export interface SearchHitItem {
+  chunk_id: number;
+  doc_id: number;
+  seq: number;
+  content: string;
+  score: number;
+  document_title: string;
+}

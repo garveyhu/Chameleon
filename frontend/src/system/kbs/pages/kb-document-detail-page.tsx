@@ -1,0 +1,236 @@
+/** 文档详情页：信息卡 + chunk 卡片墙（grid）
+ *
+ * chunk 数大时启用 react-virtual 渲染窗口；小于阈值时走原生 grid。
+ */
+
+import { useQuery } from '@tanstack/react-query';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { ArrowLeft, FileText, Globe, ScrollText } from 'lucide-react';
+import type { ReactElement } from 'react';
+import { useMemo, useRef } from 'react';
+import { Link, useParams } from 'react-router-dom';
+
+import { SectionCard } from '@/core/components/table';
+import { Badge } from '@/core/components/ui/badge';
+import { cn } from '@/core/lib/cn';
+import { formatDateTime } from '@/core/lib/format';
+import { ChunkCard } from '@/system/kbs/components/chunk-card';
+import { documentApi } from '@/system/kbs/services/document';
+import type { DocumentItem } from '@/system/kbs/types/kb';
+
+const SOURCE_ICON: Record<DocumentItem['source_type'], ReactElement> = {
+  upload: <FileText className="h-3.5 w-3.5" strokeWidth={1.6} />,
+  url: <Globe className="h-3.5 w-3.5" strokeWidth={1.6} />,
+  text: <ScrollText className="h-3.5 w-3.5" strokeWidth={1.6} />,
+};
+
+const VIRTUAL_THRESHOLD = 60; // chunk 数超过这个值启用窗口虚拟化
+
+export const KbDocumentDetailPage = () => {
+  const { id, docId } = useParams<{ id: string; docId: string }>();
+  const kbId = Number(id);
+  const docIdNum = Number(docId);
+  const valid = Number.isFinite(kbId) && Number.isFinite(docIdNum);
+
+  const docQ = useQuery({
+    queryKey: ['kb-doc', kbId, docIdNum],
+    queryFn: () => documentApi.get(kbId, docIdNum),
+    enabled: valid,
+  });
+
+  const chunksQ = useQuery({
+    queryKey: ['kb-doc-chunks', kbId, docIdNum],
+    queryFn: () => documentApi.listChunks(kbId, docIdNum, { page: 1, page_size: 200 }),
+    enabled: valid,
+  });
+
+  if (!valid) {
+    return (
+      <SectionCard>
+        <div className="p-6 text-sm text-stone-500">非法的路径参数</div>
+      </SectionCard>
+    );
+  }
+
+  const doc = docQ.data ?? null;
+  const chunks = chunksQ.data?.items ?? [];
+
+  return (
+    <div className="space-y-3">
+      <Breadcrumb kbId={kbId} doc={doc} />
+      {doc && <DocumentInfoCard doc={doc} chunkCount={chunksQ.data?.total ?? 0} />}
+      <SectionCard>
+        <div className="mb-3 flex items-baseline justify-between">
+          <h3 className="text-[14px] font-medium text-stone-900">
+            切块卡片墙
+          </h3>
+          <span className="text-[11.5px] text-stone-500">
+            共 {chunksQ.data?.total ?? 0} 块
+          </span>
+        </div>
+        {chunksQ.isLoading ? (
+          <div className="py-10 text-center text-sm text-stone-400">加载中…</div>
+        ) : chunks.length === 0 ? (
+          <div className="py-12 text-center text-sm text-stone-400">
+            尚无切块；上传完成后会自动出现
+          </div>
+        ) : chunks.length > VIRTUAL_THRESHOLD ? (
+          <ChunkVirtualWall chunks={chunks} />
+        ) : (
+          <ChunkGrid chunks={chunks} />
+        )}
+      </SectionCard>
+    </div>
+  );
+};
+
+const Breadcrumb = ({
+  kbId,
+  doc,
+}: {
+  kbId: number;
+  doc: DocumentItem | null;
+}) => (
+  <div className="flex items-center gap-2 text-[12.5px] text-stone-500">
+    <Link
+      to="/kbs"
+      className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-stone-100 hover:text-stone-800"
+    >
+      <ArrowLeft className="h-3.5 w-3.5" /> 知识库
+    </Link>
+    <span className="text-stone-300">/</span>
+    <Link to={`/kbs/${kbId}`} className="hover:underline">
+      KB {kbId}
+    </Link>
+    <span className="text-stone-300">/</span>
+    <span className="text-stone-700">
+      {doc ? doc.title : '文档…'}
+    </span>
+  </div>
+);
+
+const DocumentInfoCard = ({
+  doc,
+  chunkCount,
+}: {
+  doc: DocumentItem;
+  chunkCount: number;
+}) => (
+  <SectionCard>
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-stone-500">{SOURCE_ICON[doc.source_type]}</span>
+          <h2 className="truncate text-[16px] font-medium text-stone-900">
+            {doc.title}
+          </h2>
+          <StatusBadge status={doc.status} />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-stone-500">
+          <span>类型: {doc.mime_type ?? '—'}</span>
+          <span>来源: {doc.source_type}</span>
+          {doc.size_bytes != null && (
+            <span>大小: {(doc.size_bytes / 1024).toFixed(1)} KB</span>
+          )}
+          <span>
+            统计: <span className="font-mono tnum">{chunkCount} chunks · {doc.token_count} tokens</span>
+          </span>
+          <span>创建: {formatDateTime(doc.created_at)}</span>
+        </div>
+        {doc.tags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {doc.tags.map(t => (
+              <Badge key={t} variant="outline" className="text-[10.5px]">
+                {t}
+              </Badge>
+            ))}
+          </div>
+        )}
+        {doc.status === 'failed' && doc.status_message && (
+          <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">
+            {doc.status_message}
+          </div>
+        )}
+      </div>
+    </div>
+  </SectionCard>
+);
+
+const StatusBadge = ({ status }: { status: DocumentItem['status'] }) => {
+  const map: Record<DocumentItem['status'], { label: string; cls: string }> = {
+    pending: { label: '排队中', cls: 'bg-stone-100 text-stone-600' },
+    processing: { label: '处理中', cls: 'bg-amber-50 text-amber-700' },
+    ready: { label: '就绪', cls: 'bg-emerald-50 text-emerald-700' },
+    failed: { label: '失败', cls: 'bg-rose-50 text-rose-700' },
+  };
+  const b = map[status];
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[10.5px] font-medium',
+        b.cls,
+      )}
+    >
+      {b.label}
+    </span>
+  );
+};
+
+const ChunkGrid = ({ chunks }: { chunks: import('@/system/kbs/types/kb').ChunkItem[] }) => (
+  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+    {chunks.map(c => (
+      <ChunkCard key={c.id} chunk={c} />
+    ))}
+  </div>
+);
+
+const ChunkVirtualWall = ({
+  chunks,
+}: {
+  chunks: import('@/system/kbs/types/kb').ChunkItem[];
+}) => {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowItems = useMemo(() => {
+    const rows: (typeof chunks)[] = [];
+    for (let i = 0; i < chunks.length; i += 3) rows.push(chunks.slice(i, i + 3));
+    return rows;
+  }, [chunks]);
+
+  const virt = useVirtualizer({
+    count: rowItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 220,
+    overscan: 4,
+  });
+
+  return (
+    <div
+      ref={parentRef}
+      className="max-h-[70vh] overflow-y-auto rounded-md border border-stone-200/70"
+    >
+      <div style={{ height: virt.getTotalSize(), position: 'relative', width: '100%' }}>
+        {virt.getVirtualItems().map(v => (
+          <div
+            key={v.key}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              transform: `translateY(${v.start}px)`,
+            }}
+            className="px-3 py-2"
+            ref={virt.measureElement}
+            data-index={v.index}
+          >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {rowItems[v.index].map(c => (
+                <ChunkCard key={c.id} chunk={c} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};

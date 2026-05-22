@@ -978,6 +978,18 @@
   dependencies:
     "@tanstack/query-core" "5.100.11"
 
+"@tanstack/react-virtual@^3.13.25":
+  version "3.13.25"
+  resolved "https://registry.npmjs.org/@tanstack/react-virtual/-/react-virtual-3.13.25.tgz#7d45278405450362ac3693664c0751992d25aa45"
+  integrity sha512-bmNoqMu6gcAW9JGrKVB0Q1tN1i5RONZF8r1fW0bbE4Oyf3DwEGnzzQJ2OW+Ozg1P4s8PyugkHg2ULZoFQN+cqw==
+  dependencies:
+    "@tanstack/virtual-core" "3.15.0"
+
+"@tanstack/virtual-core@3.15.0":
+  version "3.15.0"
+  resolved "https://registry.npmjs.org/@tanstack/virtual-core/-/virtual-core-3.15.0.tgz#05f2511f564bb82d245718bc7df6691a69aeed17"
+  integrity sha512-0AwPGx0I8QxPYjAxShT/+z+ZOe9u8mW5rsXvivCTjRfRmz9a43+3mRyi4wwlyoUqOC56q/jatKa0Bh9M99BEHQ==
+
 "@trivago/prettier-plugin-sort-imports@^6.0.2":
   version "6.0.2"
   resolved "https://registry.npmjs.org/@trivago/prettier-plugin-sort-imports/-/prettier-plugin-sort-imports-6.0.2.tgz#b30948c4d22a84f00ae9133bcabd0603de3c0261"

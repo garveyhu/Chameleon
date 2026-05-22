@@ -19,6 +19,13 @@ const module: ModuleRouteConfig = {
         return { Component: m.KbDetailPage };
       },
     },
+    {
+      path: '/kbs/:id/documents/:docId',
+      lazy: async () => {
+        const m = await import('@/system/kbs/pages/kb-document-detail-page');
+        return { Component: m.KbDocumentDetailPage };
+      },
+    },
   ],
 };
 
