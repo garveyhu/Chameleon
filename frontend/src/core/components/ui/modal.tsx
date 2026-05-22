@@ -47,7 +47,7 @@ export const ModalContent = React.forwardRef<
   ) => (
     <ModalPortal>
       <DialogPrimitive.Overlay
-        className="modal-overlay fixed inset-0 z-50 bg-stone-950/25 backdrop-blur-[1.5px]"
+        className="modal-overlay fixed inset-0 z-50 bg-stone-950/20"
       />
       <DialogPrimitive.Content
         ref={ref}

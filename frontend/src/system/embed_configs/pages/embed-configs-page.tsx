@@ -371,44 +371,18 @@ const SnippetDialog = ({
           <DialogTitle>嵌入代码 · {cfg?.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
-          <div>
-            <Label className="text-xs">JS Widget（推荐：右下角浮动气泡）</Label>
-            <div className="mt-1 flex gap-2">
-              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
-                {widget}
-              </pre>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(widget);
-                  toast.success('已复制');
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs">iframe（嵌入到页面内某个区域）</Label>
-            <div className="mt-1 flex gap-2">
-              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
-                {iframe}
-              </pre>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(iframe);
-                  toast.success('已复制');
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-          <p className="text-xs text-amber-700">
-            ⚠️ 业务方网页的 Origin 必须在白名单内才能加载，否则 403。
+          <CodeSnippet
+            label="JS Widget"
+            hint="推荐：右下角浮动气泡"
+            code={widget}
+          />
+          <CodeSnippet
+            label="iframe"
+            hint="嵌入到页面内某个区域"
+            code={iframe}
+          />
+          <p className="rounded-md border border-amber-200/70 bg-amber-50/60 px-3 py-2 text-[11.5px] text-amber-800">
+            ⚠️ 业务方网页的 Origin 必须在白名单内才能加载，否则返回 403。
           </p>
         </div>
         <DialogFooter>
@@ -416,5 +390,44 @@ const SnippetDialog = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+};
+
+const CodeSnippet = ({
+  label,
+  hint,
+  code,
+}: {
+  label: string;
+  hint?: string;
+  code: string;
+}) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <span className="text-[12px] font-medium text-stone-800">{label}</span>
+        {hint && <span className="text-[11px] text-stone-500">· {hint}</span>}
+      </div>
+      <div className="group relative overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-all px-3.5 py-3 pr-12 font-mono text-[12px] leading-relaxed text-stone-700">
+          {code}
+        </pre>
+        <button
+          type="button"
+          onClick={async () => {
+            await navigator.clipboard.writeText(code);
+            setCopied(true);
+            toast.success('已复制');
+            setTimeout(() => setCopied(false), 1500);
+          }}
+          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-stone-200/80 bg-white/85 px-1.5 py-1 text-[10.5px] text-stone-600 shadow-sm transition hover:bg-white hover:text-stone-900"
+          title="复制"
+        >
+          <Copy className="h-3 w-3" />
+          {copied ? '已复制' : '复制'}
+        </button>
+      </div>
+    </div>
   );
 };

@@ -434,8 +434,24 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
               这是<strong className="text-red-600">唯一一次</strong>看到明文 token 的机会，请立即保存。
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[12px] leading-relaxed text-stone-800">
-            {plain?.plain_key}
+          <div className="group relative overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all px-3.5 py-3 pr-12 font-mono text-[12.5px] leading-relaxed text-stone-800">
+              {plain?.plain_key}
+            </pre>
+            <button
+              type="button"
+              onClick={() => {
+                if (plain?.plain_key) {
+                  navigator.clipboard.writeText(plain.plain_key);
+                  toast.success('已复制');
+                }
+              }}
+              className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-stone-200/80 bg-white/85 px-1.5 py-1 text-[10.5px] text-stone-600 shadow-sm transition hover:bg-white hover:text-stone-900"
+              title="复制"
+            >
+              <Copy className="h-3 w-3" />
+              复制
+            </button>
           </div>
           <DialogFooter>
             <Button
