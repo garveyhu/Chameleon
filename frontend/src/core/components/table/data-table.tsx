@@ -53,6 +53,8 @@ export interface DataTableProps<T> {
   rowClassName?: (row: T, index: number) => string | undefined;
   /** 每行左侧 4px 状态条 */
   leftBar?: (row: T) => string | undefined;
+  /** 整行点击；设置后行加 cursor-pointer */
+  onRowClick?: (row: T, index: number) => void;
 
   className?: string;
 }
@@ -80,6 +82,7 @@ export function DataTable<T>({
   emptyExtra,
   rowClassName,
   leftBar,
+  onRowClick,
   className,
 }: DataTableProps<T>) {
   const getKey = React.useCallback(
@@ -193,7 +196,12 @@ export function DataTable<T>({
               return (
                 <tr
                   key={getKey(row, idx)}
-                  className={cn('group hover:bg-stone-50/60', rowClassName?.(row, idx))}
+                  className={cn(
+                    'group hover:bg-stone-50/60',
+                    onRowClick && 'cursor-pointer',
+                    rowClassName?.(row, idx),
+                  )}
+                  onClick={onRowClick ? () => onRowClick(row, idx) : undefined}
                 >
                   {hasLeftBar ? (
                     <td className="p-0">
