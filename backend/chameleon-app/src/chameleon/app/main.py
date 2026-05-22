@@ -24,6 +24,7 @@ from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
 from chameleon.system.api_key import api_keys_router
 from chameleon.system.apps import apps_router
+from chameleon.system.abilities import abilities_router
 from chameleon.system.audit_logs import audit_logs_router
 from chameleon.system.auth import auth_router
 from chameleon.system.channels import channels_router
@@ -123,6 +124,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(apps_router)
     app.include_router(providers_admin_router)
     app.include_router(channels_router)
+    app.include_router(abilities_router)
     app.include_router(models_router)
     app.include_router(agents_admin_router)
     app.include_router(kbs_admin_router)

@@ -18,6 +18,7 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "api_keys": ("read", "write", "delete"),
     "providers": ("read", "write", "delete"),
     "channels": ("read", "write", "delete"),
+    "abilities": ("read", "write", "delete"),
     "models": ("read", "write", "delete"),
     "agents": ("read", "write", "delete"),
     "kbs": ("read", "write", "delete"),
@@ -58,7 +59,7 @@ _ADMIN_PERMS = ["*:*"]
 
 # developer：业务资源 CRUD + 看 dashboard + call_logs，不能管 users / roles / permissions / settings
 _DEVELOPER_RESOURCES = {
-    "apps", "api_keys", "providers", "channels", "models", "agents",
+    "apps", "api_keys", "providers", "channels", "abilities", "models", "agents",
     "kbs", "embed_configs", "call_logs", "dashboard", "playground",
     "schemas",
 }

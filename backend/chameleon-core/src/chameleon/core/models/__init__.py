@@ -3,6 +3,7 @@
 集中导出 Base + 全部业务模型，让 alembic env.py 一次性 import 全表 metadata。
 """
 
+from chameleon.core.models.ability import Ability
 from chameleon.core.models.agent import Agent
 from chameleon.core.models.agent_kb_link import AgentKbLink
 from chameleon.core.models.api_key import ApiKey, CallLog
@@ -46,6 +47,7 @@ __all__ = [
     "ModelDefault",
     "Agent",
     "AgentKbLink",
+    "Ability",
     # 业务域
     "Conversation",
     "Message",
