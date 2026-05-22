@@ -35,7 +35,24 @@ const App = () => (
       <Suspense fallback={<FullscreenLoading />}>
         <RouterProvider router={router} />
       </Suspense>
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster
+        position="top-right"
+        closeButton
+        toastOptions={{
+          classNames: {
+            toast:
+              '!bg-white !border !border-stone-200 !shadow-[0_8px_24px_-8px_rgba(0,0,0,0.12)] !text-stone-900 !font-medium',
+            title: '!text-stone-900 !font-medium !text-[12.5px]',
+            description: '!text-stone-500 !text-[11.5px]',
+            success: '[&_[data-icon]]:!text-emerald-600',
+            error: '[&_[data-icon]]:!text-rose-600',
+            warning: '[&_[data-icon]]:!text-amber-600',
+            info: '[&_[data-icon]]:!text-sky-600',
+            closeButton:
+              '!bg-white !text-stone-400 hover:!text-stone-800 !border-stone-200',
+          },
+        }}
+      />
     </TooltipProvider>
   </QueryClientProvider>
 );
