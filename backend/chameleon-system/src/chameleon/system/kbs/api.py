@@ -110,6 +110,24 @@ class CreateTextDocumentRequest(BaseModel):
     content: str
 
 
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = Field(default=5, ge=1, le=50)
+    min_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    doc_ids: list[int] | None = None
+    tags: list[str] | None = None
+    mode: str | None = Field(default=None, pattern="^(vector|hybrid|keyword)$")
+
+
+class SearchHitItem(BaseModel):
+    chunk_id: int
+    doc_id: int
+    seq: int
+    content: str
+    score: float
+    document_title: str
+
+
 def _kb_to_item(kb, doc_count: int, chunk_count: int) -> KbAdminItem:
     return KbAdminItem(
         id=kb.id,
@@ -350,3 +368,59 @@ async def delete_document(
         session, kb_id=kb_id, doc_id=doc_id
     )
     return Result.ok(DocumentAdminItem.model_validate(row))
+
+
+# ── Document chunks（卡片墙用） ───────────────────────────
+
+
+@router.get(
+    "/{kb_id}/documents/{doc_id}/chunks",
+    response_model=Result[PageResult[ChunkItem]],
+)
+async def list_document_chunks(
+    kb_id: int,
+    doc_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[PageResult[ChunkItem]]:
+    _doc, paged = await document_service.list_document_chunks(
+        session,
+        kb_id=kb_id,
+        doc_id=doc_id,
+        page=PageParams(page=page, page_size=page_size),
+    )
+    return Result.ok(
+        PageResult(
+            items=[ChunkItem.model_validate(c) for c in paged.items],
+            total=paged.total,
+            page=paged.page,
+            page_size=paged.page_size,
+        )
+    )
+
+
+# ── KB search playground ──────────────────────────────────
+
+
+@router.post(
+    "/{kb_id}/search",
+    response_model=Result[list[SearchHitItem]],
+)
+async def search_kb(
+    kb_id: int,
+    req: SearchRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[list[SearchHitItem]]:
+    hits = await document_service.search_chunks(
+        session,
+        kb_id=kb_id,
+        query=req.query,
+        top_k=req.top_k,
+        min_score=req.min_score,
+        doc_ids=req.doc_ids,
+        tags=req.tags,
+    )
+    return Result.ok([SearchHitItem(**h) for h in hits])

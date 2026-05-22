@@ -24,6 +24,7 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
+from chameleon.core.embedding import get_embedding_client
 from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.core.utils.snowflake import next_id
 from chameleon.core.vector import get_store
@@ -351,6 +352,120 @@ async def delete_document(
     row.deleted_at = datetime.now(timezone.utc)
     await session.flush()
     return row
+
+
+async def list_document_chunks(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    doc_id: int,
+    page: PageParams,
+) -> tuple[Document, PageResult[Chunk]]:
+    """分页查询某 doc 的 chunks（按 seq 升序）"""
+    doc = await get_document(session, kb_id=kb_id, doc_id=doc_id)
+    stmt = select(Chunk).where(Chunk.doc_id == doc.id)
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(Chunk.seq).offset(page.offset).limit(page.limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return doc, PageResult(
+        items=list(rows), total=total, page=page.page, page_size=page.page_size
+    )
+
+
+# ── search（admin playground） ────────────────────────────
+
+
+async def search_chunks(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    query: str,
+    top_k: int = 5,
+    min_score: float = 0.0,
+    doc_ids: list[int] | None = None,
+    tags: list[str] | None = None,
+) -> list[dict]:
+    """语义检索；可按 doc_ids / tags 过滤命中文档。
+    返 [{chunk_id, doc_id, seq, content, score, document_title}]
+    """
+    kb = await _get_kb(session, kb_id)
+    if not query.strip():
+        raise ValidationError(message="query 不能为空")
+
+    # 1. embed query
+    client = get_embedding_client(kb.embedding_model)
+    vecs = await client.embed([query])
+    if not vecs:
+        return []
+    query_vec = vecs[0]
+
+    # 2. 若有 tags 过滤，先把命中 tag 的 doc_ids 求出来，与传入 doc_ids 做交集
+    candidate_doc_ids: set[int] | None = None
+    if tags:
+        stmt = select(Document.id).where(
+            Document.kb_id == kb.id, Document.deleted_at.is_(None)
+        )
+        # 所有 tag 都要命中（@>），与 list 文档一致的语义
+        for t in tags:
+            stmt = stmt.where(cast(Document.tags, JSONB).contains([t]))
+        rows = (await session.execute(stmt)).scalars().all()
+        candidate_doc_ids = set(rows)
+    if doc_ids:
+        if candidate_doc_ids is None:
+            candidate_doc_ids = set(doc_ids)
+        else:
+            candidate_doc_ids &= set(doc_ids)
+        if not candidate_doc_ids:
+            return []
+
+    # 3. 走向量召回（取 top_k*3 兜底，过滤完再截）
+    distance = Chunk.embedding.cosine_distance(query_vec).label("distance")
+    expand = top_k * 3 if candidate_doc_ids else top_k
+    stmt = (
+        select(
+            Chunk.id,
+            Chunk.doc_id,
+            Chunk.seq,
+            Chunk.content,
+            Document.title,
+            distance,
+        )
+        .join(Document, Chunk.doc_id == Document.id)
+        .where(Chunk.kb_id == kb.id, Document.deleted_at.is_(None))
+        .order_by(distance.asc())
+        .limit(expand)
+    )
+    if candidate_doc_ids is not None:
+        stmt = stmt.where(Chunk.doc_id.in_(candidate_doc_ids))
+
+    rows = (await session.execute(stmt)).all()
+    hits: list[dict] = []
+    for r in rows:
+        score = 1.0 - float(r.distance)
+        if score < min_score:
+            continue
+        hits.append(
+            {
+                "chunk_id": r.id,
+                "doc_id": r.doc_id,
+                "seq": r.seq,
+                "content": r.content,
+                "score": score,
+                "document_title": r.title,
+            }
+        )
+        if len(hits) >= top_k:
+            break
+    return hits
 
 
 async def get_status(
