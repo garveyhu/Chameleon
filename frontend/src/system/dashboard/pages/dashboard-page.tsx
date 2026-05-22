@@ -1,8 +1,9 @@
-/** Dashboard 主页：综合指标 + 时序图 + top agents/apps */
+/** Dashboard 主页：DateRangePicker + 综合指标 + 时序图 + top agents/apps */
 
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Bot, KeySquare, Sparkles } from 'lucide-react';
+import { Activity, Bot, KeySquare, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import type { ComponentType } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -13,9 +14,11 @@ import {
   YAxis,
 } from 'recharts';
 
+import { DateRangePicker, type DateRange } from '@/core/components/common/date-range-picker';
 import { PageHeader } from '@/core/components/common/page-header';
 import { Spinner } from '@/core/components/common/spinner';
 import { Card, CardContent } from '@/core/components/ui/card';
+import { cn } from '@/core/lib/cn';
 import { formatNumber, formatPercent } from '@/core/lib/format';
 import { dashboardApi } from '@/system/dashboard/services/dashboard';
 import type { OverviewItem } from '@/system/dashboard/types/dashboard';
@@ -24,6 +27,7 @@ interface StatCardProps {
   label: string;
   value: string;
   hint?: string;
+  delta?: number | null;
   Icon: ComponentType<{ className?: string }>;
   tone?: 'primary' | 'success' | 'warning' | 'danger';
 }
@@ -35,13 +39,31 @@ const toneClass: Record<NonNullable<StatCardProps['tone']>, string> = {
   danger: 'bg-red-50 text-red-600',
 };
 
-const StatCard = ({ label, value, hint, Icon, tone = 'primary' }: StatCardProps) => (
+const StatCard = ({ label, value, hint, delta, Icon, tone = 'primary' }: StatCardProps) => (
   <Card>
     <CardContent className="flex items-start justify-between pt-5">
       <div>
         <div className="text-xs text-stone-500">{label}</div>
         <div className="mt-2 font-mono text-2xl tracking-tight text-stone-900">{value}</div>
-        {hint && <div className="mt-1 text-[11px] text-stone-400">{hint}</div>}
+        <div className="mt-1 flex items-center gap-2 text-[11px]">
+          {hint ? <span className="text-stone-400">{hint}</span> : null}
+          {delta !== undefined && delta !== null && Number.isFinite(delta) ? (
+            <span
+              className={cn(
+                'inline-flex items-center gap-0.5 font-medium',
+                delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-600' : 'text-stone-400',
+              )}
+            >
+              {delta > 0 ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : delta < 0 ? (
+                <TrendingDown className="h-3 w-3" />
+              ) : null}
+              {delta > 0 ? '+' : ''}
+              {(delta * 100).toFixed(1)}%
+            </span>
+          ) : null}
+        </div>
       </div>
       <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClass[tone]}`}>
         <Icon className="h-5 w-5" />
@@ -50,42 +72,66 @@ const StatCard = ({ label, value, hint, Icon, tone = 'primary' }: StatCardProps)
   </Card>
 );
 
+const defaultRange = (): DateRange => {
+  const to = new Date();
+  to.setHours(23, 59, 59, 999);
+  const from = new Date();
+  from.setDate(from.getDate() - 6);
+  from.setHours(0, 0, 0, 0);
+  return { from, to };
+};
+
 export const DashboardPage = () => {
+  const [range, setRange] = useState<DateRange>(defaultRange);
+  const params = useMemo(
+    () => ({ from_ts: range.from.toISOString(), to_ts: range.to.toISOString() }),
+    [range],
+  );
+
   const overviewQ = useQuery({
-    queryKey: ['dashboard', 'overview'],
-    queryFn: dashboardApi.overview,
+    queryKey: ['dashboard', 'overview', params],
+    queryFn: () => dashboardApi.overview(params),
   });
   const tsQ = useQuery({
-    queryKey: ['dashboard', 'timeseries', 'hour', 24],
-    queryFn: () => dashboardApi.timeseries({ granularity: 'hour', hours: 24 }),
+    queryKey: ['dashboard', 'timeseries', params],
+    queryFn: () => dashboardApi.timeseries({ ...params, granularity: 'auto' }),
   });
   const agentsQ = useQuery({
-    queryKey: ['dashboard', 'top-agents'],
-    queryFn: () => dashboardApi.topAgents({ limit: 5, hours: 24 }),
+    queryKey: ['dashboard', 'top-agents', params],
+    queryFn: () => dashboardApi.topAgents({ ...params, limit: 5 }),
   });
   const appsQ = useQuery({
-    queryKey: ['dashboard', 'top-apps'],
-    queryFn: () => dashboardApi.topApps({ limit: 5, hours: 24 }),
+    queryKey: ['dashboard', 'top-apps', params],
+    queryFn: () => dashboardApi.topApps({ ...params, limit: 5 }),
   });
 
   const o: OverviewItem | undefined = overviewQ.data;
+  const delta = (() => {
+    if (!o || o.prev_period_calls === undefined || o.total_calls_in_range === undefined) return null;
+    if (!o.prev_period_calls) return o.total_calls_in_range > 0 ? 1 : 0;
+    return (o.total_calls_in_range - o.prev_period_calls) / o.prev_period_calls;
+  })();
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="过去 24h 综合指标" />
+      <div className="mb-4 flex items-center justify-between">
+        <PageHeader title="Dashboard" description="按所选时间区间综合指标" />
+        <DateRangePicker value={range} onChange={setRange} />
+      </div>
 
       <div className="grid grid-cols-4 gap-4">
         <StatCard
-          label="今日调用"
-          value={formatNumber(o?.total_calls_24h ?? 0)}
-          hint={`7 天 ${formatNumber(o?.total_calls_7d ?? 0)}`}
+          label="区间内调用"
+          value={formatNumber(o?.total_calls_in_range ?? o?.total_calls_24h ?? 0)}
+          hint={`上一周期 ${formatNumber(o?.prev_period_calls ?? 0)}`}
+          delta={delta}
           Icon={Activity}
           tone="primary"
         />
         <StatCard
-          label="成功率"
+          label="成功率 (24h)"
           value={formatPercent(o?.success_rate_24h ?? 1)}
-          hint={`平均响应 ${(o?.avg_duration_ms_24h ?? 0).toFixed(0)} ms`}
+          hint={`平均 ${(o?.avg_duration_ms_24h ?? 0).toFixed(0)} ms`}
           Icon={Sparkles}
           tone={
             (o?.success_rate_24h ?? 1) > 0.95
@@ -96,7 +142,7 @@ export const DashboardPage = () => {
           }
         />
         <StatCard
-          label="Token 消耗"
+          label="Token 消耗 (24h)"
           value={formatNumber(
             (o?.total_prompt_tokens_24h ?? 0) + (o?.total_completion_tokens_24h ?? 0),
           )}
@@ -105,7 +151,7 @@ export const DashboardPage = () => {
           tone="primary"
         />
         <StatCard
-          label="活跃应用"
+          label="活跃应用 (24h)"
           value={formatNumber(o?.active_apps_24h ?? 0)}
           hint={`活跃 agent ${o?.active_agents_24h ?? 0}`}
           Icon={KeySquare}
@@ -117,8 +163,11 @@ export const DashboardPage = () => {
         <Card className="col-span-2">
           <CardContent className="pt-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-stone-900">24 小时调用趋势</h3>
-              {tsQ.isLoading && <Spinner size="sm" />}
+              <h3 className="text-sm font-medium text-stone-900">调用趋势</h3>
+              <div className="flex items-center gap-2 text-[11px] text-stone-400">
+                {tsQ.data?.granularity ? <span>按 {tsQ.data.granularity}</span> : null}
+                {tsQ.isLoading && <Spinner size="sm" />}
+              </div>
             </div>
             <div className="h-64">
               {tsQ.data && tsQ.data.points.length > 0 ? (
@@ -128,7 +177,9 @@ export const DashboardPage = () => {
                     <XAxis
                       dataKey="ts"
                       tickFormatter={t =>
-                        new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit' })
+                        tsQ.data?.granularity === 'day'
+                          ? new Date(t).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+                          : new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit' })
                       }
                       stroke="#999"
                       fontSize={11}

@@ -1,8 +1,12 @@
 """dashboard HTTP 路由 (/v1/admin/dashboard)
 
-- overview：综合卡片数据
+- overview：综合卡片数据（含上一周期 delta）
 - timeseries：时序聚合（按 hour / day 分桶）
-- top-agents / top-apps：top N 列表
+- top-agents / top-apps / top-models：top N 列表
+
+时间区间：
+  既支持 hours= 简单参数（向下兼容），也支持 from_ts / to_ts ISO datetime。
+  两者都不传走 hours=24 默认。
 """
 
 from __future__ import annotations
@@ -20,10 +24,24 @@ from chameleon.core.models import CallLog
 from chameleon.system.auth.dependencies import require_permission
 
 
+def _resolve_range(
+    from_ts: datetime | None, to_ts: datetime | None, hours: int
+) -> tuple[datetime, datetime]:
+    """统一区间解析。
+
+    优先级：from_ts/to_ts > hours
+    """
+    now = datetime.now(timezone.utc)
+    if from_ts and to_ts:
+        return from_ts, to_ts
+    return now - timedelta(hours=hours), now
+
+
 # ── DTO ────────────────────────────────────────────────────
 
 
 class OverviewItem(BaseModel):
+    # 兼容旧字段名（前端 dashboard 还在用）
     total_calls_24h: int
     total_calls_7d: int
     success_rate_24h: float
@@ -32,6 +50,11 @@ class OverviewItem(BaseModel):
     total_completion_tokens_24h: int
     active_apps_24h: int
     active_agents_24h: int
+    # 与所选时间区间相关的指标（新加）
+    range_from: datetime | None = None
+    range_to: datetime | None = None
+    total_calls_in_range: int = 0
+    prev_period_calls: int = 0  # 上一同长度周期，用于 delta
 
 
 class TimePoint(BaseModel):
@@ -63,12 +86,20 @@ router = APIRouter(prefix="/v1/admin/dashboard", tags=["admin:dashboard"])
 
 @router.get("/overview", response_model=Result[OverviewItem])
 async def overview(
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("dashboard:read")),
 ) -> Result[OverviewItem]:
     now = datetime.now(timezone.utc)
     since_24h = now - timedelta(hours=24)
     since_7d = now - timedelta(days=7)
+
+    # 用户选定的时间区间（默认 24h）
+    range_from, range_to = _resolve_range(from_ts, to_ts, hours=24)
+    span = range_to - range_from
+    prev_from = range_from - span
+    prev_to = range_from
 
     total_24h = (
         await session.execute(
@@ -123,6 +154,22 @@ async def overview(
         )
     ).scalar_one()
 
+    # 区间内 & 上一周期总数（用于 delta）
+    total_in_range = (
+        await session.execute(
+            select(func.count(CallLog.id)).where(
+                CallLog.created_at >= range_from, CallLog.created_at <= range_to
+            )
+        )
+    ).scalar_one()
+    prev_period = (
+        await session.execute(
+            select(func.count(CallLog.id)).where(
+                CallLog.created_at >= prev_from, CallLog.created_at < prev_to
+            )
+        )
+    ).scalar_one()
+
     return Result.ok(
         OverviewItem(
             total_calls_24h=total_24h,
@@ -133,20 +180,33 @@ async def overview(
             total_completion_tokens_24h=int(completion_tokens or 0),
             active_apps_24h=active_apps,
             active_agents_24h=active_agents,
+            range_from=range_from,
+            range_to=range_to,
+            total_calls_in_range=total_in_range,
+            prev_period_calls=prev_period,
         )
     )
 
 
 @router.get("/timeseries", response_model=Result[TimeSeriesResult])
 async def timeseries(
-    granularity: str = Query("hour", pattern="^(hour|day)$"),
+    granularity: str = Query("auto", pattern="^(hour|day|auto)$"),
     hours: int = Query(24, ge=1, le=720),
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("dashboard:read")),
 ) -> Result[TimeSeriesResult]:
-    """按 hour 或 day 分桶聚合 call_logs"""
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
-    bucket_fmt = "hour" if granularity == "hour" else "day"
+    """按 hour 或 day 分桶聚合 call_logs
+
+    granularity='auto'：区间 ≤ 48h 用 hour，否则 day。
+    """
+    range_from, range_to = _resolve_range(from_ts, to_ts, hours)
+    if granularity == "auto":
+        span_hours = (range_to - range_from).total_seconds() / 3600
+        granularity = "hour" if span_hours <= 48 else "day"
+    bucket_fmt = granularity
+    since = range_from
 
     # PG date_trunc 分桶
     bucket = func.date_trunc(bucket_fmt, CallLog.created_at).label("bucket")
@@ -158,7 +218,7 @@ async def timeseries(
             .filter(CallLog.success.is_(False))
             .label("errors"),
         )
-        .where(CallLog.created_at >= since)
+        .where(CallLog.created_at >= since, CallLog.created_at <= range_to)
         .group_by(bucket)
         .order_by(bucket)
     )
@@ -177,14 +237,16 @@ async def timeseries(
 async def top_agents(
     limit: int = Query(10, ge=1, le=50),
     hours: int = Query(24, ge=1, le=720),
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("dashboard:read")),
 ) -> Result[list[TopAgent]]:
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    range_from, range_to = _resolve_range(from_ts, to_ts, hours)
     rows = (
         await session.execute(
             select(CallLog.agent_key, func.count(CallLog.id).label("cnt"))
-            .where(CallLog.created_at >= since)
+            .where(CallLog.created_at >= range_from, CallLog.created_at <= range_to)
             .group_by(CallLog.agent_key)
             .order_by(func.count(CallLog.id).desc())
             .limit(limit)
@@ -197,17 +259,22 @@ async def top_agents(
 async def top_apps(
     limit: int = Query(10, ge=1, le=50),
     hours: int = Query(24, ge=1, le=720),
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("dashboard:read")),
 ) -> Result[list[TopApp]]:
-    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    range_from, range_to = _resolve_range(from_ts, to_ts, hours)
     rows = (
         await session.execute(
             select(CallLog.app_id, func.count(CallLog.id).label("cnt"))
-            .where(CallLog.created_at >= since)
+            .where(CallLog.created_at >= range_from, CallLog.created_at <= range_to)
             .group_by(CallLog.app_id)
             .order_by(func.count(CallLog.id).desc())
             .limit(limit)
         )
     ).all()
     return Result.ok([TopApp(app_id=r.app_id, count=r.cnt) for r in rows])
+
+
+# TODO: top-models —— call_logs 表暂无 model 字段，二期加 model 列后实现

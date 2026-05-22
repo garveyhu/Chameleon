@@ -7,6 +7,10 @@ export interface OverviewItem {
   total_completion_tokens_24h: number;
   active_apps_24h: number;
   active_agents_24h: number;
+  range_from?: string | null;
+  range_to?: string | null;
+  total_calls_in_range?: number;
+  prev_period_calls?: number;
 }
 
 export interface TimePoint {
