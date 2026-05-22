@@ -21,6 +21,7 @@ import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { DocumentTable } from '@/system/kbs/components/document-table';
 import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone';
+import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
 import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
 import { RetrievalTest } from '@/system/kbs/components/retrieval-test';
 import { kbApi } from '@/system/kbs/services/kb';
@@ -92,7 +93,7 @@ export const KbDetailPage = () => {
             ) : (
               <PlaceholderTab title="检索测试" hint="加载 KB 信息中…" />
             ))}
-          {tab === 'eval' && <PlaceholderTab title="检索评估" hint="Bundle 4 即将上线" />}
+          {tab === 'eval' && <EvaluationListTab kbId={kbId} />}
           {tab === 'config' &&
             (kbQ.data ? (
               <KbConfigForm kb={kbQ.data} />
