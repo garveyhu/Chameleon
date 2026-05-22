@@ -50,6 +50,7 @@ from chameleon.core.infra import redis as redis_infra
 from chameleon.core.infra.db import engine
 from chameleon.core.infra.jwt import init_jwt
 from chameleon.core.infra.logger import setup_logger
+from chameleon.core.infra.object_store import get_object_store
 from chameleon.core.utils.crypto import init_crypto
 from chameleon.system.seed import run_seed_if_empty
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
@@ -69,6 +70,12 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     await redis_infra.ping()
     logger.info("Redis connected")
+
+    # MinIO bucket 自检（KB 文档原文走对象存储）
+    try:
+        get_object_store().ensure_bucket()
+    except Exception:
+        logger.warning("MinIO 不可用：KB 上传会失败（检查 docker compose / .env 凭据）")
 
     # DB 空 → seed 默认 admin / 角色 / 权限 / 模型 / agents（幂等）
     await run_seed_if_empty()

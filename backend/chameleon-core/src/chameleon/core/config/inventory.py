@@ -122,6 +122,29 @@ def redis_config() -> dict:
     return base
 
 
+def minio_config() -> dict:
+    """MinIO 连接信息（env > component.json）
+
+    字段：endpoint / secure / bucket / public_url / access_key / secret_key
+    """
+    base = dict(component_settings.get("minio") or {})
+    if env_settings.MINIO_ENDPOINT is not None:
+        base["endpoint"] = env_settings.MINIO_ENDPOINT
+    if env_settings.MINIO_BUCKET is not None:
+        base["bucket"] = env_settings.MINIO_BUCKET
+    # 凭据只走 env（不进 component.json）
+    base["access_key"] = env_settings.MINIO_ACCESS_KEY or ""
+    base["secret_key"] = env_settings.MINIO_SECRET_KEY or ""
+    base.setdefault("endpoint", "127.0.0.1:9000")
+    base.setdefault("secure", False)
+    base.setdefault("bucket", "chameleon")
+    base.setdefault(
+        "public_url",
+        f"{'https' if base['secure'] else 'http'}://{base['endpoint']}",
+    )
+    return base
+
+
 # ── 会话 ─────────────────────────────────────────────────
 
 

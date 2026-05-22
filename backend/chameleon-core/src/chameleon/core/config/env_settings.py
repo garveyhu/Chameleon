@@ -43,6 +43,12 @@ class EnvSettings(PydanticBaseSettings):
     REDIS_DB: int | None = None
     REDIS_PASSWORD: str | None = None
 
+    # MinIO 凭据（凭据敏感不进 component.json）
+    MINIO_ACCESS_KEY: str | None = None
+    MINIO_SECRET_KEY: str | None = None
+    MINIO_ENDPOINT: str | None = None
+    MINIO_BUCKET: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=CONFIG_PATH / ".env",
         env_file_encoding="utf-8",

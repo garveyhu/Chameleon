@@ -15,5 +15,12 @@
     "db": 0,
     "password": "",
     "socket_timeout": 2.0
+  },
+
+  "minio": {
+    "endpoint": "127.0.0.1:9000",
+    "secure": false,
+    "bucket": "chameleon",
+    "public_url": "http://127.0.0.1:9000"
   }
 }
