@@ -1,6 +1,9 @@
 import { get } from '@/core/lib/request';
 import type { PageResult } from '@/core/types/api';
-import type { CallLogItem } from '@/system/call_logs/types/call-log';
+import type {
+  CallLogDetail,
+  CallLogItem,
+} from '@/system/call_logs/types/call-log';
 
 export const callLogApi = {
   list: (params?: {
@@ -12,4 +15,6 @@ export const callLogApi = {
     since?: string;
     until?: string;
   }) => get<PageResult<CallLogItem>>('/v1/admin/call-logs', { params }),
+
+  get: (id: number) => get<CallLogDetail>(`/v1/admin/call-logs/${id}`),
 };

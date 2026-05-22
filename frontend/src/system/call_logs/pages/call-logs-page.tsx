@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/core/components/ui/badge';
 import { Input } from '@/core/components/ui/input';
 import { formatDateTime, formatNumber } from '@/core/lib/format';
+import { TraceDrawer } from '@/system/call_logs/components/trace-drawer';
 import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem } from '@/system/call_logs/types/call-log';
 
@@ -29,6 +30,7 @@ export const CallLogsPage = () => {
   const [appId, setAppId] = useState('');
   const [agentKey, setAgentKey] = useState('');
   const [success, setSuccess] = useState<string>('all');
+  const [traceLog, setTraceLog] = useState<CallLogItem | null>(null);
 
   const listQ = useQuery({
     queryKey: ['call-logs', page, pageSize, appId, agentKey, success],
@@ -159,6 +161,7 @@ export const CallLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
+          onRowClick={setTraceLog}
           emptyText={
             <EmptyState
               icon={<FileText strokeWidth={1.5} />}
@@ -178,6 +181,7 @@ export const CallLogsPage = () => {
           }}
         />
       </SectionCard>
+      <TraceDrawer callLog={traceLog} onClose={() => setTraceLog(null)} />
     </div>
   );
 };
