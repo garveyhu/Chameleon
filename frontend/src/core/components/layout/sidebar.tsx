@@ -28,6 +28,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   PlaySquare,
+  Plug,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -81,6 +82,7 @@ const AI_GROUP: NavGroup = {
   children: [
     { to: '/agents', icon: Bot, i18nKey: 'menu.agents', fallbackTitle: '智能体', perm: 'agents:read' },
     { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
+    { to: '/channels', icon: Plug, i18nKey: 'menu.channels', fallbackTitle: 'Channels', perm: 'channels:read' },
     { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
     { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
     { to: '/playground', icon: PlaySquare, i18nKey: 'menu.playground', fallbackTitle: 'Playground', perm: 'playground:invoke' },
