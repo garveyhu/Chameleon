@@ -139,14 +139,21 @@ http.interceptors.response.use(
       error.message ||
       '请求失败';
     if (status && status >= 400) {
-      // 401 + 已走 refresh-redirect 分支：不重复 toast（refresh 失败已跳 /login）
-      // 401 + 来自 /v1/auth/login 自己：要 toast（密码错 / 账号锁 / 禁用 等）
-      const refreshHandled =
+      // 跳过 toast 的情况：401 + 正在 refresh-retry 中（上面那个 if 会
+      // 处理：refresh 成功就重试，refresh 失败就跳 /login）。这种"还在
+      // 退避中"的 401 不出 toast，等重试结果或登录页给反馈。
+      //
+      // 其余 401 全部 toast，包括：
+      //   - /v1/auth/login 自身的 401（密码错 / 锁定 / 禁用）
+      //   - 已经 retry 过仍然 401（_retry=true）→ refresh 拿到的 token
+      //     仍没合适权限，要把后端 message 显给用户
+      const inRefreshRetryChain =
         status === 401 &&
         original &&
+        !original._retry &&
         !original.url?.includes('/v1/auth/login') &&
         !original.url?.includes('/v1/auth/refresh');
-      if (!refreshHandled) {
+      if (!inRefreshRetryChain) {
         toast.error(message);
       }
     }

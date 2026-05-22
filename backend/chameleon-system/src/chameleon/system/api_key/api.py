@@ -1,21 +1,21 @@
 """api_key 模块 HTTP 路由
 
 挂点：/v1/admin/api-keys/*
-鉴权：全部要求 admin scope
+鉴权：JWT + api_keys:read / api_keys:write
 """
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.core.infra.db import get_session
 from chameleon.system.api_key import service
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
     ApiKeyItem,
     CreateApiKeyRequest,
 )
-from chameleon.core.infra.auth import CurrentApp, require_scope
-from chameleon.core.infra.db import get_session
-from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.system.auth.dependencies import require_permission
 
 router = APIRouter(prefix="/v1/admin/api-keys", tags=["admin:api-keys"])
 
@@ -24,10 +24,8 @@ router = APIRouter(prefix="/v1/admin/api-keys", tags=["admin:api-keys"])
 async def create_api_key(
     req: CreateApiKeyRequest,
     session: AsyncSession = Depends(get_session),
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("api_keys:write")),
 ) -> Result[ApiKeyCreated]:
-    # P2 阶段：created_by_user_id 暂传 None（v0.1 鉴权基于 ApiKey 不是 User）
-    # P3 完成 JWT 鉴权后改为 current_user.id
     created = await service.create_api_key(session, req, created_by_user_id=None)
     return Result.ok(created)
 
@@ -38,7 +36,7 @@ async def list_api_keys(
     page_size: int = Query(10, ge=1, le=100),
     include_revoked: bool = Query(False),
     session: AsyncSession = Depends(get_session),
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("api_keys:read")),
 ) -> Result[PageResult[ApiKeyItem]]:
     result = await service.list_api_keys(
         session,
@@ -52,7 +50,7 @@ async def list_api_keys(
 async def revoke_api_key(
     key_id: int,
     session: AsyncSession = Depends(get_session),
-    _: CurrentApp = Depends(require_scope("admin")),
+    _: object = Depends(require_permission("api_keys:delete")),
 ) -> Result[ApiKeyItem]:
     item = await service.revoke_api_key(session, key_id)
     return Result.ok(item)
