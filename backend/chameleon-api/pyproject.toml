@@ -1,6 +1,6 @@
 [project]
 name = "chameleon-api"
-version = "0.1.0"
+version = "0.3.0"
 description = "Chameleon 对外 AI 服务能力包（business-facing API：agent / knowledge / conversation / task）"
 requires-python = ">=3.12"
 dependencies = [
