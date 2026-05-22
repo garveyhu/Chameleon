@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
-from chameleon.system.kbs import document_service
+from chameleon.system.kbs import document_service, evaluation_service
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -132,6 +132,54 @@ class SearchHitItem(BaseModel):
     content: str
     score: float
     document_title: str
+
+
+class EvalQuery(BaseModel):
+    query: str
+    expected_chunk_ids: list[int]
+
+
+class CreateEvaluationRequest(BaseModel):
+    name: str
+    queries: list[EvalQuery]
+    recall_mode: str = Field(
+        default="vector", pattern="^(vector|hybrid|keyword)$"
+    )
+    top_k: int = Field(default=5, ge=1, le=50)
+
+
+class EvaluationItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kb_id: int
+    name: str
+    recall_mode: str
+    top_k: int
+    status: str
+    error_message: str | None = None
+    results: dict | None = None
+    created_at: datetime
+    completed_at: datetime | None = None
+
+
+class EvaluationListItem(BaseModel):
+    """列表用的瘦版本（不返巨大的 queries/results.per_query）"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kb_id: int
+    name: str
+    recall_mode: str
+    top_k: int
+    status: str
+    created_at: datetime
+    completed_at: datetime | None = None
+    # 摘要指标（results 里的 metric 顶层）
+    hit_at_5: float | None = None
+    mrr: float | None = None
+    latency_p50_ms: float | None = None
 
 
 def _kb_to_item(kb, doc_count: int, chunk_count: int) -> KbAdminItem:
@@ -490,3 +538,103 @@ async def search_kb(
         mode=req.mode,
     )
     return Result.ok([SearchHitItem(**h) for h in hits])
+
+
+# ── Retrieval Evaluations ─────────────────────────────────
+
+
+def _eval_to_list_item(row) -> EvaluationListItem:
+    res = row.results or {}
+    hit5 = (res.get("hit_at_k") or {}).get("5")
+    return EvaluationListItem(
+        id=row.id,
+        kb_id=row.kb_id,
+        name=row.name,
+        recall_mode=row.recall_mode,
+        top_k=row.top_k,
+        status=row.status,
+        created_at=row.created_at,
+        completed_at=row.completed_at,
+        hit_at_5=hit5,
+        mrr=res.get("mrr"),
+        latency_p50_ms=res.get("latency_p50_ms"),
+    )
+
+
+@router.post(
+    "/{kb_id}/evaluations",
+    response_model=Result[EvaluationItem],
+)
+async def create_evaluation(
+    kb_id: int,
+    req: CreateEvaluationRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[EvaluationItem]:
+    row = await evaluation_service.create_evaluation(
+        session,
+        kb_id=kb_id,
+        name=req.name,
+        queries=[q.model_dump() for q in req.queries],
+        recall_mode=req.recall_mode,
+        top_k=req.top_k,
+    )
+    await session.commit()
+    evaluation_service.spawn_eval(eval_id=row.id, kb_id=kb_id)
+    return Result.ok(EvaluationItem.model_validate(row))
+
+
+@router.get(
+    "/{kb_id}/evaluations",
+    response_model=Result[PageResult[EvaluationListItem]],
+)
+async def list_evaluations(
+    kb_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[PageResult[EvaluationListItem]]:
+    paged = await evaluation_service.list_evaluations(
+        session, kb_id=kb_id, page=PageParams(page=page, page_size=page_size)
+    )
+    return Result.ok(
+        PageResult(
+            items=[_eval_to_list_item(r) for r in paged.items],
+            total=paged.total,
+            page=paged.page,
+            page_size=paged.page_size,
+        )
+    )
+
+
+@router.get(
+    "/{kb_id}/evaluations/{eval_id}",
+    response_model=Result[EvaluationItem],
+)
+async def get_evaluation(
+    kb_id: int,
+    eval_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[EvaluationItem]:
+    row = await evaluation_service.get_evaluation(
+        session, kb_id=kb_id, eval_id=eval_id
+    )
+    return Result.ok(EvaluationItem.model_validate(row))
+
+
+@router.post(
+    "/{kb_id}/evaluations/{eval_id}/delete",
+    response_model=Result[EvaluationItem],
+)
+async def delete_evaluation(
+    kb_id: int,
+    eval_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[EvaluationItem]:
+    row = await evaluation_service.delete_evaluation(
+        session, kb_id=kb_id, eval_id=eval_id
+    )
+    return Result.ok(EvaluationItem.model_validate(row))
