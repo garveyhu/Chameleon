@@ -36,8 +36,9 @@ from chameleon.system.settings.import_service import apply_import_zip
 router = APIRouter(prefix="/v1/admin/settings", tags=["admin:settings"])
 
 
-@router.post(
+@router.api_route(
     "/export-json",
+    methods=["GET", "POST"],
     response_class=Response,
     responses={200: {"content": {"application/zip": {}}}},
 )

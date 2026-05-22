@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import { cn } from '@/core/lib/cn';
+import { confirm } from '@/core/lib/confirm';
 import { getRaw, postForm } from '@/core/lib/request';
 import { toast } from '@/core/lib/toast';
 import { modelApi } from '@/system/models/services/model';
@@ -150,6 +151,18 @@ const SystemSettingsTab = ({ group }: { group: SettingGroup }) => {
     },
   });
 
+  const handleReset = async (key: string) => {
+    const schema = items.find(it => it.key === key);
+    const defaultText = schema ? String(schema.default ?? '—') : '默认值';
+    const ok = await confirm({
+      title: '重置为默认值？',
+      description: `${key} 将清空 DB 中的覆盖记录，回到默认值（${defaultText}）。`,
+      confirmText: '重置',
+    });
+    if (!ok) return;
+    resetMut.mutate(key);
+  };
+
   if (q.isLoading) {
     return <div className="text-[12.5px] text-stone-400">加载中...</div>;
   }
@@ -178,7 +191,7 @@ const SystemSettingsTab = ({ group }: { group: SettingGroup }) => {
               item={item}
               draftValue={liveValues[item.key]}
               onChange={(k, v) => setDraft(prev => ({ ...prev, [k]: v }))}
-              onReset={k => resetMut.mutate(k)}
+              onReset={handleReset}
             />
           ))
         )}
@@ -316,7 +329,13 @@ const ExportImportTab = () => {
   });
 
   const handleImport = async (file: File) => {
-    if (!confirm(`确定导入 ${file.name}？现有数据将被 UPSERT 合并，操作不可撤销。`)) return;
+    const ok = await confirm({
+      title: '确认导入配置？',
+      description: `将合并 ${file.name} 中的 apps / users / providers / models / agents / api_keys / embed_configs。同 key 行直接 UPSERT 覆盖，操作不可撤销。`,
+      confirmText: '继续导入',
+      danger: true,
+    });
+    if (!ok) return;
     setImporting(true);
     try {
       const fd = new FormData();
@@ -339,8 +358,8 @@ const ExportImportTab = () => {
         toast.warning(`${result.warnings.length} 条警告，详见浏览器 console`);
         console.warn('Import warnings:', result.warnings);
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '导入失败');
+    } catch {
+      // 全局拦截器已提示错误，无需重复
     } finally {
       setImporting(false);
       if (fileRef.current) fileRef.current.value = '';
