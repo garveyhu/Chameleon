@@ -14,17 +14,17 @@ import * as React from 'react';
 import { cn } from '@/core/lib/cn';
 
 const buttonVariants = cva(
-  'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200',
+  'inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-200',
   {
     variants: {
       variant: {
-        primary: 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800',
-        default: 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800',
+        primary: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
+        default: 'bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800',
         outline:
           'border border-stone-300 bg-white text-stone-700 hover:bg-stone-50 active:bg-stone-100',
         secondary: 'bg-stone-100 text-stone-900 hover:bg-stone-200',
         ghost: 'text-stone-700 hover:bg-stone-100 active:bg-stone-200',
-        link: 'text-blue-600 hover:underline underline-offset-2',
+        link: 'text-primary-600 hover:underline underline-offset-2',
         danger: 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800',
         'danger-outline': 'border border-red-300 text-red-600 hover:bg-red-50 active:bg-red-100',
         dark: 'bg-stone-900 text-white hover:bg-stone-800 active:bg-stone-700',

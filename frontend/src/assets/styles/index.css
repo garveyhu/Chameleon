@@ -15,6 +15,7 @@
 @import url('@fontsource/instrument-serif/400-italic.css');
 
 @import url('tailwindcss');
+@import url('./theme.css');
 
 @theme {
   /* ─── 主题色（blue primary，工程师感） ─── */

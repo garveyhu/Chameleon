@@ -5,6 +5,7 @@ export const STORAGE_KEY = {
   ACCESS_TOKEN: 'chameleon:access_token',
   USER: 'chameleon:user',
   LOCALE: 'chameleon:locale',
+  PREFERENCES: 'chameleon:preferences',
 } as const;
 
 /** Refresh 由 cookie 自动携带，不在前端持久化 */

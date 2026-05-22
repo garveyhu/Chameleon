@@ -9,6 +9,7 @@ import {
   FileText,
   Hourglass,
   MessagesSquare,
+  Palette,
   Save,
   Sparkles,
   Upload,
@@ -39,11 +40,12 @@ import { confirm } from '@/core/lib/confirm';
 import { getRaw, postForm } from '@/core/lib/request';
 import { toast } from '@/core/lib/toast';
 import { modelApi } from '@/system/models/services/model';
+import { AppearanceTab } from '@/system/settings/components/appearance-tab';
 import { SettingsField } from '@/system/settings/components/settings-field';
 import { settingsApi } from '@/system/settings/services/settings';
 
 type SettingGroup = 'general' | 'session' | 'knowledge' | 'stream' | 'timeout' | 'call_log';
-type TabKey = SettingGroup | 'model_defaults' | 'export_import';
+type TabKey = SettingGroup | 'model_defaults' | 'export_import' | 'appearance';
 
 interface TabDef {
   key: TabKey;
@@ -59,6 +61,7 @@ const TABS: TabDef[] = [
   { key: 'timeout', label: '超时', icon: <Hourglass className="h-3.5 w-3.5" /> },
   { key: 'call_log', label: '调用日志', icon: <FileText className="h-3.5 w-3.5" /> },
   { key: 'model_defaults', label: '默认模型', icon: <Sparkles className="h-3.5 w-3.5" /> },
+  { key: 'appearance', label: '外观', icon: <Palette className="h-3.5 w-3.5" /> },
   { key: 'export_import', label: '导入导出', icon: <Download className="h-3.5 w-3.5" /> },
 ];
 
@@ -94,6 +97,7 @@ export const SettingsPage = () => {
             <SystemSettingsTab group={activeTab as SettingGroup} />
           ) : null}
           {activeTab === 'model_defaults' ? <ModelDefaultsTab /> : null}
+          {activeTab === 'appearance' ? <AppearanceTab /> : null}
           {activeTab === 'export_import' ? <ExportImportTab /> : null}
         </div>
       </div>
