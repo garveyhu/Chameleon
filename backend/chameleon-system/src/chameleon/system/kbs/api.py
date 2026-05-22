@@ -487,5 +487,6 @@ async def search_kb(
         min_score=req.min_score,
         doc_ids=req.doc_ids,
         tags=req.tags,
+        mode=req.mode,
     )
     return Result.ok([SearchHitItem(**h) for h in hits])

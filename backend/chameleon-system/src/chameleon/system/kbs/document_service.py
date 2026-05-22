@@ -467,43 +467,104 @@ async def search_chunks(
     min_score: float = 0.0,
     doc_ids: list[int] | None = None,
     tags: list[str] | None = None,
+    mode: str | None = None,
 ) -> list[dict]:
-    """语义检索；可按 doc_ids / tags 过滤命中文档。
+    """三模式 chunk 检索；可按 doc_ids / tags 过滤。
+    mode: vector / keyword / hybrid（None 时走 kb.recall_mode）
     返 [{chunk_id, doc_id, seq, content, score, document_title}]
     """
     kb = await _get_kb(session, kb_id)
     if not query.strip():
         raise ValidationError(message="query 不能为空")
+    mode = mode or kb.recall_mode or "vector"
+    if mode not in ("vector", "keyword", "hybrid"):
+        raise ValidationError(message=f"unsupported recall_mode: {mode}")
 
-    # 1. embed query
+    candidate_doc_ids = await _resolve_doc_filter(
+        session, kb_id=kb.id, doc_ids=doc_ids, tags=tags
+    )
+    # 过滤命中为空 → 直接返
+    if (doc_ids or tags) and not candidate_doc_ids:
+        return []
+
+    if mode == "vector":
+        hits = await _vector_search(
+            session,
+            kb=kb,
+            query=query,
+            top_k=top_k,
+            doc_ids=candidate_doc_ids,
+        )
+    elif mode == "keyword":
+        hits = await _keyword_search(
+            session,
+            kb_id=kb.id,
+            query=query,
+            top_k=top_k,
+            doc_ids=candidate_doc_ids,
+        )
+    else:  # hybrid
+        vec = await _vector_search(
+            session,
+            kb=kb,
+            query=query,
+            top_k=top_k * 2,
+            doc_ids=candidate_doc_ids,
+        )
+        kw = await _keyword_search(
+            session,
+            kb_id=kb.id,
+            query=query,
+            top_k=top_k * 2,
+            doc_ids=candidate_doc_ids,
+        )
+        hits = _rrf_merge(vec, kw, top_k=top_k)
+
+    return [h for h in hits if h["score"] >= min_score][:top_k]
+
+
+# ── search helpers ───────────────────────────────────────
+
+
+async def _resolve_doc_filter(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    doc_ids: list[int] | None,
+    tags: list[str] | None,
+) -> set[int] | None:
+    """返候选 doc_id 集；None 表示无过滤。"""
+    if not tags and not doc_ids:
+        return None
+    candidate: set[int] | None = None
+    if tags:
+        stmt = select(Document.id).where(
+            Document.kb_id == kb_id, Document.deleted_at.is_(None)
+        )
+        for t in tags:
+            stmt = stmt.where(cast(Document.tags, JSONB).contains([t]))
+        candidate = set((await session.execute(stmt)).scalars().all())
+    if doc_ids:
+        if candidate is None:
+            candidate = set(doc_ids)
+        else:
+            candidate &= set(doc_ids)
+    return candidate
+
+
+async def _vector_search(
+    session: AsyncSession,
+    *,
+    kb,
+    query: str,
+    top_k: int,
+    doc_ids: set[int] | None,
+) -> list[dict]:
     client = get_embedding_client(kb.embedding_model)
     vecs = await client.embed([query])
     if not vecs:
         return []
-    query_vec = vecs[0]
-
-    # 2. 若有 tags 过滤，先把命中 tag 的 doc_ids 求出来，与传入 doc_ids 做交集
-    candidate_doc_ids: set[int] | None = None
-    if tags:
-        stmt = select(Document.id).where(
-            Document.kb_id == kb.id, Document.deleted_at.is_(None)
-        )
-        # 所有 tag 都要命中（@>），与 list 文档一致的语义
-        for t in tags:
-            stmt = stmt.where(cast(Document.tags, JSONB).contains([t]))
-        rows = (await session.execute(stmt)).scalars().all()
-        candidate_doc_ids = set(rows)
-    if doc_ids:
-        if candidate_doc_ids is None:
-            candidate_doc_ids = set(doc_ids)
-        else:
-            candidate_doc_ids &= set(doc_ids)
-        if not candidate_doc_ids:
-            return []
-
-    # 3. 走向量召回（取 top_k*3 兜底，过滤完再截）
-    distance = Chunk.embedding.cosine_distance(query_vec).label("distance")
-    expand = top_k * 3 if candidate_doc_ids else top_k
+    distance = Chunk.embedding.cosine_distance(vecs[0]).label("distance")
     stmt = (
         select(
             Chunk.id,
@@ -516,30 +577,111 @@ async def search_chunks(
         .join(Document, Chunk.doc_id == Document.id)
         .where(Chunk.kb_id == kb.id, Document.deleted_at.is_(None))
         .order_by(distance.asc())
-        .limit(expand)
+        .limit(top_k)
     )
-    if candidate_doc_ids is not None:
-        stmt = stmt.where(Chunk.doc_id.in_(candidate_doc_ids))
-
+    if doc_ids is not None:
+        stmt = stmt.where(Chunk.doc_id.in_(doc_ids))
     rows = (await session.execute(stmt)).all()
-    hits: list[dict] = []
-    for r in rows:
-        score = 1.0 - float(r.distance)
-        if score < min_score:
-            continue
-        hits.append(
-            {
-                "chunk_id": r.id,
-                "doc_id": r.doc_id,
-                "seq": r.seq,
-                "content": r.content,
-                "score": score,
-                "document_title": r.title,
-            }
+    return [
+        {
+            "chunk_id": r.id,
+            "doc_id": r.doc_id,
+            "seq": r.seq,
+            "content": r.content,
+            "score": 1.0 - float(r.distance),
+            "document_title": r.title,
+        }
+        for r in rows
+    ]
+
+
+async def _keyword_search(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    query: str,
+    top_k: int,
+    doc_ids: set[int] | None,
+) -> list[dict]:
+    """PG ts_rank 关键词召回（simple 配置，无中文分词，按空格 / 标点切）"""
+    # query → tsquery：用 plainto_tsquery 容错（自动 AND）
+    ts_query = func.plainto_tsquery("simple", query)
+    content_tsv = func.to_tsvector("simple", Chunk.content)
+    # 用 content_tsv GENERATED 列加速
+    # SQLAlchemy 不直接 reflect generated 列，引一个 raw column
+    from sqlalchemy import literal_column
+    tsv_col = literal_column("content_tsv")
+    rank = func.ts_rank(tsv_col, ts_query).label("rank")
+    stmt = (
+        select(
+            Chunk.id,
+            Chunk.doc_id,
+            Chunk.seq,
+            Chunk.content,
+            Document.title,
+            rank,
         )
-        if len(hits) >= top_k:
-            break
-    return hits
+        .join(Document, Chunk.doc_id == Document.id)
+        .where(
+            Chunk.kb_id == kb_id,
+            Document.deleted_at.is_(None),
+            tsv_col.op("@@")(ts_query),
+        )
+        .order_by(rank.desc())
+        .limit(top_k)
+    )
+    if doc_ids is not None:
+        stmt = stmt.where(Chunk.doc_id.in_(doc_ids))
+    rows = (await session.execute(stmt)).all()
+    # 简单归一化到 [0, 1]：当前命中 rank 最大值归一
+    if not rows:
+        return []
+    max_rank = max(float(r.rank) for r in rows) or 1.0
+    # ts_rank 仅在内部排序用；归一化为 score 是粗略可解释化
+    return [
+        {
+            "chunk_id": r.id,
+            "doc_id": r.doc_id,
+            "seq": r.seq,
+            "content": r.content,
+            "score": float(r.rank) / max_rank,
+            "document_title": r.title,
+        }
+        for r in rows
+    ]
+
+
+def _rrf_merge(
+    vec_hits: list[dict],
+    kw_hits: list[dict],
+    *,
+    top_k: int,
+    k: int = 60,
+) -> list[dict]:
+    """Reciprocal Rank Fusion：score = sum(1/(k + rank))"""
+    rrf: dict[int, dict] = {}
+    by_id: dict[int, dict] = {}
+    for rank, h in enumerate(vec_hits):
+        cid = h["chunk_id"]
+        by_id[cid] = h
+        rrf[cid] = rrf.get(cid, {"score": 0.0})
+        rrf[cid]["score"] += 1.0 / (k + rank + 1)
+    for rank, h in enumerate(kw_hits):
+        cid = h["chunk_id"]
+        by_id.setdefault(cid, h)
+        rrf[cid] = rrf.get(cid, {"score": 0.0})
+        rrf[cid]["score"] += 1.0 / (k + rank + 1)
+    # 排序、归一化 score
+    sorted_ids = sorted(rrf, key=lambda c: rrf[c]["score"], reverse=True)
+    if not sorted_ids:
+        return []
+    max_score = rrf[sorted_ids[0]]["score"] or 1.0
+    out: list[dict] = []
+    for cid in sorted_ids[:top_k]:
+        base = dict(by_id[cid])
+        base["score"] = rrf[cid]["score"] / max_score
+        out.append(base)
+    return out
 
 
 async def get_status(
