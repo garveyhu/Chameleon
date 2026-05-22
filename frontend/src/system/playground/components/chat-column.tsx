@@ -7,6 +7,7 @@ import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
+import { MessageActions } from '@/system/playground/components/message-actions';
 import { ParamPanel } from '@/system/playground/components/param-panel';
 import { streamInvoke } from '@/system/playground/services/playground';
 import type {
@@ -44,6 +45,97 @@ export const ChatColumn = ({
     [messages],
   );
 
+  const runInvoke = useCallback(
+    async (history: PlaygroundMessage[], assistantId: string) => {
+      const reqMessages = history.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        await streamInvoke(
+          {
+            model_id: params.model_id,
+            system_prompt: params.system_prompt || undefined,
+            temperature: params.temperature,
+            top_p: params.top_p,
+            max_tokens: params.max_tokens,
+            messages: reqMessages,
+            kb_ids: params.kb_ids.length ? params.kb_ids : undefined,
+          },
+          {
+            signal: controller.signal,
+            onChunk: (chunk: InvokeChunk) => {
+              if (chunk.error) {
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantId
+                      ? {
+                          ...m,
+                          status: 'failed',
+                          error: `${chunk.error!.type}: ${chunk.error!.message}`,
+                        }
+                      : m,
+                  ),
+                );
+                return;
+              }
+              if (chunk.meta) {
+                const rid =
+                  typeof chunk.meta.request_id === 'string'
+                    ? chunk.meta.request_id
+                    : undefined;
+                if (rid) {
+                  setMessages(prev =>
+                    prev.map(m =>
+                      m.id === assistantId ? { ...m, requestId: rid } : m,
+                    ),
+                  );
+                }
+              }
+              if (chunk.delta) {
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantId
+                      ? { ...m, content: m.content + chunk.delta }
+                      : m,
+                  ),
+                );
+              }
+              if (chunk.end) {
+                setMessages(prev =>
+                  prev.map(m =>
+                    m.id === assistantId
+                      ? { ...m, status: 'done', usage: chunk.usage ?? null }
+                      : m,
+                  ),
+                );
+              }
+            },
+          },
+        );
+      } catch (e) {
+        const aborted = (e as DOMException)?.name === 'AbortError';
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? {
+                  ...m,
+                  status: 'failed',
+                  error: aborted ? '已中止' : String(e),
+                }
+              : m,
+          ),
+        );
+      } finally {
+        abortRef.current = null;
+      }
+    },
+    [params],
+  );
+
   const send = useCallback(async () => {
     const text = input.trim();
     if (!text) return;
@@ -64,80 +156,109 @@ export const ChatColumn = ({
     };
     setMessages(prev => [...prev, userMsg, aiMsg]);
     setInput('');
+    await runInvoke([...messages, userMsg], aiMsg.id);
+  }, [input, params, messages, runInvoke]);
 
-    const reqMessages = [...messages, userMsg].map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
-    const controller = new AbortController();
-    abortRef.current = controller;
+  /** 删除指定消息（user 同步删紧随其后的 assistant；assistant 单独删） */
+  const deleteMessage = useCallback((id: string) => {
+    setMessages(prev => {
+      const idx = prev.findIndex(m => m.id === id);
+      if (idx < 0) return prev;
+      const target = prev[idx];
+      if (target.role === 'user' && idx + 1 < prev.length && prev[idx + 1].role === 'assistant') {
+        return prev.filter((_, i) => i !== idx && i !== idx + 1);
+      }
+      return prev.filter((_, i) => i !== idx);
+    });
+  }, []);
 
-    try {
-      await streamInvoke(
-        {
-          model_id: params.model_id,
-          system_prompt: params.system_prompt || undefined,
-          temperature: params.temperature,
-          top_p: params.top_p,
-          max_tokens: params.max_tokens,
-          messages: reqMessages,
-          kb_ids: params.kb_ids.length ? params.kb_ids : undefined,
-        },
-        {
-          signal: controller.signal,
-          onChunk: (chunk: InvokeChunk) => {
-            if (chunk.error) {
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === aiMsg.id
-                    ? {
-                        ...m,
-                        status: 'failed',
-                        error: `${chunk.error!.type}: ${chunk.error!.message}`,
-                      }
-                    : m,
-                ),
-              );
-              return;
-            }
-            if (chunk.delta) {
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === aiMsg.id
-                    ? { ...m, content: m.content + chunk.delta }
-                    : m,
-                ),
-              );
-            }
-            if (chunk.end) {
-              setMessages(prev =>
-                prev.map(m =>
-                  m.id === aiMsg.id
-                    ? { ...m, status: 'done', usage: chunk.usage ?? null }
-                    : m,
-                ),
-              );
-            }
-          },
-        },
-      );
-    } catch (e) {
-      const aborted = (e as DOMException)?.name === 'AbortError';
+  /** 编辑 user 消息并重发（老 assistant 标记 stale） */
+  const editMessage = useCallback(
+    async (id: string, nextContent: string) => {
+      if (!params.model_id) {
+        toast.error('请先选择模型');
+        return;
+      }
+      const idx = messages.findIndex(m => m.id === id);
+      if (idx < 0 || messages[idx].role !== 'user') return;
+
+      const replacedUser: PlaygroundMessage = {
+        ...messages[idx],
+        content: nextContent,
+      };
+      const newAssistant: PlaygroundMessage = {
+        id: newId(),
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+      };
+      // 老 assistant（如果有）标 stale，保留可读
+      const oldAssistant =
+        idx + 1 < messages.length && messages[idx + 1].role === 'assistant'
+          ? messages[idx + 1]
+          : null;
+      const next: PlaygroundMessage[] = [
+        ...messages.slice(0, idx),
+        replacedUser,
+        ...(oldAssistant ? [{ ...oldAssistant, stale: true }] : []),
+        newAssistant,
+      ];
+      setMessages(next);
+
+      // history 用 replacedUser，但不含老 stale assistant（避免它干扰新一轮）
+      const history = [
+        ...messages.slice(0, idx).filter(m => !m.stale),
+        replacedUser,
+      ];
+      await runInvoke(history, newAssistant.id);
+    },
+    [messages, params, runInvoke],
+  );
+
+  /** 对一条 assistant 消息重新生成（基于其前面的 user 消息） */
+  const regenerateMessage = useCallback(
+    async (id: string) => {
+      if (!params.model_id) {
+        toast.error('请先选择模型');
+        return;
+      }
+      const idx = messages.findIndex(m => m.id === id);
+      if (idx < 0 || messages[idx].role !== 'assistant') return;
+      // 找前面那条 user
+      let userIdx = idx - 1;
+      while (userIdx >= 0 && messages[userIdx].role !== 'user') userIdx--;
+      if (userIdx < 0) {
+        toast.error('找不到对应的 user 消息');
+        return;
+      }
+      const newAssistant: PlaygroundMessage = {
+        id: newId(),
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+      };
+      const next: PlaygroundMessage[] = [
+        ...messages.slice(0, idx),
+        { ...messages[idx], stale: true },
+        newAssistant,
+      ];
+      setMessages(next);
+
+      const history = messages.slice(0, idx).filter(m => !m.stale);
+      await runInvoke(history, newAssistant.id);
+    },
+    [messages, params, runInvoke],
+  );
+
+  /** 更新消息（不重新调用 API，比如 feedback 状态） */
+  const updateMessage = useCallback(
+    (id: string, patch: Partial<PlaygroundMessage>) => {
       setMessages(prev =>
-        prev.map(m =>
-          m.id === aiMsg.id
-            ? {
-                ...m,
-                status: 'failed',
-                error: aborted ? '已中止' : String(e),
-              }
-            : m,
-        ),
+        prev.map(m => (m.id === id ? { ...m, ...patch } : m)),
       );
-    } finally {
-      abortRef.current = null;
-    }
-  }, [input, params, messages]);
+    },
+    [],
+  );
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -237,7 +358,24 @@ export const ChatColumn = ({
             输入消息开始对话
           </div>
         ) : (
-          messages.map(m => <MessageBubble key={m.id} msg={m} />)
+          messages.map(m => (
+            <MessageBubble
+              key={m.id}
+              msg={m}
+              onEdit={
+                m.role === 'user'
+                  ? next => editMessage(m.id, next)
+                  : undefined
+              }
+              onRegenerate={
+                m.role === 'assistant'
+                  ? () => regenerateMessage(m.id)
+                  : undefined
+              }
+              onDelete={() => deleteMessage(m.id)}
+              onFeedbackChange={value => updateMessage(m.id, { feedback: value })}
+            />
+          ))
         )}
       </div>
 
@@ -273,36 +411,107 @@ export const ChatColumn = ({
   );
 };
 
-const MessageBubble = ({ msg }: { msg: PlaygroundMessage }) => {
+interface MessageBubbleProps {
+  msg: PlaygroundMessage;
+  onEdit?: (next: string) => void | Promise<void>;
+  onRegenerate?: () => void | Promise<void>;
+  onDelete?: () => void;
+  onFeedbackChange?: (value: 1 | -1 | null) => void;
+}
+
+const MessageBubble = ({
+  msg,
+  onEdit,
+  onRegenerate,
+  onDelete,
+  onFeedbackChange,
+}: MessageBubbleProps) => {
   const isUser = msg.role === 'user';
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(msg.content);
+
   return (
     <div
       className={cn(
-        'rounded-md px-3 py-2 text-[12.5px]',
+        'group relative rounded-md px-3 py-2 text-[12.5px] transition',
         isUser ? 'bg-amber-50/70' : 'bg-stone-50',
         msg.status === 'failed' && 'bg-rose-50',
+        msg.stale && 'opacity-50',
       )}
     >
-      <div className="mb-0.5 text-[10.5px] uppercase tracking-wider text-stone-500">
-        {msg.role}
-        {msg.status === 'streaming' && (
-          <span className="ml-2 text-amber-600">streaming…</span>
-        )}
-        {msg.status === 'failed' && (
-          <span className="ml-2 text-rose-600">failed</span>
-        )}
-        {msg.usage && (
-          <span className="ml-2 font-mono tnum text-stone-400">
-            ↑{msg.usage.input_tokens} ↓{msg.usage.output_tokens}
-          </span>
+      <div className="mb-0.5 flex items-center justify-between">
+        <div className="text-[10.5px] uppercase tracking-wider text-stone-500">
+          {msg.role}
+          {msg.stale && <span className="ml-2 text-stone-400">stale</span>}
+          {msg.status === 'streaming' && (
+            <span className="ml-2 text-amber-600">streaming…</span>
+          )}
+          {msg.status === 'failed' && (
+            <span className="ml-2 text-rose-600">failed</span>
+          )}
+          {msg.usage && (
+            <span className="ml-2 font-mono tnum text-stone-400">
+              ↑{msg.usage.input_tokens} ↓{msg.usage.output_tokens}
+            </span>
+          )}
+        </div>
+        {!editing && (
+          <div className="absolute right-2 top-1.5">
+            <MessageActions
+              msg={msg}
+              onEdit={onEdit ? () => setEditing(true) : undefined}
+              onRegenerate={onRegenerate}
+              onDelete={onDelete}
+              onFeedbackChange={onFeedbackChange}
+            />
+          </div>
         )}
       </div>
-      <div className="whitespace-pre-wrap text-stone-800">
-        {msg.content || (msg.status === 'streaming' ? '…' : '')}
-        {msg.error && (
-          <div className="mt-1 text-rose-600">{msg.error}</div>
-        )}
-      </div>
+      {editing ? (
+        <div className="space-y-1.5">
+          <Textarea
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            rows={3}
+            className="text-[12.5px]"
+            autoFocus
+          />
+          <div className="flex justify-end gap-1.5">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setEditing(false);
+                setEditVal(msg.content);
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const next = editVal.trim();
+                if (!next || next === msg.content) {
+                  setEditing(false);
+                  return;
+                }
+                setEditing(false);
+                await onEdit?.(next);
+              }}
+              disabled={!editVal.trim()}
+            >
+              提交并重发
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="whitespace-pre-wrap text-stone-800">
+          {msg.content || (msg.status === 'streaming' ? '…' : '')}
+          {msg.error && (
+            <div className="mt-1 text-rose-600">{msg.error}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

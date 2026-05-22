@@ -5,12 +5,16 @@
 
 import { EmbedApi, EmbedError } from './api';
 import {
+  checkIcon,
   closeIcon,
+  copyIcon,
   getBubbleIcon,
   paperclipIcon,
+  refreshIcon,
   sendIcon,
   thumbsDownIcon,
   thumbsUpIcon,
+  trashIcon,
 } from './icons';
 import { renderMarkdown } from './markdown';
 import { SessionManager } from './session';
@@ -279,6 +283,11 @@ export class ChameleonWidget {
     }
     inner.appendChild(bubble);
 
+    if (msg.role === 'user' && !msg.streaming) {
+      // user 消息也加 Actions（copy / delete）
+      inner.appendChild(this.buildMessageActions(msg));
+    }
+
     if (msg.role === 'assistant' && !msg.pending && !msg.error) {
       if (this.behavior.show_citations && msg.citations && msg.citations.length > 0) {
         const c = document.createElement('div');
@@ -292,8 +301,8 @@ export class ChameleonWidget {
         }
         inner.appendChild(c);
       }
-      if (this.behavior.show_feedback && !msg.streaming) {
-        inner.appendChild(this.buildFeedbackTools(msg));
+      if (!msg.streaming) {
+        inner.appendChild(this.buildMessageActions(msg));
       }
     }
 
@@ -301,50 +310,115 @@ export class ChameleonWidget {
     return wrap;
   }
 
-  private buildFeedbackTools(msg: WidgetMessage): HTMLDivElement {
+  private buildMessageActions(msg: WidgetMessage): HTMLDivElement {
     const tools = document.createElement('div');
     tools.className = 'msg-tools';
-    const up = document.createElement('button');
-    up.type = 'button';
-    up.title = '有帮助';
-    up.innerHTML = thumbsUpIcon;
-    const down = document.createElement('button');
-    down.type = 'button';
-    down.title = '没帮助';
-    down.innerHTML = thumbsDownIcon;
-    if (msg.feedback === 1) up.classList.add('active');
-    if (msg.feedback === -1) down.classList.add('active');
 
-    // 没有 requestId（极少数后端老分支 / 错误响应）→ 禁用反馈按钮
-    if (!msg.requestId) {
-      up.disabled = true;
-      down.disabled = true;
-      tools.appendChild(up);
-      tools.appendChild(down);
-      return tools;
+    // Copy（所有消息）
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.title = '复制';
+    copyBtn.innerHTML = copyIcon;
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(msg.content);
+        const orig = copyBtn.innerHTML;
+        copyBtn.innerHTML = checkIcon;
+        copyBtn.classList.add('active');
+        setTimeout(() => {
+          copyBtn.innerHTML = orig;
+          copyBtn.classList.remove('active');
+        }, 1200);
+      } catch {
+        /* clipboard 不可用就静默 */
+      }
+    });
+    tools.appendChild(copyBtn);
+
+    // Regenerate（仅 assistant）
+    if (msg.role === 'assistant') {
+      const regen = document.createElement('button');
+      regen.type = 'button';
+      regen.title = '重新生成';
+      regen.innerHTML = refreshIcon;
+      regen.addEventListener('click', () => void this.regenerateMessage(msg.id));
+      tools.appendChild(regen);
     }
 
-    const submit = (positive: boolean, btn: HTMLButtonElement) => {
-      const other = positive ? down : up;
-      // 二次点击同一个 = 撤销（视为新反馈值的语义；当前后端 append-only，简化为：始终发送一条 score）
-      const willActive = !btn.classList.contains('active');
-      btn.classList.toggle('active', willActive);
-      other.classList.remove('active');
-      const value: 1 | -1 | null = willActive ? (positive ? 1 : -1) : null;
-      this.updateMessage(msg.id, { feedback: value });
-      if (willActive && msg.requestId) {
-        void this.api.feedback({
-          trace_id: msg.requestId,
-          name: 'thumbs',
-          value: positive ? 1 : -1,
-        });
+    // 反馈（仅 assistant + 配置开 + 有 requestId）
+    if (
+      msg.role === 'assistant' &&
+      this.behavior.show_feedback
+    ) {
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.title = '有帮助';
+      up.innerHTML = thumbsUpIcon;
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.title = '没帮助';
+      down.innerHTML = thumbsDownIcon;
+      if (msg.feedback === 1) up.classList.add('active');
+      if (msg.feedback === -1) down.classList.add('active');
+      if (!msg.requestId) {
+        up.disabled = true;
+        down.disabled = true;
+      } else {
+        const submit = (positive: boolean, btn: HTMLButtonElement) => {
+          const other = positive ? down : up;
+          const willActive = !btn.classList.contains('active');
+          btn.classList.toggle('active', willActive);
+          other.classList.remove('active');
+          const value: 1 | -1 | null = willActive ? (positive ? 1 : -1) : null;
+          this.updateMessage(msg.id, { feedback: value });
+          if (willActive && msg.requestId) {
+            void this.api.feedback({
+              trace_id: msg.requestId,
+              name: 'thumbs',
+              value: positive ? 1 : -1,
+            });
+          }
+        };
+        up.addEventListener('click', () => submit(true, up));
+        down.addEventListener('click', () => submit(false, down));
       }
-    };
-    up.addEventListener('click', () => submit(true, up));
-    down.addEventListener('click', () => submit(false, down));
-    tools.appendChild(up);
-    tools.appendChild(down);
+      tools.appendChild(up);
+      tools.appendChild(down);
+    }
+
+    // Delete（所有消息）
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.title = '删除';
+    del.className = 'danger';
+    del.innerHTML = trashIcon;
+    del.addEventListener('click', () => this.deleteMessage(msg.id));
+    tools.appendChild(del);
+
     return tools;
+  }
+
+  /** 删除消息（widget 本地态，不写后端） */
+  private deleteMessage(id: string): void {
+    const idx = this.messages.findIndex(m => m.id === id);
+    if (idx < 0) return;
+    this.messages.splice(idx, 1);
+    const el = this.messagesEl.querySelector(`[data-mid="${id}"]`);
+    el?.remove();
+  }
+
+  /** 重新生成 assistant 消息（基于前面那条 user） */
+  private async regenerateMessage(id: string): Promise<void> {
+    if (this.isSending) return;
+    const idx = this.messages.findIndex(m => m.id === id);
+    if (idx < 0 || this.messages[idx].role !== 'assistant') return;
+    let userIdx = idx - 1;
+    while (userIdx >= 0 && this.messages[userIdx].role !== 'user') userIdx--;
+    if (userIdx < 0) return;
+    const userInput = this.messages[userIdx].content;
+    // 移除当前 assistant + 重发
+    this.deleteMessage(id);
+    await this.handleSend(userInput);
   }
 
   private scrollToBottom(): void {

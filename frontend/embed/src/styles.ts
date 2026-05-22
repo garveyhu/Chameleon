@@ -306,8 +306,14 @@ export const buildStyles = (ui: UiConfig): string => {
   line-height: 0;
 }
 .msg-tools button:hover { background: rgba(127,127,127,.15); color: ${theme.paneText}; }
+.msg-tools button:disabled { cursor: not-allowed; opacity: .4; }
+.msg-tools button:disabled:hover { background: transparent; color: ${theme.subtleText}; }
 .msg-tools button.active { color: ${theme.themeColor}; }
+.msg-tools button.danger:hover { background: rgba(220,38,38,.10); color: #dc2626; }
 .msg-tools svg { width: 13px; height: 13px; }
+/* user 消息 Actions：默认隐藏，hover 显（避免每条 user 都长一排按钮） */
+.msg.user .msg-tools { opacity: 0; transition: opacity .15s; }
+.msg.user:hover .msg-tools { opacity: 1; }
 
 .citations {
   display: flex; flex-wrap: wrap; gap: 4px;

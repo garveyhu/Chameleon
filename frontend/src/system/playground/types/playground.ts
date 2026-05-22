@@ -11,6 +11,12 @@ export interface PlaygroundMessage {
   /** assistant 完成后填的 usage */
   usage?: PlaygroundUsage | null;
   error?: string | null;
+  /** 后端 SSE meta 透出（assistant 才有），用于 feedback 上报 */
+  requestId?: string;
+  /** 用户当前的反馈：1=👍 / -1=👎 / null=未点 */
+  feedback?: 1 | -1 | null;
+  /** 该消息是否已被 edit/regenerate 替换（true 时灰显） */
+  stale?: boolean;
 }
 
 export interface PlaygroundUsage {
