@@ -1,5 +1,6 @@
+import type { EntityId } from '@/core/types/api';
 export interface ProviderItem {
-  id: number;
+  id: EntityId;
   code: string;
   kind: 'llm' | 'embedding' | 'dify' | 'fastgpt' | 'coze';
   name: string;

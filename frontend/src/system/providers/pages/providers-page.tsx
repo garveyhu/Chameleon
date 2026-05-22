@@ -55,7 +55,7 @@ export const ProvidersPage = () => {
   });
 
   const delMut = useMutation({
-    mutationFn: (id: number) => providerApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => providerApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['providers'] });
@@ -64,7 +64,7 @@ export const ProvidersPage = () => {
   });
 
   const toggleMut = useMutation({
-    mutationFn: (args: { id: number; enabled: boolean }) =>
+    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
       providerApi.update(args.id, { enabled: args.enabled }),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['providers'] });

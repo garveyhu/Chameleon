@@ -1,5 +1,6 @@
+import type { EntityId } from '@/core/types/api';
 export interface UserItem {
-  id: number;
+  id: EntityId;
   username: string;
   email: string | null;
   display_name: string | null;

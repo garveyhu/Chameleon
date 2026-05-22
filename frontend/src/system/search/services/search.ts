@@ -1,5 +1,6 @@
 /** 全站搜索 API */
 
+import type { EntityId } from '@/core/types/api';
 import { get } from '@/core/lib/request';
 
 export type SearchType =
@@ -13,7 +14,7 @@ export type SearchType =
 
 export interface SearchResult {
   type: SearchType;
-  id: number;
+  id: EntityId;
   title: string;
   snippet: string;
   url: string;

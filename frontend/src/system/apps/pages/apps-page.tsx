@@ -72,7 +72,7 @@ export const AppsPage = () => {
   });
 
   const delMut = useMutation({
-    mutationFn: (id: number) => appApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => appApi.delete(id),
     onSuccess: () => {
       toast.success('应用已删除');
       qc.invalidateQueries({ queryKey: ['apps'] });
@@ -304,7 +304,7 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
   });
 
   const revokeMut = useMutation({
-    mutationFn: (id: number) => apiKeyApi.revoke(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => apiKeyApi.revoke(id),
     onSuccess: () => {
       toast.success('Key 已撤销');
       qc.invalidateQueries({ queryKey: ['app-keys'] });

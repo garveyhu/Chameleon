@@ -1,6 +1,7 @@
+import type { EntityId } from '@/core/types/api';
 export interface ModelItem {
-  id: number;
-  provider_id: number;
+  id: EntityId;
+  provider_id: EntityId;
   provider_code: string | null;
   code: string;
   kind: 'chat' | 'embedding';
@@ -12,7 +13,7 @@ export interface ModelItem {
 }
 
 export interface CreateModelRequest {
-  provider_id: number;
+  provider_id: EntityId;
   code: string;
   kind: 'chat' | 'embedding';
   dim?: number;

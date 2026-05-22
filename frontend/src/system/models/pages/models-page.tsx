@@ -56,7 +56,7 @@ export const ModelsPage = () => {
     },
   });
   const delMut = useMutation({
-    mutationFn: (id: number) => modelApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => modelApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['models'] });
@@ -65,13 +65,13 @@ export const ModelsPage = () => {
   });
 
   const testMut = useMutation({
-    mutationFn: (id: number) => modelApi.test(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => modelApi.test(id),
     onSuccess: data =>
       data.ok ? toast.success(data.detail) : toast.error(data.detail),
   });
 
   const toggleMut = useMutation({
-    mutationFn: (args: { id: number; enabled: boolean }) =>
+    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
       modelApi.update(args.id, { enabled: args.enabled }),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['models'] });
@@ -203,9 +203,9 @@ const CreateModelModal = ({
   loading,
 }: {
   open: boolean;
-  providers: { id: number; code: string }[];
+  providers: { id: import('@/core/types/api').EntityId; code: string }[];
   onClose: () => void;
-  onSubmit: (req: { provider_id: number; code: string; kind: 'chat' | 'embedding'; dim?: number }) => void;
+  onSubmit: (req: { provider_id: import('@/core/types/api').EntityId; code: string; kind: 'chat' | 'embedding'; dim?: number }) => void;
   loading: boolean;
 }) => {
   const [providerId, setProviderId] = useState<string>('');

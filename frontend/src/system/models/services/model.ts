@@ -1,3 +1,4 @@
+import type { EntityId } from '@/core/types/api';
 import { get, post } from '@/core/lib/request';
 import type { CreateModelRequest, ModelItem } from '@/system/models/types/model';
 
@@ -6,11 +7,11 @@ export const modelApi = {
     get<ModelItem[]>('/v1/admin/models', { params }),
   create: (req: CreateModelRequest) => post<ModelItem>('/v1/admin/models', req),
   update: (
-    id: number,
+    id: EntityId,
     req: { dim?: number; defaults?: Record<string, unknown>; enabled?: boolean },
   ) => post<ModelItem>(`/v1/admin/models/${id}/update`, req),
-  delete: (id: number) => post<void>(`/v1/admin/models/${id}/delete`),
-  test: (id: number) =>
+  delete: (id: EntityId) => post<void>(`/v1/admin/models/${id}/delete`),
+  test: (id: EntityId) =>
     post<{ ok: boolean; latency_ms: number; sample: string; detail: string }>(
       `/v1/admin/models/${id}/test`,
     ),

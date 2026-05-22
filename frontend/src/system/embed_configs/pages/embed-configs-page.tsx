@@ -72,7 +72,7 @@ export const EmbedConfigsPage = () => {
   });
 
   const delMut = useMutation({
-    mutationFn: (id: number) => embedConfigApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => embedConfigApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['embed-configs'] });
@@ -81,7 +81,7 @@ export const EmbedConfigsPage = () => {
   });
 
   const toggleMut = useMutation({
-    mutationFn: (args: { id: number; enabled: boolean }) =>
+    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
       embedConfigApi.update(args.id, { enabled: args.enabled }),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['embed-configs'] });
@@ -241,8 +241,8 @@ const CreateEmbedModal = ({
   onClose: () => void;
   onSubmit: (req: {
     name: string;
-    agent_id: number;
-    app_id: number;
+    agent_id: import('@/core/types/api').EntityId;
+    app_id: import('@/core/types/api').EntityId;
     allowed_origins?: string[];
   }) => void;
   loading: boolean;
@@ -330,8 +330,8 @@ const CreateEmbedModal = ({
             onClick={() =>
               onSubmit({
                 name,
-                agent_id: Number(agentId),
-                app_id: Number(appId),
+                agent_id: agentId,
+                app_id: appId,
                 allowed_origins: origins
                   ? origins
                       .split('\n')

@@ -1,5 +1,6 @@
 /** 系统配置 + 模型默认 + 配置导入导出 API */
 
+import type { EntityId } from '@/core/types/api';
 import { get, post } from '@/core/lib/request';
 
 export interface SystemSettingItem {
@@ -21,7 +22,7 @@ export interface SystemSettingsResponse {
 
 export interface ModelDefaultItem {
   case_name: 'llm' | 'embedding' | 'vision';
-  model_id: number | null;
+  model_id: EntityId | null;
   model_code: string | null;
   model_kind: string | null;
 }
@@ -36,7 +37,7 @@ export const settingsApi = {
 
   listModelDefaults: () =>
     get<ModelDefaultItem[]>('/v1/admin/settings/model-defaults'),
-  updateModelDefault: (case_name: string, model_id: number | null) =>
+  updateModelDefault: (case_name: string, model_id: EntityId | null) =>
     post<ModelDefaultItem>(
       `/v1/admin/settings/model-defaults/${encodeURIComponent(case_name)}/update`,
       { model_id },

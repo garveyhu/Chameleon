@@ -198,7 +198,7 @@ const ModelDefaultsTab = () => {
   const modelsQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
 
   const updateMut = useMutation({
-    mutationFn: (args: { case_name: string; model_id: number | null }) =>
+    mutationFn: (args: { case_name: string; model_id: import('@/core/types/api').EntityId | null }) =>
       settingsApi.updateModelDefault(args.case_name, args.model_id),
     onSuccess: () => {
       toast.success('已更新');
@@ -259,9 +259,9 @@ const CaseRow = ({
   allowClear,
 }: {
   label: string;
-  value: number | null;
-  options: { id: number; name: string; provider: string | null }[];
-  onChange: (id: number | null) => void;
+  value: import('@/core/types/api').EntityId | null;
+  options: { id: import('@/core/types/api').EntityId; name: string; provider: string | null }[];
+  onChange: (id: import('@/core/types/api').EntityId | null) => void;
   allowClear?: boolean;
 }) => (
   <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3 last:border-b-0">

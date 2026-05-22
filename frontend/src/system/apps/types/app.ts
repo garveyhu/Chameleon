@@ -1,5 +1,6 @@
+import type { EntityId } from '@/core/types/api';
 export interface AppItem {
-  id: number;
+  id: EntityId;
   app_key: string;
   name: string;
   description: string | null;
@@ -21,7 +22,7 @@ export interface CreateAppRequest {
 }
 
 export interface ApiKeyItem {
-  id: number;
+  id: EntityId;
   app_id: string;
   name: string;
   key_prefix: string;

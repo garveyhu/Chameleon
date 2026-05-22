@@ -1,5 +1,6 @@
+import type { EntityId } from '@/core/types/api';
 export interface RoleItem {
-  id: number;
+  id: EntityId;
   code: string;
   name: string;
   description: string | null;

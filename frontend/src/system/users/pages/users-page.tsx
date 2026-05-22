@@ -84,7 +84,7 @@ export const UsersPage = () => {
   });
 
   const resetMut = useMutation({
-    mutationFn: (args: { id: number; req: ResetForm }) =>
+    mutationFn: (args: { id: import('@/core/types/api').EntityId; req: ResetForm }) =>
       userApi.resetPassword(args.id, { new_password: args.req.new_password }),
     onSuccess: () => {
       toast.success('密码已重置');
@@ -93,7 +93,7 @@ export const UsersPage = () => {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => userApi.delete(id),
+    mutationFn: (id: import('@/core/types/api').EntityId) => userApi.delete(id),
     onSuccess: () => {
       toast.success('用户已删除');
       qc.invalidateQueries({ queryKey: ['users'] });
