@@ -36,6 +36,7 @@ from chameleon.core.api.exceptions import (
     ProviderError,
     ResultCode,
 )
+from chameleon.core.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
     AgentDef,
@@ -87,26 +88,29 @@ async def invoke(
     request_id: str,
 ) -> InvokeResponse:
     start_ts = time.monotonic()
+    rec = SpanRecorder()
 
     # ① 注册表查询
-    agent_def = AGENTS.get(agent_key)
-    if agent_def is None:
-        raise AgentNotFoundError(message=f"agent 不存在: {agent_key}")
-    provider = PROVIDERS.get(agent_def.provider)
-    if provider is None:
-        # 理论上 init_registry 已经 fail-fast 保证，这里兜底
-        raise BusinessError(
-            ResultCode.RegistryError,
-            message=f"provider 未注册: {agent_def.provider}",
-        )
+    with rec.span("agent_resolve", meta={"agent_key": agent_key}):
+        agent_def = AGENTS.get(agent_key)
+        if agent_def is None:
+            raise AgentNotFoundError(message=f"agent 不存在: {agent_key}")
+        provider = PROVIDERS.get(agent_def.provider)
+        if provider is None:
+            # 理论上 init_registry 已经 fail-fast 保证，这里兜底
+            raise BusinessError(
+                ResultCode.RegistryError,
+                message=f"provider 未注册: {agent_def.provider}",
+            )
 
     # ② 会话处理
-    conv = await _ensure_conversation(
-        session,
-        agent_def,
-        req.session_id,
-        current_app=current_app,
-    )
+    with rec.span("conversation_setup"):
+        conv = await _ensure_conversation(
+            session,
+            agent_def,
+            req.session_id,
+            current_app=current_app,
+        )
 
     # ③ 历史装载（A10 裁决）
     if isinstance(req.input, str):
@@ -137,15 +141,16 @@ async def invoke(
         ]
 
     # ④ 落库 user msg（先写防丢；list 模式只落 last user，不落 client 自管历史）
-    await conv_service.append(
-        session,
-        conv.session_id,
-        AppendMessageDraft(
-            role="user",
-            content=current_input_text,
-            provider=agent_def.provider,
-        ),
-    )
+    with rec.span("history_persist"):
+        await conv_service.append(
+            session,
+            conv.session_id,
+            AppendMessageDraft(
+                role="user",
+                content=current_input_text,
+                provider=agent_def.provider,
+            ),
+        )
 
     # ⑤ 装 InvokeContext
     ctx = InvokeContext(
@@ -165,8 +170,10 @@ async def invoke(
     success = True
     code = ResultCode.Success.value
     err_msg: str | None = None
+    request_payload = _build_request_payload(req, agent_def, current_input_text)
     try:
-        result = await provider.invoke(ctx)
+        with rec.span("provider_invoke", meta={"provider": agent_def.provider}):
+            result = await provider.invoke(ctx)
     except ProviderError as pe:
         success = False
         code = int(pe.code)
@@ -182,6 +189,8 @@ async def invoke(
             code=code,
             error_message=err_msg,
             duration_ms=int((time.monotonic() - start_ts) * 1000),
+            spans=rec.dump(),
+            request_payload=request_payload,
         )
         raise
     except Exception:
@@ -196,35 +205,37 @@ async def invoke(
             code=ResultCode.InternalError.value,
             error_message="unexpected error",
             duration_ms=int((time.monotonic() - start_ts) * 1000),
+            spans=rec.dump(),
+            request_payload=request_payload,
         )
         raise
 
-    # ⑦ 落库 assistant msg
-    await conv_service.append(
-        session,
-        conv.session_id,
-        AppendMessageDraft(
-            role="assistant",
-            content=result.answer,
-            steps=[s.model_dump() for s in result.steps] or None,
-            citations=[c.model_dump() for c in result.citations] or None,
-            tool_calls=[tc.model_dump() for tc in result.tool_calls] or None,
-            usage=result.usage.model_dump() if result.usage else None,
-            provider=agent_def.provider,
-        ),
-    )
-
-    # ⑧ touch（首轮自动 title）
-    title = current_input_text if conv.title is None else None
-    await conv_service.touch(
-        session,
-        conv.session_id,
-        title=title,
-        provider_conv_id=result.provider_conv_id,
-    )
+    # ⑦ 落库 assistant msg + ⑧ touch
+    with rec.span("response_persist"):
+        await conv_service.append(
+            session,
+            conv.session_id,
+            AppendMessageDraft(
+                role="assistant",
+                content=result.answer,
+                steps=[s.model_dump() for s in result.steps] or None,
+                citations=[c.model_dump() for c in result.citations] or None,
+                tool_calls=[tc.model_dump() for tc in result.tool_calls] or None,
+                usage=result.usage.model_dump() if result.usage else None,
+                provider=agent_def.provider,
+            ),
+        )
+        title = current_input_text if conv.title is None else None
+        await conv_service.touch(
+            session,
+            conv.session_id,
+            title=title,
+            provider_conv_id=result.provider_conv_id,
+        )
 
     # ⑨ 审计
     usage = result.usage
+    response_payload = _build_response_payload(result)
     await _record_call(
         session,
         request_id=request_id,
@@ -239,6 +250,9 @@ async def invoke(
         prompt_tokens=usage.prompt_tokens if usage else None,
         completion_tokens=usage.completion_tokens if usage else None,
         total_tokens=usage.total_tokens if usage else None,
+        spans=rec.dump(),
+        request_payload=request_payload,
+        response_payload=response_payload,
     )
 
     return InvokeResponse(
@@ -294,6 +308,36 @@ async def _record_call(session: AsyncSession, **kwargs) -> None:
         )
 
 
+def _build_request_payload(
+    req: InvokeRequest, agent_def: AgentDef, current_input_text: str
+) -> dict:
+    """构造入参快照（不暴露 raw bytes / 大对象，限制长度避免 JSONB 爆）"""
+    return {
+        "agent": agent_def.key,
+        "provider": agent_def.provider,
+        "session_id": req.session_id,
+        "input_preview": (
+            current_input_text[:2000]
+            if isinstance(current_input_text, str)
+            else None
+        ),
+        "input_kind": "string" if isinstance(req.input, str) else "list",
+        "context": req.context or None,
+        "options": req.options or None,
+    }
+
+
+def _build_response_payload(result) -> dict:
+    answer = (result.answer or "")[:4000]
+    return {
+        "answer_preview": answer,
+        "steps": [s.model_dump() for s in result.steps] or None,
+        "citations": [c.model_dump() for c in result.citations] or None,
+        "tool_calls": [tc.model_dump() for tc in result.tool_calls] or None,
+        "usage": result.usage.model_dump() if result.usage else None,
+    }
+
+
 # ── 流式 invoke 主流程 ────────────────────────────────
 
 
@@ -315,25 +359,29 @@ async def stream_invoke(
     - 正常完成 → 落 assistant msg、touch 会话、写 call_log（success）
     """
     start_ts = time.monotonic()
+    rec = SpanRecorder()
 
     # 共享准备阶段（① 注册表 / ② 会话 / ③ 历史 / ④ 落 user msg）
-    async with AsyncSessionLocal() as session:
-        prep = await _prepare_invocation(
-            session,
-            agent_key,
-            req,
-            current_app=current_app,
-            request_id=request_id,
-            stream=True,
-        )
-        await session.commit()
+    with rec.span("prepare_invocation"):
+        async with AsyncSessionLocal() as session:
+            prep = await _prepare_invocation(
+                session,
+                agent_key,
+                req,
+                current_app=current_app,
+                request_id=request_id,
+                stream=True,
+            )
+            await session.commit()
     agent_def, provider, conv, ctx, current_input_text = prep
+    request_payload = _build_request_payload(req, agent_def, current_input_text)
 
     # 流式调用 + 聚合器
     aggregator = _StreamAggregator(session_id=ctx.session_id, request_id=request_id)
     failed = False
     fail_code: int = ResultCode.Success.value
     fail_msg: str | None = None
+    provider_span_start = rec.now_ms()
 
     try:
         async for event in provider.stream(ctx):
@@ -383,6 +431,15 @@ async def stream_invoke(
             data={"code": fail_code, "message": fail_msg},
         )
     finally:
+        # 收口 provider_invoke span
+        rec.add(
+            "provider_invoke",
+            start_ms=provider_span_start,
+            end_ms=rec.now_ms(),
+            status="failed" if failed else "success",
+            meta={"provider": agent_def.provider, "stream": True},
+            error_message=fail_msg if failed else None,
+        )
         # 后置写入 + 审计（独立 session）
         await _stream_finalize(
             failed=failed,
@@ -397,6 +454,8 @@ async def stream_invoke(
             agent_key=agent_key,
             request_id=request_id,
             duration_ms=int((time.monotonic() - start_ts) * 1000),
+            spans=rec,
+            request_payload=request_payload,
         )
 
 
@@ -493,6 +552,8 @@ async def _stream_finalize(
     agent_key: str,
     request_id: str,
     duration_ms: int,
+    spans: SpanRecorder,
+    request_payload: dict,
 ) -> None:
     """流结束后：落 assistant msg + touch + call_log（独立 session 防 yield 期间 session 已死）
 
@@ -502,29 +563,36 @@ async def _stream_finalize(
     async with AsyncSessionLocal() as session:
         try:
             if not failed and result.answer:
-                await conv_service.append(
-                    session,
-                    conv_session_id,
-                    AppendMessageDraft(
-                        role="assistant",
-                        content=result.answer,
-                        steps=[s.model_dump() for s in result.steps] or None,
-                        citations=[c.model_dump() for c in result.citations] or None,
-                        tool_calls=[tc.model_dump() for tc in result.tool_calls]
-                        or None,
-                        usage=result.usage.model_dump() if result.usage else None,
-                        provider=agent_def.provider,
-                    ),
-                )
-                title = current_input_text if not conv_had_title else None
-                await conv_service.touch(
-                    session,
-                    conv_session_id,
-                    title=title,
-                    provider_conv_id=result.provider_conv_id,
-                )
+                with spans.span("response_persist"):
+                    await conv_service.append(
+                        session,
+                        conv_session_id,
+                        AppendMessageDraft(
+                            role="assistant",
+                            content=result.answer,
+                            steps=[s.model_dump() for s in result.steps] or None,
+                            citations=[c.model_dump() for c in result.citations]
+                            or None,
+                            tool_calls=[tc.model_dump() for tc in result.tool_calls]
+                            or None,
+                            usage=result.usage.model_dump() if result.usage else None,
+                            provider=agent_def.provider,
+                        ),
+                    )
+                    title = current_input_text if not conv_had_title else None
+                    await conv_service.touch(
+                        session,
+                        conv_session_id,
+                        title=title,
+                        provider_conv_id=result.provider_conv_id,
+                    )
 
             usage = result.usage
+            response_payload = (
+                _build_response_payload(result)
+                if (not failed and result.answer)
+                else None
+            )
             await _record_call(
                 session,
                 request_id=request_id,
@@ -539,6 +607,9 @@ async def _stream_finalize(
                 prompt_tokens=usage.prompt_tokens if usage else None,
                 completion_tokens=usage.completion_tokens if usage else None,
                 total_tokens=usage.total_tokens if usage else None,
+                spans=spans.dump(),
+                request_payload=request_payload,
+                response_payload=response_payload,
             )
             await session.commit()
         except Exception:  # noqa: BLE001

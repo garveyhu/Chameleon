@@ -153,6 +153,9 @@ async def record_call(
     prompt_tokens: int | None = None,
     completion_tokens: int | None = None,
     total_tokens: int | None = None,
+    spans: list[dict] | None = None,
+    request_payload: dict | None = None,
+    response_payload: dict | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）"""
     log = CallLog(
@@ -168,6 +171,9 @@ async def record_call(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        spans=spans,
+        request_payload=request_payload,
+        response_payload=response_payload,
     )
     session.add(log)
     await session.flush()

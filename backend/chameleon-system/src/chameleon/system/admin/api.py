@@ -11,7 +11,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.system.admin import service
-from chameleon.system.admin.schemas import CallLogItem, ProviderStatusItem
+from chameleon.system.admin.schemas import (
+    CallLogDetailItem,
+    CallLogItem,
+    ProviderStatusItem,
+)
 from chameleon.core.infra.auth import CurrentApp, require_scope
 from chameleon.core.infra.db import get_session
 from chameleon.core.api.response import PageParams, PageResult, Result
@@ -41,6 +45,18 @@ async def list_call_logs(
         success=success,
     )
     return Result.ok(result)
+
+
+@router.get(
+    "/call-logs/{call_log_id}", response_model=Result[CallLogDetailItem]
+)
+async def get_call_log(
+    call_log_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: CurrentApp = Depends(require_scope("admin")),
+) -> Result[CallLogDetailItem]:
+    item = await service.get_call_log(session, call_log_id)
+    return Result.ok(item)
 
 
 @router.get("/providers/status", response_model=Result[list[ProviderStatusItem]])

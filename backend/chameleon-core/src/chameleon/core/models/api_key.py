@@ -91,6 +91,12 @@ class CallLog(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # P16-E2 trace: spans [{name, start_ms, end_ms, status, error?, meta?}]
+    spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # 入参快照（input + options + history 摘要等）
+    request_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 出参快照（answer + steps + citations + tool_calls + usage）
+    response_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

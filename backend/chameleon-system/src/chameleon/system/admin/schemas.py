@@ -24,6 +24,14 @@ class CallLogItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CallLogDetailItem(CallLogItem):
+    """call_log 详情：列表 fields + 完整 spans / request_payload / response_payload"""
+
+    spans: list | None = None
+    request_payload: dict | None = None
+    response_payload: dict | None = None
+
+
 class ProviderStatusItem(BaseModel):
     name: str
     ok: bool

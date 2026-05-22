@@ -11,7 +11,12 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.system.admin.schemas import CallLogItem, ProviderStatusItem
+from chameleon.system.admin.schemas import (
+    CallLogDetailItem,
+    CallLogItem,
+    ProviderStatusItem,
+)
+from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.models import CallLog
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.providers.base import PROVIDERS
@@ -61,6 +66,19 @@ async def list_call_logs(
         page=page.page,
         page_size=page.page_size,
     )
+
+
+async def get_call_log(
+    session: AsyncSession, call_log_id: int
+) -> CallLogDetailItem:
+    row = (
+        await session.execute(select(CallLog).where(CallLog.id == call_log_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"call_log 不存在: {call_log_id}"
+        )
+    return CallLogDetailItem.model_validate(row)
 
 
 async def providers_status() -> list[ProviderStatusItem]:
