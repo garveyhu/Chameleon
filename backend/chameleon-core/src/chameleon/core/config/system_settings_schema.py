@@ -11,7 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-SettingGroup = Literal["general", "session", "knowledge", "stream", "timeout", "call_log"]
+SettingGroup = Literal[
+    "general", "session", "knowledge", "stream", "timeout", "call_log", "gateway"
+]
 SettingType = Literal["int", "float", "bool", "str", "select"]
 
 
@@ -185,6 +187,20 @@ SYSTEM_SETTINGS_SCHEMA: list[SettingSchema] = [
         max=3650,
         description_zh="调用日志保留天数（0 = 永久不清理）",
         description_en="Call log retention days (0 = no cleanup)",
+    ),
+    SettingSchema(
+        key="gateway.routing_enabled",
+        group="gateway",
+        value_type="bool",
+        default=False,
+        description_zh=(
+            "启用 channel/ability 矩阵路由（关闭时走旧的 agent→provider 直绑）。"
+            "v0.3 默认关闭，v0.4 默认开启，v0.5 删除旧路径。"
+        ),
+        description_en=(
+            "Enable channel/ability matrix routing (off = legacy agent→provider). "
+            "Default off in v0.3, on in v0.4, legacy removed in v0.5."
+        ),
     ),
 ]
 

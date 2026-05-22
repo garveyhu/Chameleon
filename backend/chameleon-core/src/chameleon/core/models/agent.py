@@ -52,6 +52,9 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # P17.A1.2 矩阵路由用：声明 agent 需要的 model 能力。NULL = 不参与矩阵
+    # 路由，仍走老的 agent.provider 直绑（兼容期，v0.5 强制要求）。
+    preferred_model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_agents_source", "source"),

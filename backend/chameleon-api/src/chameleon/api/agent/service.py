@@ -18,6 +18,7 @@ import time
 from collections.abc import AsyncIterator
 
 from loguru import logger
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.agent.schemas import (
@@ -36,6 +37,8 @@ from chameleon.core.api.exceptions import (
     ProviderError,
     ResultCode,
 )
+from chameleon.core.config.runtime_settings import get_bool
+from chameleon.core.routing import NoSatisfiedChannelError, resolve_channel
 from chameleon.core.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
@@ -76,6 +79,72 @@ def get_agent(key: str) -> AgentItem:
     )
 
 
+# ── P17.A1.2 路由决策 helper ──────────────────────────────
+
+
+async def _try_routing_decision(
+    session: AsyncSession,
+    *,
+    agent_key: str,
+    rec: SpanRecorder,
+) -> int | None:
+    """读 gateway.routing_enabled flag + agent.preferred_model_code，
+    解析到 channel 后返其 id；任何情况失败都返 None（不阻塞老路径）。
+
+    决策结果记录到 span 元数据用于调试，**不实际修改 provider 行为** ——
+    P17.A2 failover 会把 channel 信息真正灌进 InvokeContext。
+    本 PR 只是把矩阵路由的"决策"先打通，便于后续接管。
+    """
+    with rec.span("routing_decision", meta={"agent": agent_key}) as span:
+        try:
+            enabled = await get_bool(session, "gateway.routing_enabled")
+        except Exception as e:  # noqa: BLE001
+            logger.debug("routing flag read failed | err={}", e)
+            return None
+        if not enabled:
+            span.meta["status"] = "flag_off"
+            return None
+
+        # 取 agent 行的 preferred_model_code（DB 字段，与注册表的 agent_def 是两套）
+        from chameleon.core.models import Agent
+
+        agent_row = (
+            await session.execute(
+                select(Agent).where(
+                    Agent.agent_key == agent_key, Agent.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if agent_row is None or not agent_row.preferred_model_code:
+            span.meta["status"] = "no_preferred_model"
+            return None
+
+        try:
+            ch = await resolve_channel(
+                session, model_code=agent_row.preferred_model_code
+            )
+        except NoSatisfiedChannelError as e:
+            span.meta["status"] = "no_channel"
+            span.meta["model_code"] = agent_row.preferred_model_code
+            logger.warning(
+                "routing decision: no channel | agent={} | model_code={} | err={}",
+                agent_key,
+                agent_row.preferred_model_code,
+                e,
+            )
+            return None
+        except Exception as e:  # noqa: BLE001
+            span.meta["status"] = "error"
+            span.meta["error"] = str(e)[:200]
+            logger.exception("routing decision unexpected error | agent={}", agent_key)
+            return None
+
+        span.meta["status"] = "matched"
+        span.meta["model_code"] = agent_row.preferred_model_code
+        span.meta["channel_id"] = ch.id
+        return ch.id
+
+
 # ── 非流式 invoke 主流程 ────────────────────────────────
 
 
@@ -102,6 +171,13 @@ async def invoke(
                 ResultCode.RegistryError,
                 message=f"provider 未注册: {agent_def.provider}",
             )
+
+    # ①.5 P17.A1.2 路由决策（feature flag 控；本 PR 仅决策不接管）
+    routed_channel_id = await _try_routing_decision(
+        session, agent_key=agent_key, rec=rec
+    )
+    # routed_channel_id 暂时只用于审计（P17.A2 失败重试会真正消费）
+    _ = routed_channel_id
 
     # ② 会话处理
     with rec.span("conversation_setup"):
