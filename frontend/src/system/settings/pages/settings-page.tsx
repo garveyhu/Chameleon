@@ -139,7 +139,6 @@ const SystemSettingsTab = ({ group }: { group: SettingGroup }) => {
       setDraft({});
       qc.invalidateQueries({ queryKey: ['system-settings'] });
     },
-    onError: e => toast.error(e instanceof Error ? e.message : '保存失败'),
   });
 
   const resetMut = useMutation({
@@ -205,7 +204,6 @@ const ModelDefaultsTab = () => {
       toast.success('已更新');
       qc.invalidateQueries({ queryKey: ['model-defaults'] });
     },
-    onError: e => toast.error(e instanceof Error ? e.message : '更新失败'),
   });
 
   const llmModels = (modelsQ.data || []).filter(m => m.kind === 'chat' && m.enabled);
@@ -315,7 +313,6 @@ const ExportImportTab = () => {
       setWarnOpen(false);
       setAcknowledged(false);
     },
-    onError: e => toast.error(e instanceof Error ? e.message : '导出失败'),
   });
 
   const handleImport = async (file: File) => {

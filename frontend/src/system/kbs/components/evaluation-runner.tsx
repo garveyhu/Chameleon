@@ -113,7 +113,6 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
       reset();
       onClose();
     },
-    onError: () => toast.error('创建失败'),
   });
 
   const canSubmit =

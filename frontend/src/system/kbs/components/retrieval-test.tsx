@@ -54,7 +54,6 @@ export const RetrievalTest = ({ kb }: Props) => {
         toast.info('未命中任何 chunk，试着降低 top_k 或换 query');
       }
     },
-    onError: () => toast.error('检索失败'),
   });
 
   return (

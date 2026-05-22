@@ -67,7 +67,6 @@ export const KbConfigForm = ({ kb }: Props) => {
       qc.invalidateQueries({ queryKey: ['kb', kb.id] });
       qc.invalidateQueries({ queryKey: ['kbs'] });
     },
-    onError: () => toast.error('保存失败'),
   });
 
   const reindexMut = useMutation({
@@ -77,7 +76,6 @@ export const KbConfigForm = ({ kb }: Props) => {
       qc.invalidateQueries({ queryKey: ['kb-documents', kb.id] });
       setConfirmOpen(false);
     },
-    onError: () => toast.error('批量重分块失败'),
   });
 
   const setMode = (mode: KbChunkStrategy['mode']) => {

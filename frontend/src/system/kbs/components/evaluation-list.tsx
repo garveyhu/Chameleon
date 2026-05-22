@@ -10,6 +10,7 @@ import {
   TablePagination,
 } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
+import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { EvaluationCompareChart } from '@/system/kbs/components/evaluation-compare-chart';
@@ -67,7 +68,6 @@ export const EvaluationListTab = ({ kbId }: Props) => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['kb-evaluations', kbId] });
     },
-    onError: () => toast.error('删除失败'),
   });
 
   const columns: DataTableColumn<EvaluationListItem>[] = [
@@ -161,9 +161,15 @@ export const EvaluationListTab = ({ kbId }: Props) => {
           type="button"
           title="删除"
           className="rounded p-1 text-stone-500 hover:bg-rose-50 hover:text-rose-600"
-          onClick={ev => {
+          onClick={async ev => {
             ev.stopPropagation();
-            if (window.confirm(`删除评估批次 "${e.name}"？`)) {
+            if (
+              await confirm({
+                title: `删除评估批次 "${e.name}"？`,
+                danger: true,
+                confirmText: '删除',
+              })
+            ) {
               deleteMut.mutate(e.id);
             }
           }}

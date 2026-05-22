@@ -54,7 +54,6 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
       toast.success('关联已保存');
       qc.invalidateQueries({ queryKey: ['agent-linked-kbs', agentId] });
     },
-    onError: () => toast.error('保存失败'),
   });
 
   const remove = (id: import('@/core/types/api').EntityId) =>

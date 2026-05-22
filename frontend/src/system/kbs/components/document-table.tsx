@@ -21,6 +21,7 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Tooltip } from '@/core/components/ui/tooltip';
+import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
@@ -89,7 +90,6 @@ export const DocumentTable = ({ kbId }: Props) => {
       toast.success('文档已删除');
       qc.invalidateQueries({ queryKey: ['kb-documents', kbId] });
     },
-    onError: () => toast.error('删除失败'),
   });
 
   const columns: DataTableColumn<DocumentItem>[] = [
@@ -174,9 +174,16 @@ export const DocumentTable = ({ kbId }: Props) => {
           type="button"
           title="删除"
           className="rounded p-1 text-stone-500 hover:bg-rose-50 hover:text-rose-600"
-          onClick={e => {
+          onClick={async e => {
             e.stopPropagation();
-            if (window.confirm(`删除 "${d.title}"？此操作会同步清理切块与对象存储。`)) {
+            if (
+              await confirm({
+                title: `删除文档 "${d.title}"？`,
+                description: '将同步清理切块与对象存储，不可恢复。',
+                danger: true,
+                confirmText: '删除',
+              })
+            ) {
               deleteMut.mutate(d.id);
             }
           }}

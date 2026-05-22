@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState } from 'react';
 
+import { confirm } from '@/core/lib/confirm';
+
 interface UseModalDirtyResult {
   dirty: boolean;
   setDirty: (v: boolean) => void;
@@ -28,9 +30,15 @@ export const useModalDirty = (
   }, []);
 
   const guardedOpenChange = useCallback(
-    (open: boolean, originalOnChange: (open: boolean) => void) => {
+    async (open: boolean, originalOnChange: (open: boolean) => void) => {
       if (!open && dirtyRef.current) {
-        if (typeof window !== 'undefined' && window.confirm(confirmMessage)) {
+        const ok = await confirm({
+          title: '关闭未保存的修改？',
+          description: confirmMessage,
+          confirmText: '丢弃修改',
+          danger: true,
+        });
+        if (ok) {
           reset();
           originalOnChange(false);
         }

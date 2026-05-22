@@ -34,7 +34,6 @@ export const ChunkCard = ({ chunk, onSave }: Props) => {
       setEditing(false);
       qc.invalidateQueries({ queryKey: ['kb-doc-chunks'] });
     },
-    onError: () => toast.error('保存失败'),
   });
 
   const copy = async () => {

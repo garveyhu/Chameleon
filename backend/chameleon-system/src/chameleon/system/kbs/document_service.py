@@ -350,6 +350,7 @@ async def update_document(
     if chunk_strategy is not None:
         row.chunk_strategy = chunk_strategy
     await session.flush()
+    await session.refresh(row)
     return row
 
 
@@ -425,6 +426,7 @@ async def delete_document(
 
     row.deleted_at = datetime.now(timezone.utc)
     await session.flush()
+    await session.refresh(row)
     return row
 
 

@@ -140,7 +140,6 @@ const DocumentInfoCard = ({
       toast.success('文档信息已保存');
       qc.invalidateQueries({ queryKey: ['kb-doc', doc.kb_id, doc.id] });
     },
-    onError: () => toast.error('保存失败'),
   });
 
   const reindexMut = useMutation({
@@ -150,7 +149,6 @@ const DocumentInfoCard = ({
       qc.invalidateQueries({ queryKey: ['kb-doc', doc.kb_id, doc.id] });
       qc.invalidateQueries({ queryKey: ['kb-doc-chunks', doc.kb_id, doc.id] });
     },
-    onError: () => toast.error('重分块失败'),
   });
 
   return (

@@ -36,7 +36,6 @@ export const DocumentUploadZone = ({ kbId }: Props) => {
       toast.success(`已上传 ${queued.length} 个文件`);
       qc.invalidateQueries({ queryKey: ['kb-documents', kbId] });
     },
-    onError: () => toast.error('上传失败'),
   });
 
   const handleFiles = (files: FileList | File[] | null) => {
@@ -140,7 +139,6 @@ const UrlImportModal = ({ open, onClose, kbId, onDone }: ModalProps) => {
       onDone();
       onClose();
     },
-    onError: () => toast.error('URL 导入失败'),
   });
   return (
     <Modal open={open} onOpenChange={o => !o && onClose()}>
@@ -196,7 +194,6 @@ const TextImportModal = ({ open, onClose, kbId, onDone }: ModalProps) => {
       onDone();
       onClose();
     },
-    onError: () => toast.error('文本导入失败'),
   });
   return (
     <Modal open={open} onOpenChange={o => !o && onClose()}>
