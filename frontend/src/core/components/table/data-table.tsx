@@ -112,7 +112,8 @@ export function DataTable<T>({
   }, []);
   const empty = rows.length === 0 && !loading && hasMounted;
   const isPlaceholder = (loading || !hasMounted) && rows.length === 0;
-  const showSkeleton = useDelayedFlag(isPlaceholder, 200);
+  // 400ms 延迟：接口 ≤ 400ms 返回时直接出数据，不闪一下 skeleton
+  const showSkeleton = useDelayedFlag(isPlaceholder, 400);
 
   return (
     <div className={cn('overflow-hidden rounded-lg border border-stone-200/60', className)}>
