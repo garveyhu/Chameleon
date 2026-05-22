@@ -19,6 +19,10 @@ class CallLogItem(BaseModel):
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    # P17.C1 嵌套 Observation
+    parent_id: str | None = None
+    observation_type: str = "generation"
+    completion_start_ms: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -30,6 +34,34 @@ class CallLogDetailItem(CallLogItem):
     spans: list | None = None
     request_payload: dict | None = None
     response_payload: dict | None = None
+
+
+class TraceTreeNode(BaseModel):
+    """Trace tree 节点 —— observation 嵌套树的一个节点
+
+    每个节点是一条 call_log；children 列表里是 parent_id == 本 node.request_id 的子。
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    request_id: str
+    parent_id: str | None = None
+    observation_type: str = "generation"
+    agent_key: str
+    app_id: str
+    session_id: str | None = None
+    stream: bool = False
+    success: bool
+    code: int
+    error_message: str | None = None
+    duration_ms: int
+    completion_start_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    created_at: datetime
+    children: list["TraceTreeNode"] = []
 
 
 class ProviderStatusItem(BaseModel):

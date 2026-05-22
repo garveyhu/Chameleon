@@ -1,5 +1,16 @@
 import type { EntityId } from '@/core/types/api';
 
+export type ObservationType =
+  | 'trace'
+  | 'span'
+  | 'generation'
+  | 'agent'
+  | 'tool'
+  | 'retriever'
+  | 'evaluator'
+  | 'embedding'
+  | 'guardrail';
+
 export interface CallLogItem {
   id: EntityId;
   request_id: string;
@@ -16,7 +27,32 @@ export interface CallLogItem {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  /** P17.C1 嵌套 Observation 字段 */
+  parent_id?: string | null;
+  observation_type?: ObservationType;
+  completion_start_ms?: number | null;
   created_at: string;
+}
+
+export interface TraceTreeNode {
+  id: EntityId;
+  request_id: string;
+  parent_id: string | null;
+  observation_type: ObservationType;
+  agent_key: string;
+  app_id: string;
+  session_id: string | null;
+  stream: boolean;
+  success: boolean;
+  code: number;
+  error_message: string | null;
+  duration_ms: number;
+  completion_start_ms: number | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  created_at: string;
+  children: TraceTreeNode[];
 }
 
 export interface SpanRecord {

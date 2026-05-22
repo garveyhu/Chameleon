@@ -14,11 +14,12 @@ import {
 } from '@/core/components/ui/sheet';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { ObservationTree } from '@/system/call_logs/components/observation-tree';
 import { TimelineChart } from '@/system/call_logs/components/timeline-chart';
 import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem } from '@/system/call_logs/types/call-log';
 
-type TabKey = 'request' | 'response' | 'timeline' | 'logs' | 'raw';
+type TabKey = 'tree' | 'request' | 'response' | 'timeline' | 'logs' | 'raw';
 
 interface TabDef {
   key: TabKey;
@@ -26,6 +27,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
+  { key: 'tree', label: 'Tree' },
   { key: 'request', label: 'Request' },
   { key: 'response', label: 'Response' },
   { key: 'timeline', label: 'Timeline' },
@@ -39,12 +41,19 @@ interface Props {
 }
 
 export const TraceDrawer = ({ callLog, onClose }: Props) => {
-  const [tab, setTab] = useState<TabKey>('timeline');
+  const [tab, setTab] = useState<TabKey>('tree');
 
   const detailQ = useQuery({
     queryKey: ['call-log-detail', callLog?.id],
     queryFn: () => callLogApi.get(callLog!.id),
     enabled: callLog != null,
+  });
+
+  // 仅当 Tree tab 激活时拉嵌套树（用 request_id 而非 id）
+  const treeQ = useQuery({
+    queryKey: ['call-log-tree', callLog?.request_id],
+    queryFn: () => callLogApi.tree(callLog!.request_id),
+    enabled: callLog != null && tab === 'tree',
   });
 
   return (
@@ -100,7 +109,22 @@ export const TraceDrawer = ({ callLog, onClose }: Props) => {
             ))}
           </nav>
 
-          {detailQ.isLoading || !detailQ.data ? (
+          {tab === 'tree' ? (
+            treeQ.isLoading ? (
+              <div className="py-10 text-center text-sm text-stone-400">加载嵌套树…</div>
+            ) : treeQ.data ? (
+              <div className="space-y-2">
+                <div className="text-[11px] text-stone-500">
+                  以 observation 父子关系展开；点击节点可查看节点详情
+                </div>
+                <ObservationTree root={treeQ.data} />
+              </div>
+            ) : (
+              <div className="py-10 text-center text-sm text-stone-400">
+                无法加载嵌套树
+              </div>
+            )
+          ) : detailQ.isLoading || !detailQ.data ? (
             <div className="py-10 text-center text-sm text-stone-400">加载中…</div>
           ) : (
             <>

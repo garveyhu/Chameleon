@@ -15,6 +15,7 @@ from chameleon.system.admin.schemas import (
     CallLogDetailItem,
     CallLogItem,
     ProviderStatusItem,
+    TraceTreeNode,
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.models import CallLog
@@ -79,6 +80,67 @@ async def get_call_log(
             ResultCode.Fail, message=f"call_log 不存在: {call_log_id}"
         )
     return CallLogDetailItem.model_validate(row)
+
+
+async def get_trace_tree(
+    session: AsyncSession, trace_request_id: str
+) -> TraceTreeNode:
+    """以 trace_request_id 为根，递归收集所有子 observation 拼成树
+
+    实现：先查根 + 其所有后代（按 parent_id 链路 BFS）一次性 fetch，再 in-memory
+    组装成树。这避免 N+1，对常见 trace 深度（< 50 节点）足够快。
+    """
+    root = (
+        await session.execute(
+            select(CallLog).where(CallLog.request_id == trace_request_id)
+        )
+    ).scalar_one_or_none()
+    if root is None:
+        raise BusinessError(
+            ResultCode.Fail,
+            message=f"call_log 不存在: request_id={trace_request_id}",
+        )
+
+    # BFS 收集所有后代 —— PG WITH RECURSIVE 也行但 ORM 麻烦；先 Python 层 BFS。
+    # 假设单 trace 节点数不超过 ~500（绝大多数 trace 几十节点）。
+    all_logs: dict[str, CallLog] = {root.request_id: root}
+    frontier: list[str] = [root.request_id]
+    safety = 0
+    while frontier and safety < 20:  # 深度上限保护
+        safety += 1
+        children = (
+            (
+                await session.execute(
+                    select(CallLog).where(CallLog.parent_id.in_(frontier))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        next_frontier: list[str] = []
+        for c in children:
+            if c.request_id in all_logs:
+                continue  # 防御性去重（循环指向理论上不该发生）
+            all_logs[c.request_id] = c
+            next_frontier.append(c.request_id)
+        frontier = next_frontier
+
+    # 组装树
+    def to_node(row: CallLog) -> TraceTreeNode:
+        return TraceTreeNode.model_validate(row)
+
+    nodes: dict[str, TraceTreeNode] = {
+        rid: to_node(row) for rid, row in all_logs.items()
+    }
+    for rid, row in all_logs.items():
+        if row.parent_id and row.parent_id in nodes:
+            nodes[row.parent_id].children.append(nodes[rid])
+
+    # children 按 created_at 升序排列
+    for n in nodes.values():
+        n.children.sort(key=lambda x: x.created_at)
+
+    return nodes[root.request_id]
 
 
 async def providers_status() -> list[ProviderStatusItem]:
