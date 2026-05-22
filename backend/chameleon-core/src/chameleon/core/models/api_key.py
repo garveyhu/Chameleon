@@ -97,6 +97,14 @@ class CallLog(Base):
     request_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 出参快照（answer + steps + citations + tool_calls + usage）
     response_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # P17.C1 嵌套 Observation：parent_id 指向同表父 request_id；NULL = trace root
+    parent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # observation 类型枚举（trace/span/generation/agent/tool/retriever/evaluator/embedding/guardrail）
+    observation_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="generation", default="generation"
+    )
+    # 首 token 延迟（流式可用），ms
+    completion_start_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -109,4 +117,6 @@ class CallLog(Base):
         Index("ix_call_logs_agent_created", "agent_key", "created_at"),
         Index("ix_call_logs_success_created", "success", "created_at"),
         Index("ix_call_logs_api_key", "api_key_id"),
+        Index("ix_call_logs_parent", "parent_id"),
+        Index("ix_call_logs_type", "observation_type"),
     )

@@ -54,7 +54,7 @@ class Channel(Base, TimestampMixin, SoftDeleteMixin):
     id: Mapped[int] = snowflake_pk()
     provider_id: Mapped[int] = mapped_column(
         BigInteger,
-        ForeignKey("providers.id", ondelete="RESTRICT"),
+        ForeignKey("providers.id", ondelete="CASCADE"),
         nullable=False,
     )
     # 同一 provider 下唯一名（便于 admin 区分多 key），不强制全局唯一

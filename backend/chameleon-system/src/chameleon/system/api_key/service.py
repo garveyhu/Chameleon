@@ -14,15 +14,15 @@ from loguru import logger
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.api.response import PageParams, PageResult
+from chameleon.core.infra.auth import generate_api_key
+from chameleon.core.models import ApiKey, App, CallLog
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
     ApiKeyItem,
     CreateApiKeyRequest,
 )
-from chameleon.core.infra.auth import generate_api_key
-from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import ApiKey, App, CallLog
-from chameleon.core.api.response import PageParams, PageResult
 
 
 async def create_api_key(
@@ -156,8 +156,20 @@ async def record_call(
     spans: list[dict] | None = None,
     request_payload: dict | None = None,
     response_payload: dict | None = None,
+    # P17.C1 嵌套 observation 字段
+    parent_id: str | None = None,
+    observation_type: str = "generation",
+    completion_start_ms: int | None = None,
 ) -> None:
-    """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）"""
+    """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
+
+    P17.C1 起 call_log 同时承担"嵌套 observation"角色：
+    - parent_id 指向同表父 request_id；NULL = trace 根
+    - observation_type 区分 trace/span/generation/agent/tool/...
+
+    parent_id 由调用方显式传入 —— 推荐用 chameleon.core.observe.observe()
+    context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
+    """
     log = CallLog(
         request_id=request_id,
         app_id=app_id,
@@ -174,6 +186,9 @@ async def record_call(
         spans=spans,
         request_payload=request_payload,
         response_payload=response_payload,
+        parent_id=parent_id,
+        observation_type=observation_type,
+        completion_start_ms=completion_start_ms,
     )
     session.add(log)
     await session.flush()

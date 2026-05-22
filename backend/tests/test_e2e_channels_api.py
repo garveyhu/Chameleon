@@ -95,10 +95,18 @@ async def test_channels_requires_auth(client: AsyncClient):
 # ── 列表 + 过滤 ───────────────────────────────────────────
 
 
-async def test_channels_list_includes_backfilled(
-    client: AsyncClient, admin_token: str
+async def test_channels_list_works(
+    client: AsyncClient, admin_token: str, tmp_provider: int
 ):
-    """backfill 的 default channels 应该在列表里（PG 内已经填入 3 条）"""
+    """通过 fixture 创建 channel 后列表能列出（不依赖 backfill 残留数据）"""
+    # tmp_provider fixture 触发后表里至少有它的 provider，但 channels 表可能空。
+    # 先建一条
+    await client.post(
+        "/v1/admin/channels",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"provider_id": tmp_provider, "name": "list-test"},
+    )
+
     r = await client.get(
         "/v1/admin/channels",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -106,9 +114,7 @@ async def test_channels_list_includes_backfilled(
     assert r.status_code == 200
     items = r.json()["data"]
     assert len(items) >= 1
-    # 至少有一个 default channel
-    assert any(it["name"] == "default" for it in items)
-    # provider_code 已 join 上
+    assert any(it["name"] == "list-test" for it in items)
     assert all("provider_code" in it for it in items)
 
 
