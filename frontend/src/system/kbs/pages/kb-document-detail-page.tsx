@@ -3,18 +3,21 @@
  * chunk 数大时启用 react-virtual 渲染窗口；小于阈值时走原生 grid。
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowLeft, FileText, Globe, ScrollText } from 'lucide-react';
+import { ArrowLeft, FileText, Globe, RotateCcw, ScrollText } from 'lucide-react';
 import type { ReactElement } from 'react';
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { SectionCard } from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
+import { Button } from '@/core/components/ui/button';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import { ChunkCard } from '@/system/kbs/components/chunk-card';
+import { MetadataEditor } from '@/system/kbs/components/metadata-editor';
+import { TagEditor } from '@/system/kbs/components/tag-editor';
 import { documentApi } from '@/system/kbs/services/document';
 import type { DocumentItem } from '@/system/kbs/types/kb';
 
@@ -115,46 +118,106 @@ const DocumentInfoCard = ({
 }: {
   doc: DocumentItem;
   chunkCount: number;
-}) => (
-  <SectionCard>
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-stone-500">{SOURCE_ICON[doc.source_type]}</span>
-          <h2 className="truncate text-[16px] font-medium text-stone-900">
-            {doc.title}
-          </h2>
-          <StatusBadge status={doc.status} />
-        </div>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-stone-500">
-          <span>类型: {doc.mime_type ?? '—'}</span>
-          <span>来源: {doc.source_type}</span>
-          {doc.size_bytes != null && (
-            <span>大小: {(doc.size_bytes / 1024).toFixed(1)} KB</span>
+}) => {
+  const qc = useQueryClient();
+  const [tags, setTags] = useState<string[]>(doc.tags);
+  const [meta, setMeta] = useState<Record<string, unknown>>(doc.meta ?? {});
+  // 文档刷新时同步内部状态
+  useEffect(() => setTags(doc.tags), [doc.tags]);
+  useEffect(() => setMeta(doc.meta ?? {}), [doc.meta]);
+
+  const dirty = useMemo(
+    () =>
+      JSON.stringify(tags) !== JSON.stringify(doc.tags) ||
+      JSON.stringify(meta) !== JSON.stringify(doc.meta ?? {}),
+    [tags, meta, doc.tags, doc.meta],
+  );
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      documentApi.update(doc.kb_id, doc.id, { tags, meta }),
+    onSuccess: () => {
+      toast.success('文档信息已保存');
+      qc.invalidateQueries({ queryKey: ['kb-doc', doc.kb_id, doc.id] });
+    },
+    onError: () => toast.error('保存失败'),
+  });
+
+  const reindexMut = useMutation({
+    mutationFn: () => documentApi.reindex(doc.kb_id, doc.id),
+    onSuccess: () => {
+      toast.success('已排队重分块');
+      qc.invalidateQueries({ queryKey: ['kb-doc', doc.kb_id, doc.id] });
+      qc.invalidateQueries({ queryKey: ['kb-doc-chunks', doc.kb_id, doc.id] });
+    },
+    onError: () => toast.error('重分块失败'),
+  });
+
+  return (
+    <SectionCard>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-stone-500">
+              {SOURCE_ICON[doc.source_type]}
+            </span>
+            <h2 className="truncate text-[16px] font-medium text-stone-900">
+              {doc.title}
+            </h2>
+            <StatusBadge status={doc.status} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-stone-500">
+            <span>类型: {doc.mime_type ?? '—'}</span>
+            <span>来源: {doc.source_type}</span>
+            {doc.size_bytes != null && (
+              <span>大小: {(doc.size_bytes / 1024).toFixed(1)} KB</span>
+            )}
+            <span>
+              统计:{' '}
+              <span className="font-mono tnum">
+                {chunkCount} chunks · {doc.token_count} tokens
+              </span>
+            </span>
+            <span>创建: {formatDateTime(doc.created_at)}</span>
+          </div>
+          {doc.status === 'failed' && doc.status_message && (
+            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">
+              {doc.status_message}
+            </div>
           )}
-          <span>
-            统计: <span className="font-mono tnum">{chunkCount} chunks · {doc.token_count} tokens</span>
-          </span>
-          <span>创建: {formatDateTime(doc.created_at)}</span>
+          <div className="mt-3 space-y-3">
+            <div>
+              <div className="mb-1 text-[11.5px] text-stone-600">标签</div>
+              <TagEditor value={tags} onChange={setTags} />
+            </div>
+            <div>
+              <div className="mb-1 text-[11.5px] text-stone-600">元数据</div>
+              <MetadataEditor value={meta} onChange={setMeta} />
+            </div>
+          </div>
         </div>
-        {doc.tags.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {doc.tags.map(t => (
-              <Badge key={t} variant="outline" className="text-[10.5px]">
-                {t}
-              </Badge>
-            ))}
-          </div>
-        )}
-        {doc.status === 'failed' && doc.status_message && (
-          <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">
-            {doc.status_message}
-          </div>
-        )}
+        <div className="flex shrink-0 flex-col gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => reindexMut.mutate()}
+            disabled={reindexMut.isPending || doc.status === 'processing'}
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            重新分块
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => saveMut.mutate()}
+            disabled={!dirty || saveMut.isPending}
+          >
+            保存修改
+          </Button>
+        </div>
       </div>
-    </div>
-  </SectionCard>
-);
+    </SectionCard>
+  );
+};
 
 const StatusBadge = ({ status }: { status: DocumentItem['status'] }) => {
   const map: Record<DocumentItem['status'], { label: string; cls: string }> = {

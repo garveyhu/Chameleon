@@ -66,4 +66,27 @@ export const documentApi = {
 
   search: (kbId: number, req: SearchRequest) =>
     post<SearchHitItem[]>(`/v1/admin/kbs/${kbId}/search`, req),
+
+  update: (
+    kbId: number,
+    docId: number,
+    req: {
+      tags?: string[];
+      meta?: Record<string, unknown>;
+      chunk_strategy?: import('@/system/kbs/types/kb').KbChunkStrategy;
+    },
+  ) =>
+    post<DocumentItem>(
+      `/v1/admin/kbs/${kbId}/documents/${docId}/update`,
+      req,
+    ),
+
+  reindex: (kbId: number, docId: number) =>
+    post<IngestQueued>(
+      `/v1/admin/kbs/${kbId}/documents/${docId}/reindex`,
+      {},
+    ),
+
+  reindexAll: (kbId: number) =>
+    post<IngestQueued[]>(`/v1/admin/kbs/${kbId}/reindex-all`, {}),
 };
