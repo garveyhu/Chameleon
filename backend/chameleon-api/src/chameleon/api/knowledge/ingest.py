@@ -1,61 +1,71 @@
-"""异步 ingest worker
+"""异步 ingest worker（P16-C 重构）
 
-v1：FastAPI BackgroundTasks。流程：
-  task.running → 取 doc → 切块 → 批量 embed → upsert chunks → doc.ready / task.success
+流水线：
+    fetch → parse → chunk → embed → upsert
 
-失败：doc.failed + task.failed（error JSONB 含 type/message）
+states: pending → processing → ready / failed
 
-切块策略 v1：纯字符切（chunk_size + overlap）。未来切 tokenizer-aware。
+并发：模块级 Semaphore，从 inventory.kb_ingest_concurrency() 读上限。
+失败：document.status='failed' + status_message=错误摘要；任务表也同步 failed。
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 from loguru import logger
 from sqlalchemy import select
 
+from chameleon.api.knowledge import parsers, storage
 from chameleon.api.task import service as task_service
-from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.config import inventory
 from chameleon.core.embedding import get_embedding_client
+from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import Document, KnowledgeBase
 from chameleon.core.vector import ChunkPayload, get_store
 
-_HTTP_TIMEOUT = 30.0
+# 模块级 semaphore，按 kb_ingest_concurrency() lazy init
+_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    global _semaphore
+    if _semaphore is None:
+        _semaphore = asyncio.Semaphore(inventory.kb_ingest_concurrency())
+    return _semaphore
 
 
 async def run_ingest_task(*, task_id: int, document_id: int, kb_id: int) -> None:
-    """Background entrypoint（被 BackgroundTasks 调）"""
-    logger.info(
-        "ingest worker start | task={} | doc={} | kb={}",
-        task_id,
-        document_id,
-        kb_id,
-    )
-    try:
-        await _execute(task_id=task_id, document_id=document_id, kb_id=kb_id)
-    except Exception as e:  # noqa: BLE001
-        logger.exception("ingest task failed | task={} | doc={}", task_id, document_id)
-        await _mark_failure(
+    """Background entrypoint（asyncio.create_task 调用）"""
+    sem = _get_semaphore()
+    async with sem:
+        logger.info(
+            "ingest worker start | task={} | doc={} | kb={}",
             task_id,
             document_id,
-            error={
-                "type": type(e).__name__,
-                "message": str(e)[:500],
-            },
+            kb_id,
         )
+        try:
+            await _execute(task_id=task_id, document_id=document_id, kb_id=kb_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("ingest task failed | task={} | doc={}", task_id, document_id)
+            await _mark_failure(
+                task_id,
+                document_id,
+                error={"type": type(e).__name__, "message": str(e)[:500]},
+            )
 
 
 async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
-    # task → running
+    # 1. 进 processing
     async with AsyncSessionLocal() as session:
         await task_service.mark_running(session, task_id)
-        await _set_doc_status(session, document_id, "chunking")
+        await _set_doc_status(session, document_id, "processing")
         await session.commit()
 
-    # 取 kb + doc
+    # 2. 取 kb + doc 快照
     async with AsyncSessionLocal() as session:
         kb = (
             await session.execute(
@@ -65,97 +75,126 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
         doc = (
             await session.execute(select(Document).where(Document.id == document_id))
         ).scalar_one()
-        chunk_size = kb.chunk_size
-        chunk_overlap = kb.chunk_overlap
+        kb_chunk_strategy = kb.chunk_strategy or {}
+        doc_chunk_strategy = doc.chunk_strategy or kb_chunk_strategy
+        # 兼容旧字段
+        chunk_size = int(doc_chunk_strategy.get("chunk_size") or kb.chunk_size)
+        chunk_overlap = int(doc_chunk_strategy.get("overlap") or kb.chunk_overlap)
         source_type = doc.source_type
         source_uri = doc.source_uri
+        mime_type = doc.mime_type
         meta = doc.meta or {}
         embedding_model = kb.embedding_model
+        doc_title = doc.title
 
-    # 抓内容
-    raw_text = await _fetch_content(source_type, source_uri, meta)
-    if not raw_text or not raw_text.strip():
-        raise ValueError("document content is empty")
+    # 3. fetch + parse
+    parsed = await _fetch_and_parse(
+        source_type=source_type,
+        source_uri=source_uri,
+        mime_type=mime_type,
+        meta=meta,
+        name=doc_title,
+    )
+    text = parsed.text
+    if not text or not text.strip():
+        raise ValueError("document content is empty after parsing")
 
-    # 切块
-    chunks_text = _chunk(raw_text, chunk_size=chunk_size, overlap=chunk_overlap)
+    # 4. chunk（v1 fixed；C3.2 切多策略）
+    chunks_text = _chunk_fixed(text, chunk_size=chunk_size, overlap=chunk_overlap)
     logger.info(
-        "ingest chunking done | task={} | doc={} | chunks={}",
+        "ingest chunked | task={} | doc={} | chunks={}",
         task_id,
         document_id,
         len(chunks_text),
     )
-
     async with AsyncSessionLocal() as session:
         await task_service.mark_progress(
             session, task_id, 30, message=f"chunked into {len(chunks_text)} pieces"
         )
-        await _set_doc_status(session, document_id, "embedding")
         await session.commit()
 
-    # 批量 embed
+    # 5. embed
     embedder = get_embedding_client(embedding_model)
     vectors = await embedder.embed(chunks_text)
     if len(vectors) != len(chunks_text):
         raise RuntimeError(
             f"embedding count mismatch: {len(vectors)} != {len(chunks_text)}"
         )
-
     async with AsyncSessionLocal() as session:
         await task_service.mark_progress(session, task_id, 70, message="embedded")
         await session.commit()
 
-    # upsert chunks
+    # 6. upsert chunks（先清旧 chunks 再写）
     store = get_store()
+    await store.delete(kb_id=kb_id, doc_id=document_id)
     payloads = [
         ChunkPayload(
-            content=chunk,
+            content=ct,
             embedding=vec,
             seq=i,
-            token_count=_approx_tokens(chunk),
+            token_count=_approx_tokens(ct),
             meta=None,
         )
-        for i, (chunk, vec) in enumerate(zip(chunks_text, vectors), start=1)
+        for i, (ct, vec) in enumerate(zip(chunks_text, vectors), start=1)
     ]
     await store.upsert(kb_id=kb_id, doc_id=document_id, chunks=payloads)
 
-    # finalize
+    # 7. finalize：写回 doc 统计 + status=ready；merge parsed.metadata 到 doc.meta
+    total_tokens = sum(p.token_count or 0 for p in payloads)
     async with AsyncSessionLocal() as session:
-        await _set_doc_status(session, document_id, "ready")
+        d = (
+            await session.execute(select(Document).where(Document.id == document_id))
+        ).scalar_one()
+        d.status = "ready"
+        d.status_message = None
+        d.chunk_count = len(payloads)
+        d.token_count = total_tokens
+        d.meta = {**(d.meta or {}), **{k: v for k, v in parsed.metadata.items() if k != "name"}}
+        d.updated_at = datetime.now(timezone.utc)
         await task_service.mark_success(
-            session,
-            task_id,
-            result={"chunks": len(payloads)},
+            session, task_id, result={"chunks": len(payloads), "tokens": total_tokens}
         )
         await session.commit()
     logger.info(
-        "ingest worker done | task={} | doc={} | chunks={}",
+        "ingest done | task={} | doc={} | chunks={} | tokens={}",
         task_id,
         document_id,
         len(payloads),
+        total_tokens,
     )
 
 
 # ── helpers ─────────────────────────────────────────────
 
 
-async def _fetch_content(
-    source_type: str, source_uri: str | None, meta: dict[str, Any]
-) -> str:
+async def _fetch_and_parse(
+    *,
+    source_type: str,
+    source_uri: str | None,
+    mime_type: str | None,
+    meta: dict[str, Any],
+    name: str,
+) -> parsers.ParsedDocument:
     if source_type == "text":
-        return str(meta.get("content") or "")
+        content = str(meta.get("content") or "")
+        return await parsers.parse(content, name=name, mime_type=mime_type or "text/plain")
     if source_type == "url":
         if not source_uri:
             raise ValueError("source_uri required for source_type=url")
-        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-            resp = await client.get(source_uri)
-            resp.raise_for_status()
-            return resp.text
+        from chameleon.api.knowledge.parsers import url as url_parser
+        return await url_parser.fetch_and_parse(source_uri, name=name)
+    if source_type == "upload":
+        if not source_uri:
+            raise ValueError("source_uri required for source_type=upload")
+        content_bytes = storage.read_upload(source_uri)
+        return await parsers.parse(
+            content_bytes, name=name, mime_type=mime_type or "application/octet-stream"
+        )
     raise ValueError(f"unsupported source_type: {source_type}")
 
 
-def _chunk(text: str, *, chunk_size: int, overlap: int) -> list[str]:
-    """简单字符切块（v1）"""
+def _chunk_fixed(text: str, *, chunk_size: int, overlap: int) -> list[str]:
+    """字符级固定切块（v1；C3.2 引入多策略）"""
     if chunk_size <= 0:
         return [text] if text else []
     if overlap < 0 or overlap >= chunk_size:
