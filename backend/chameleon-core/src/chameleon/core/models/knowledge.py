@@ -36,6 +36,16 @@ class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin):
     )
     chunk_size: Mapped[int] = mapped_column(Integer, nullable=False, default=800)
     chunk_overlap: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    # P16-C: 分块策略 / 召回参数（KB 级默认；document.chunk_strategy 覆盖）
+    chunk_strategy: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        default=lambda: {"mode": "fixed", "chunk_size": 800, "overlap": 100},
+    )
+    default_top_k: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    recall_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="vector"
+    )
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
@@ -52,8 +62,14 @@ class Document(Base, TimestampMixin, SoftDeleteMixin):
     source_type: Mapped[str] = mapped_column(String(16), nullable=False)
     source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    # null = 用 KB 的 chunk_strategy；非 null 覆盖
+    chunk_strategy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (Index("ix_documents_kb_status", "kb_id", "status"),)

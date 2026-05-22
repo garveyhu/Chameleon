@@ -4,6 +4,7 @@
 """
 
 from chameleon.core.models.agent import Agent
+from chameleon.core.models.agent_kb_link import AgentKbLink
 from chameleon.core.models.api_key import ApiKey, CallLog
 from chameleon.core.models.app import App, AppAgent
 from chameleon.core.models.audit_log import AuditLog
@@ -14,6 +15,7 @@ from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
 from chameleon.core.models.model_def import LLMModel
 from chameleon.core.models.model_default import ModelDefault
 from chameleon.core.models.provider import Provider
+from chameleon.core.models.retrieval_evaluation import RetrievalEvaluation
 from chameleon.core.models.setting import Setting
 from chameleon.core.models.task import Task
 from chameleon.core.models.user import (
@@ -40,12 +42,14 @@ __all__ = [
     "LLMModel",
     "ModelDefault",
     "Agent",
+    "AgentKbLink",
     # 业务域
     "Conversation",
     "Message",
     "KnowledgeBase",
     "Document",
     "Chunk",
+    "RetrievalEvaluation",
     "Task",
     "CallLog",
     # 嵌入域
