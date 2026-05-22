@@ -53,7 +53,7 @@ class PageParams(BaseModel):
     """分页查询参数"""
 
     page: int = Field(1, ge=1, description="页码")
-    page_size: int = Field(10, ge=1, le=100, description="每页数量")
+    page_size: int = Field(10, ge=1, le=500, description="每页数量")
 
     @property
     def offset(self) -> int:
