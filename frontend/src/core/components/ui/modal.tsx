@@ -64,7 +64,7 @@ export const ModalContent = React.forwardRef<
           onInteractOutside?.(e);
         }}
         className={cn(
-          'modal-content fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] flex-col overflow-hidden',
+          'modal-content fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex max-h-[90vh] flex-col overflow-hidden',
           'rounded-2xl border border-stone-200 bg-paper shadow-pop',
           SIZE_CLASS[size],
           className,
