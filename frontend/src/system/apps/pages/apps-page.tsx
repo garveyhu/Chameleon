@@ -434,7 +434,7 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
               这是<strong className="text-red-600">唯一一次</strong>看到明文 token 的机会，请立即保存。
             </DialogDescription>
           </DialogHeader>
-          <div className="rounded-md bg-stone-900 p-3 font-mono text-xs text-emerald-300 break-all">
+          <div className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[12px] leading-relaxed text-stone-800">
             {plain?.plain_key}
           </div>
           <DialogFooter>

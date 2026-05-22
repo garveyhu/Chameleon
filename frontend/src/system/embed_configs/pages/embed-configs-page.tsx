@@ -374,7 +374,7 @@ const SnippetDialog = ({
           <div>
             <Label className="text-xs">JS Widget（推荐：右下角浮动气泡）</Label>
             <div className="mt-1 flex gap-2">
-              <pre className="flex-1 overflow-auto rounded-md bg-stone-900 p-3 font-mono text-xs text-emerald-300">
+              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
                 {widget}
               </pre>
               <Button
@@ -392,7 +392,7 @@ const SnippetDialog = ({
           <div>
             <Label className="text-xs">iframe（嵌入到页面内某个区域）</Label>
             <div className="mt-1 flex gap-2">
-              <pre className="flex-1 overflow-auto rounded-md bg-stone-900 p-3 font-mono text-xs text-emerald-300">
+              <pre className="flex-1 overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-stone-200 bg-stone-50 p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
                 {iframe}
               </pre>
               <Button
