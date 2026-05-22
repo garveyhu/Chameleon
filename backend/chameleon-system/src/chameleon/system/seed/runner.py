@@ -44,6 +44,7 @@ from chameleon.system.seed.defaults import (
     default_roles,
 )
 from chameleon.system.seed.models_seed import seed_providers_and_models
+from chameleon.system.seed.settings_seed import seed_system_settings
 
 
 async def run_seed_if_empty(
@@ -74,6 +75,7 @@ async def run_seed_if_empty(
         logger.info("DB empty → running first-time seed ...")
         await _seed_other_roles(session)
         admin_creds = await _seed_default_admin(session)
+        await seed_system_settings(session, config_dir=config_dir)
         await seed_providers_and_models(session, config_dir=config_dir)
         await seed_agents(session, config_dir=config_dir)
         await session.commit()

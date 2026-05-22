@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.config.constants import CONFIG_PATH
-from chameleon.core.models import LLMModel, Provider
+from chameleon.core.models import LLMModel, ModelDefault, Provider
 from chameleon.core.utils.crypto import encrypt
 
 
@@ -38,6 +38,7 @@ async def seed_providers_and_models(
 
     provider_id_by_code = await _seed_providers(session, raw.get("providers") or {})
     await _seed_models(session, raw.get("models") or {}, provider_id_by_code)
+    await _seed_model_defaults(session, raw.get("cases") or {})
 
 
 async def _seed_providers(
@@ -75,6 +76,44 @@ async def _seed_providers(
             "seed: provider {} (api_key={})", code, "encrypted" if api_key_plain else "blank"
         )
     return result
+
+
+async def _seed_model_defaults(
+    session: AsyncSession,
+    cases: dict[str, str | None],
+) -> None:
+    """从 model.json.cases 写入 model_defaults 表（首次启动）"""
+    existing = set(
+        (await session.execute(select(ModelDefault.case_name))).scalars().all()
+    )
+    inserted = 0
+    for case_name, model_name in cases.items():
+        if case_name in existing:
+            continue
+        if not model_name:
+            session.add(ModelDefault(case_name=case_name, model_id=None))
+            inserted += 1
+            continue
+        model_row = (
+            await session.execute(
+                select(LLMModel).where(
+                    LLMModel.code == model_name, LLMModel.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if model_row is None:
+            logger.warning(
+                "seed: cases.{} = '{}' 找不到对应 model，留 NULL", case_name, model_name
+            )
+            session.add(ModelDefault(case_name=case_name, model_id=None))
+        else:
+            session.add(
+                ModelDefault(case_name=case_name, model_id=model_row.id)
+            )
+        inserted += 1
+    if inserted:
+        await session.flush()
+        logger.info("seed: model_defaults ({})", inserted)
 
 
 async def _seed_models(

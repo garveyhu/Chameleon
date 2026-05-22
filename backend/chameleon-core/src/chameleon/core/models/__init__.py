@@ -12,6 +12,7 @@ from chameleon.core.models.conversation import Conversation, Message
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
 from chameleon.core.models.model_def import LLMModel
+from chameleon.core.models.model_default import ModelDefault
 from chameleon.core.models.provider import Provider
 from chameleon.core.models.setting import Setting
 from chameleon.core.models.task import Task
@@ -37,6 +38,7 @@ __all__ = [
     # 模型域
     "Provider",
     "LLMModel",
+    "ModelDefault",
     "Agent",
     # 业务域
     "Conversation",
