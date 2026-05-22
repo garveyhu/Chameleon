@@ -19,7 +19,7 @@ from chameleon.core.api.exceptions import KnowledgeBaseNotFoundError
 from chameleon.core.config import inventory
 from chameleon.core.embedding import get_embedding_client
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import KnowledgeBase
+from chameleon.core.models import Agent, AgentKbLink, KnowledgeBase
 from chameleon.core.vector import ChunkHit, get_store
 
 
@@ -57,6 +57,43 @@ async def get_kb_meta(kb_key: str) -> KbMeta | None:
             chunk_size=row.chunk_size,
             chunk_overlap=row.chunk_overlap,
         )
+
+
+async def list_linked_kb_metas(agent_key: str) -> list[KbMeta]:
+    """返指定 agent 关联的全部 KB（按 agent_kb_link）。
+
+    用于 BaseAgent.retrieve() 在 invoke 时跨 KB 检索。
+    """
+    async with AsyncSessionLocal() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(KnowledgeBase)
+                    .join(AgentKbLink, AgentKbLink.kb_id == KnowledgeBase.id)
+                    .join(Agent, Agent.id == AgentKbLink.agent_id)
+                    .where(
+                        Agent.agent_key == agent_key,
+                        Agent.deleted_at.is_(None),
+                        KnowledgeBase.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return [
+        KbMeta(
+            id=r.id,
+            kb_key=r.kb_key,
+            name=r.name,
+            description=r.description,
+            embedding_model=r.embedding_model,
+            embedding_dim=r.embedding_dim,
+            chunk_size=r.chunk_size,
+            chunk_overlap=r.chunk_overlap,
+        )
+        for r in rows
+    ]
 
 
 async def search_kb(

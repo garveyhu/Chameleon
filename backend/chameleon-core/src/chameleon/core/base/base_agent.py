@@ -131,6 +131,40 @@ class BaseAgent(ABC):
             f"{cls.__name__} must implement astream() OR build_graph() OR build_runnable()"
         )
 
+    # ── KB 检索（关联 KB → 跨 KB merge top_k） ────────────────
+
+    @classmethod
+    async def retrieve(
+        cls,
+        ctx: "InvokeContext",
+        query: str,
+        *,
+        top_k: int | None = None,
+        min_score: float = 0.0,
+    ) -> list[Any]:
+        """跨 ctx.agent_def 所有挂载 KB 的向量检索；按 score 合并 top_k。
+
+        没挂 KB → 返空 list。
+        """
+        from chameleon.core.components.knowledge import (
+            list_linked_kb_metas,
+            search_kb,
+        )
+
+        agent_key = ctx.agent_def.key
+        metas = await list_linked_kb_metas(agent_key)
+        if not metas:
+            return []
+        merged: list[Any] = []
+        for meta in metas:
+            k = top_k or meta.chunk_size and 5  # 默认 5
+            hits = await search_kb(
+                meta.kb_key, query, top_k=k, min_score=min_score
+            )
+            merged.extend(hits)
+        merged.sort(key=lambda h: getattr(h, "score", 0.0), reverse=True)
+        return merged[: (top_k or 5)]
+
     # ── 内置范式桥（classmethod 形式，方便子类直接 yield from） ─
 
     @classmethod

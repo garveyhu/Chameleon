@@ -26,32 +26,68 @@ class EchoNativeAgent(BaseAgent):
 
     @classmethod
     async def astream(cls, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
-        """直接 yield StreamEvent，框架不干涉"""
+        """直接 yield StreamEvent，框架不干涉。
+
+        当 agent 在 admin 里挂载 KB 时，retrieve() 返 top_k chunks，
+        echo 把命中的来源摘要拼进输出；没挂 KB 时退化为纯回声。
+        """
         # 取当前轮文本
         if isinstance(ctx.input, str):
             text = ctx.input
         else:
             text = ctx.input[-1].content if ctx.input else ""
 
-        # 1) step：演示中间步骤
+        # 1) step：retrieve
         yield StreamEvent(
             type=StreamEventType.step,
-            data={"name": "prepare", "status": "success", "duration_ms": 1},
+            data={"name": "retrieve", "status": "running"},
         )
 
-        # 2) delta：按字符流出（实际应用里可能是 LLM token）
-        prefix = "echo(native): "
+        try:
+            hits = await cls.retrieve(ctx, text, top_k=3)
+        except Exception:  # noqa: BLE001
+            hits = []
+
+        yield StreamEvent(
+            type=StreamEventType.step,
+            data={
+                "name": "retrieve",
+                "status": "success",
+                "hits": [
+                    {"doc_id": h.doc_id, "score": round(h.score, 3)}
+                    for h in hits
+                ],
+            },
+        )
+
+        # 2) delta：按字符流出
+        if hits:
+            context_preview = " · ".join(
+                f"#{i + 1} doc:{h.doc_id}#{h.seq}" for i, h in enumerate(hits[:3])
+            )
+            prefix = f"echo(kb-aware|{context_preview}): "
+        else:
+            prefix = "echo(native): "
         for ch in prefix + text:
             yield StreamEvent(type=StreamEventType.delta, data={"text": ch})
 
-        # 3) metadata：演示 usage 自报（agent 自己产生 usage 指标）
-        yield StreamEvent(
-            type=StreamEventType.metadata,
-            data={
-                "usage": {
-                    "prompt_tokens": len(text),
-                    "completion_tokens": len(prefix + text),
-                    "total_tokens": len(text) + len(prefix + text),
+        # 3) metadata：usage + citations（chunk 命中转成 citation）
+        meta_data: dict = {
+            "usage": {
+                "prompt_tokens": len(text),
+                "completion_tokens": len(prefix + text),
+                "total_tokens": len(text) + len(prefix + text),
+            }
+        }
+        if hits:
+            meta_data["citations"] = [
+                {
+                    "chunk_id": h.id,
+                    "doc_id": h.doc_id,
+                    "seq": h.seq,
+                    "score": h.score,
+                    "content": h.content[:200],
                 }
-            },
-        )
+                for h in hits
+            ]
+        yield StreamEvent(type=StreamEventType.metadata, data=meta_data)
