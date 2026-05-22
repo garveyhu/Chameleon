@@ -5,6 +5,7 @@ import { Cpu, Plus, Trash2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -34,6 +35,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
+import { TestModelModal } from '@/system/models/components/test-model-modal';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
@@ -43,6 +45,7 @@ export const ModelsPage = () => {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [delModel, setDelModel] = useState<ModelItem | null>(null);
+  const [testModel, setTestModel] = useState<ModelItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
   const providersQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
@@ -56,7 +59,7 @@ export const ModelsPage = () => {
     },
   });
   const delMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => modelApi.delete(id),
+    mutationFn: (id: EntityId) => modelApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['models'] });
@@ -64,14 +67,8 @@ export const ModelsPage = () => {
     },
   });
 
-  const testMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => modelApi.test(id),
-    onSuccess: data =>
-      data.ok ? toast.success(data.detail) : toast.error(data.detail),
-  });
-
   const toggleMut = useMutation({
-    mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
+    mutationFn: (args: { id: EntityId; enabled: boolean }) =>
       modelApi.update(args.id, { enabled: args.enabled }),
     onMutate: async args => {
       await qc.cancelQueries({ queryKey: ['models'] });
@@ -127,9 +124,8 @@ export const ModelsPage = () => {
           <button
             type="button"
             title={t('common.test')}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900 disabled:opacity-50"
-            onClick={() => testMut.mutate(m.id)}
-            disabled={testMut.isPending}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setTestModel(m)}
           >
             <Zap className="h-3.5 w-3.5" /> {t('common.test')}
           </button>
@@ -191,6 +187,7 @@ export const ModelsPage = () => {
         onConfirm={() => delModel && delMut.mutate(delModel.id)}
         onCancel={() => setDelModel(null)}
       />
+      <TestModelModal model={testModel} onClose={() => setTestModel(null)} />
     </div>
   );
 };
@@ -203,9 +200,9 @@ const CreateModelModal = ({
   loading,
 }: {
   open: boolean;
-  providers: { id: import('@/core/types/api').EntityId; code: string }[];
+  providers: { id: EntityId; code: string }[];
   onClose: () => void;
-  onSubmit: (req: { provider_id: import('@/core/types/api').EntityId; code: string; kind: 'chat' | 'embedding'; dim?: number }) => void;
+  onSubmit: (req: { provider_id: EntityId; code: string; kind: 'chat' | 'embedding'; dim?: number }) => void;
   loading: boolean;
 }) => {
   const [providerId, setProviderId] = useState<string>('');

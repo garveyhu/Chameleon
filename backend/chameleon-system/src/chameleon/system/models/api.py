@@ -17,6 +17,7 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import Result
+from chameleon.core.api.sse import sse_response
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
@@ -24,6 +25,7 @@ from chameleon.core.infra.db import get_session
 from chameleon.core.models import LLMModel, Provider
 from chameleon.core.utils.crypto import get_or_decrypt
 from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.models import test_service
 
 
 class ModelItem(BaseModel):
@@ -254,6 +256,28 @@ async def test_model(
                 detail=f"{type(e).__name__}: {e}",
             )
         )
+
+
+class StreamTestRequest(BaseModel):
+    prompt: str | None = Field(default=None, max_length=2000)
+
+
+@router.post("/{model_id}/test/stream")
+async def test_model_stream(
+    model_id: int,
+    req: StreamTestRequest | None = None,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("models:read")),
+):
+    """SSE 流式测试：chat 模型逐 token 推；embedding 一次性返回 dim + 预览。
+
+    chunk 结构详见 test_service.stream_test 注释。
+    """
+    prompt = req.prompt if req else None
+    return sse_response(
+        test_service.stream_test(session, model_id=model_id, prompt=prompt),
+        log_label=f"model_test:{model_id}",
+    )
 
 
 @router.post("/{model_id}/delete", response_model=Result[None])

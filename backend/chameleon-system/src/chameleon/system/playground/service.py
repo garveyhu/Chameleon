@@ -110,7 +110,52 @@ def build_messages(
     return out
 
 
-async def stream_invoke(
+async def invoke_stream(
+    session: AsyncSession,
+    *,
+    model_id: int | None,
+    model_name: str | None,
+    system_prompt: str | None,
+    temperature: float,
+    top_p: float | None,
+    max_tokens: int | None,
+    messages: list[dict],
+    kb_ids: list[int],
+) -> AsyncIterator[dict]:
+    """完整 playground 调用编排：解析 model → 拉 KB context → 拼 message → 流式调用。
+
+    抛 ValidationError / BusinessError 都视为业务错误，由上层 sse_response 兜底成 error chunk。
+    """
+    resolved_model = model_name
+    if not resolved_model:
+        if model_id is None:
+            raise ValidationError(message="必须提供 model_id 或 model_name")
+        resolved_model = await get_model_name(session, model_id)
+
+    last_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
+    if last_user is None:
+        raise ValidationError(message="messages 中至少有一条 user")
+
+    kb_context = await build_kb_context(
+        session, query=last_user.get("content", ""), kb_ids=kb_ids
+    )
+    lc_messages = build_messages(
+        system_prompt=system_prompt,
+        kb_context=kb_context,
+        messages=messages,
+    )
+
+    async for chunk in _stream_llm(
+        model_name=resolved_model,
+        temperature=temperature,
+        top_p=top_p,
+        max_tokens=max_tokens,
+        messages=lc_messages,
+    ):
+        yield chunk
+
+
+async def _stream_llm(
     *,
     model_name: str,
     temperature: float,
