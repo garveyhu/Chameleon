@@ -403,31 +403,32 @@ const CodeSnippet = ({
   code: string;
 }) => {
   const [copied, setCopied] = useState(false);
+  const onCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    toast.success('已复制');
+    setTimeout(() => setCopied(false), 1500);
+  };
   return (
-    <div>
-      <div className="mb-1.5 flex items-baseline gap-2">
-        <span className="text-[12px] font-medium text-stone-800">{label}</span>
-        {hint && <span className="text-[11px] text-stone-500">· {hint}</span>}
-      </div>
-      <div className="group relative overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
-        <pre className="overflow-x-auto whitespace-pre-wrap break-all px-3.5 py-3 pr-12 font-mono text-[12px] leading-relaxed text-stone-700">
-          {code}
-        </pre>
+    <div className="overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
+      {/* 顶部条：标签 + 复制按钮，不与代码区重叠 */}
+      <div className="flex items-center justify-between border-b border-stone-200/70 bg-white/40 px-3 py-1.5">
+        <div className="flex items-baseline gap-2">
+          <span className="text-[12px] font-medium text-stone-800">{label}</span>
+          {hint && <span className="text-[11px] text-stone-500">· {hint}</span>}
+        </div>
         <button
           type="button"
-          onClick={async () => {
-            await navigator.clipboard.writeText(code);
-            setCopied(true);
-            toast.success('已复制');
-            setTimeout(() => setCopied(false), 1500);
-          }}
-          className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-stone-200/80 bg-white/85 px-1.5 py-1 text-[10.5px] text-stone-600 shadow-sm transition hover:bg-white hover:text-stone-900"
-          title="复制"
+          onClick={onCopy}
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-stone-500 transition hover:bg-stone-100 hover:text-stone-900"
         >
           <Copy className="h-3 w-3" />
           {copied ? '已复制' : '复制'}
         </button>
       </div>
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all px-3.5 py-3 font-mono text-[12px] leading-relaxed text-stone-700">
+        {code}
+      </pre>
     </div>
   );
 };
