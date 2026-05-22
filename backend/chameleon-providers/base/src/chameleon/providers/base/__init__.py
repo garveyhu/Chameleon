@@ -24,6 +24,7 @@ from chameleon.providers.base.registry import (
 )
 from chameleon.providers.base.types import (
     AgentDef,
+    ChannelOverride,
     Citation,
     InvokeContext,
     InvokeResult,
@@ -38,6 +39,7 @@ from chameleon.providers.base.types import (
 __all__ = [
     "AGENTS",
     "AgentDef",
+    "ChannelOverride",
     "Citation",
     "InvokeContext",
     "InvokeResult",

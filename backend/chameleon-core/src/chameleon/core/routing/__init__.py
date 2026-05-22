@@ -7,6 +7,11 @@
 业务侧 invoke 前调 resolve_channel；调用结束按结果调 mark_*。
 """
 
+from chameleon.core.routing.error_classify import should_retry
+from chameleon.core.routing.failover import (
+    build_channel_override,
+    invoke_with_failover,
+)
 from chameleon.core.routing.router import (
     NoSatisfiedChannelError,
     mark_failed,
@@ -19,4 +24,7 @@ __all__ = [
     "mark_success",
     "mark_failed",
     "NoSatisfiedChannelError",
+    "should_retry",
+    "invoke_with_failover",
+    "build_channel_override",
 ]

@@ -17,8 +17,8 @@ from collections.abc import AsyncIterator
 
 from loguru import logger
 
-from chameleon.core.config import inventory
 from chameleon.core.api.exceptions import ProviderConfigError
+from chameleon.core.config import inventory
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
     InvokeContext,
@@ -34,20 +34,34 @@ class DifyProvider(Provider):
 
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         cfg = ctx.agent_def.config
-        endpoint = cfg.get("endpoint")
-        api_key_env = cfg.get("api_key_env")
         mode = cfg.get("mode", "chat")
 
-        if not endpoint or not api_key_env:
-            raise ProviderConfigError(
-                message=f"dify agent {ctx.agent_def.key} missing endpoint / api_key_env"
-            )
-
-        api_key = os.environ.get(api_key_env)
-        if not api_key:
-            raise ProviderConfigError(
-                message=f"env {api_key_env} not set for agent {ctx.agent_def.key}"
-            )
+        # P17.A2: 若 channel_override 存在，优先用 channel 凭证（矩阵路由）；
+        # 否则走老路径 —— 从 agent.config.api_key_env 解 env var
+        if ctx.channel_override is not None:
+            endpoint = ctx.channel_override.base_url or cfg.get("endpoint")
+            api_key = ctx.channel_override.api_key
+            if not endpoint or not api_key:
+                raise ProviderConfigError(
+                    message=(
+                        f"dify channel #{ctx.channel_override.channel_id} 缺 "
+                        "base_url / api_key（请在 admin /channels 配置）"
+                    )
+                )
+        else:
+            endpoint = cfg.get("endpoint")
+            api_key_env = cfg.get("api_key_env")
+            if not endpoint or not api_key_env:
+                raise ProviderConfigError(
+                    message=(
+                        f"dify agent {ctx.agent_def.key} missing endpoint / api_key_env"
+                    )
+                )
+            api_key = os.environ.get(api_key_env)
+            if not api_key:
+                raise ProviderConfigError(
+                    message=f"env {api_key_env} not set for agent {ctx.agent_def.key}"
+                )
 
         timeout_ms = inventory.provider_timeout_ms("dify")
         client = DifyClient(endpoint, api_key, timeout=timeout_ms / 1000)

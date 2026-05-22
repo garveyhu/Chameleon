@@ -266,6 +266,31 @@ async def test_update_invalid_status(
     assert "status 非法" in body["message"]
 
 
+async def test_channel_health_endpoint(
+    client: AsyncClient, admin_token: str, tmp_provider: int
+):
+    """P17.A2 健康端点 —— 实时返 channel 当前 fail_count / EWMA 延迟等"""
+    cr = await client.post(
+        "/v1/admin/channels",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"provider_id": tmp_provider, "name": "health-test"},
+    )
+    cid = cr.json()["data"]["id"]
+
+    r = await client.get(
+        f"/v1/admin/channels/{cid}/health",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert r.status_code == 200, r.text
+    h = r.json()["data"]
+    assert h["channel_id"] == cid
+    assert h["status"] == "enabled"
+    assert h["fail_count"] == 0
+    assert h["response_time_ms"] is None
+    assert h["last_success_at"] is None
+    assert h["used_quota"] == 0
+
+
 async def test_delete_channel_soft(
     client: AsyncClient, admin_token: str, tmp_provider: int
 ):

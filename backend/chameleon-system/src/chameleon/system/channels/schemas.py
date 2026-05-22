@@ -59,3 +59,15 @@ class UpdateChannelRequest(BaseModel):
     )
     weight: int | None = Field(default=None, ge=0)
     priority: int | None = Field(default=None, ge=0)
+
+
+class ChannelHealthItem(BaseModel):
+    """channel 健康快照（实时从 channel 行算出来；call_logs 后续做 1h 聚合）"""
+
+    channel_id: int
+    status: str
+    fail_count: int
+    response_time_ms: int | None = None
+    last_failed_at: datetime | None = None
+    last_success_at: datetime | None = None
+    used_quota: int

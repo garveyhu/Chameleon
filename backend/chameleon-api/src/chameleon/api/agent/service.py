@@ -26,11 +26,8 @@ from chameleon.api.agent.schemas import (
     InvokeRequest,
     InvokeResponse,
 )
-from chameleon.system.api_key import service as api_key_service
 from chameleon.api.conversation import service as conv_service
 from chameleon.api.conversation.schemas import AppendMessageDraft
-from chameleon.core.infra.auth import CurrentApp
-from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
@@ -38,9 +35,14 @@ from chameleon.core.api.exceptions import (
     ResultCode,
 )
 from chameleon.core.config.runtime_settings import get_bool
-from chameleon.core.routing import NoSatisfiedChannelError, resolve_channel
+from chameleon.core.infra.auth import CurrentApp
+from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.routing import (
+    build_channel_override,
+    invoke_with_failover,
+)
 from chameleon.core.utils.spans import SpanRecorder
-from chameleon.providers.base import AGENTS, PROVIDERS
+from chameleon.providers.base import AGENTS, PROVIDERS, ChannelOverride
 from chameleon.providers.base.types import (
     AgentDef,
     InvokeContext,
@@ -49,6 +51,7 @@ from chameleon.providers.base.types import (
     _StreamAggregator,
 )
 from chameleon.providers.base.types import Message as ProviderMessage
+from chameleon.system.api_key import service as api_key_service
 
 # ── agent 列表 / 详情（注册表只读访问） ──────────────────
 
@@ -82,30 +85,30 @@ def get_agent(key: str) -> AgentItem:
 # ── P17.A1.2 路由决策 helper ──────────────────────────────
 
 
-async def _try_routing_decision(
+async def _resolve_routing_target(
     session: AsyncSession,
     *,
     agent_key: str,
     rec: SpanRecorder,
-) -> int | None:
-    """读 gateway.routing_enabled flag + agent.preferred_model_code，
-    解析到 channel 后返其 id；任何情况失败都返 None（不阻塞老路径）。
+) -> str | None:
+    """读 flag + agent.preferred_model_code。
 
-    决策结果记录到 span 元数据用于调试，**不实际修改 provider 行为** ——
-    P17.A2 failover 会把 channel 信息真正灌进 InvokeContext。
-    本 PR 只是把矩阵路由的"决策"先打通，便于后续接管。
+    返 model_code（非 None）= 应该走 failover 路由；None = 走老路径。
+
+    流式接口暂走老路径（failover 流式难，留 P18）。本 helper 只为非流式
+    invoke 决策。
     """
     with rec.span("routing_decision", meta={"agent": agent_key}) as span:
         try:
             enabled = await get_bool(session, "gateway.routing_enabled")
         except Exception as e:  # noqa: BLE001
             logger.debug("routing flag read failed | err={}", e)
+            span.meta["status"] = "flag_read_error"
             return None
         if not enabled:
             span.meta["status"] = "flag_off"
             return None
 
-        # 取 agent 行的 preferred_model_code（DB 字段，与注册表的 agent_def 是两套）
         from chameleon.core.models import Agent
 
         agent_row = (
@@ -119,30 +122,9 @@ async def _try_routing_decision(
             span.meta["status"] = "no_preferred_model"
             return None
 
-        try:
-            ch = await resolve_channel(
-                session, model_code=agent_row.preferred_model_code
-            )
-        except NoSatisfiedChannelError as e:
-            span.meta["status"] = "no_channel"
-            span.meta["model_code"] = agent_row.preferred_model_code
-            logger.warning(
-                "routing decision: no channel | agent={} | model_code={} | err={}",
-                agent_key,
-                agent_row.preferred_model_code,
-                e,
-            )
-            return None
-        except Exception as e:  # noqa: BLE001
-            span.meta["status"] = "error"
-            span.meta["error"] = str(e)[:200]
-            logger.exception("routing decision unexpected error | agent={}", agent_key)
-            return None
-
-        span.meta["status"] = "matched"
+        span.meta["status"] = "ready"
         span.meta["model_code"] = agent_row.preferred_model_code
-        span.meta["channel_id"] = ch.id
-        return ch.id
+        return agent_row.preferred_model_code
 
 
 # ── 非流式 invoke 主流程 ────────────────────────────────
@@ -172,12 +154,10 @@ async def invoke(
                 message=f"provider 未注册: {agent_def.provider}",
             )
 
-    # ①.5 P17.A1.2 路由决策（feature flag 控；本 PR 仅决策不接管）
-    routed_channel_id = await _try_routing_decision(
+    # ①.5 P17.A2 路由决策 —— 拿 model_code 后下面 ⑥ 步走 failover
+    routed_model_code = await _resolve_routing_target(
         session, agent_key=agent_key, rec=rec
     )
-    # routed_channel_id 暂时只用于审计（P17.A2 失败重试会真正消费）
-    _ = routed_channel_id
 
     # ② 会话处理
     with rec.span("conversation_setup"):
@@ -242,14 +222,40 @@ async def invoke(
         request_id=request_id,
     )
 
-    # ⑥ 调 provider（非流式聚合）
+    # ⑥ 调 provider（非流式聚合；routed_model_code 非 None 时走 failover wrapper）
     success = True
     code = ResultCode.Success.value
     err_msg: str | None = None
     request_payload = _build_request_payload(req, agent_def, current_input_text)
     try:
         with rec.span("provider_invoke", meta={"provider": agent_def.provider}):
-            result = await provider.invoke(ctx)
+            if routed_model_code:
+                async def _do_invoke(channel):
+                    override = ChannelOverride(**build_channel_override(channel))
+                    # InvokeContext frozen=False → 这里用 model_copy 更安全；
+                    # 但因为 ctx 还没传给下游，直接 mutate 是 OK 的
+                    ctx_with_override = ctx.model_copy(
+                        update={"channel_override": override}
+                    )
+                    return await provider.invoke(ctx_with_override)
+
+                result, used_channel = await invoke_with_failover(
+                    session,
+                    model_code=routed_model_code,
+                    invoke_fn=_do_invoke,
+                )
+                start_ms = rec.now_ms()
+                rec.add(
+                    "channel_chosen",
+                    start_ms=start_ms,
+                    end_ms=start_ms,
+                    meta={
+                        "channel_id": used_channel.id,
+                        "model_code": routed_model_code,
+                    },
+                )
+            else:
+                result = await provider.invoke(ctx)
     except ProviderError as pe:
         success = False
         code = int(pe.code)

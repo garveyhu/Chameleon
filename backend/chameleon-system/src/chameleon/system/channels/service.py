@@ -18,6 +18,7 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.models import Channel, ChannelStatus, Provider
 from chameleon.core.utils.crypto import encrypt
 from chameleon.system.channels.schemas import (
+    ChannelHealthItem,
     ChannelItem,
     CreateChannelRequest,
     UpdateChannelRequest,
@@ -64,6 +65,20 @@ async def get_channel(session: AsyncSession, channel_id: int) -> ChannelItem:
         )
     ch, provider_code = row
     return _row_to_item(ch, provider_code)
+
+
+async def get_health(session: AsyncSession, channel_id: int) -> ChannelHealthItem:
+    """实时健康快照 —— 从 channel 行直接读（failover wrapper 写入的 EWMA 字段）"""
+    ch = await _load_channel(session, channel_id)
+    return ChannelHealthItem(
+        channel_id=ch.id,
+        status=ch.status,
+        fail_count=ch.fail_count,
+        response_time_ms=ch.response_time_ms,
+        last_failed_at=ch.last_failed_at,
+        last_success_at=ch.last_success_at,
+        used_quota=ch.used_quota,
+    )
 
 
 # ── 写 ────────────────────────────────────────────────────

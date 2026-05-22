@@ -43,6 +43,21 @@ class AgentDef(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class ChannelOverride(BaseModel):
+    """运行时 channel 凭证注入（P17.A1.2 矩阵路由解析后写入）
+
+    存在时 HTTP provider（dify/fastgpt）应**优先**用这里的 base_url +
+    api_key（明文，service 层已经解密），跳过 agent_def.config 里
+    api_key_env 等老路径。channel_id 用于 failover 标识。
+    """
+
+    channel_id: int
+    base_url: str | None = None
+    api_key: str | None = None
+
+    model_config = ConfigDict(frozen=True)
+
+
 class InvokeContext(BaseModel):
     """每次调用打包好的上下文
 
@@ -59,6 +74,8 @@ class InvokeContext(BaseModel):
     app_id: str
     stream: bool = False
     request_id: str | None = None
+    # P17.A1.2 矩阵路由解析后的 channel 凭证；None 表示走老路径（agent.config 直绑）
+    channel_override: ChannelOverride | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

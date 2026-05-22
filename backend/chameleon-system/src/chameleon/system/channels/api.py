@@ -14,6 +14,7 @@ from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.channels import service as channel_service
 from chameleon.system.channels.schemas import (
+    ChannelHealthItem,
     ChannelItem,
     CreateChannelRequest,
     UpdateChannelRequest,
@@ -42,6 +43,17 @@ async def get_channel(
     _: object = Depends(require_permission("channels:read")),
 ) -> Result[ChannelItem]:
     item = await channel_service.get_channel(session, channel_id)
+    return Result.ok(item)
+
+
+@router.get("/{channel_id}/health", response_model=Result[ChannelHealthItem])
+async def get_channel_health(
+    channel_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("channels:read")),
+) -> Result[ChannelHealthItem]:
+    """实时健康快照（failover wrapper 写入的 fail_count / EWMA 延迟等）"""
+    item = await channel_service.get_health(session, channel_id)
     return Result.ok(item)
 
 
