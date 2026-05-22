@@ -332,6 +332,80 @@ async def get_document(
     return row
 
 
+async def update_document(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    doc_id: int,
+    tags: list[str] | None = None,
+    meta: dict | None = None,
+    chunk_strategy: dict | None = None,
+) -> Document:
+    """更新 document tag / metadata / chunk_strategy；不重新分块。"""
+    row = await get_document(session, kb_id=kb_id, doc_id=doc_id)
+    if tags is not None:
+        row.tags = list(tags)
+    if meta is not None:
+        row.meta = {**(row.meta or {}), **meta}
+    if chunk_strategy is not None:
+        row.chunk_strategy = chunk_strategy
+    await session.flush()
+    return row
+
+
+async def reindex_document(
+    session: AsyncSession, *, kb_id: int, doc_id: int
+) -> tuple[int, int]:
+    """重新分块单个文档：清旧 chunks → 标 pending → 排 ingest 任务。
+    返 (document_id, task_id)。
+    """
+    doc = await get_document(session, kb_id=kb_id, doc_id=doc_id)
+    if doc.status == "processing":
+        raise ValidationError(message="文档正在处理中，无法 reindex")
+    # 删旧 chunks（向量库）；ingest worker 也会自删，这里早做一次让 UI 立刻清零
+    store = get_store()
+    await store.delete(kb_id=kb_id, doc_id=doc_id)
+    doc.status = "pending"
+    doc.status_message = None
+    doc.chunk_count = 0
+    doc.token_count = 0
+    await session.flush()
+    task_id = await _enqueue_ingest(session, kb_id=kb_id, doc_id=doc.id)
+    return doc.id, task_id
+
+
+async def reindex_all_documents(
+    session: AsyncSession, *, kb_id: int
+) -> list[dict]:
+    """批量重分块当前 KB 全部 done/failed 文档。"""
+    kb = await _get_kb(session, kb_id)
+    rows = (
+        (
+            await session.execute(
+                select(Document).where(
+                    Document.kb_id == kb.id,
+                    Document.deleted_at.is_(None),
+                    Document.status.in_(("ready", "failed")),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: list[dict] = []
+    for doc in rows:
+        store = get_store()
+        await store.delete(kb_id=kb.id, doc_id=doc.id)
+        doc.status = "pending"
+        doc.status_message = None
+        doc.chunk_count = 0
+        doc.token_count = 0
+        await session.flush()
+        task_id = await _enqueue_ingest(session, kb_id=kb.id, doc_id=doc.id)
+        out.append({"document_id": doc.id, "task_id": task_id})
+    return out
+
+
 async def delete_document(
     session: AsyncSession, *, kb_id: int, doc_id: int
 ) -> Document:

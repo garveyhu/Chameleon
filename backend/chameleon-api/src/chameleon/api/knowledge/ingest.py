@@ -18,7 +18,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy import select
 
-from chameleon.api.knowledge import parsers, storage
+from chameleon.api.knowledge import chunker, parsers, storage
 from chameleon.api.task import service as task_service
 from chameleon.core.config import inventory
 from chameleon.core.embedding import get_embedding_client
@@ -77,9 +77,20 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
         ).scalar_one()
         kb_chunk_strategy = kb.chunk_strategy or {}
         doc_chunk_strategy = doc.chunk_strategy or kb_chunk_strategy
-        # 兼容旧字段
-        chunk_size = int(doc_chunk_strategy.get("chunk_size") or kb.chunk_size)
-        chunk_overlap = int(doc_chunk_strategy.get("overlap") or kb.chunk_overlap)
+        # 旧字段兜底（chunk_strategy 不带 chunk_size / overlap 时回到 KB 顶层）
+        active_strategy: dict[str, object] = {
+            "mode": doc_chunk_strategy.get("mode") or "fixed",
+            "chunk_size": int(
+                doc_chunk_strategy.get("chunk_size") or kb.chunk_size
+            ),
+            "overlap": int(
+                doc_chunk_strategy.get("overlap") or kb.chunk_overlap
+            ),
+        }
+        if doc_chunk_strategy.get("separator_regex"):
+            active_strategy["separator_regex"] = doc_chunk_strategy[
+                "separator_regex"
+            ]
         source_type = doc.source_type
         source_uri = doc.source_uri
         mime_type = doc.mime_type
@@ -99,13 +110,16 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
     if not text or not text.strip():
         raise ValueError("document content is empty after parsing")
 
-    # 4. chunk（v1 fixed；C3.2 切多策略）
-    chunks_text = _chunk_fixed(text, chunk_size=chunk_size, overlap=chunk_overlap)
+    # 4. chunk（按 strategy 分发：fixed / paragraph / sentence / regex）
+    chunks_text = chunker.split(text, active_strategy)
+    if not chunks_text:
+        raise ValueError("chunker produced no chunks")
     logger.info(
-        "ingest chunked | task={} | doc={} | chunks={}",
+        "ingest chunked | task={} | doc={} | chunks={} | mode={}",
         task_id,
         document_id,
         len(chunks_text),
+        active_strategy.get("mode"),
     )
     async with AsyncSessionLocal() as session:
         await task_service.mark_progress(
@@ -191,22 +205,6 @@ async def _fetch_and_parse(
             content_bytes, name=name, mime_type=mime_type or "application/octet-stream"
         )
     raise ValueError(f"unsupported source_type: {source_type}")
-
-
-def _chunk_fixed(text: str, *, chunk_size: int, overlap: int) -> list[str]:
-    """字符级固定切块（v1；C3.2 引入多策略）"""
-    if chunk_size <= 0:
-        return [text] if text else []
-    if overlap < 0 or overlap >= chunk_size:
-        overlap = 0
-    step = chunk_size - overlap
-    out: list[str] = []
-    i = 0
-    n = len(text)
-    while i < n:
-        out.append(text[i : i + chunk_size])
-        i += step
-    return [c for c in out if c.strip()]
 
 
 def _approx_tokens(text: str) -> int:

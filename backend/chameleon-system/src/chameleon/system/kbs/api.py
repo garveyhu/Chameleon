@@ -110,6 +110,12 @@ class CreateTextDocumentRequest(BaseModel):
     content: str
 
 
+class UpdateDocumentRequest(BaseModel):
+    tags: list[str] | None = None
+    meta: dict | None = None
+    chunk_strategy: dict | None = None
+
+
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
@@ -352,6 +358,65 @@ async def create_text_document(
         task_id=task_id, document_id=doc_id, kb_id=kb_id
     )
     return Result.ok(IngestQueued(document_id=doc_id, task_id=task_id))
+
+
+@router.post(
+    "/{kb_id}/documents/{doc_id}/update",
+    response_model=Result[DocumentAdminItem],
+)
+async def update_document(
+    kb_id: int,
+    doc_id: int,
+    req: UpdateDocumentRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[DocumentAdminItem]:
+    row = await document_service.update_document(
+        session,
+        kb_id=kb_id,
+        doc_id=doc_id,
+        tags=req.tags,
+        meta=req.meta,
+        chunk_strategy=req.chunk_strategy,
+    )
+    return Result.ok(DocumentAdminItem.model_validate(row))
+
+
+@router.post(
+    "/{kb_id}/documents/{doc_id}/reindex",
+    response_model=Result[IngestQueued],
+)
+async def reindex_document(
+    kb_id: int,
+    doc_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[IngestQueued]:
+    doc_id_out, task_id = await document_service.reindex_document(
+        session, kb_id=kb_id, doc_id=doc_id
+    )
+    await session.commit()
+    document_service.spawn_ingest(
+        task_id=task_id, document_id=doc_id_out, kb_id=kb_id
+    )
+    return Result.ok(IngestQueued(document_id=doc_id_out, task_id=task_id))
+
+
+@router.post(
+    "/{kb_id}/reindex-all", response_model=Result[list[IngestQueued]]
+)
+async def reindex_all(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[list[IngestQueued]]:
+    queued = await document_service.reindex_all_documents(session, kb_id=kb_id)
+    await session.commit()
+    for q in queued:
+        document_service.spawn_ingest(
+            task_id=q["task_id"], document_id=q["document_id"], kb_id=kb_id
+        )
+    return Result.ok([IngestQueued(**q) for q in queued])
 
 
 @router.post(
