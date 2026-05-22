@@ -22,9 +22,9 @@ from chameleon.core.api.response import Result
 from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Provider
+from chameleon.core.schema import get as get_schema
 from chameleon.core.utils.crypto import encrypt
 from chameleon.system.auth.dependencies import require_permission
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -41,8 +41,17 @@ class ProviderItem(BaseModel):
     extra_config: dict | None = None
     enabled: bool
     description: str | None = None
+    # 用 kind 推导出来的 agent_config schema name，前端按此拉 /v1/admin/schemas/{name}
+    # 渲染 "新建 agent" 表单；为 None 表示该 kind 暂未注册 schema，前端走 raw JSON
+    agent_config_schema_name: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+def _agent_config_schema_for(kind: str) -> str | None:
+    """按 provider.kind 推导对应 agent_config schema 注册名；未注册返 None"""
+    candidate = f"provider.{kind}.agent_config"
+    return candidate if get_schema(candidate) is not None else None
 
 
 def _to_item(p: Provider) -> ProviderItem:
@@ -56,6 +65,7 @@ def _to_item(p: Provider) -> ProviderItem:
         extra_config=p.extra_config,
         enabled=p.enabled,
         description=p.description,
+        agent_config_schema_name=_agent_config_schema_for(p.kind),
         created_at=p.created_at,
         updated_at=p.updated_at,
     )

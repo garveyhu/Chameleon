@@ -9,7 +9,10 @@ agent 继承 BaseAgent，实现 `astream(ctx)` async generator，自由 yield。
 - 想要极致灵活控制流式输出（手动 yield 任意 event 类型）
 """
 
+# 必须 import schemas 触发 @register 装饰器副作用
+from chameleon.agents.example_echo_native import schemas as _schemas  # noqa: F401
 from chameleon.agents.example_echo_native.agent import EchoNativeAgent
+from chameleon.agents.example_echo_native.schemas import EchoAgentInput
 
-__all__ = ["EchoNativeAgent"]
+__all__ = ["EchoNativeAgent", "EchoAgentInput"]
 __version__ = "0.1.0"

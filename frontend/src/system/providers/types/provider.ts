@@ -9,6 +9,8 @@ export interface ProviderItem {
   extra_config: Record<string, unknown> | null;
   enabled: boolean;
   description: string | null;
+  /** 推导出来的 agent_config schema 注册名，按此调 schemaApi.get(name) 拉 schema 渲染表单 */
+  agent_config_schema_name: string | null;
   created_at: string;
   updated_at: string;
 }
