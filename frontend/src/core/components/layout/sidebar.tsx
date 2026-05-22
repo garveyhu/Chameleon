@@ -27,6 +27,7 @@ import {
   Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
+  PlaySquare,
   Settings,
   ShieldCheck,
   Sparkles,
@@ -82,6 +83,7 @@ const AI_GROUP: NavGroup = {
     { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
     { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
     { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
+    { to: '/playground', icon: PlaySquare, i18nKey: 'menu.playground', fallbackTitle: 'Playground', perm: 'playground:invoke' },
     { to: '/embed-configs', icon: Cpu, i18nKey: 'menu.embed_configs', fallbackTitle: '嵌入式', perm: 'embed_configs:read' },
   ],
 };
