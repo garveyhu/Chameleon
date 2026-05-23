@@ -62,6 +62,10 @@ class Document(Base, TimestampMixin, SoftDeleteMixin):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     source_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    # P22.4：文档媒介类型（text / image / pdf；NULL 兼容老数据 = text）
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="text", server_default="text"
+    )
     source_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -113,11 +117,18 @@ class Chunk(Base, TimestampMixin):
     quarantine_reason: Mapped[str | None] = mapped_column(
         String(64), nullable=True
     )
+    # P22.4：chunk 媒介类型（text / image；多模态检索时按 kind 过滤 / 路由）
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="text", server_default="text"
+    )
+    # P22.4：原始资源 URL（image 上传后填 MinIO URL；text chunk 通常为空）
+    source_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),
         Index("ix_chunks_doc_seq", "doc_id", "seq"),
         Index("ix_chunks_collection_index", "collection_id", "index_name"),
         Index("ix_chunks_quarantined", "quarantined"),
+        Index("ix_chunks_kind", "kind"),
         # HNSW 向量索引在 migration 里手写（SQLAlchemy 不直接支持 HNSW 参数）
     )

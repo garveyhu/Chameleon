@@ -1,0 +1,62 @@
+"""chameleon.core.retrieval —— 检索算子库
+
+P22.4 PR #79：抽出 hybrid 6 步管道为独立模块，便于：
+- 单测每一步（无 DB 依赖）
+- 接 reranker hook（PR #80）
+- 接多模态 image vector（PR #82）
+
+Pipeline（6 步）：
+    1) vector 召回 top_k * 2
+    2) BM25 召回 top_k * 2
+    3) dedupe（按 chunk_id；可选内容相似度合并）
+    4) RRF 融合排序
+    5) metadata filter（quarantined / collection / kind / tags）
+    6) optional reranker hook → 取 top_k
+
+红线（plan §2 P22）：
+- ⛔ quarantined chunks 不应出现在结果（半软删保留）
+"""
+
+from chameleon.core.retrieval.hybrid import (
+    HybridConfig,
+    Hit,
+    HybridPipeline,
+    dedupe_by_chunk_id,
+    fuse_rrf,
+    metadata_filter,
+)
+from chameleon.core.retrieval.reranker import (
+    JudgeFn,
+    Reranker,
+    make_dedupe_reranker,
+    make_dedupe_then_judge_reranker,
+    make_llm_judge_reranker,
+    pass_through,
+)
+from chameleon.core.retrieval.vlm_caption import (
+    CaptionFn,
+    CaptionResult,
+    VLMClient,
+    generate_caption,
+    generate_captions_batch,
+)
+
+__all__ = [
+    "CaptionFn",
+    "CaptionResult",
+    "HybridConfig",
+    "Hit",
+    "HybridPipeline",
+    "JudgeFn",
+    "Reranker",
+    "VLMClient",
+    "dedupe_by_chunk_id",
+    "fuse_rrf",
+    "generate_caption",
+    "generate_captions_batch",
+    "make_dedupe_reranker",
+    "make_dedupe_then_judge_reranker",
+    "make_llm_judge_reranker",
+    "metadata_filter",
+    "pass_through",
+]
