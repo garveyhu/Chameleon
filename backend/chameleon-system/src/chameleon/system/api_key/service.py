@@ -192,3 +192,24 @@ async def record_call(
     )
     session.add(log)
     await session.flush()
+
+    # P19.3 PR #39：trace 根 + 有 app_id 时累加 workspace 配额
+    # parent_id IS NULL = 顶层调用（trace root），子 span 不重复算请求数
+    if parent_id is None and app_id:
+        try:
+            from chameleon.system.workspaces.quota_service import (
+                increment_usage,
+                workspace_id_for_app,
+            )
+
+            ws_id = await workspace_id_for_app(session, app_id)
+            await increment_usage(
+                session, ws_id, total_tokens=total_tokens, requests=1
+            )
+        except Exception:
+            # 计数失败绝不污染主请求路径；call_log 已写入
+            logger.exception(
+                "quota increment failed | app={} | request_id={}",
+                app_id,
+                request_id,
+            )

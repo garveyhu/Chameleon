@@ -4,7 +4,9 @@ import type {
   AddMemberPayload,
   CreateWorkspacePayload,
   MemberItem,
+  QuotaItem,
   UpdateMemberRolePayload,
+  UpdateQuotaPayload,
   UpdateWorkspacePayload,
   WorkspaceItem,
 } from '@/system/workspaces/types/workspace';
@@ -44,4 +46,10 @@ export const workspaceApi = {
       `/v1/admin/workspaces/${id}/members/${membershipId}/delete`,
       {},
     ),
+
+  getQuota: (id: EntityId) =>
+    get<QuotaItem>(`/v1/admin/workspaces/${id}/quota`),
+
+  updateQuota: (id: EntityId, p: UpdateQuotaPayload) =>
+    post<QuotaItem>(`/v1/admin/workspaces/${id}/quota/update`, p),
 };

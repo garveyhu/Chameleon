@@ -27,7 +27,7 @@ from chameleon.core.api.exceptions import (
     PermissionDeniedError,
     ResultCode,
 )
-from chameleon.core.models import ApiKey
+from chameleon.core.models import ApiKey, App
 
 _ALPHABET = string.ascii_letters + string.digits
 _KEY_BODY_LEN = 40
@@ -42,6 +42,8 @@ class CurrentApp:
     app_id: str
     name: str
     scopes: list[str]
+    # P19.3 PR #39：app → workspace 归属，配额检查 / 业务过滤都靠这个
+    workspace_id: int | None = None
 
 
 # ── key 生成与校验 ────────────────────────────────────────
@@ -94,12 +96,20 @@ async def current_app(
     row.last_used_at = datetime.now(timezone.utc)
     # 不显式 commit，由 get_session 上下文管理
 
+    # P19.3：解析 app_id → workspace_id（业务路径配额 / 过滤靠这个）
+    ws_id = (
+        await session.execute(
+            select(App.workspace_id).where(App.app_id == row.app_id)
+        )
+    ).scalar_one_or_none()
+
     logger.debug("auth ok | app_id={} | scopes={}", row.app_id, row.scopes)
     return CurrentApp(
         id=row.id,
         app_id=row.app_id,
         name=row.name,
         scopes=list(row.scopes or []),
+        workspace_id=ws_id,
     )
 
 

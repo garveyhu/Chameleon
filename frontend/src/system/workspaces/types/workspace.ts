@@ -61,3 +61,21 @@ export const PLAN_OPTIONS: { label: string; value: WorkspacePlan }[] = [
 
 /** 默认 workspace 的固定 id —— 与后端 DEFAULT_WORKSPACE_ID 对齐 */
 export const DEFAULT_WORKSPACE_ID = '1';
+
+// ── quota ────────────────────────────────────────────
+
+
+export interface QuotaItem {
+  workspace_id: EntityId;
+  token_quota_monthly: number | null;
+  token_used_current_month: number;
+  request_quota_daily: number | null;
+  request_used_today: number;
+  reset_at: string;
+}
+
+export interface UpdateQuotaPayload {
+  token_quota_monthly?: number | null;
+  request_quota_daily?: number | null;
+  reset_used?: boolean;
+}

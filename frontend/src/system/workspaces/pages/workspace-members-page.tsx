@@ -20,6 +20,7 @@ import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { InviteMemberModal } from '@/system/workspaces/components/invite-member-modal';
+import { QuotaCard } from '@/system/workspaces/components/quota-card';
 import { workspaceApi } from '@/system/workspaces/services/workspace';
 import type {
   AddMemberPayload,
@@ -127,6 +128,8 @@ export const WorkspaceMembersPage = () => {
             </Badge>
           )}
         </div>
+
+        <QuotaCard workspaceId={wsId} />
 
         <SectionCard>
           <header className="mb-3 flex items-center justify-between">

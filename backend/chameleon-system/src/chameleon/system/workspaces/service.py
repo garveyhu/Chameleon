@@ -17,11 +17,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.models import Membership, User, Workspace, WorkspaceQuota
 from chameleon.core.models.workspace import DEFAULT_WORKSPACE_ID
+from chameleon.system.workspaces.quota_service import (
+    get_or_create_quota,
+    snapshot as quota_snapshot,
+)
 from chameleon.system.workspaces.schemas import (
     AddMemberRequest,
     CreateWorkspaceRequest,
     MemberItem,
+    QuotaItem,
     UpdateMemberRoleRequest,
+    UpdateQuotaRequest,
     UpdateWorkspaceRequest,
     WorkspaceItem,
 )
@@ -230,6 +236,39 @@ async def remove_member(
             ResultCode.NotFound,
             message=f"成员关系不存在: ws={ws_id} mid={membership_id}",
         )
+
+
+# ── quota ───────────────────────────────────────────────
+
+
+async def get_quota(session: AsyncSession, ws_id: int) -> QuotaItem:
+    await _load(session, ws_id)  # 校验 ws 存在
+    snap = await quota_snapshot(session, ws_id)
+    return QuotaItem(
+        workspace_id=snap.workspace_id,
+        token_quota_monthly=snap.token_quota_monthly,
+        token_used_current_month=snap.token_used_current_month,
+        request_quota_daily=snap.request_quota_daily,
+        request_used_today=snap.request_used_today,
+        reset_at=snap.reset_at,
+    )
+
+
+async def update_quota(
+    session: AsyncSession, ws_id: int, req: UpdateQuotaRequest
+) -> QuotaItem:
+    await _load(session, ws_id)
+    quota = await get_or_create_quota(session, ws_id)
+    quota.token_quota_monthly = req.token_quota_monthly
+    quota.request_quota_daily = req.request_quota_daily
+    if req.reset_used:
+        quota.token_used_current_month = 0
+        quota.request_used_today = 0
+        quota.reset_at = datetime.now(timezone.utc)
+    await session.flush()
+    await session.refresh(quota)
+    await session.commit()
+    return await get_quota(session, ws_id)
 
 
 # ── helpers ─────────────────────────────────────────────

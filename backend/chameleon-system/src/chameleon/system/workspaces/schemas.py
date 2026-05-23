@@ -56,3 +56,24 @@ class AddMemberRequest(BaseModel):
 
 class UpdateMemberRoleRequest(BaseModel):
     role: Literal["owner", "admin", "member", "viewer"]
+
+
+# ── quota ────────────────────────────────────────────
+
+
+class QuotaItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    workspace_id: int
+    token_quota_monthly: int | None = None
+    token_used_current_month: int
+    request_quota_daily: int | None = None
+    request_used_today: int
+    reset_at: datetime
+
+
+class UpdateQuotaRequest(BaseModel):
+    token_quota_monthly: int | None = Field(default=None, ge=0)
+    request_quota_daily: int | None = Field(default=None, ge=0)
+    # 显式重置 used 计数（管理员 force reset）
+    reset_used: bool = False

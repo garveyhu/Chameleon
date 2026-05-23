@@ -51,6 +51,13 @@ async def invoke_agent(
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ):
+    # P19.3 PR #39：业务 invoke 前检查 workspace 配额（超额 → 429）
+    from chameleon.system.workspaces.quota_service import (
+        assert_within_request_quota,
+    )
+
+    await assert_within_request_quota(session, app.workspace_id)
+
     request_id = getattr(request.state, "request_id", "req_unknown")
 
     if req.stream:

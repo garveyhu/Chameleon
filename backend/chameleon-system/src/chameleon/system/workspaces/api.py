@@ -13,7 +13,9 @@ from chameleon.system.workspaces.schemas import (
     AddMemberRequest,
     CreateWorkspaceRequest,
     MemberItem,
+    QuotaItem,
     UpdateMemberRoleRequest,
+    UpdateQuotaRequest,
     UpdateWorkspaceRequest,
     WorkspaceItem,
 )
@@ -122,3 +124,25 @@ async def remove_member(
 ) -> Result[None]:
     await service.remove_member(session, ws_id, membership_id)
     return Result.ok(None)
+
+
+# ── quota ───────────────────────────────────────────────
+
+
+@router.get("/{ws_id}/quota", response_model=Result[QuotaItem])
+async def get_quota(
+    ws_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission(_PERM_READ)),
+) -> Result[QuotaItem]:
+    return Result.ok(await service.get_quota(session, ws_id))
+
+
+@router.post("/{ws_id}/quota/update", response_model=Result[QuotaItem])
+async def update_quota(
+    ws_id: int,
+    req: UpdateQuotaRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission(_PERM_WRITE)),
+) -> Result[QuotaItem]:
+    return Result.ok(await service.update_quota(session, ws_id, req))
