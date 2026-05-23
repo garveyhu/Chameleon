@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -26,9 +26,10 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Agent
+from chameleon.core.models.workspace import DEFAULT_WORKSPACE_ID
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service
-from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.auth.dependencies import CurrentUser, require_permission
 
 
 # ── DTO ────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ class AgentItem(BaseModel):
     tags: list | None = None
     enabled: bool
     version: str | None = None
+    workspace_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -118,7 +120,7 @@ async def list_agents(
     source: str | None = Query(default=None),
     enabled: bool | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
-    _: object = Depends(require_permission("agents:read")),
+    current: CurrentUser = Depends(require_permission("agents:read")),
 ) -> Result[list[AgentItem]]:
     stmt = (
         select(Agent)
@@ -129,8 +131,28 @@ async def list_agents(
         stmt = stmt.where(Agent.source == source)
     if enabled is not None:
         stmt = stmt.where(Agent.enabled.is_(enabled))
+    stmt = _apply_workspace_filter(stmt, Agent, current)
     rows = (await session.execute(stmt)).scalars().all()
     return Result.ok([AgentItem.model_validate(a) for a in rows])
+
+
+def _apply_workspace_filter(stmt, model, current: CurrentUser):
+    """P19.3 工作区可见性过滤：
+    - admin 未指定 ws → 不过滤
+    - 指定 ws → 仅 workspace_id == ws；若包含 DEFAULT，允许老 NULL 行
+    - 非 admin 多 ws → IN scope；含 DEFAULT 时同样收 NULL 行
+    """
+    ws_ids = current.workspace_filter_ids()
+    if ws_ids is None:
+        return stmt
+    if DEFAULT_WORKSPACE_ID in ws_ids:
+        return stmt.where(
+            or_(
+                model.workspace_id.in_(ws_ids),
+                model.workspace_id.is_(None),
+            )
+        )
+    return stmt.where(model.workspace_id.in_(ws_ids))
 
 
 @router.get("/{agent_id}", response_model=Result[AgentItem])
@@ -146,7 +168,7 @@ async def get_agent(
 async def create_agent(
     req: CreateAgentRequest,
     session: AsyncSession = Depends(get_session),
-    _: object = Depends(require_permission("agents:write")),
+    current: CurrentUser = Depends(require_permission("agents:write")),
 ) -> Result[AgentItem]:
     existing = (
         await session.execute(
@@ -155,6 +177,8 @@ async def create_agent(
     ).scalar_one_or_none()
     if existing is not None:
         raise ValidationError(message=f"agent_key 已存在: {req.agent_key}")
+    # P19.3：创建强制写 workspace_id —— admin 未指定 → DEFAULT
+    ws_id = current.workspace_id if current.workspace_id is not None else DEFAULT_WORKSPACE_ID
     a = Agent(
         agent_key=req.agent_key,
         name=req.name,
@@ -164,6 +188,7 @@ async def create_agent(
         config=req.config,
         tags=req.tags,
         enabled=True,
+        workspace_id=ws_id,
     )
     session.add(a)
     return Result.ok(await _serialize_and_commit(session, a))
