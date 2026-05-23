@@ -22,6 +22,7 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.models import Dataset, EvalJob, EvalJobRun
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets.judges import JUDGES
+from chameleon.system.eval_jobs.alert import maybe_send_alert
 from chameleon.system.eval_jobs.schemas import (
     CreateEvalJobRequest,
     EvalJobItem,
@@ -185,6 +186,14 @@ async def trigger_job(
             job.last_score = mean_score
         await session.commit()
         await session.refresh(job_run)
+
+        # alert pipeline：失败不能污染主路径
+        try:
+            await maybe_send_alert(session, job, job_run)
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "eval_alert pipeline raised | job={}", job.id
+            )
     except Exception as e:  # noqa: BLE001
         logger.exception("eval_job trigger failed | id={}", job_id)
         # 回滚后只更新失败状态

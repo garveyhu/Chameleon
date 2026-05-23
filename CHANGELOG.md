@@ -6,7 +6,8 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ### Added
 
-- **Eval Jobs schema + APScheduler 触发器（P19.1 PR #30）** — `eval_jobs` / `eval_job_runs` 两张表；`AsyncIOScheduler` lifespan 接入，CRUD 后路由层 `sync_job` 自动注册/卸载 cron；手动 `/trigger` 端点同步复用 `datasets.runner` 跑一次 + 写 `eval_job_run` + 计算 `delta_score`；alert / regression rule 推 PR #31。
+- **Eval Jobs schema + APScheduler 触发器（P19.1 PR #30）** — `eval_jobs` / `eval_job_runs` 两张表；`AsyncIOScheduler` lifespan 接入，CRUD 后路由层 `sync_job` 自动注册/卸载 cron；手动 `/trigger` 端点同步复用 `datasets.runner` 跑一次 + 写 `eval_job_run` + 计算 `delta_score`。
+- **Slack / Webhook notifier + regression alert + Redis dedup（P19.1 PR #31）** — Notifier ABC + 内置两类渠道；`should_alert` 阈值判定（`abs(delta) >= regression_threshold` 触发）；`maybe_send_alert` pipeline 集成进 `trigger_job` 末尾；Redis `SET NX EX(silence_minutes*60)` 防风暴去重；网络失败 `alert_sent=False`，主路径不受影响。
 
 ## [0.4.0] — 2026-05-23
 
