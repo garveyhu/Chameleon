@@ -24,7 +24,14 @@ from chameleon.core.models import (
     DatasetRun,
     DatasetRunItem,
 )
+from chameleon.system.datasets.pii import (
+    PiiStrategy,
+    apply_pii_strategy,
+    apply_pii_strategy_dict,
+)
 from chameleon.system.datasets.schemas import (
+    BulkImportRequest,
+    BulkImportResult,
     CompareItemCell,
     CompareRunsResult,
     CreateDatasetRequest,
@@ -184,19 +191,30 @@ async def sample_from_logs(
     stmt = stmt.order_by(CallLog.created_at.desc()).limit(req.limit)
 
     logs = (await session.execute(stmt)).scalars().all()
+    pii_strategy: PiiStrategy = req.pii_strategy  # type: ignore[assignment]
 
     added = 0
     skipped = 0
+    dropped_pii = 0
     for lg in logs:
         if lg.request_id in existing_set:
             skipped += 1
             continue
-        redacted_input = _redact_input(lg.request_payload)
-        expected = (
-            _shallow_jsonable(lg.response_payload)
-            if req.include_response_as_expected
-            else None
+        redacted_input, dropped_in = _redact_input(
+            lg.request_payload, pii_strategy
         )
+        if dropped_in:
+            dropped_pii += 1
+            continue
+        if req.include_response_as_expected:
+            expected, dropped_out = apply_pii_strategy_dict(
+                _shallow_jsonable(lg.response_payload), pii_strategy
+            )
+            if dropped_out:
+                dropped_pii += 1
+                continue
+        else:
+            expected = None
         item = DatasetItem(
             dataset_id=ds.id,
             source_call_log_id=lg.request_id,
@@ -207,6 +225,7 @@ async def sample_from_logs(
                 "app_id": lg.app_id,
                 "success": lg.success,
                 "duration_ms": lg.duration_ms,
+                "pii_strategy": pii_strategy,
                 "sampled_at": datetime.now(timezone.utc).isoformat(),
             },
         )
@@ -232,16 +251,87 @@ async def sample_from_logs(
     ).scalar_one()
     await session.commit()
 
-    return SampleResult(dataset_id=ds.id, added=added, skipped=skipped)
+    return SampleResult(
+        dataset_id=ds.id,
+        added=added,
+        skipped=skipped,
+        dropped_pii=dropped_pii,
+    )
+
+
+# ── 手工 import ──────────────────────────────────────────
+
+
+async def bulk_import_items(
+    session: AsyncSession,
+    dataset_id: int,
+    req: BulkImportRequest,
+) -> BulkImportResult:
+    """手工批量入 dataset_items（CSV/JSONL 前端解析后调用）
+
+    PII 策略同采样：mask（默认）/ drop / keep。
+    """
+    ds = await _load_dataset(session, dataset_id)
+    pii_strategy: PiiStrategy = req.pii_strategy  # type: ignore[assignment]
+    added = 0
+    dropped_pii = 0
+    for raw in req.items:
+        masked_input, dropped_in = apply_pii_strategy_dict(
+            raw.input_payload, pii_strategy
+        )
+        if dropped_in:
+            dropped_pii += 1
+            continue
+        masked_expected, dropped_out = apply_pii_strategy_dict(
+            raw.expected_output, pii_strategy
+        )
+        if dropped_out:
+            dropped_pii += 1
+            continue
+        item = DatasetItem(
+            dataset_id=ds.id,
+            source_call_log_id=None,
+            input_payload=masked_input or {},
+            expected_output=masked_expected,
+            meta={
+                **(raw.meta or {}),
+                "source": "manual_import",
+                "pii_strategy": pii_strategy,
+                "imported_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        session.add(item)
+        added += 1
+    await session.flush()
+    ds.item_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(DatasetItem)
+            .where(DatasetItem.dataset_id == ds.id)
+        )
+    ).scalar_one()
+    await session.commit()
+    return BulkImportResult(
+        dataset_id=ds.id, added=added, dropped_pii=dropped_pii
+    )
 
 
 # ── 脱敏 helper ───────────────────────────────────────────
 
 
-def _redact_input(payload: dict | None) -> dict[str, Any]:
+def _redact_input(
+    payload: dict | None, pii_strategy: PiiStrategy = "mask"
+) -> tuple[dict[str, Any], bool]:
     """call_log.request_payload → 脱敏的 input_payload
 
     保留：每个字段的 hash + length + token_count_approx + redacted preview（短）。
+    PII 策略（preview 字段）：
+    - mask（默认）：preview 内 email / phone / id_card 替换占位符
+    - drop：preview 含任意 PII → 整条 item 跳过（返 True）
+    - keep：保留原文（仅 admin 明确无 PII 时）
+
+    Returns:
+        (redacted_input, should_drop)
     """
     payload = payload or {}
     out: dict[str, Any] = {"_redacted": True}
@@ -249,12 +339,19 @@ def _redact_input(payload: dict | None) -> dict[str, Any]:
         if isinstance(v, str):
             text = v
             sha = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+            raw_preview = text[:_MAX_REDACTED_PREVIEW] + (
+                "…" if len(text) > _MAX_REDACTED_PREVIEW else ""
+            )
+            processed_preview, dropped = apply_pii_strategy(
+                raw_preview, pii_strategy
+            )
+            if dropped:
+                return out, True
             out[k] = {
                 "hash": f"sha256:{sha}",
                 "length": len(text),
                 "token_count_approx": max(1, len(text) // 3),
-                "preview": text[:_MAX_REDACTED_PREVIEW]
-                + ("…" if len(text) > _MAX_REDACTED_PREVIEW else ""),
+                "preview": processed_preview,
             }
         elif isinstance(v, (int, float, bool)) or v is None:
             out[k] = v
@@ -266,7 +363,7 @@ def _redact_input(payload: dict | None) -> dict[str, Any]:
             }
         else:
             out[k] = {"type": type(v).__name__}
-    return out
+    return out, False
 
 
 def _structure_summary(v: Any) -> dict[str, Any]:

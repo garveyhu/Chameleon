@@ -216,6 +216,212 @@ async def test_sample_from_logs_redacts_input(
     assert ds_r.json()["data"]["item_count"] == app_with_logs["log_count"]
 
 
+async def test_sample_pii_mask_in_preview(
+    client: AsyncClient, admin_token: str
+):
+    """P21.1：preview 字段必须脱敏邮箱/手机/身份证"""
+    suffix = secrets.token_hex(3)
+    app_key = f"e2e-dspii-{suffix}"
+    async with AsyncSessionLocal() as s:
+        s.add(App(app_key=app_key, name="pii test", status="active"))
+        await s.flush()
+        await record_call(
+            s,
+            request_id=f"rid-pii-{suffix}-0",
+            app_id=app_key,
+            agent_key="example",
+            session_id=None,
+            stream=False,
+            success=True,
+            code=200,
+            error_message=None,
+            duration_ms=100,
+            request_payload={
+                "user_input": "联系 alice@example.com 或 13812345678",
+            },
+            response_payload={"answer": "OK"},
+            observation_type="trace",
+        )
+        await s.commit()
+    try:
+        cr = await client.post(
+            "/v1/admin/datasets",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"name": "pii-mask-ds"},
+        )
+        did = cr.json()["data"]["id"]
+
+        r = await client.post(
+            f"/v1/admin/datasets/{did}/sample-from-logs",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"app_id": app_key, "limit": 5, "pii_strategy": "mask"},
+        )
+        assert r.status_code == 200
+        assert r.json()["data"]["added"] == 1
+        assert r.json()["data"]["dropped_pii"] == 0
+
+        items_r = await client.get(
+            f"/v1/admin/datasets/{did}/items",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        items = items_r.json()["data"]
+        preview = items[0]["input_payload"]["user_input"]["preview"]
+        assert "<EMAIL>" in preview
+        assert "<PHONE>" in preview
+        assert "alice@example.com" not in preview
+        assert "13812345678" not in preview
+    finally:
+        async with AsyncSessionLocal() as s:
+            await s.execute(
+                delete(DatasetItem).where(
+                    DatasetItem.source_call_log_id.like(f"rid-pii-{suffix}-%")
+                )
+            )
+            await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
+            await s.execute(delete(App).where(App.app_key == app_key))
+            await s.commit()
+
+
+async def test_sample_pii_drop_strategy(
+    client: AsyncClient, admin_token: str
+):
+    """P21.1：drop 策略下含 PII 的 call_log 整条跳过"""
+    suffix = secrets.token_hex(3)
+    app_key = f"e2e-dsdrop-{suffix}"
+    async with AsyncSessionLocal() as s:
+        s.add(App(app_key=app_key, name="drop test", status="active"))
+        await s.flush()
+        # 一条有 PII，一条无 PII
+        await record_call(
+            s,
+            request_id=f"rid-drop-{suffix}-pii",
+            app_id=app_key,
+            agent_key="example",
+            session_id=None,
+            stream=False,
+            success=True,
+            code=200,
+            error_message=None,
+            duration_ms=100,
+            request_payload={"user_input": "邮箱 user@x.com"},
+            response_payload={"answer": "OK"},
+            observation_type="trace",
+        )
+        await record_call(
+            s,
+            request_id=f"rid-drop-{suffix}-clean",
+            app_id=app_key,
+            agent_key="example",
+            session_id=None,
+            stream=False,
+            success=True,
+            code=200,
+            error_message=None,
+            duration_ms=100,
+            request_payload={"user_input": "什么是 RAG？"},
+            response_payload={"answer": "OK"},
+            observation_type="trace",
+        )
+        await s.commit()
+    try:
+        cr = await client.post(
+            "/v1/admin/datasets",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"name": "pii-drop-ds"},
+        )
+        did = cr.json()["data"]["id"]
+
+        r = await client.post(
+            f"/v1/admin/datasets/{did}/sample-from-logs",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json={"app_id": app_key, "limit": 5, "pii_strategy": "drop"},
+        )
+        data = r.json()["data"]
+        assert data["added"] == 1
+        assert data["dropped_pii"] == 1
+    finally:
+        async with AsyncSessionLocal() as s:
+            await s.execute(
+                delete(DatasetItem).where(
+                    DatasetItem.source_call_log_id.like(f"rid-drop-{suffix}-%")
+                )
+            )
+            await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
+            await s.execute(delete(App).where(App.app_key == app_key))
+            await s.commit()
+
+
+async def test_bulk_import_basic(client: AsyncClient, admin_token: str):
+    """P21.1：手工 bulk-import items（无 PII）"""
+    cr = await client.post(
+        "/v1/admin/datasets",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"name": "bulk-ds"},
+    )
+    did = cr.json()["data"]["id"]
+    r = await client.post(
+        f"/v1/admin/datasets/{did}/items/bulk-import",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "items": [
+                {
+                    "input_payload": {"q": "什么是 RAG？"},
+                    "expected_output": {"answer": "RAG 是检索增强生成"},
+                },
+                {
+                    "input_payload": {"q": "什么是 Agent？"},
+                    "expected_output": {"answer": "Agent 是自主智能体"},
+                },
+            ]
+        },
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()["data"]
+    assert data["added"] == 2
+    assert data["dropped_pii"] == 0
+
+
+async def test_bulk_import_pii_drop(client: AsyncClient, admin_token: str):
+    """P21.1：bulk-import 配 drop 策略，含 PII 的整条跳过"""
+    cr = await client.post(
+        "/v1/admin/datasets",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"name": "bulk-drop-ds"},
+    )
+    did = cr.json()["data"]["id"]
+    r = await client.post(
+        f"/v1/admin/datasets/{did}/items/bulk-import",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "items": [
+                {"input_payload": {"q": "正常问题"}},
+                {"input_payload": {"q": "联系 alice@example.com"}},
+            ],
+            "pii_strategy": "drop",
+        },
+    )
+    data = r.json()["data"]
+    assert data["added"] == 1
+    assert data["dropped_pii"] == 1
+
+
+async def test_bulk_import_rejects_empty(
+    client: AsyncClient, admin_token: str
+):
+    cr = await client.post(
+        "/v1/admin/datasets",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"name": "bulk-empty-ds"},
+    )
+    did = cr.json()["data"]["id"]
+    r = await client.post(
+        f"/v1/admin/datasets/{did}/items/bulk-import",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"items": []},
+    )
+    assert r.status_code in (400, 422)
+
+
 async def test_sample_is_idempotent(
     client: AsyncClient, admin_token: str, app_with_logs: dict
 ):

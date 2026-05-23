@@ -12,6 +12,8 @@ from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets import service as ds_service
 from chameleon.system.datasets.judges import list_judges
 from chameleon.system.datasets.schemas import (
+    BulkImportRequest,
+    BulkImportResult,
     CompareRunsRequest,
     CompareRunsResult,
     CreateDatasetRequest,
@@ -134,6 +136,21 @@ async def sample_from_logs(
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[SampleResult]:
     result = await ds_service.sample_from_logs(session, dataset_id, req)
+    return Result.ok(result)
+
+
+@router.post(
+    "/{dataset_id}/items/bulk-import",
+    response_model=Result[BulkImportResult],
+)
+async def bulk_import(
+    dataset_id: int,
+    req: BulkImportRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[BulkImportResult]:
+    """手工 CSV/JSONL 前端解析后批量入 items（PII 策略可选）"""
+    result = await ds_service.bulk_import_items(session, dataset_id, req)
     return Result.ok(result)
 
 

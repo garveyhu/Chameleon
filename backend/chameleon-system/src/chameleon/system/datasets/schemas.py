@@ -62,6 +62,11 @@ class SampleFromLogsRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=500)
     # 是否同时把 response_payload 也带入 expected_output（人工标注前的"金标准"）
     include_response_as_expected: bool = True
+    # P21.1 红线：PII 策略
+    # - mask：preview / expected_output 内的 email/phone/id_card 替换占位符（默认）
+    # - drop：含任意 PII 的 call_log 整条跳过，不入库
+    # - keep：保留原文（明确知道无 PII 时；不推荐）
+    pii_strategy: str = Field(default="mask", pattern="^(mask|drop|keep)$")
 
 
 class SampleResult(BaseModel):
@@ -70,6 +75,8 @@ class SampleResult(BaseModel):
     dataset_id: int
     added: int
     skipped: int  # 已存在（同 source_call_log_id）跳过的数量
+    # P21.1：因 PII drop 策略跳过的数量（与 skipped 区分）
+    dropped_pii: int = 0
 
 
 class UpdateItemRequest(BaseModel):
@@ -77,6 +84,28 @@ class UpdateItemRequest(BaseModel):
 
     expected_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+
+
+class BulkImportItem(BaseModel):
+    """手工 import 时单条 item 的入参（前端解析 CSV/JSONL 后构造）"""
+
+    input_payload: dict[str, Any]
+    expected_output: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
+
+
+class BulkImportRequest(BaseModel):
+    """批量 import items"""
+
+    items: list[BulkImportItem] = Field(min_length=1, max_length=1000)
+    # 同 sample：mask（默认）/ drop / keep
+    pii_strategy: str = Field(default="mask", pattern="^(mask|drop|keep)$")
+
+
+class BulkImportResult(BaseModel):
+    dataset_id: int
+    added: int
+    dropped_pii: int = 0
 
 
 # ── DatasetRun（PR #25） ──────────────────────────────────
