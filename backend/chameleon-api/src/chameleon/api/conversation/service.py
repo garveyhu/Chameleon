@@ -154,6 +154,7 @@ async def append(
         tool_calls=draft.tool_calls,
         usage=draft.usage,
         provider=draft.provider,
+        parent_message_id=draft.parent_message_id,
         created_at=datetime.now(timezone.utc),
     )
     session.add(msg)

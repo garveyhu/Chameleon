@@ -33,6 +33,8 @@ class MessageItem(BaseModel):
     tool_calls: list[dict[str, Any]] | None
     usage: dict[str, Any] | None
     provider: str | None
+    # P18.5 PR #27：分支起点（regenerate/edit-and-resend fork 时填）
+    parent_message_id: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -48,3 +50,4 @@ class AppendMessageDraft(BaseModel):
     tool_calls: list[dict[str, Any]] | None = None
     usage: dict[str, Any] | None = None
     provider: str | None = None
+    parent_message_id: int | None = None

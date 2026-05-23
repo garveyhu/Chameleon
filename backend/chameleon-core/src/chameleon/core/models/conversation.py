@@ -62,6 +62,11 @@ class Message(Base):
     tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True)
     usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # P18.5 PR #27：消息分支 —— 指向同 session 的"前一条" message（fork 起点）
+    # NULL = 线性主线；非 NULL = 该消息从该 parent 分叉而来
+    parent_message_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -69,4 +74,5 @@ class Message(Base):
 
     __table_args__ = (
         Index("ix_messages_session_seq", "session_id", "seq", unique=True),
+        Index("ix_messages_parent", "parent_message_id"),
     )
