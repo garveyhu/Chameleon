@@ -2,6 +2,12 @@
 
 All notable changes to Chameleon. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Sandbox Runtime 抽象 + Mock 实现（P20.1 PR #45）** — `chameleon.core.sandbox`：`SandboxRuntime` ABC + `SandboxConfig` / `SandboxResult` 不可变 dataclass + 全局 registry（`register_runtime` / `get_runtime` / `list_runtime_names`）；`SandboxConfig.__post_init__` 校验 timeout / memory / cpu 上下界 + 拒绝 `network='full'`；`MockSandboxRuntime` subprocess 实现（dev/test 用，`CHAMELEON_ENV=production` 拒绝加载）—— preexec_fn 容错 setrlimit (CPU/AS/NPROC)、`asyncio.wait_for` 强杀超时、stdout/stderr 各 1MB 截断。19 单测 + 1 Linux-only skip（macOS 上 `RLIMIT_AS` 是 no-op）。
+
 ## [0.5.0] — 2026-05-23
 
 **P19 阶段三收官**：Eval 自动化 + Plugin 热加载生态 + Multi-tenant Workspace + Multimodal。十三个 PR 一次性把"实用性脚手架"补齐：能 cron 跑回归测；能在线热装/启停插件；能用 workspace 切租户视角并加配额闸门；能在 Playground 上传图音文件参与多模态对话。
