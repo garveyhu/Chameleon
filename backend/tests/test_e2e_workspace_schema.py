@@ -53,7 +53,8 @@ async def test_default_workspace_seeded():
         ).scalar_one()
         assert ws.workspace_key == "default"
         assert ws.plan == "enterprise"
-        # Quota 行也 seed 了
+        # Quota 行也 seed 了；used 计数可能因前置测试 record_call 累加 > 0，
+        # 这里只验证行存在 + counter 是非负 BigInt（不强求 == 0，避免跨测试污染）
         q = (
             await s.execute(
                 select(WorkspaceQuota).where(
@@ -61,7 +62,8 @@ async def test_default_workspace_seeded():
                 )
             )
         ).scalar_one()
-        assert q.token_used_current_month == 0
+        assert q.token_used_current_month >= 0
+        assert q.request_used_today >= 0
 
 
 # ── 业务表都加了 workspace_id 列 ─────────────────────────

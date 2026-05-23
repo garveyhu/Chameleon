@@ -2,23 +2,48 @@
 
 All notable changes to Chameleon. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] — 2026-05-23
 
-### Added
+**P19 阶段三收官**：Eval 自动化 + Plugin 热加载生态 + Multi-tenant Workspace + Multimodal。十三个 PR 一次性把"实用性脚手架"补齐：能 cron 跑回归测；能在线热装/启停插件；能用 workspace 切租户视角并加配额闸门；能在 Playground 上传图音文件参与多模态对话。
 
-- **Eval Jobs schema + APScheduler 触发器（P19.1 PR #30）** — `eval_jobs` / `eval_job_runs` 两张表；`AsyncIOScheduler` lifespan 接入，CRUD 后路由层 `sync_job` 自动注册/卸载 cron；手动 `/trigger` 端点同步复用 `datasets.runner` 跑一次 + 写 `eval_job_run` + 计算 `delta_score`。
-- **Slack / Webhook notifier + regression alert + Redis dedup（P19.1 PR #31）** — Notifier ABC + 内置两类渠道；`should_alert` 阈值判定（`abs(delta) >= regression_threshold` 触发）；`maybe_send_alert` pipeline 集成进 `trigger_job` 末尾；Redis `SET NX EX(silence_minutes*60)` 防风暴去重；网络失败 `alert_sent=False`，主路径不受影响。
-- **Eval Jobs 管理 UI（P19.1 PR #32）** — `/eval-jobs` 列表页（job_key/cron/最近分数/状态/手动触发/启用切换/删除）；`/eval-jobs/:id` 详情页（8 张概览卡 + SVG mean_score 趋势折线 + 运行历史表，alert sent 高亮）；create/edit 复用同一 modal，cron 用预设 + 自定义双轨，alert_config 启用切换出 Slack/Webhook 渠道配；sidebar 新增「评测任务」入口（AI 能力分组）。
-- **Plugin manifest 协议 + Provider hot reload 骨架（P19.2 PR #33）** — `chameleon.core.plugins`：`PluginManifest` Pydantic 严格模型（name/version/entrypoint 正则校验 + `extra='forbid'` 防走私 + 拒绝 `__import__`/`eval` 等敏感关键字）；`plugin_instances` 表（builtin/local/git/pypi 四种 source）；`PluginRegistry` 单例（bootstrap_builtin / load_all / set_enabled / reload / install / uninstall），5s asyncio.wait_for 超时上限；builtin local/dify/fastgpt 首次启动 idempotent seed；`build_provider_registry()` 接受 `disabled_plugin_keys` 实现"admin disable builtin plugin 不重启即生效"。
-- **Plugin SDK + Admin API（P19.2 PR #34）** — `chameleon.core.plugins.sdk` 暴露 `@plugin_provider` / `@plugin_tool` / `@plugin_embedding` 装饰器给外部开发者；`assert_entrypoint_not_internal` 沙箱拒绝把 entrypoint 指向 `chameleon.core.models` / `chameleon.core.infra` / `chameleon.system` / `chameleon.api` / `chameleon.app` 内部模块；`/v1/admin/plugins` 端点齐全（list / get / install / enable / disable / reload / uninstall / config 更新）；启停后调 `reset_registry_for_test + init_registry` 让 PROVIDERS 实时下架/恢复 builtin；新增 `plugins:read/write/delete` 权限点 seed。
-- **Plugin 管理 UI（P19.2 PR #35）** — `/plugins` 列表页（内置 / 外部 两个分组，type 标签彩色，状态 badge，操作 reload/启停/卸载/编辑 config；builtin 卸载按钮置灰带 tooltip）；`PluginInstallModal` JSON manifest 粘贴 + 实时解析预览 + source local/git/pypi 切换；`PluginConfigModal` JSON 编辑器 + 顶部 manifest config_schema 字段提示；sidebar 加 Puzzle 图标的「插件」入口（AI 能力分组）。
-- **Multi-tenant Workspace schema + default ws seed（P19.3 PR #36）** — `workspaces` / `teams` / `memberships` / `workspace_quotas` 4 张新表；`WorkspaceScopedMixin` 给 10 张业务表（agents / apps / knowledge_bases / graphs / datasets / eval_jobs / tool_instances / channels / abilities / embed_configs）加 NULLABLE `workspace_id` 列 + FK + index；alembic upgrade 内幂等 seed `default` workspace (id=1) + `workspace_quotas` 行 + UPDATE backfill 老数据；service 层鉴权 / 切换 / 配额 UI 推 PR #37-#39。
-- **Workspace 鉴权 + 业务过滤（P19.3 PR #37）** — `CurrentUser` 扩展 `workspace_id` / `workspace_scope` / `is_admin` / `workspace_filter_ids`；`get_current_user` 启动时拉 memberships 算可访问 ws 集，支持 `X-Workspace-Id` header 切换视角（`all` 显式全量）；非 admin 越权访问报 403，老用户无 memberships 兜底 default ws；agents 路由首批接通过滤（list 加 `workspace_id IN scope` + DEFAULT 兼容老 NULL 行；create 强制写当前 ws）；isolation 测试覆盖 6 个场景。
-- **Workspace admin API + 切换 UI + Members 管理（P19.3 PR #38）** — 后端 `/v1/admin/workspaces` CRUD（默认 ws 防删 + workspace_key 唯一 + 同步 quota 行）+ `/members` CRUD（防重 + role 切换）；前端 Zustand `workspace-store` 持久化当前 ws + axios request interceptor 自动注入 `X-Workspace-Id`；sidebar 顶部加 `WorkspaceSwitcher` dropdown（全量 / 单 ws 切换 + 新建 + 跳成员页）+ 切换时 `queryClient.clear()` 全量 refetch；`/workspaces/:id/members` 页（成员表 + role inline 改 + 移除 + 邀请 modal）；新增 `workspaces:*` 权限点 seed。Chrome MCP 验收切 ws 后 agents 列表立刻按租户过滤。
-- **Workspace 配额限流 + 月度 reset cron（P19.3 PR #39）** — `quota_service` 单点：`assert_within_request_quota`（业务 invoke 入口前 check token 月配额 + 请求日配额，超额抛 `WorkspaceQuotaExceeded` → HTTP 429）+ `increment_usage`（`record_call` 钩子在 trace 根累加；子 span 不重复）+ lazy + cron 双轨跨期 reset（跨日清 request_used / 跨月清 token_used；APScheduler 注册每日 00:05 UTC 兜底）；`CurrentApp` 加 `workspace_id` 字段（auth dep JOIN apps 解析）；admin `/v1/admin/workspaces/{id}/quota` GET/update（管理员可设上限或强制重置 used）；前端 `QuotaCard` 双 usage bar（红/黄/蓝渐变 + 超额高亮）+ 上限编辑表单，挂在 members 页顶部。
-- **Multimodal ContentBlock 协议 + ProviderMessage 扩展（P19.4 PR #40）** — `chameleon.providers.base.types`：`TextBlock` / `ImageUrlBlock` / `AudioUrlBlock` 三类 ContentBlock + `normalize_content` / `flatten_to_text` helper + `Message.content` 联合类型 `str | list[ContentBlock]`（OpenAI/Anthropic 兼容）；`messages.content_blocks` JSONB 列（NULL = 纯文本兼容老消息）+ `conversation.service.append` 写时 flatten 同步老 content 字段、`load_messages` 多模态消息还原 blocks；`SSEEventKind` 加 `image_chunk` / `audio_chunk` 预留 + 对应 payload model；echo native agent 探测 ImageUrlBlock 计数并打 multimodal 前缀；红线：image/audio 走 URL 不内嵌 base64。
-- **MinIO presigned upload + 多模态 ingest（P19.4 PR #41）** — `object_store.presigned_put_url` 扩展；`/v1/files/presigned-upload` 生成临时直传 PUT URL + 长效 GET URL（避免文件中转后端）；`/v1/files/{object_id}/finalize` 上传完 stat MinIO 确认 + size mismatch 拒绝防中间被改包；20MB 上限 + mime 白名单（png/jpeg/webp/gif/mp3/wav/ogg/webm/pdf）；object_id 用 `secrets.token_urlsafe(16)` 防猜测 + namespace 隔离 + `PurePosixPath.name` 剥 `../` 防 path traversal；同步修 `current_app` + `quota_service.workspace_id_for_app` 用 `App.app_key` 解 workspace。
-- **Playground 多模态上传 UI（P19.4 PR #42）** — `file-upload` helper 三步走（presign → PUT 直传 MinIO → finalize）；`FileAttachButton` 文件选择 + 上传 spinner + 缩略图 chip（image 显小图、其他显类型标签 + 移除按钮）；ChatColumn 集成 attach state + send 时把 attachments 转成 `ContentBlock[]`（text + image_url + audio_url）传给后端；MessageBubble 渲染 attachments（image 100px 缩略点击放大、audio `<audio>` 控件、其他文件文本占位链接）；playground backend `PlaygroundMessage.content` 改 `str \| list[dict]` 透传 langchain；`/v1/files` 加 `current_app_or_admin` 双轨鉴权（admin UI 走 JWT、外部业务走 api_key）。Chrome MCP 链路 100% 通：JWT → presigned → PUT MinIO 9000 → finalize → 真实长效 URL。
+### Eval 自动化（P19.1）
+
+- **Eval Jobs schema + APScheduler 触发器（PR #30）** — `eval_jobs` / `eval_job_runs` 两张表；`AsyncIOScheduler` lifespan 接入，CRUD 后路由层 `sync_job` 自动注册/卸载 cron；手动 `/trigger` 端点同步复用 `datasets.runner` 跑一次 + 写 `eval_job_run` + 计算 `delta_score`。
+- **Slack / Webhook notifier + regression alert + Redis dedup（PR #31）** — Notifier ABC + 内置两类渠道；`should_alert` 阈值判定；`maybe_send_alert` Pipeline 集成进 `trigger_job` 末尾；Redis `SET NX EX(silence_minutes*60)` 防风暴去重；网络失败 `alert_sent=False`，主路径不受影响。
+- **Eval Jobs 管理 UI（PR #32）** — `/eval-jobs` 列表 + 详情页（8 张概览卡 + SVG 趋势折线 + 运行历史表）；create/edit modal cron 预设 + 自定义双轨；sidebar 新增「评测任务」入口。
+
+### Plugin Hot Loader（P19.2）
+
+- **Plugin manifest 协议 + Registry 骨架（PR #33）** — `PluginManifest` Pydantic 严格模型（正则校验 + `extra='forbid'` + 拒绝 `__import__`/`eval`）；`plugin_instances` 表；`PluginRegistry` 单例（bootstrap_builtin / load_all / set_enabled / reload / install / uninstall），5s asyncio.wait_for 超时；builtin local/dify/fastgpt 首次启动 idempotent seed；`build_provider_registry()` 接受 `disabled_plugin_keys` 实现 admin disable builtin 不重启即生效。
+- **SDK 装饰器 + Admin API + sandbox（PR #34）** — `@plugin_provider` / `@plugin_tool` / `@plugin_embedding` + `assert_entrypoint_not_internal` 沙箱拒绝指向 `chameleon.core.models` / `infra` / `system` / `api` / `app` 等内部模块；`/v1/admin/plugins` 完整 CRUD + reload + uninstall + config 更新；启停后重建 PROVIDERS。
+- **Plugin 管理 UI（PR #35）** — `/plugins` 列表（内置 / 外部分组 + type 彩色标签）；安装 modal 粘贴 manifest JSON 实时解析；config modal JSON 编辑 + 顶部 schema 字段提示。
+
+### Multi-tenant Workspace（P19.3）
+
+- **Workspace schema + default ws seed（PR #36）** — `workspaces` / `teams` / `memberships` / `workspace_quotas` 4 张新表；`WorkspaceScopedMixin` 给 10 张业务表（agents/apps/knowledge_bases/graphs/datasets/eval_jobs/tool_instances/channels/abilities/embed_configs）加 NULLABLE `workspace_id`；alembic upgrade 内幂等 seed default workspace (id=1) + UPDATE backfill 老数据。
+- **鉴权 + 业务过滤（PR #37）** — `CurrentUser` 扩展 `workspace_id` / `workspace_scope` / `is_admin` / `workspace_filter_ids`；`X-Workspace-Id` header 切换视角；agents 路由首批接通过滤；isolation 测试 6 场景。
+- **Workspace admin API + 切换 UI + Members（PR #38）** — `/v1/admin/workspaces` CRUD + members CRUD；Zustand workspace-store + axios interceptor 自动注入 `X-Workspace-Id`；`WorkspaceSwitcher` dropdown + 切换时 `queryClient.clear()`；`/workspaces/:id/members` 页 inline role 改 + 邀请 modal。
+- **配额限流 + 月度 reset cron（PR #39）** — `quota_service` 单点：业务 invoke 前 check token 月配额 + 请求日配额，超额 → HTTP 429；`record_call` trace 根累加；lazy + cron 双轨跨期 reset（APScheduler 每日 00:05 UTC）；`CurrentApp.workspace_id` 由 auth dep JOIN apps 解析；admin API + 前端 `QuotaCard` 双 usage bar。
+
+### Multimodal（P19.4）
+
+- **ContentBlock 协议 + ProviderMessage 扩展（PR #40）** — `TextBlock` / `ImageUrlBlock` / `AudioUrlBlock` 三类 ContentBlock + `normalize_content` / `flatten_to_text` helper + `Message.content` 联合类型 `str \| list[ContentBlock]`（OpenAI/Anthropic 兼容）；`messages.content_blocks` JSONB 列；`SSEEventKind` 加 `image_chunk` / `audio_chunk` 预留；echo native agent 检测 ImageUrlBlock。
+- **MinIO presigned upload + ingest（PR #41）** — `/v1/files/presigned-upload` 生成临时 PUT URL + 长效 GET URL；`/v1/files/{object_id}/finalize` stat 确认 + size mismatch 拒绝；20MB 上限 + mime 白名单；object_id 用 `secrets.token_urlsafe(16)` 防猜测 + namespace 隔离 + path traversal 剥离。
+- **Playground 多模态上传 UI（PR #42）** — `file-upload` helper 三步走；`FileAttachButton` + chip 缩略；ChatColumn 集成 attachments → 发送时转 `ContentBlock[]`；MessageBubble 渲染 image 缩略 / audio inline；`/v1/files` 加 `current_app_or_admin` 双轨鉴权。
+
+### 红线（P19 新增）
+
+- ⛔ Plugin 加载必须 async + 5s 超时；manifest 不允许包含可执行代码；plugin 不能直接挂载 `chameleon.core.models.*` 等内部模块
+- ⛔ Multi-tenant 改 schema 必须 backward-compat（workspace_id NULLABLE + default ws backfill）
+- ⛔ Eval alert 必须 Redis rate-limit + dedup；告警失败不污染主 trigger 路径
+- ⛔ 配额检查走单点中间件（assert_within_request_quota），业务路由不分散写
+- ⛔ Multimodal image / audio 走 URL，不内嵌 base64
+- ⛔ 切换 workspace 强制 `queryClient.clear()` 防跨租户缓存污染
+
+### 测试
+
+- P19 专属 130/130 全绿（含 eval_jobs / plugin / workspace / quota / multimodal / files）
+- 全套 pytest 589 passed（剩 12 pre-existing failures 与 P19 无关）
 
 ## [0.4.0] — 2026-05-23
 
