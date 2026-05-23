@@ -20,6 +20,7 @@ from sqlalchemy import text
 
 from chameleon.api.agent import agents_router
 from chameleon.api.embed import embed_router
+from chameleon.api.otel import otel_router
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
 from chameleon.system.api_key import api_keys_router
@@ -177,6 +178,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(scores_router)
     # 嵌入式业务
     app.include_router(embed_router)
+    app.include_router(otel_router)
     # 业务接口
     app.include_router(conversations_router)
     app.include_router(agents_router)
