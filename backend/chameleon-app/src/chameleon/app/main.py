@@ -103,6 +103,12 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # eval_jobs scheduler 起 cron 触发器（DB 里 enabled=True 的 job 全部注册）
     await eval_scheduler.start()
+
+    # P20.1：sandbox runtime 注册（docker 可达 → docker，dev 兜底 mock）
+    from chameleon.core.sandbox import bootstrap_runtimes
+
+    sbx_runtimes = await bootstrap_runtimes()
+    logger.info("sandbox runtimes: {}", sbx_runtimes)
     yield
 
     await eval_scheduler.shutdown()

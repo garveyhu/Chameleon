@@ -7,6 +7,8 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 ### Added
 
 - **Sandbox Runtime 抽象 + Mock 实现（P20.1 PR #45）** — `chameleon.core.sandbox`：`SandboxRuntime` ABC + `SandboxConfig` / `SandboxResult` 不可变 dataclass + 全局 registry（`register_runtime` / `get_runtime` / `list_runtime_names`）；`SandboxConfig.__post_init__` 校验 timeout / memory / cpu 上下界 + 拒绝 `network='full'`；`MockSandboxRuntime` subprocess 实现（dev/test 用，`CHAMELEON_ENV=production` 拒绝加载）—— preexec_fn 容错 setrlimit (CPU/AS/NPROC)、`asyncio.wait_for` 强杀超时、stdout/stderr 各 1MB 截断。19 单测 + 1 Linux-only skip（macOS 上 `RLIMIT_AS` 是 no-op）。
+- **Docker runtime + bootstrap lifespan（P20.1 PR #46）** — `DockerSandboxRuntime` 用 docker-py SDK 包到 `asyncio.to_thread`；代码 base64 经 env 喂给 `sh -c | base64 -d > /tmp/main.py | python` 避免 attach_socket detach 时的 stdin 死锁；安全默认：`network_mode=none` / `read_only=True` rootfs / `tmpfs=/tmp` / `user=65534:65534` nobody / `cap_drop=ALL` / `no-new-privileges` / `pids_limit=64`；docker 不可达自动降级 mock；`bootstrap_runtimes()` lifespan 启动期注册。7 个 docker smoke 测试真跑 container（hello / 非零退出 / runtime error / timeout 杀容器 / stdout 截断 / network=none 阻塞）。
+- **CodeRunnerTool + ToolNode 接通（P20.1 PR #47）** — `chameleon.core.tools.builtins.code_runner.CodeRunnerTool` 调 sandbox runtime；admin config 透传 timeout/memory/cpu/network/image；用户代码非零退出不算 tool fail（数据带 `exit_code` + `user_code_failed` meta）；通过现有 ToolNode → GraphExecutor 链路调度可达，9 个 E2E 覆盖（Tool 层 + Graph 层）。
 
 ## [0.5.0] — 2026-05-23
 
