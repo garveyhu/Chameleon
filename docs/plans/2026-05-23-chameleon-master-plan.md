@@ -343,21 +343,25 @@ gantt
 
 **v0.5 release notes**："Chameleon 上线 Eval CI（每日回归 + Slack 告警）；Plugin 热加载 + 管理 UI；Workspace 多租户三层隔离 + 配额；Multimodal Vision 协议接入。"
 
-### ⚙️ P20 · 高级节点 + 配额体系 + 多模态（Week 25-32）
+### ⚙️ P20 · 真实 Sandbox + Plugin 市场 + KB Collection + Agent 协同 → v0.6（Week 25-32）
 
-**主题**：Workflow 节点扩到 10 种；用户配额 + 限流；UI 上多模态。
+**Detail plan**：[docs/plans/2026-05-23-p20-detail.md](./2026-05-23-p20-detail.md) ← **按 P19 提前消化内容重定向**
+
+**主题重定向**：原 P20 计划的 Quota / 多模态 / Collection 已在 P19 全部或部分 ship（PR #36-42）。P20 改为下一批高价值主题：
+- **Sandbox 真实现**：替换 P18 Tool 占位（docker + Firecracker 双 runtime + 4 维资源限制）
+- **Plugin Marketplace 远端**：Ed25519 签名 + 浏览 / 搜索 / 一键装
+- **KB Collection types**：FAQ / Wiki / API 三套专用 chunker + 多索引拓扑
+- **Agent 协同**：A2A 协议 + multi-agent debate 节点
 
 | 周次 | Feature | Slots | 验收 |
 |---|---|---|---|
-| W25-26 | B5 5 高级节点（Iteration / Parallel / HumanInLoop / VariableSet / Code） | 8 | Iteration 节点能跑 for-each；HumanInLoop 能暂停等审批 |
-| W27 | A3 Channel 状态机 + A4 多 key 池 | 4 | 失败自动 disable；多 key 轮询 + 自动剔除 |
-| W28 | A7 Quota + A9 Group 倍率 | 5 | user 有月配额；VIP 组 cost ratio 优惠 |
-| W29 | D4 Hit-test rich UI | 4 | /kbs/:id/test 三栏布局；score breakdown |
-| W30-31 | D5 Collection 类型（file/link/api/image） | 7 | 可加 URL 链接 / API 数据源 / 图片集 |
-| W32 | E7 多模态上传 | 3 | widget + admin 都能上传图 / 文件 / 录音 |
-| W32 | v0.6 release | 4 | 发版 |
+| W25-26 | P20.1 Code Sandbox 真实现（runtime 抽象 + docker + ToolNode 接通） | 8 | timeout / OOM / stdout 截断全跑通；Trace tree 看 tool span |
+| W27-28 | P20.2 Plugin Marketplace 远端（签名 + 浏览 + 一键装） | 7 | 注册 registry → 装 openrouter → /plugins 看到并启用 |
+| W29-30 | P20.3 KB Collection types + 多索引 | 8 | FAQ kb 命中 qa_question 字段；切换 collection 切换索引 |
+| W31-32 | P20.4 A2A 协议 + agent debate 节点 | 7 | 3 agent 5 轮辩论；Trace tree 嵌套 15 个 generation |
+| W32 | v0.6 release | 2 | 发版 |
 
-**v0.6 release notes**："Chameleon 完整 Workflow（10 节点）；Quota + Group 倍率；KB 支持 link/api/image；widget/admin 多模态。"
+**v0.6 release notes**："Chameleon 上线真实 Code Sandbox（docker/Firecracker 双 runtime）；Plugin Marketplace 远端注册中心 + 签名校验；KB FAQ/Wiki/API 三种专用集合类型 + 多索引；multi-agent debate 节点（A2A 协议）。"
 
 ### 🔬 P21 · Eval 完整闭环 + RAG 全集 + 对话树（Week 33-40）
 
@@ -494,8 +498,9 @@ gantt
 - `docs/plans/2026-05-23-chameleon-master-plan.md`（本文）
 - `docs/plans/2026-05-23-p17-detail.md`（P17 详细 sub-plan，✅ ship → v0.3）
 - `docs/plans/2026-05-23-p18-detail.md`（P18 详细 sub-plan，✅ ship → v0.4）
-- `docs/plans/2026-05-23-p19-detail.md`（P19 详细 sub-plan，⏳ pending → v0.5）
-- 后续 `docs/plans/2026-05-23-p{20..22}-detail.md` 每阶段开始前出
+- `docs/plans/2026-05-23-p19-detail.md`（P19 详细 sub-plan，✅ ship → v0.5）
+- `docs/plans/2026-05-23-p20-detail.md`（P20 详细 sub-plan，⏳ pending → v0.6）
+- 后续 `docs/plans/2026-05-23-p{21..22}-detail.md` 每阶段开始前出
 - `docs/adr/` 持续新增（每新表 / 大决策一个 ADR）
 - `docs/competitive/`（已有，5 份对标分析，作为永久参考）
 
