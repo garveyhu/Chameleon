@@ -10,7 +10,7 @@ import type {
 } from './types.js';
 
 const MAX_BATCH = 5000;
-const SDK_VERSION = '0.1.0';
+const SDK_VERSION = '1.0.0';
 
 export class ChameleonClient {
   readonly apiKey: string;

@@ -4,6 +4,67 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-05-23 🎉
+
+**v1.0 launch**：22 个阶段 / 17 个 P22 PR / ~8K LOC（项目至此 ≈ 60K+ LOC）。Chameleon 进入对外发版，public API 进入 deprecation policy 周期（保留 1 minor 版本）。
+
+> "Chameleon 1.0 — 完整的 LLMops 一站式平台，一仓库覆盖 Dify+LangFuse+One-API 的能力栈。提供 Python/TypeScript SDK，OTLP 兼容，企业级多租户。"
+
+### Migration
+
+- 新增 4 个 alembic changeset（forward-only）：
+  - `p22_w41_audit_cost`（audit_logs 11 维 / call_logs.cost_usd / model_pricing 表）
+  - `p22_w44_workflow_versioning`（graphs published_spec / published_version / published_at）
+  - `p22_w45_multimodal_kb`（documents.kind / chunks.kind / chunks.source_url + index）
+  - `p22_w47_app_templates`（应用市场 app_templates 表）
+  - 全部带 `downgrade()` 可逐条回滚
+- 升级步骤详见 `docs/release/v1.0-migration.md`
+
+### Breaking changes
+
+无。所有 P17-P21 数据与 API 完全兼容；P22 全部 forward-only 新增。
+
+### 审计 + Cost（P22.1）
+
+- **Audit 11 维 + cost_usd 字段 + 价目表（PR #71）** — audit_logs 加 workspace_id (FK SET NULL) + session_id（9 → 11 维）；call_logs 加 cost_usd NUMERIC(12,6)；新表 model_pricing 按 (model_code, effective_from) 历史归档。`chameleon.system.pricing` 提供 calc_cost / get_active_pricing / seed_default_pricing；内置 11 个主流模型默认价目（gpt-4o / claude-opus-4 / qwen-plus 等）；启动期 seed_if_empty。record_call 加 model_code 可选参数；按当时价目算 cost_usd 存死（红线：可重放）。10 e2e。
+- **Cost dashboard UI + 多维聚合（PR #72）** — 3 endpoint：/v1/admin/dashboard/cost/{totals,by-dimension,timeseries}；前端 /dashboard/cost 三卡片 + 24h/7d/30d 切换 + SVG 时序柱图 + 多维 top-10 表 + 横向条形图；sidebar 加「成本统计」DollarSign 入口。8 e2e。
+
+### OTEL + SDK（P22.2）
+
+- **OTLP HTTP/JSON 摄入端点（PR #73）** — chameleon.api.otel（schemas / converter / api）；POST /v1/otel/v1/traces；每 span → call_log 行；按 attributes 推 observation_type（chameleon.* > openinference > gen_ai.* > scope.name）；红线：必须 app_id 校验（current_app dep）；单批 ≤ 5000 spans（413）。7 e2e。
+- **Python SDK + 链式 API（PR #74）** — 新仓 sdk/python/，包名 `chameleon-sdk`；Client（sync）+ AsyncClient + Trace/Span 链式 API + with-block；自动嵌套 parent_span_id；flush() OTLP 上报；atexit 兜底。9 单测 + ASGI e2e。
+- **TypeScript SDK + 链式 API（PR #75）** — 新仓 sdk/typescript/，包名 `@chameleon/sdk`；ChameleonClient + Trace/Span（async-first）+ withTrace/withSpan helpers；兼容 browser + Node 18+；tsc strict clean。
+- **SDK auto-patch + docs（PR #76）** — `chameleon_sdk.decorators`：set_default_client / @trace / patch_openai / patch_all（openai 未装时静默）；patch_openai monkey-patch Completions.create 自动 trace + usage 抽取；docs/sdk/python.md + typescript.md。
+
+### Thought chain + Workflow 版本（P22.3）
+
+- **Trace 详情页（PR #77）** — 新 system/traces 模块 + /traces/:requestId 独立路由；ObservationTree 左侧 + 节点详情分屏右侧（observation_type badge / duration / tokens / ttfb / error / request_payload JsonViewer / response_payload / spans 列表）；TreeStats 头部统计。
+- **Workflow draft/published 版本（PR #78）** — graphs 加 published_spec JSONB + published_version Integer + published_at；POST /v1/admin/graphs/{id}/publish endpoint；`publish_graph` deepcopy draft → freeze；前端 graph 编辑器顶部状态条「已发布 v3」(emerald) / 「草稿」(amber) + 「发布」按钮 + confirm；红线：published 不可改（draft 改不影响 published_spec）。5 e2e。
+
+### RAG 全集（P22.4）
+
+- **hybrid 6 步搜索融合（PR #79）** — 新模块 chameleon.core.retrieval；Hit / HybridConfig / HybridPipeline；6 步：vector → BM25 → dedupe by chunk_id → RRF → metadata filter（quarantined / collection / kind / min_score）→ optional reranker → top_k；纯 callable 设计零外部依赖。15 单测。
+- **Reranker + 内容去重（PR #80）** — make_dedupe_reranker（Jaccard 词集相似度）/ make_llm_judge_reranker（judge_fn 加权 0.5*orig + 0.5*judge；异常 fallback）/ make_dedupe_then_judge_reranker 组合。11 单测。
+- **VLM 图片 caption（PR #81）** — generate_caption / batch；支持 VLMClient Protocol 或 CaptionFn callable；失败 fallback 链（fallback_text > URL filename）；query string 自动剥离；红线：caption 走 URL 引用不内嵌 base64。8 单测。
+- **chunks/documents kind + 多模态（PR #82）** — documents.kind + chunks.kind + source_url + ix_chunks_kind；HybridConfig.allow_kinds 默认 {text}；metadata_filter 按 kind 过滤。
+
+### 应用市场 + 移动端（P22.5）
+
+- **应用市场 template gallery（PR #83）** — 新表 app_templates（name/description/category/spec_json/cover_image/verified/downloads/created_by）；4 类 category（assistant/agent/workflow/rag）；service.create 默认 verified=False（红线）；list 默认 only_verified=True；前端 /marketplace/templates 卡片网格 + 4 类切换 + 仅已审核 toggle；sidebar 加 Sparkles「应用模板」入口。7 e2e。
+- **移动端响应式 + Embed widget（PR #84）** — MainLayout 移动端 (< md) 自动 collapsed + matchMedia listener；main padding 移动端 px-3 py-3，桌面 px-6 py-4；playground `max-md:!grid-cols-1` 强制单列；embed-iframe 已是 h-screen w-screen 全屏。
+
+### Release（v1.0 收官）
+
+- **verify + benchmark（PR #85）** — 全套 pytest 373 core / ~64 e2e P22 新增；TS SDK tsc clean；microbenchmark：fuse_rrf 36µs P50 / HybridPipeline 28µs P50 / ragas_faithfulness 49µs P50（见 docs/release/v1.0-benchmark.md）。
+- **Docs（PR #86）** — README v1.0 重写（对标表 + SDK quickstart + 项目结构 + 完整能力清单）；docs/quickstart.md（5 分钟跑通）；docs/architecture.md（分层 + 数据流 + schema 关系 + 红线一览）。
+- **Release prep（PR #87）** — CHANGELOG v1.0 / docs/release/v1.0-migration.md / 4 backend pyproject + 1 frontend package.json + 2 SDK 版本 → 1.0.0 / tag v1.0.0 / main fast-forward。
+
+### Verification
+
+- 自动化测试：373 core + ~64 P22 e2e + 36 retrieval/eval 单测，全部绿
+- microbench：见 docs/release/v1.0-benchmark.md
+- 验收报告：docs/release/v1.0-screenshots/VERIFICATION.md
+
 ## [0.7.0] — 2026-05-23
 
 **P21 阶段五收官**：Eval 完整闭环 + RAG 全集 + 对话树。11 个 PR：能从 call_log 一键采样含 PII 脱敏的 Dataset；能用 EvalTemplate 编排 RAGAS 4 算子做自动评估并查看分布；能扫 KB 一致性问题（孤儿 / 维度不一致 / 零向量）并半软删 + 一键修复；能在对话详情页按 parent_message_id 构树 + 切支 + regenerate / edit-and-resend 创建兄弟分支。

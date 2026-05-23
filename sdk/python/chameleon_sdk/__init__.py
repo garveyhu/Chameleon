@@ -34,7 +34,7 @@ from chameleon_sdk.decorators import (
 )
 from chameleon_sdk.tracer import Span, Trace
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "AsyncClient",
