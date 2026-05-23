@@ -222,10 +222,10 @@ async def reset_all_periods(session: AsyncSession) -> int:
 async def workspace_id_for_app(
     session: AsyncSession, app_id: str
 ) -> int:
-    """业务路径常用：把 api_key → app_id → workspace_id"""
+    """业务路径常用：app_id（即 App.app_key slug）→ workspace_id"""
     row = (
         await session.execute(
-            select(App.workspace_id).where(App.app_id == app_id)
+            select(App.workspace_id).where(App.app_key == app_id)
         )
     ).scalar_one_or_none()
     if row is None:

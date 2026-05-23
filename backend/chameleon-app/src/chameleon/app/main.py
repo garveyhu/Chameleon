@@ -49,6 +49,7 @@ from chameleon.system.search import search_router
 from chameleon.system.settings import settings_router
 from chameleon.system.users import users_router
 from chameleon.api.conversation import conversations_router
+from chameleon.api.files import files_router
 from chameleon.api.knowledge import knowledge_router
 from chameleon.api.task import tasks_router
 from chameleon.core.api.exceptions import (
@@ -159,6 +160,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(conversations_router)
     app.include_router(agents_router)
     app.include_router(knowledge_router)
+    app.include_router(files_router)
     app.include_router(tasks_router)
 
 

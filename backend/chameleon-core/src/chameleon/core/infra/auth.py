@@ -96,10 +96,11 @@ async def current_app(
     row.last_used_at = datetime.now(timezone.utc)
     # 不显式 commit，由 get_session 上下文管理
 
-    # P19.3：解析 app_id → workspace_id（业务路径配额 / 过滤靠这个）
+    # P19.3：解析 app_id（slug）→ workspace_id（业务路径配额 / 过滤靠这个）
+    # ApiKey.app_id 存的是 App.app_key（slug），不是 App.id
     ws_id = (
         await session.execute(
-            select(App.workspace_id).where(App.app_id == row.app_id)
+            select(App.workspace_id).where(App.app_key == row.app_id)
         )
     ).scalar_one_or_none()
 

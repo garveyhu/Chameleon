@@ -124,6 +124,22 @@ class ObjectStore:
             self._bucket, key, expires=timedelta(seconds=expires_seconds)
         )
 
+    def presigned_put_url(
+        self,
+        key: str,
+        *,
+        expires_seconds: int = 600,
+    ) -> str:
+        """生成临时直传 URL —— 前端拿到后 PUT 上传
+
+        P19.4 PR #41：多模态上传链路。前端拿 URL 后直传 MinIO，避免文件
+        中转经过后端。expires 短一点（默认 10 min）足够前端发起 PUT。
+        """
+        self.ensure_bucket()
+        return self._client.presigned_put_object(
+            self._bucket, key, expires=timedelta(seconds=expires_seconds)
+        )
+
     def stat(self, key: str) -> dict:
         """返对象大小 / mime / etag"""
         info = self._client.stat_object(self._bucket, key)
