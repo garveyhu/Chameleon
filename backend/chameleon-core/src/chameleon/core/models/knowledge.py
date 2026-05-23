@@ -91,9 +91,24 @@ class Chunk(Base, TimestampMixin):
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     embedding: Mapped[list[float]] = mapped_column(Vector(_EMBED_DIM), nullable=False)
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # P20.3：归属 collection（NULL = generic 默认 collection 兼容老 chunk）
+    collection_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("kb_collections.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # 一个原文可生成多个不同 index（同 doc + chunk 不同 'view'）—— chunk/qa/summary
+    index_name: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="chunk"
+    )
+    # FAQ collection：每 chunk 内嵌问句；retrieve 时按 qa_question 走 BM25
+    qa_question: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # API collection：endpoint 标识（"GET /v1/users"）
+    api_endpoint: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),
         Index("ix_chunks_doc_seq", "doc_id", "seq"),
+        Index("ix_chunks_collection_index", "collection_id", "index_name"),
         # HNSW 向量索引在 migration 里手写（SQLAlchemy 不直接支持 HNSW 参数）
     )

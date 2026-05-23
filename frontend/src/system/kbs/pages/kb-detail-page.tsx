@@ -9,6 +9,7 @@ import {
   BarChart3,
   FileText,
   FlaskConical,
+  Layers,
   Search,
   Settings,
 } from 'lucide-react';
@@ -19,6 +20,7 @@ import { Link, useParams } from 'react-router-dom';
 import { SectionCard } from '@/core/components/table';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { CollectionsTab } from '@/system/kbs/components/collections-tab';
 import { DocumentTable } from '@/system/kbs/components/document-table';
 import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone';
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
@@ -27,7 +29,13 @@ import { RetrievalTest } from '@/system/kbs/components/retrieval-test';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
-type TabKey = 'overview' | 'documents' | 'search' | 'eval' | 'config';
+type TabKey =
+  | 'overview'
+  | 'documents'
+  | 'collections'
+  | 'search'
+  | 'eval'
+  | 'config';
 
 interface TabDef {
   key: TabKey;
@@ -38,6 +46,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { key: 'overview', label: '概览', icon: <BarChart3 className="h-3.5 w-3.5" /> },
   { key: 'documents', label: '文档', icon: <FileText className="h-3.5 w-3.5" /> },
+  { key: 'collections', label: 'Collections', icon: <Layers className="h-3.5 w-3.5" /> },
   { key: 'search', label: '检索测试', icon: <Search className="h-3.5 w-3.5" /> },
   { key: 'eval', label: '评估', icon: <FlaskConical className="h-3.5 w-3.5" /> },
   { key: 'config', label: '配置', icon: <Settings className="h-3.5 w-3.5" /> },
@@ -87,6 +96,7 @@ export const KbDetailPage = () => {
         <div className="p-4">
           {tab === 'overview' && <OverviewTab kb={kbQ.data ?? null} />}
           {tab === 'documents' && <DocumentsTab kbId={kbId} />}
+          {tab === 'collections' && <CollectionsTab kbId={kbId} />}
           {tab === 'search' &&
             (kbQ.data ? (
               <RetrievalTest kb={kbQ.data} />

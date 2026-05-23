@@ -697,3 +697,64 @@ async def delete_evaluation(
         session, kb_id=kb_id, eval_id=eval_id
     )
     return Result.ok(EvaluationItem.model_validate(row))
+
+
+# ── P20.3 collections admin ────────────────────────
+
+
+from chameleon.system.kbs import collections_service as cs
+
+
+@router.get(
+    "/{kb_id}/collections",
+    response_model=Result[list[cs.CollectionItem]],
+)
+async def list_collections(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[list[cs.CollectionItem]]:
+    return Result.ok(await cs.list_collections(session, kb_id))
+
+
+@router.post(
+    "/{kb_id}/collections",
+    response_model=Result[cs.CollectionItem],
+)
+async def create_collection(
+    kb_id: int,
+    req: cs.CreateCollectionRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[cs.CollectionItem]:
+    return Result.ok(await cs.create_collection(session, kb_id, req))
+
+
+@router.post(
+    "/{kb_id}/collections/{collection_id}/update",
+    response_model=Result[cs.CollectionItem],
+)
+async def update_collection(
+    kb_id: int,
+    collection_id: int,
+    req: cs.UpdateCollectionRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[cs.CollectionItem]:
+    return Result.ok(
+        await cs.update_collection(session, kb_id, collection_id, req)
+    )
+
+
+@router.post(
+    "/{kb_id}/collections/{collection_id}/delete",
+    response_model=Result[None],
+)
+async def delete_collection(
+    kb_id: int,
+    collection_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:delete")),
+) -> Result[None]:
+    await cs.delete_collection(session, kb_id, collection_id)
+    return Result.ok(None)
