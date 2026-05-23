@@ -8,6 +8,7 @@ import {
   Flag,
   GitBranch,
   PlayCircle,
+  Users,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -60,6 +61,13 @@ const TYPE_META: Record<
     ring: 'ring-amber-200',
     bg: 'bg-amber-50',
     label: 'If/Else',
+  },
+  agent_debate: {
+    icon: Users,
+    color: 'text-fuchsia-700',
+    ring: 'ring-fuchsia-200',
+    bg: 'bg-fuchsia-50',
+    label: 'Agent Debate',
   },
   noop: {
     icon: CircleDashed,

@@ -7,6 +7,7 @@ import {
   Flag,
   GitBranch,
   PlayCircle,
+  Users,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -57,6 +58,13 @@ const ITEMS: PaletteItem[] = [
     icon: GitBranch,
     desc: '条件分支',
     color: 'text-amber-600',
+  },
+  {
+    type: 'agent_debate',
+    label: 'Agent Debate',
+    icon: Users,
+    desc: '多 agent 辩论',
+    color: 'text-fuchsia-600',
   },
   {
     type: 'end',

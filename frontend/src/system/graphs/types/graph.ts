@@ -7,7 +7,8 @@ export type GraphNodeType =
   | 'llm'
   | 'kb'
   | 'tool'
-  | 'if_else';
+  | 'if_else'
+  | 'agent_debate';
 
 export interface NodeSpec {
   id: string;

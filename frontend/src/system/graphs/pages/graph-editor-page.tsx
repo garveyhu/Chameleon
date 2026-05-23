@@ -460,6 +460,7 @@ function defaultLabel(type: GraphNodeType, id: string): string {
     kb: 'KB 检索',
     tool: '工具',
     if_else: '条件分支',
+    agent_debate: 'Agent 辩论',
     end: '终态',
     start: '开始',
     noop: '占位',

@@ -8,6 +8,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
+import { AgentDebateForm } from '@/system/graphs/components/agent-debate-form';
 import type { GraphNodeType, NodeSpec } from '@/system/graphs/types/graph';
 
 interface Props {
@@ -180,6 +181,10 @@ const DataForm = ({
         </div>
       </>
     );
+  }
+
+  if (type === 'agent_debate') {
+    return <AgentDebateForm data={data} onPatch={onPatch} />;
   }
 
   if (type === 'if_else') {
