@@ -71,3 +71,33 @@ class TestRunResult(BaseModel):
     error: dict[str, Any] | None = None
     duration_ms: int
     node_runs: list[NodeRunItem]
+
+
+class GraphRunRequest(BaseModel):
+    """正式 run（持久化 + 写 call_logs）"""
+
+    input: dict[str, Any] = Field(default_factory=dict)
+
+
+class GraphRunItem(BaseModel):
+    """graph_runs 列表项"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    graph_id: int
+    request_id: str
+    status: str
+    duration_ms: int | None = None
+    node_count: int | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    created_at: datetime
+
+
+class GraphRunDetail(GraphRunItem):
+    """graph_runs 详情：含 input / output / error"""
+
+    input: Any | None = None
+    output: Any | None = None
+    error: dict[str, Any] | None = None

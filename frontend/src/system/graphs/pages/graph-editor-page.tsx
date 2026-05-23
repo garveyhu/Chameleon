@@ -30,7 +30,7 @@ import type {
 import '@xyflow/react/dist/style.css';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, Play, Save } from 'lucide-react';
+import { ChevronLeft, History, Play, Save, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -39,6 +39,7 @@ import { Button } from '@/core/components/ui/button';
 import { toast } from '@/core/lib/toast';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
+import { RunsPanel } from '@/system/graphs/components/runs-panel';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
 import { graphApi } from '@/system/graphs/services/graph';
@@ -46,6 +47,7 @@ import type {
   EdgeSpec,
   GraphDetail,
   GraphNodeType,
+  GraphRunItem,
   GraphSpec,
   NodeSpec,
   TestRunResult,
@@ -236,11 +238,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onError: e => toast.error(`保存失败：${(e as Error).message}`),
   });
 
-  const runMut = useMutation({
-    mutationFn: () => graphApi.testRun(graph.id, {}),
-    onSuccess: r => {
+  const applyTestRunResult = useCallback(
+    (r: TestRunResult) => {
       setRunResult(r);
-      // 把 node status 投回 RFNode.data.runStatus
       setNodes(ns =>
         ns.map(n => {
           const nr = r.node_runs.find(x => x.node_id === n.id);
@@ -260,8 +260,30 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           : `执行失败：${r.error?.message || 'unknown'}`,
       );
     },
+    [setNodes],
+  );
+
+  const testRunMut = useMutation({
+    mutationFn: () => graphApi.testRun(graph.id, {}),
+    onSuccess: applyTestRunResult,
     onError: e => toast.error(`执行失败：${(e as Error).message}`),
   });
+
+  /** 正式 run：持久化 + 写 call_logs（trace tree drawer 可见） */
+  const persistRunMut = useMutation({
+    mutationFn: () => graphApi.run(graph.id, {}),
+    onSuccess: () => {
+      toast.success('已发起持久化执行（trace 写入 call_logs）');
+      runsQ.refetch();
+    },
+    onError: e => toast.error(`执行失败：${(e as Error).message}`),
+  });
+
+  const runsQ = useQuery({
+    queryKey: ['graph-runs', graph.id],
+    queryFn: () => graphApi.listRuns(graph.id),
+  });
+  const [runsOpen, setRunsOpen] = useState(false);
 
   // ── render ───────────────────────────────────────────────
 
@@ -294,13 +316,33 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
             </span>
           )}
           <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setRunsOpen(o => !o)}
+            title="历史 runs"
+          >
+            <History className="h-3 w-3" />
+            {runsQ.data ? ` ${runsQ.data.length}` : ''}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
-            onClick={() => runMut.mutate()}
-            disabled={runMut.isPending}
+            onClick={() => testRunMut.mutate()}
+            disabled={testRunMut.isPending}
+            title="跑一次但不写 call_logs（debug 用）"
           >
             <Play className="mr-1 h-3 w-3" />
             Test Run
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => persistRunMut.mutate()}
+            disabled={persistRunMut.isPending}
+            title="持久化执行：写 graph_runs + call_logs，trace tree drawer 可见"
+          >
+            <Zap className="mr-1 h-3 w-3" />
+            Run
           </Button>
           <Button
             size="sm"
@@ -341,11 +383,19 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           </ReactFlow>
         </div>
 
-        <NodeInspector
-          node={selectedSpec}
-          onChange={updateSelectedSpec}
-          onDelete={deleteSelected}
-        />
+        {runsOpen ? (
+          <RunsPanel
+            runs={runsQ.data ?? []}
+            loading={runsQ.isLoading}
+            onClose={() => setRunsOpen(false)}
+          />
+        ) : (
+          <NodeInspector
+            node={selectedSpec}
+            onChange={updateSelectedSpec}
+            onDelete={deleteSelected}
+          />
+        )}
       </div>
     </div>
   );

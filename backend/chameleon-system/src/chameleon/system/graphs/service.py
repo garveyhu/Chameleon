@@ -17,11 +17,13 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.graph import GraphExecutor, GraphSpec, NodeContext
-from chameleon.core.models import Graph
+from chameleon.core.models import Graph, GraphRun
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
     GraphDetail,
     GraphItem,
+    GraphRunDetail,
+    GraphRunItem,
     NodeRunItem,
     TestRunRequest,
     TestRunResult,
@@ -160,6 +162,36 @@ async def _load(session: AsyncSession, graph_id: int) -> Graph:
             ResultCode.Fail, message=f"graph 不存在: {graph_id}"
         )
     return row
+
+
+async def list_runs(
+    session: AsyncSession, graph_id: int, limit: int = 50
+) -> list[GraphRunItem]:
+    """按 graph_id 列 runs（最新在前）"""
+    rows = (
+        (
+            await session.execute(
+                select(GraphRun)
+                .where(GraphRun.graph_id == graph_id)
+                .order_by(GraphRun.created_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [GraphRunItem.model_validate(r) for r in rows]
+
+
+async def get_run(session: AsyncSession, run_id: int) -> GraphRunDetail:
+    row = (
+        await session.execute(select(GraphRun).where(GraphRun.id == run_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"graph_run 不存在: {run_id}"
+        )
+    return GraphRunDetail.model_validate(row)
 
 
 def _validate_spec(spec: dict) -> GraphSpec:

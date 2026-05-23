@@ -61,3 +61,21 @@ export interface TestRunResult {
   duration_ms: number;
   node_runs: NodeRunItem[];
 }
+
+export interface GraphRunItem {
+  id: EntityId;
+  graph_id: EntityId;
+  request_id: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  duration_ms: number | null;
+  node_count: number | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface GraphRunDetail extends GraphRunItem {
+  input?: unknown;
+  output?: unknown;
+  error?: { type: string; message: string } | null;
+}

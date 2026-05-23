@@ -161,37 +161,9 @@ class GraphExecutor:
         while current_id is not None:
             node = self._nodes[current_id]
             node_started = datetime.now(timezone.utc)
+            # 1) 跑 node：只 catch execute() 自身的异常
             try:
                 output = await node.execute(ctx, cur_input)
-                node_finished = datetime.now(timezone.utc)
-                node_runs.append(
-                    NodeRunResult(
-                        node_id=node.id,
-                        node_type=node.type,
-                        status=NodeStatus.SUCCESS,
-                        input=cur_input,
-                        output=output,
-                        started_at=node_started,
-                        finished_at=node_finished,
-                        duration_ms=_ms(node_started, node_finished),
-                    )
-                )
-                last_output = output
-
-                # 到 end 节点收尾
-                if node.type == "end":
-                    current_id = None
-                    break
-
-                # 选下一节点（含 if_else 分支）
-                next_id = self._pick_next(node, output)
-                if next_id is None:
-                    # 没有出边但又不是 end → 半截图，算 fail
-                    raise RuntimeError(
-                        f"node {node.id} 无 outgoing edge 且非 end，图断裂"
-                    )
-                cur_input = output
-                current_id = next_id
             except Exception as exc:  # noqa: BLE001
                 node_finished = datetime.now(timezone.utc)
                 err = {"type": type(exc).__name__, "message": str(exc)[:500]}
@@ -224,6 +196,69 @@ class GraphExecutor:
                     duration_ms=_ms(started_at, finished_at),
                     node_runs=node_runs,
                 )
+
+            # 2) execute 成功：append success node_run
+            node_finished = datetime.now(timezone.utc)
+            node_runs.append(
+                NodeRunResult(
+                    node_id=node.id,
+                    node_type=node.type,
+                    status=NodeStatus.SUCCESS,
+                    input=cur_input,
+                    output=output,
+                    started_at=node_started,
+                    finished_at=node_finished,
+                    duration_ms=_ms(node_started, node_finished),
+                )
+            )
+            last_output = output
+
+            # 3) 到 end 节点收尾
+            if node.type == "end":
+                current_id = None
+                break
+
+            # 4) 选下一节点（含 if_else 分支）—— 失败按 graph 级 error，不再
+            # 重复追加节点 node_run（避免 request_id 重复 + 误判节点失败）
+            try:
+                next_id = self._pick_next(node, output)
+            except Exception as exc:  # noqa: BLE001
+                err = {"type": type(exc).__name__, "message": str(exc)[:500]}
+                logger.exception(
+                    "graph routing failed | run={} | node={}",
+                    ctx.graph_run_id,
+                    node.id,
+                )
+                finished_at = datetime.now(timezone.utc)
+                return RunResult(
+                    status=NodeStatus.FAILED,
+                    input=input,
+                    output=None,
+                    error=err,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=_ms(started_at, finished_at),
+                    node_runs=node_runs,
+                )
+
+            if next_id is None:
+                err = {
+                    "type": "GraphStructureError",
+                    "message": f"node {node.id} 无 outgoing edge 且非 end，图断裂",
+                }
+                finished_at = datetime.now(timezone.utc)
+                return RunResult(
+                    status=NodeStatus.FAILED,
+                    input=input,
+                    output=None,
+                    error=err,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=_ms(started_at, finished_at),
+                    node_runs=node_runs,
+                )
+            cur_input = output
+            current_id = next_id
 
         finished_at = datetime.now(timezone.utc)
         return RunResult(

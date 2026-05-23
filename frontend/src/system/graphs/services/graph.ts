@@ -3,6 +3,8 @@ import type { EntityId } from '@/core/types/api';
 import type {
   GraphDetail,
   GraphItem,
+  GraphRunDetail,
+  GraphRunItem,
   GraphSpec,
   TestRunResult,
 } from '@/system/graphs/types/graph';
@@ -36,4 +38,11 @@ export const graphApi = {
 
   testRun: (id: EntityId, input: Record<string, unknown> = {}) =>
     post<TestRunResult>(`/v1/admin/graphs/${id}/test-run`, { input }),
+
+  /** 正式跑（持久化 + 写 call_logs，串到 trace tree） */
+  run: (id: EntityId, input: Record<string, unknown> = {}) =>
+    post<GraphRunDetail>(`/v1/admin/graphs/${id}/run`, { input }),
+
+  listRuns: (id: EntityId) =>
+    get<GraphRunItem[]>(`/v1/admin/graphs/${id}/runs`),
 };
