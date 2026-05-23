@@ -312,37 +312,36 @@ gantt
 - 前端 `core/components/form/json-schema-form.tsx`
 - v0.3 release notes：**"Chameleon 现在能用 1 个 model code 路由到多个上游、记录嵌套调用链、widget 收用户反馈、admin 支持 8 种主题色"**
 
-### 🛠️ P18 · Workflow 雏形 + Cost 落地（Week 9-16）
+### 🛠️ P18 · Workflow + Tools + Eval Pipeline → v0.4（Week 9-16）✅ shipped
 
-**主题**：Workflow 第一次能跑通；Cost 计算闭环。
+**Detail plan**：[docs/plans/2026-05-23-p18-detail.md](./2026-05-23-p18-detail.md)
+**实际 ship 日期**：2026-05-23（提前 8 周交付）
+**变更说明**：实际把 master plan 原 P19 的 React Flow 编辑器 + Tool calling 全部提前消化，并叠加 Eval Pipeline 与 message branch。
+
+**实际 ship 内容**：
+- ✅ GraphEngine MVP（5 节点 + React Flow 编辑器） — 原 B1/B2/B3
+- ✅ Tool calling + HTTP/SQL + admin gate — 原 B4
+- ✅ Dataset + DatasetRun + judges + 对比 — 原 P21 C5/C6 提前
+- ✅ Chunking 实时预览三栏 — 原 P21 D6 提前
+- ✅ Message branch via parent_message_id — 原 P21 B6 提前
+
+**v0.4 release notes（实际）**："Chameleon 上线可视化工作流编排（GraphEngine + React Flow）；Tool function calling；LangFuse 风 Eval 闭环；KB 切块实时预览；对话分支。"
+
+### 🎨 P19 · Eval 自动化 + Plugin 生态 + Multi-tenant + Multimodal → v0.5（Week 17-24）
+
+**Detail plan**：[docs/plans/2026-05-23-p19-detail.md](./2026-05-23-p19-detail.md) ← **按 P18 提前消化内容重定向**
+
+**主题重定向**：原 P19 计划的 React Flow 编辑器（W17-18）+ Tool calling（W19-20）已被 P18 提前 ship。P19 改为下一批高价值主题。
 
 | 周次 | Feature | Slots | 验收 |
 |---|---|---|---|
-| W9-10 | B1 Node[NodeDataT] 基类 + 5 核心节点（LLM/Tool/KB/IfElse/End） | 8 | CLI `chameleon workflow run sample.yaml` 可跑通 |
-| W11-12 | B2 GraphEngine MVP（Worker pool + Ready queue + Event） | 8 | 流式输出节点级 event；并发节点并行执行 |
-| W13 | A5 Pre/Post-consume 计费 | 4 | invoke 前预扣，结束后实扣；超额拒绝 |
-| W14 | A6 Model + PricingTier + Price（从 litellm 同步种子） | 4 | model 价目可在 admin 改；版本号回滚 |
-| W15 | C3 Observation cost + D2 多策略 chunker | 4 | call_logs 实时算 cost；KB chunking 三种模式可切 |
-| W16 | E4 JSON Schema 表单上线全站 + E5 Trace 树视图 | 4 | trace 详情页改成嵌套树；node config 走 schema form |
-| W16 | v0.4 release | 4 | 发版 |
+| W17-18 | P19.1 Eval 自动化（eval_jobs cron + Slack/Webhook alert） | 8 | 每日 dataset 回归测试；regression 分数下降自动告警 |
+| W19-20 | P19.2 Plugin Hot Loader（manifest + Provider/Tool 热加载） | 7 | manifest.toml 协议；不重启进程装 plugin；管理 UI |
+| W21-22 | P19.3 Multi-tenant Group（Workspace + Team + Quota） | 8 | 三层隔离；老数据归 default ws；切换 UI + 配额面板 |
+| W23-24 | P19.4 Multimodal（content blocks + MinIO presigned） | 7 | OpenAI/Anthropic 协议；playground 上传图片对话 |
+| W24 | v0.5 release | 2 | 发版 |
 
-**v0.4 release notes**："Chameleon 现支持 YAML 定义 workflow，5 个节点类型；trace 树状可视化；cost 按 input/output 精确拆分。"
-
-### 🎨 P19 · Workflow 编辑器 + 多租户骨架 + Prompt 版本（Week 17-24）
-
-**主题**：Workflow 有可视化编辑；引入 Group/Organization；Prompt 版本管理。
-
-| 周次 | Feature | Slots | 验收 |
-|---|---|---|---|
-| W17-18 | B3 React Flow 前端编辑器 | 8 | 拖拽 5 种节点 / 连线 / 节点配置 / 保存运行 |
-| W19-20 | B4 Tool calling + HTTP/SQL/Code Sandbox（3 内置） | 7 | LLM 节点开启 function calling 后能调内置 tool |
-| W21-22 | A8 Group / Organization / Project | 6 | admin 可建组织；用户归属；ability/channel 走 group |
-| W23 | C4 Prompt 版本 + 依赖 | 4 | prompts 表；LLM 节点引用 prompt + version/label |
-| W23 | D3 chunks.indexes[] 多索引 | 3 | chunk 可挂 chunk/qa/summary 多 index；GIN 索引 |
-| W24 | E3 Zustand slice 重构 + E6 Plugin market 壳 | 3 | 状态层规整；plugin modal 占位（实际安装 P22） |
-| W24 | v0.5 release | 4 | 发版 |
-
-**v0.5 release notes**："Chameleon 上线 workflow 可视化编辑器，5 节点 + 3 工具；Group 多租户隔离；Prompt 版本/label/tag 全套。"
+**v0.5 release notes**："Chameleon 上线 Eval CI（每日回归 + Slack 告警）；Plugin 热加载 + 管理 UI；Workspace 多租户三层隔离 + 配额；Multimodal Vision 协议接入。"
 
 ### ⚙️ P20 · 高级节点 + 配额体系 + 多模态（Week 25-32）
 
@@ -493,7 +492,10 @@ gantt
 
 **docs/**：
 - `docs/plans/2026-05-23-chameleon-master-plan.md`（本文）
-- `docs/plans/2026-05-23-p17-{1..6}-detail.md`（每阶段开始前出详细 sub-plan）
+- `docs/plans/2026-05-23-p17-detail.md`（P17 详细 sub-plan，✅ ship → v0.3）
+- `docs/plans/2026-05-23-p18-detail.md`（P18 详细 sub-plan，✅ ship → v0.4）
+- `docs/plans/2026-05-23-p19-detail.md`（P19 详细 sub-plan，⏳ pending → v0.5）
+- 后续 `docs/plans/2026-05-23-p{20..22}-detail.md` 每阶段开始前出
 - `docs/adr/` 持续新增（每新表 / 大决策一个 ADR）
 - `docs/competitive/`（已有，5 份对标分析，作为永久参考）
 
