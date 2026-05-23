@@ -20,7 +20,9 @@ from chameleon.system.playground import service
 
 class PlaygroundMessage(BaseModel):
     role: Literal["user", "assistant", "system"]
-    content: str
+    # P19.4 PR #42：multimodal —— content 既可纯字符串，也可 ContentBlock 列表
+    # 形态：[{"type":"text","text":"..."}, {"type":"image_url","image_url":{"url":"..."}}]
+    content: str | list[dict]
 
 
 class PlaygroundInvokeRequest(BaseModel):

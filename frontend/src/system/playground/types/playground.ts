@@ -2,10 +2,29 @@ import type { EntityId } from '@/core/types/api';
 
 export type PlaygroundRole = 'user' | 'assistant' | 'system';
 
+export interface MessageAttachment {
+  object_id: string;
+  object_url: string;
+  size: number;
+  content_type: string | null;
+  mime_kind: 'image' | 'audio' | 'pdf' | 'other';
+}
+
+/** P19.4 PR #42：ContentBlock 形态，对齐 OpenAI/Anthropic vision API */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image_url';
+      image_url: { url: string; detail?: 'auto' | 'low' | 'high' };
+    }
+  | { type: 'audio_url'; audio_url: { url: string; format?: string } };
+
 export interface PlaygroundMessage {
   id: string;
   role: PlaygroundRole;
   content: string;
+  /** P19.4 PR #42：上传的多模态附件；user 消息发送时转 ContentBlock 列表 */
+  attachments?: MessageAttachment[];
   /** UI 标记：流式中 / 完成 / 失败 */
   status?: 'streaming' | 'done' | 'failed';
   /** assistant 完成后填的 usage */
@@ -42,7 +61,7 @@ export interface InvokeRequest {
   temperature: number;
   top_p?: number | null;
   max_tokens?: number | null;
-  messages: Array<{ role: PlaygroundRole; content: string }>;
+  messages: Array<{ role: PlaygroundRole; content: string | ContentBlock[] }>;
   kb_ids?: EntityId[];
 }
 

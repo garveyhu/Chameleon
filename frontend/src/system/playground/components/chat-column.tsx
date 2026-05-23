@@ -7,14 +7,19 @@ import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
+import { FileAttachButton } from '@/system/playground/components/file-attach-button';
 import { MessageActions } from '@/system/playground/components/message-actions';
 import { ParamPanel } from '@/system/playground/components/param-panel';
 import { streamInvoke } from '@/system/playground/services/playground';
 import type {
+  ContentBlock,
   InvokeChunk,
+  MessageAttachment,
   PlaygroundMessage,
   PlaygroundParams,
 } from '@/system/playground/types/playground';
+import type { UploadResult } from '@/system/files/services/file-upload';
+import { toContentBlock } from '@/system/files/services/file-upload';
 
 const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -39,6 +44,7 @@ export const ChatColumn = ({
 }: Props) => {
   const [messages, setMessages] = useState<PlaygroundMessage[]>([]);
   const [input, setInput] = useState('');
+  const [attachments, setAttachments] = useState<UploadResult[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const streaming = useMemo(
     () => messages.some(m => m.status === 'streaming'),
@@ -47,10 +53,24 @@ export const ChatColumn = ({
 
   const runInvoke = useCallback(
     async (history: PlaygroundMessage[], assistantId: string) => {
-      const reqMessages = history.map(m => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const reqMessages = history.map(m => {
+        // P19.4 PR #42：含 attachments 的 user 消息 → 转 ContentBlock 列表
+        if (m.role === 'user' && m.attachments && m.attachments.length > 0) {
+          const blocks: ContentBlock[] = [];
+          if (m.content.trim()) {
+            blocks.push({ type: 'text', text: m.content });
+          }
+          for (const a of m.attachments) {
+            const block = toContentBlock({
+              ...a,
+              mime_kind: a.mime_kind,
+            }) as ContentBlock;
+            blocks.push(block);
+          }
+          return { role: m.role, content: blocks };
+        }
+        return { role: m.role, content: m.content };
+      });
       const controller = new AbortController();
       abortRef.current = controller;
 
@@ -138,15 +158,26 @@ export const ChatColumn = ({
 
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     if (!params.model_id) {
       toast.error('请先选择模型');
       return;
     }
+    const userAttachments: MessageAttachment[] | undefined =
+      attachments.length > 0
+        ? attachments.map(a => ({
+            object_id: a.object_id,
+            object_url: a.object_url,
+            size: a.size,
+            content_type: a.content_type,
+            mime_kind: a.mime_kind,
+          }))
+        : undefined;
     const userMsg: PlaygroundMessage = {
       id: newId(),
       role: 'user',
       content: text,
+      attachments: userAttachments,
     };
     const aiMsg: PlaygroundMessage = {
       id: newId(),
@@ -156,8 +187,9 @@ export const ChatColumn = ({
     };
     setMessages(prev => [...prev, userMsg, aiMsg]);
     setInput('');
+    setAttachments([]);
     await runInvoke([...messages, userMsg], aiMsg.id);
-  }, [input, params, messages, runInvoke]);
+  }, [input, attachments, params, messages, runInvoke]);
 
   /** 删除指定消息（user 同步删紧随其后的 assistant；assistant 单独删） */
   const deleteMessage = useCallback((id: string) => {
@@ -393,18 +425,32 @@ export const ChatColumn = ({
           placeholder="输入消息… ⌘/Ctrl+Enter 发送"
           className="text-[12.5px]"
         />
-        <div className="mt-1.5 flex justify-end gap-2">
-          {streaming ? (
-            <Button size="sm" variant="ghost" onClick={stop}>
-              <Square className="mr-1 h-3 w-3" />
-              停止
-            </Button>
-          ) : (
-            <Button size="sm" onClick={send} disabled={!input.trim()}>
-              <Send className="mr-1 h-3 w-3" />
-              发送
-            </Button>
-          )}
+        <div className="mt-1.5 flex items-center gap-2">
+          <FileAttachButton
+            attachments={attachments}
+            onAttached={a => setAttachments(prev => [...prev, a])}
+            onRemove={id =>
+              setAttachments(prev => prev.filter(a => a.object_id !== id))
+            }
+            disabled={streaming}
+          />
+          <div className="ml-auto flex items-center gap-2">
+            {streaming ? (
+              <Button size="sm" variant="ghost" onClick={stop}>
+                <Square className="mr-1 h-3 w-3" />
+                停止
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={send}
+                disabled={!input.trim() && attachments.length === 0}
+              >
+                <Send className="mr-1 h-3 w-3" />
+                发送
+              </Button>
+            )}
+          </div>
         </div>
       </footer>
     </div>
@@ -505,14 +551,65 @@ const MessageBubble = ({
           </div>
         </div>
       ) : (
-        <div className="whitespace-pre-wrap text-stone-800">
-          {msg.content || (msg.status === 'streaming' ? '…' : '')}
-          {msg.error && (
-            <div className="mt-1 text-rose-600">{msg.error}</div>
+        <div className="space-y-1.5">
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {msg.attachments.map(a => (
+                <AttachmentPreview key={a.object_id} attachment={a} />
+              ))}
+            </div>
           )}
+          <div className="whitespace-pre-wrap text-stone-800">
+            {msg.content || (msg.status === 'streaming' ? '…' : '')}
+            {msg.error && (
+              <div className="mt-1 text-rose-600">{msg.error}</div>
+            )}
+          </div>
         </div>
       )}
     </div>
+  );
+};
+
+const AttachmentPreview = ({
+  attachment,
+}: {
+  attachment: NonNullable<PlaygroundMessage['attachments']>[number];
+}) => {
+  if (attachment.mime_kind === 'image') {
+    return (
+      <a
+        href={attachment.object_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block overflow-hidden rounded-md border border-stone-200/70 transition hover:border-amber-300"
+      >
+        <img
+          src={attachment.object_url}
+          alt=""
+          className="block h-24 w-24 object-cover"
+        />
+      </a>
+    );
+  }
+  if (attachment.mime_kind === 'audio') {
+    return (
+      <audio
+        controls
+        src={attachment.object_url}
+        className="h-8 max-w-[280px] rounded-md"
+      />
+    );
+  }
+  return (
+    <a
+      href={attachment.object_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 rounded-md border border-stone-200/70 bg-stone-50/60 px-2 py-1 text-[11px] text-stone-700 hover:border-amber-300 hover:bg-amber-50/40"
+    >
+      {attachment.mime_kind ?? 'file'} · {attachment.object_id.split('/').pop()}
+    </a>
   );
 };
 
