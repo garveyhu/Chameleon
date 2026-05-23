@@ -66,6 +66,9 @@ class SSEEventKind(StrEnum):
     USAGE = "usage"
     END = "end"
     ERROR = "error"
+    # P19.4 PR #40：多模态预留 —— provider 流式生成图 / 音频时按 chunk emit
+    IMAGE_CHUNK = "image_chunk"
+    AUDIO_CHUNK = "audio_chunk"
 
 
 # ── 共享 payload 模型 ────────────────────────────────────────
@@ -125,6 +128,28 @@ class NodePayload(BaseModel):
     duration_ms: int | None = None
 
 
+class ImageChunkPayload(BaseModel):
+    """P19.4 PR #40：流式图生成片段（占位 —— 未来 image gen 用）
+
+    detail = 'partial' 中间帧 / 'final' 终帧。
+    """
+
+    url: str
+    detail: str = "partial"
+    mime_type: str | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+class AudioChunkPayload(BaseModel):
+    """P19.4 PR #40：流式 TTS / 音频生成片段（占位）"""
+
+    url: str
+    detail: str = "partial"
+    format: str | None = None
+    duration_ms: int | None = None
+
+
 # ── 构造 helper —— service 调这些，不直接拼 dict ────────────
 
 
@@ -166,6 +191,18 @@ def event_node_end(payload: NodePayload | dict[str, Any]) -> dict[str, Any]:
 def event_usage(usage: UsagePayload) -> dict[str, Any]:
     """单独 usage 事件（不带 end）"""
     return {SSEEventKind.USAGE.value: usage.model_dump()}
+
+
+def event_image_chunk(payload: ImageChunkPayload | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload, ImageChunkPayload):
+        return {SSEEventKind.IMAGE_CHUNK.value: payload.model_dump(exclude_none=True)}
+    return {SSEEventKind.IMAGE_CHUNK.value: payload}
+
+
+def event_audio_chunk(payload: AudioChunkPayload | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload, AudioChunkPayload):
+        return {SSEEventKind.AUDIO_CHUNK.value: payload.model_dump(exclude_none=True)}
+    return {SSEEventKind.AUDIO_CHUNK.value: payload}
 
 
 def event_end(

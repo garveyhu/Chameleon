@@ -13,15 +13,116 @@ from pydantic import BaseModel, ConfigDict, Field
 Role = Literal["user", "assistant", "system", "tool"]
 
 
+# ── P19.4 ContentBlock 协议 ─────────────────────────────
+#
+# 对齐 OpenAI / Anthropic vision API：content 既可以是字符串（老用法），
+# 也可以是 ContentBlock 列表（多模态）。
+#
+# 红线（plan §2 新增）：
+# ⛔ image / audio 走 URL 引用，不在 content 内嵌 base64 大字符串
+# ⛔ provider 适配层负责把 ContentBlock 翻译成对应 vendor 格式
+
+
+class _ImageUrl(BaseModel):
+    url: str
+    # auto: provider 自动选；low: 低分辨率省 token；high: 全分辨率
+    detail: Literal["auto", "low", "high"] = "auto"
+
+
+class _AudioUrl(BaseModel):
+    url: str
+    # mp3 / wav / m4a / ogg / flac ...
+    format: str | None = None
+
+
+class TextBlock(BaseModel):
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageUrlBlock(BaseModel):
+    type: Literal["image_url"] = "image_url"
+    image_url: _ImageUrl
+
+
+class AudioUrlBlock(BaseModel):
+    type: Literal["audio_url"] = "audio_url"
+    audio_url: _AudioUrl
+
+
+ContentBlock = TextBlock | ImageUrlBlock | AudioUrlBlock
+
+
+def normalize_content(content: str | list[ContentBlock] | list[dict[str, Any]]) -> list[ContentBlock]:
+    """把任意形态 content 归一化为 list[ContentBlock]
+
+    - str → [TextBlock]
+    - list[ContentBlock] → 原样
+    - list[dict] → 按 type 字段 dispatch（兼容外部 API 直接传 dict）
+    """
+    if isinstance(content, str):
+        return [TextBlock(text=content)]
+    out: list[ContentBlock] = []
+    for item in content:
+        if isinstance(item, TextBlock | ImageUrlBlock | AudioUrlBlock):
+            out.append(item)
+            continue
+        if not isinstance(item, dict):
+            raise ValueError(f"非法 ContentBlock 类型: {type(item).__name__}")
+        t = item.get("type")
+        if t == "text":
+            out.append(TextBlock.model_validate(item))
+        elif t == "image_url":
+            out.append(ImageUrlBlock.model_validate(item))
+        elif t == "audio_url":
+            out.append(AudioUrlBlock.model_validate(item))
+        else:
+            raise ValueError(f"未知 ContentBlock type: {t!r}")
+    return out
+
+
+def flatten_to_text(content: str | list[ContentBlock]) -> str:
+    """把多模态 content 摊平成纯文本（仅取 TextBlock）—— legacy provider 兼容"""
+    if isinstance(content, str):
+        return content
+    parts: list[str] = []
+    for b in content:
+        if isinstance(b, TextBlock):
+            parts.append(b.text)
+        elif isinstance(b, ImageUrlBlock):
+            parts.append(f"[image:{b.image_url.url}]")
+        elif isinstance(b, AudioUrlBlock):
+            parts.append(f"[audio:{b.audio_url.url}]")
+    return "".join(parts)
+
+
 class Message(BaseModel):
-    """通用消息载体（OpenAI 风格）"""
+    """通用消息载体（OpenAI 风格）
+
+    P19.4 PR #40：content 既可以是字符串（老用法），也可以是 ContentBlock 列表
+    （多模态）；provider 适配层用 normalize_content() / flatten_to_text() 兜底。
+    """
 
     role: Role
-    content: str
+    content: str | list[ContentBlock]
     name: str | None = None
     tool_call_id: str | None = None
 
     model_config = ConfigDict(extra="ignore")
+
+    def text(self) -> str:
+        """便捷：拿 content 的纯文本表示"""
+        return flatten_to_text(self.content)
+
+    def blocks(self) -> list[ContentBlock]:
+        """便捷：拿归一化的 block 列表"""
+        return normalize_content(self.content)
+
+    @property
+    def is_multimodal(self) -> bool:
+        return isinstance(self.content, list) and any(
+            not isinstance(b, TextBlock) for b in self.content
+        )
 
 
 class AgentDef(BaseModel):

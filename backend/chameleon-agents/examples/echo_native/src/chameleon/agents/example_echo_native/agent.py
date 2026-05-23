@@ -8,7 +8,14 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 from chameleon.core.base import AgentMetadata, BaseAgent
-from chameleon.providers.base.types import InvokeContext, StreamEvent, StreamEventType
+from chameleon.providers.base.types import (
+    ImageUrlBlock,
+    InvokeContext,
+    StreamEvent,
+    StreamEventType,
+    flatten_to_text,
+    normalize_content,
+)
 
 
 class EchoNativeAgent(BaseAgent):
@@ -31,11 +38,18 @@ class EchoNativeAgent(BaseAgent):
         当 agent 在 admin 里挂载 KB 时，retrieve() 返 top_k chunks，
         echo 把命中的来源摘要拼进输出；没挂 KB 时退化为纯回声。
         """
-        # 取当前轮文本
+        # 取当前轮文本（P19.4：兼容多模态 content_blocks）
         if isinstance(ctx.input, str):
             text = ctx.input
+            image_count = 0
+        elif ctx.input:
+            last = ctx.input[-1]
+            blocks = normalize_content(last.content)
+            text = flatten_to_text(blocks)
+            image_count = sum(1 for b in blocks if isinstance(b, ImageUrlBlock))
         else:
-            text = ctx.input[-1].content if ctx.input else ""
+            text = ""
+            image_count = 0
 
         # 1) step：retrieve
         yield StreamEvent(
@@ -66,6 +80,9 @@ class EchoNativeAgent(BaseAgent):
                 f"#{i + 1} doc:{h.doc_id}#{h.seq}" for i, h in enumerate(hits[:3])
             )
             prefix = f"echo(kb-aware|{context_preview}): "
+        elif image_count > 0:
+            # P19.4：多模态消息回显图片数量，证明协议在 agent 层可见
+            prefix = f"echo(multimodal|{image_count} image{'s' if image_count > 1 else ''}): "
         else:
             prefix = "echo(native): "
         for ch in prefix + text:

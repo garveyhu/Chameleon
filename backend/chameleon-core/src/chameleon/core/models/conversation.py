@@ -56,7 +56,11 @@ class Message(Base):
     session_id: Mapped[str] = mapped_column(String(64), nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False)
+    # 老 plain text 字段；P19.4 起多模态消息可同时（或仅）写 content_blocks
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # P19.4 PR #40：ContentBlock 列表（text / image_url / audio_url）
+    # NULL = 纯文本消息（向后兼容）；非 NULL = 优先取这个还原 ProviderMessage
+    content_blocks: Mapped[list | None] = mapped_column(JSON, nullable=True)
     steps: Mapped[list | None] = mapped_column(JSON, nullable=True)
     citations: Mapped[list | None] = mapped_column(JSON, nullable=True)
     tool_calls: Mapped[list | None] = mapped_column(JSON, nullable=True)

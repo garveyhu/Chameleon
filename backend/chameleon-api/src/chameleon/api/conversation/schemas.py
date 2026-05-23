@@ -28,6 +28,8 @@ class MessageItem(BaseModel):
     seq: int
     role: str
     content: str
+    # P19.4 PR #40：多模态 ContentBlock 列表（NULL = 纯文本，content 字段权威）
+    content_blocks: list[dict[str, Any]] | None = None
     steps: list[dict[str, Any]] | None
     citations: list[dict[str, Any]] | None
     tool_calls: list[dict[str, Any]] | None
@@ -45,6 +47,9 @@ class AppendMessageDraft(BaseModel):
 
     role: str = Field(..., pattern=r"^(user|assistant|system|tool)$")
     content: str
+    # P19.4 PR #40：多模态消息可同时（或仅）传 content_blocks；service 层会
+    # 把 blocks 写库，并把 flattened text 同步写 content 兼容老消费者
+    content_blocks: list[dict[str, Any]] | None = None
     steps: list[dict[str, Any]] | None = None
     citations: list[dict[str, Any]] | None = None
     tool_calls: list[dict[str, Any]] | None = None

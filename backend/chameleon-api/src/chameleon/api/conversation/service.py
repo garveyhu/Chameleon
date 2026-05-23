@@ -127,7 +127,15 @@ async def load_messages(
     )
     rows = list((await session.execute(stmt)).scalars().all())
     rows.reverse()  # 时间正序
-    return [ProviderMessage(role=r.role, content=r.content) for r in rows]
+    # P19.4 PR #40：content_blocks 非空时 content 取 blocks（多模态消息）；
+    # 否则用 plain text content（向后兼容老 history）
+    return [
+        ProviderMessage(
+            role=r.role,
+            content=r.content_blocks if r.content_blocks else r.content,
+        )
+        for r in rows
+    ]
 
 
 async def append(
@@ -144,11 +152,28 @@ async def append(
         )
     ).scalar_one()
 
+    # P19.4 PR #40：多模态消息 —— draft.content_blocks 非空时同时写
+    # blocks（权威）+ content（flattened 兼容老消费者）
+    content_str = draft.content
+    blocks = draft.content_blocks
+    if blocks:
+        from chameleon.providers.base.types import (
+            flatten_to_text,
+            normalize_content,
+        )
+
+        normalized = normalize_content(blocks)
+        # content 字段总是同步 flatten 后的文本，方便 LIKE / 全文检索
+        content_str = flatten_to_text(normalized)
+        # 序列化回 list[dict] 入库
+        blocks = [b.model_dump() for b in normalized]
+
     msg = Message(
         session_id=session_id,
         seq=next_seq,
         role=draft.role,
-        content=draft.content,
+        content=content_str,
+        content_blocks=blocks,
         steps=draft.steps,
         citations=draft.citations,
         tool_calls=draft.tool_calls,
