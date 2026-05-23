@@ -160,6 +160,8 @@ async def record_call(
     parent_id: str | None = None,
     observation_type: str = "generation",
     completion_start_ms: int | None = None,
+    # P22.1：model_code 用于查 price 算 cost；缺失则 cost=NULL
+    model_code: str | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -170,6 +172,26 @@ async def record_call(
     parent_id 由调用方显式传入 —— 推荐用 chameleon.core.observe.observe()
     context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
     """
+    # P22.1：按当时生效价目算 cost（model_code 缺失 / 价目缺失则保持 NULL）
+    cost_usd = None
+    if model_code and (prompt_tokens or completion_tokens):
+        try:
+            from chameleon.system.pricing import calc_cost
+
+            cost_usd = await calc_cost(
+                session,
+                model_code=model_code,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+            )
+        except Exception:
+            # cost 计算失败不阻塞 call_log 写入
+            logger.exception(
+                "cost calc failed | request_id={} | model={}",
+                request_id,
+                model_code,
+            )
+
     log = CallLog(
         request_id=request_id,
         app_id=app_id,
@@ -183,6 +205,7 @@ async def record_call(
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
+        cost_usd=cost_usd,
         spans=spans,
         request_payload=request_payload,
         response_payload=response_payload,

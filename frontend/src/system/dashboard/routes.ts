@@ -12,6 +12,15 @@ const module: ModuleRouteConfig = {
         return { Component: m.DashboardPage };
       },
     },
+    {
+      path: '/dashboard/cost',
+      lazy: async () => {
+        const m = await import(
+          '@/system/dashboard/pages/cost-dashboard-page'
+        );
+        return { Component: m.CostDashboardPage };
+      },
+    },
   ],
 };
 

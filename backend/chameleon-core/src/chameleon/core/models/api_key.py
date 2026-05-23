@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     func,
@@ -91,6 +92,8 @@ class CallLog(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # P22.1：成本（按当时价目算并存死；改价目不溯源）
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
     # P16-E2 trace: spans [{name, start_ms, end_ms, status, error?, meta?}]
     spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 入参快照（input + options + history 摘要等）

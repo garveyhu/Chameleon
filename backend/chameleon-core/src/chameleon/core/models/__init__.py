@@ -21,6 +21,7 @@ from chameleon.core.models.dataset import (
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
 from chameleon.core.models.eval_template import EvalTemplate
 from chameleon.core.models.kb_consistency import KbConsistencyReport
+from chameleon.core.models.model_pricing import ModelPricing
 from chameleon.core.models.plugin import PluginInstance
 from chameleon.core.models.plugin_registry import PluginRegistryEntry
 from chameleon.core.models.workspace import (
@@ -97,6 +98,7 @@ __all__ = [
     "EvalJobRun",
     "EvalTemplate",
     "KbConsistencyReport",
+    "ModelPricing",
     # 插件
     "PluginInstance",
     "PluginRegistryEntry",

@@ -278,3 +278,171 @@ async def top_apps(
 
 
 # TODO: top-models —— call_logs 表暂无 model 字段，二期加 model 列后实现
+
+
+# ── P22.1 Cost dashboard ────────────────────────────────
+
+
+class CostTotalsResult(BaseModel):
+    """卡片总额 + 上一周期 delta"""
+
+    range_from: datetime
+    range_to: datetime
+    total_usd: float
+    prev_total_usd: float | None = None
+    delta_pct: float | None = None
+    total_calls: int
+
+
+class CostDimensionRow(BaseModel):
+    label: str
+    cost_usd: float
+    calls: int
+
+
+class CostTimeseriesPoint(BaseModel):
+    ts: datetime
+    cost_usd: float
+
+
+@router.get("/cost/totals", response_model=Result[CostTotalsResult])
+async def cost_totals(
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
+    hours: int = Query(default=24, ge=1, le=24 * 90),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("call_logs:read")),
+) -> Result[CostTotalsResult]:
+    """卡片总额 + 上一周期 delta"""
+    rf, rt = _resolve_range(from_ts, to_ts, hours)
+    span = rt - rf
+    prev_to = rf
+    prev_from = rf - span
+
+    total_row = (
+        await session.execute(
+            select(
+                func.coalesce(func.sum(CallLog.cost_usd), 0).label("total"),
+                func.count(CallLog.id).label("cnt"),
+            ).where(
+                CallLog.created_at >= rf,
+                CallLog.created_at <= rt,
+                CallLog.parent_id.is_(None),
+            )
+        )
+    ).one()
+    prev_total = (
+        await session.execute(
+            select(func.coalesce(func.sum(CallLog.cost_usd), 0)).where(
+                CallLog.created_at >= prev_from,
+                CallLog.created_at <= prev_to,
+                CallLog.parent_id.is_(None),
+            )
+        )
+    ).scalar_one()
+
+    total_usd = float(total_row.total or 0)
+    prev_usd = float(prev_total or 0)
+    delta_pct = None
+    if prev_usd > 0:
+        delta_pct = (total_usd - prev_usd) / prev_usd * 100.0
+
+    return Result.ok(
+        CostTotalsResult(
+            range_from=rf,
+            range_to=rt,
+            total_usd=total_usd,
+            prev_total_usd=prev_usd if prev_usd > 0 else None,
+            delta_pct=delta_pct,
+            total_calls=int(total_row.cnt or 0),
+        )
+    )
+
+
+@router.get(
+    "/cost/by-dimension", response_model=Result[list[CostDimensionRow]]
+)
+async def cost_by_dimension(
+    dimension: str = Query(
+        default="agent_key",
+        pattern="^(agent_key|app_id|session_id)$",
+        description="按哪一维聚合：agent_key / app_id / session_id",
+    ),
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
+    hours: int = Query(default=24, ge=1, le=24 * 90),
+    limit: int = Query(default=10, ge=1, le=50),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("call_logs:read")),
+) -> Result[list[CostDimensionRow]]:
+    """按维度聚合 cost top-N"""
+    rf, rt = _resolve_range(from_ts, to_ts, hours)
+    col = {
+        "agent_key": CallLog.agent_key,
+        "app_id": CallLog.app_id,
+        "session_id": CallLog.session_id,
+    }[dimension]
+    rows = (
+        await session.execute(
+            select(
+                col.label("label"),
+                func.coalesce(func.sum(CallLog.cost_usd), 0).label("cost"),
+                func.count(CallLog.id).label("cnt"),
+            )
+            .where(
+                CallLog.created_at >= rf,
+                CallLog.created_at <= rt,
+                CallLog.parent_id.is_(None),
+            )
+            .group_by(col)
+            .order_by(func.sum(CallLog.cost_usd).desc().nullslast())
+            .limit(limit)
+        )
+    ).all()
+    return Result.ok(
+        [
+            CostDimensionRow(
+                label=str(r.label or "<null>"),
+                cost_usd=float(r.cost or 0),
+                calls=int(r.cnt or 0),
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.get(
+    "/cost/timeseries", response_model=Result[list[CostTimeseriesPoint]]
+)
+async def cost_timeseries(
+    from_ts: datetime | None = Query(default=None),
+    to_ts: datetime | None = Query(default=None),
+    hours: int = Query(default=24, ge=1, le=24 * 90),
+    bucket: str = Query(default="hour", pattern="^(hour|day)$"),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("call_logs:read")),
+) -> Result[list[CostTimeseriesPoint]]:
+    """按 hour / day 分桶的 cost 时间序列"""
+    rf, rt = _resolve_range(from_ts, to_ts, hours)
+    trunc = func.date_trunc(bucket, CallLog.created_at).label("ts")
+    rows = (
+        await session.execute(
+            select(
+                trunc,
+                func.coalesce(func.sum(CallLog.cost_usd), 0).label("cost"),
+            )
+            .where(
+                CallLog.created_at >= rf,
+                CallLog.created_at <= rt,
+                CallLog.parent_id.is_(None),
+            )
+            .group_by(trunc)
+            .order_by(trunc.asc())
+        )
+    ).all()
+    return Result.ok(
+        [
+            CostTimeseriesPoint(ts=r.ts, cost_usd=float(r.cost or 0))
+            for r in rows
+        ]
+    )

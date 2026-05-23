@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Cpu,
   Database,
+  DollarSign,
   FlaskConical,
   Globe,
   KeyRound,
@@ -79,6 +80,7 @@ interface NavGroup {
 // ── 顶部直链 ─────────────────────────────────────────────
 const TOP_ITEMS: NavLeaf[] = [
   { to: '/dashboard', icon: LayoutDashboard, i18nKey: 'menu.dashboard', fallbackTitle: '仪表盘', perm: 'dashboard:read' },
+  { to: '/dashboard/cost', icon: DollarSign, i18nKey: 'menu.cost', fallbackTitle: '成本统计', perm: 'call_logs:read' },
 ];
 
 // ── AI 能力分组 ─────────────────────────────────────────

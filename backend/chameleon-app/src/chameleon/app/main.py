@@ -111,6 +111,17 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     sbx_runtimes = await bootstrap_runtimes()
     logger.info("sandbox runtimes: {}", sbx_runtimes)
+
+    # P22.1：model_pricing seed（幂等，已存在 model_code 跳过）
+    try:
+        from chameleon.core.infra.db import AsyncSessionLocal
+        from chameleon.system.pricing import seed_default_pricing
+
+        async with AsyncSessionLocal() as _s:
+            await seed_default_pricing(_s)
+    except Exception:
+        logger.exception("model_pricing seed failed (continuing)")
+
     yield
 
     await eval_scheduler.shutdown()
