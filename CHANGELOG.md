@@ -2,6 +2,64 @@
 
 All notable changes to Chameleon. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [0.4.0] — 2026-05-23
+
+**P18 阶段二收官**：可视化工作流 + Tool 协议 + Eval 闭环。Dify 风 GraphEngine MVP + OpenAI function calling 对齐 + LangFuse 风 dataset/run 评估链路 + FastGPT 风 chunking 实时预览。
+
+### Workflow（P18.1）
+
+- **GraphEngine 内核** — `chameleon.core.graph`：泛型 `Node[InputT,OutputT]` 抽象 + Kahn 拓扑排序 + 串行 DAG 执行 + 错误冒泡。
+- **5 类内置 node** — start / end / noop / **llm** / **kb** / **tool** / **if_else**。LLM/KB 都接到 P17 的 router + KB search；IfElse 用 jsonlogic 风简化表达式（var / 比较 op / and/or/not）。
+- **React Flow 编排器** — `/graphs`：列表 + 新建 + 软删；`/graphs/:id/edit`：3-pane（左 palette / 中画布 / 右 inspector）+ Test Run / Run 双轨。
+- **GraphRun 持久化 + trace 串联** — `graph_runs` + `graph_node_runs` 两张表；每节点写 child call_log 串到 P17.C1 trace tree drawer，admin 端可直接复用嵌套树视图。
+
+### Tools（P18.2）
+
+- **Tool 协议** — `chameleon.core.tools.Tool` 基类 + 全局 registry + `parameters_schema` JSON Schema 校验 + `ToolResult` 标准返回。
+- **内置 HTTP/SQL Tool** — HTTPTool（GET/POST + URL 白名单 + timeout + max_bytes）；SQLTool 默认 disabled（admin 显式开），强制 SELECT/WITH + 禁 DML/DDL + 白名单 db_url + 30s 超时。
+- **tools admin** — `/v1/admin/tools` CRUD + `/catalog` 列内置 + ToolInstance 表持久化 (tool_key, config, enabled)。
+- **ToolNode 闸门** — 跑前查 tool_instances，disabled 则拒绝 + 清晰错误。
+- **LLM function calling** — LLMNode `tool_keys=[...]` 启用 OpenAI tools 协议；模型决定调谁返 tool_calls 结构化数组（不自动执行，留给后续 ToolNode）。
+
+### Eval（P18.3）
+
+- **Dataset 一键采样** — `/v1/admin/datasets/{id}/sample-from-logs` 按 filter 批量采 call_log → dataset_items。强制脱敏：string 字段 → `{hash:sha256(16chars), length, token_count_approx, preview(80字符)}`，**绝不存原始 PII**。
+- **人工标注** — `POST /datasets/items/{id}/update` 修改 expected_output（金标准）/ meta。
+- **DatasetRun** — `POST /datasets/{id}/run` 持久化跑：model_override + prompt_override + judge（exact_match / contains / llm_judge stub）；每 item 调 LLM 拿 actual_output → judge 评分 → 写 dataset_run_items + Score(source='eval')。
+- **对比能力** — `POST /datasets/runs/compare` 跨 N 个 run（同 dataset）item-by-item 横向 diff，便于 prompt 调参 / model A/B 测试。
+
+### RAG（P18.4）
+
+- **Chunking 实时预览** — `/v1/admin/kbs/chunking-preview` 不写库，纯调试；前端 `/kbs/:id/chunking-preview` 三栏 UI（左原文 / 中 chunks 卡片 / 右策略表单），300ms 防抖自动跑预览。5 种 mode 全支持。
+
+### Chat（P18.5）
+
+- **Message 分支** — messages 加 `parent_message_id` 列 + 索引；regenerate / edit-and-resend 时新增不覆盖，UI 按 parent_message_id 聚类显主线 + 分支。Agent 中间步骤复用 P17.C1 trace tree drawer。
+
+### Migrations
+
+新增 alembic 脚本：
+- `p18_w9_graphs` — graphs + graph_runs + graph_node_runs
+- `p18_w12_tools` — tool_instances
+- `p18_w13_datasets` — datasets + dataset_items
+- `p18_w13_dataset_runs` — dataset_runs + dataset_run_items
+- `p18_w15_message_branch` — messages.parent_message_id
+
+### Breaking changes
+
+无破坏性改动；老 routing / call_logs / scores 路径全部保留。
+具体迁移步骤见 `docs/release/v0.4-migration.md`。
+
+### Known limitations
+
+- GraphEngine 当前串行执行；并发 fanout / merge 节点留 P19
+- Tool Code Sandbox 占位，不安全的代码执行能力暂不开放
+- llm_judge 返固定 0.5，真 LLM 评分逻辑留 P19
+- Message 分支 UI 仅 playground 有 in-memory 版（P17.E1），DB 持久化基底已就位但端到端 UI 流程留 P19
+- Chunking 策略版本化（changelog）留 P19
+
+---
+
 ## [0.3.0] — 2026-05-23
 
 **P17 阶段一收官**：Gateway / Trace / RAG / UI 四维齐升级。LangFuse 风嵌套 Observation + One-API 风路由矩阵 + Dify 风外观主题 + LobeChat 风消息 Actions 同步落地。
