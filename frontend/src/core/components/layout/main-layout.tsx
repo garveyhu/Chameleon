@@ -29,7 +29,11 @@ const PATH_LABELS: Record<string, string> = {
 };
 
 export const MainLayout = () => {
-  const [collapsed, setCollapsed] = useState(false);
+  // P22.5 PR #84：移动端默认 collapsed（< md 屏幕）；桌面端默认展开
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(max-width: 767px)').matches;
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -37,11 +41,21 @@ export const MainLayout = () => {
     if (label) pushRecent(location.pathname, label);
   }, [location.pathname]);
 
+  // P22.5：viewport 变化时同步 collapsed
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => {
+      if (e.matches) setCollapsed(true);
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   return (
     <RequireAuth>
       <div className="flex h-screen bg-[var(--color-warm)]">
         <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
-        <main className="flex-1 overflow-auto px-6 py-4">
+        <main className="flex-1 overflow-auto px-3 py-3 md:px-6 md:py-4">
           <Outlet />
         </main>
       </div>

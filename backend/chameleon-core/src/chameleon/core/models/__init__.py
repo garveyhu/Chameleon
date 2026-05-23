@@ -18,6 +18,7 @@ from chameleon.core.models.dataset import (
     DatasetRun,
     DatasetRunItem,
 )
+from chameleon.core.models.app_template import AppTemplate
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
 from chameleon.core.models.eval_template import EvalTemplate
 from chameleon.core.models.kb_consistency import KbConsistencyReport
@@ -96,6 +97,7 @@ __all__ = [
     "DatasetRunItem",
     "EvalJob",
     "EvalJobRun",
+    "AppTemplate",
     "EvalTemplate",
     "KbConsistencyReport",
     "ModelPricing",

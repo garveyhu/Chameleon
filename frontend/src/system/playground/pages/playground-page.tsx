@@ -58,10 +58,11 @@ export const PlaygroundPage = () => {
         </Button>
       </div>
       <div
-        className="grid h-[calc(100vh-180px)] gap-3 p-3"
+        className="grid h-[calc(100vh-180px)] gap-3 p-3 max-md:!grid-cols-1"
         style={{
           gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,
         }}
+        title="P22.5：移动端 (<md) 强制单列 stack"
       >
         {columns.map((p, i) => (
           <ChatColumn
