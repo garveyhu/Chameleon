@@ -10,6 +10,7 @@
     "kbs": "Knowledge Bases",
     "embed_configs": "Embedded Agents",
     "call_logs": "Call Logs",
+    "trace": "Trace",
     "audit_logs": "Audit Logs",
     "settings": "Settings",
     "group": {

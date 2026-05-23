@@ -10,6 +10,7 @@
     "kbs": "知识库",
     "embed_configs": "嵌入式智能体",
     "call_logs": "调用日志",
+    "trace": "Trace",
     "audit_logs": "审计日志",
     "settings": "配置管理",
     "group": {

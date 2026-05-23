@@ -116,7 +116,7 @@ const ACCESS_GROUP: NavGroup = {
   fallbackTitle: '应用 & 调用',
   children: [
     { to: '/apps', icon: KeySquare, i18nKey: 'menu.apps', fallbackTitle: '应用 & API Key', perm: 'apps:read' },
-    { to: '/call-logs', icon: Activity, i18nKey: 'menu.call_logs', fallbackTitle: '调用日志', perm: 'call_logs:read' },
+    { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
     { to: '/users', icon: Users2, i18nKey: 'menu.users', fallbackTitle: '用户', perm: 'users:read' },
     { to: '/roles', icon: ShieldCheck, i18nKey: 'menu.roles', fallbackTitle: '角色', perm: 'roles:read' },
   ],

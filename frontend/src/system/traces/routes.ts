@@ -6,6 +6,13 @@ const module: ModuleRouteConfig = {
   order: 30,
   routes: [
     {
+      path: '/traces',
+      lazy: async () => {
+        const m = await import('@/system/call_logs/pages/call-logs-page');
+        return { Component: m.CallLogsPage };
+      },
+    },
+    {
       path: '/traces/:requestId',
       lazy: async () => {
         const m = await import('@/system/traces/pages/trace-detail-page');
