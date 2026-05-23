@@ -12,6 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, SoftDeleteMixin, TimestampMixin
+from chameleon.core.models.workspace import WorkspaceScopedMixin
 from chameleon.core.utils.snowflake import next_id
 
 # pgvector.sqlalchemy.Vector —— v1 全局维度 1536（与 inventory.embedding_dim 对齐）
@@ -23,7 +24,7 @@ except ImportError as e:
 _EMBED_DIM = 1536  # 与 inventory.embedding_dim() 默认一致；改维度需新 migration
 
 
-class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin):
+class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     __tablename__ = "knowledge_bases"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=next_id)

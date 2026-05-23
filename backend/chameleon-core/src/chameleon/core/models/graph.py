@@ -25,9 +25,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, SoftDeleteMixin, TimestampMixin, snowflake_pk
+from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class Graph(Base, TimestampMixin, SoftDeleteMixin):
+class Graph(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     """工作流图声明"""
 
     __tablename__ = "graphs"

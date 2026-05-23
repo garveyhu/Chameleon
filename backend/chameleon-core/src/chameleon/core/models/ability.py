@@ -36,9 +36,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, snowflake_pk
+from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class Ability(Base):
+class Ability(Base, WorkspaceScopedMixin):
     """(group × model × channel) 路由矩阵单条"""
 
     __tablename__ = "abilities"

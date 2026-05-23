@@ -23,10 +23,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, SoftDeleteMixin, TimestampMixin
+from chameleon.core.models.workspace import WorkspaceScopedMixin
 from chameleon.core.utils.snowflake import next_id
 
 
-class Agent(Base, TimestampMixin, SoftDeleteMixin):
+class Agent(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     """智能体注册表
 
     本地 agent：source='local'，provider_id NULL，local_class_path 必填。

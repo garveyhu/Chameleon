@@ -32,6 +32,7 @@ from chameleon.core.models.base import (
     TimestampMixin,
     snowflake_pk,
 )
+from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
 class ChannelStatus(StrEnum):
@@ -42,7 +43,7 @@ class ChannelStatus(StrEnum):
     MANUAL_DISABLED = "manual_disabled"  # 管理员手动停用
 
 
-class Channel(Base, TimestampMixin, SoftDeleteMixin):
+class Channel(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     """provider 凭证 + 调度元数据
 
     跟 provider 是多对一：一个 provider 可对应 N 个 channel（不同 key / 不同
