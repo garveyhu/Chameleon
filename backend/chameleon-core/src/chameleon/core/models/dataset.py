@@ -132,6 +132,8 @@ class DatasetRunItem(Base):
     actual_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # judge 评分（0 / 1 / 0.5 等）
     score: Mapped[float | None] = mapped_column(JSON, nullable=True)
+    # P21.2：EvalTemplate 多 metric 评分；{ "metric_name": float, ... , "weighted_total": float }
+    eval_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

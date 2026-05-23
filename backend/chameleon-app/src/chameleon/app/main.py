@@ -32,6 +32,7 @@ from chameleon.system.dashboard import dashboard_router
 from chameleon.system.datasets import datasets_router
 from chameleon.system.eval_jobs import eval_jobs_router
 from chameleon.system.eval_jobs import scheduler as eval_scheduler
+from chameleon.system.eval_templates import eval_templates_router
 from chameleon.system.embed_configs import embed_configs_router
 from chameleon.system.graphs import graphs_router
 from chameleon.system.tools import tools_router
@@ -156,6 +157,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(tools_router)
     app.include_router(datasets_router)
     app.include_router(eval_jobs_router)
+    app.include_router(eval_templates_router)
     app.include_router(plugins_router)
     app.include_router(marketplace_router)
     app.include_router(workspaces_router)

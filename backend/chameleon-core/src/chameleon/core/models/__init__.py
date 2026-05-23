@@ -19,6 +19,7 @@ from chameleon.core.models.dataset import (
     DatasetRunItem,
 )
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
+from chameleon.core.models.eval_template import EvalTemplate
 from chameleon.core.models.plugin import PluginInstance
 from chameleon.core.models.plugin_registry import PluginRegistryEntry
 from chameleon.core.models.workspace import (
@@ -93,6 +94,7 @@ __all__ = [
     "DatasetRunItem",
     "EvalJob",
     "EvalJobRun",
+    "EvalTemplate",
     # 插件
     "PluginInstance",
     "PluginRegistryEntry",

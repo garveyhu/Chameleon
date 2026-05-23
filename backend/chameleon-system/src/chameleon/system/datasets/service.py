@@ -40,8 +40,11 @@ from chameleon.system.datasets.schemas import (
     DatasetRunDetail,
     DatasetRunItemRow,
     DatasetRunRow,
+    MetricDistribution,
     SampleFromLogsRequest,
     SampleResult,
+    ScoreBucket,
+    ScoreDistributionResult,
     UpdateDatasetRequest,
     UpdateItemRequest,
 )
@@ -528,6 +531,94 @@ def _extract_preview(input_payload: dict) -> str | None:
         if isinstance(v, str):
             return v[:80]
     return None
+
+
+# ── P21.2 评分分布 ────────────────────────────────────────
+
+
+async def score_distribution(
+    session: AsyncSession,
+    run_id: int,
+    *,
+    threshold: float = 0.5,
+    bucket_count: int = 10,
+) -> ScoreDistributionResult:
+    """聚合 dataset_run_items.eval_scores → 直方图 + 低分 item id 列表
+
+    bucket：[0, 0.1), [0.1, 0.2), ..., [0.9, 1.0]（最后一桶闭区间）
+    """
+    rows = (
+        (
+            await session.execute(
+                select(DatasetRunItem)
+                .where(DatasetRunItem.dataset_run_id == run_id)
+                .order_by(DatasetRunItem.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    per_metric: dict[str, list[tuple[int, float]]] = {}
+    for r in rows:
+        scores = r.eval_scores
+        if not isinstance(scores, dict):
+            continue
+        for k, v in scores.items():
+            if k.startswith("_") or k == "weighted_total":
+                # _error 等内部字段不入分布；weighted_total 单独单独算
+                pass
+            if not isinstance(v, (int, float)):
+                continue
+            per_metric.setdefault(k, []).append((r.id, float(v)))
+
+    metrics_out: list[MetricDistribution] = []
+    total_scored = 0
+    for metric_name, pairs in per_metric.items():
+        total_scored = max(total_scored, len(pairs))
+        scores_only = [s for _, s in pairs]
+        mean_v = sum(scores_only) / len(scores_only) if scores_only else None
+        buckets = _bucketize(scores_only, bucket_count)
+        low_ids = [iid for iid, s in pairs if s < threshold]
+        metrics_out.append(
+            MetricDistribution(
+                metric_name=metric_name,
+                mean=mean_v,
+                buckets=buckets,
+                low_score_item_ids=low_ids,
+            )
+        )
+
+    return ScoreDistributionResult(
+        run_id=run_id,
+        threshold=threshold,
+        total_scored_items=total_scored,
+        metrics=metrics_out,
+    )
+
+
+def _bucketize(
+    values: list[float], n: int
+) -> list[ScoreBucket]:
+    """把 [0,1] 范围切 n 桶；最后一桶闭区间"""
+    if n < 1:
+        n = 10
+    width = 1.0 / n
+    counts = [0] * n
+    for v in values:
+        v = max(0.0, min(1.0, v))
+        idx = int(v / width)
+        if idx >= n:
+            idx = n - 1
+        counts[idx] += 1
+    return [
+        ScoreBucket(
+            low=round(i * width, 4),
+            high=round((i + 1) * width, 4),
+            count=counts[i],
+        )
+        for i in range(n)
+    ]
 
 
 # ── helpers ───────────────────────────────────────────────

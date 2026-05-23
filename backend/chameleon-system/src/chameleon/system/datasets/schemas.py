@@ -118,6 +118,8 @@ class DatasetRunRequest(BaseModel):
     model_override: str | None = Field(default=None, max_length=64)
     prompt_override: str | None = None
     judge: str = Field(default="exact_match", max_length=32)
+    # P21.2：可选 EvalTemplate 联动；跑完后按 template metrics 评分
+    eval_template_id: int | None = None
 
 
 class DatasetRunItemRow(BaseModel):
@@ -175,3 +177,28 @@ class CompareItemCell(BaseModel):
 class CompareRunsResult(BaseModel):
     runs: list[DatasetRunRow]
     rows: list[CompareItemCell]
+
+
+# ── P21.2 评分分布 ────────────────────────────────────
+
+
+class ScoreBucket(BaseModel):
+    """[low, high) 区间桶"""
+
+    low: float
+    high: float
+    count: int
+
+
+class MetricDistribution(BaseModel):
+    metric_name: str
+    mean: float | None = None
+    buckets: list[ScoreBucket]
+    low_score_item_ids: list[int]  # 低于 threshold 或 <0.5 的 item id
+
+
+class ScoreDistributionResult(BaseModel):
+    run_id: int
+    threshold: float = 0.5
+    total_scored_items: int
+    metrics: list[MetricDistribution]

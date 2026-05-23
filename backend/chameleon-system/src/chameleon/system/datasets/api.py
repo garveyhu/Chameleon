@@ -26,6 +26,7 @@ from chameleon.system.datasets.schemas import (
     DatasetRunRow,
     SampleFromLogsRequest,
     SampleResult,
+    ScoreDistributionResult,
     UpdateDatasetRequest,
     UpdateItemRequest,
 )
@@ -174,6 +175,7 @@ async def run_dataset(
         model_override=req.model_override,
         prompt_override=req.prompt_override,
         judge=req.judge,
+        eval_template_id=req.eval_template_id,
     )
     return Result.ok(DatasetRunDetail.model_validate(run))
 
@@ -220,4 +222,22 @@ async def compare_runs(
     _: object = Depends(require_permission("datasets:read")),
 ) -> Result[CompareRunsResult]:
     result = await ds_service.compare_runs(session, req.run_ids)
+    return Result.ok(result)
+
+
+@router.get(
+    "/runs/{run_id}/score-distribution",
+    response_model=Result[ScoreDistributionResult],
+)
+async def score_distribution(
+    run_id: int,
+    threshold: float = Query(default=0.5, ge=0.0, le=1.0),
+    buckets: int = Query(default=10, ge=2, le=50),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:read")),
+) -> Result[ScoreDistributionResult]:
+    """P21.2：评分分布直方图 + 低分 item id 列表"""
+    result = await ds_service.score_distribution(
+        session, run_id, threshold=threshold, bucket_count=buckets
+    )
     return Result.ok(result)

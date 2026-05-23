@@ -24,9 +24,11 @@ from chameleon.core.models import (
     DatasetItem,
     DatasetRun,
     DatasetRunItem,
+    EvalTemplate,
     Score,
 )
 from chameleon.system.datasets.judges import JUDGES
+from chameleon.system.datasets.template_scoring import score_run_with_template
 
 
 _MAX_ITEMS_PER_RUN = 500  # 单次 run 上限
@@ -40,6 +42,7 @@ async def run_dataset(
     model_override: str | None = None,
     prompt_override: str | None = None,
     judge: str = "exact_match",
+    eval_template_id: int | None = None,
 ) -> DatasetRun:
     """跑一次 dataset，持久化结果"""
     if judge not in JUDGES:
@@ -147,13 +150,41 @@ async def run_dataset(
 
     run.status = "success" if fail_count == 0 else "failed"
     run.finished_at = datetime.now(timezone.utc)
-    run.summary = {
+    summary: dict[str, Any] = {
         "total": len(items),
         "ok": ok_count,
         "fail": fail_count,
         "mean_score": score_sum / score_count if score_count > 0 else None,
         "score_count": score_count,
     }
+
+    # P21.2：可选 EvalTemplate 跑 RAGAS 多 metric 评分
+    if eval_template_id is not None:
+        template = (
+            await session.execute(
+                select(EvalTemplate).where(EvalTemplate.id == eval_template_id)
+            )
+        ).scalar_one_or_none()
+        if template is not None:
+            try:
+                eval_summary = await score_run_with_template(
+                    session, run_id=run_id, template=template
+                )
+                summary["eval_template"] = {
+                    "id": template.id,
+                    "name": template.name,
+                    "version": template.version,
+                    **eval_summary,
+                }
+            except Exception as e:  # noqa: BLE001
+                logger.exception(
+                    "eval template scoring failed | run={} | template={}",
+                    run_id,
+                    eval_template_id,
+                )
+                summary["eval_template_error"] = str(e)[:300]
+
+    run.summary = summary
     await session.commit()
     await session.refresh(run)
 

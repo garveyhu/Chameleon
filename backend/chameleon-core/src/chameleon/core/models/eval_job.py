@@ -60,6 +60,15 @@ class EvalJob(Base, TimestampMixin, WorkspaceScopedMixin):
     judge: Mapped[str] = mapped_column(
         String(32), nullable=False, default="exact_match"
     )
+    # P21.2：可选 EvalTemplate 绑定（freeze 当前 version，老 job 不受 template 改动影响）
+    template_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("eval_templates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    template_version_frozen: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
     cron_expr: Mapped[str] = mapped_column(String(64), nullable=False)
     # PR #31 用：{ kind: slack|webhook, target, regression_threshold }
     alert_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
