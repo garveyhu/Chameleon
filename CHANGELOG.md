@@ -4,6 +4,50 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-23
+
+**P21 阶段五收官**：Eval 完整闭环 + RAG 全集 + 对话树。11 个 PR：能从 call_log 一键采样含 PII 脱敏的 Dataset；能用 EvalTemplate 编排 RAGAS 4 算子做自动评估并查看分布；能扫 KB 一致性问题（孤儿 / 维度不一致 / 零向量）并半软删 + 一键修复；能在对话详情页按 parent_message_id 构树 + 切支 + regenerate / edit-and-resend 创建兄弟分支。
+
+### Migration
+
+- 新增 3 个 alembic changeset（forward-only）：
+  - `p21_w35_eval_templates`（建 `eval_templates` 表 + `eval_jobs` 加 `template_id` / `template_version_frozen`）
+  - `p21_w37_eval_scores`（`dataset_run_items.eval_scores` JSONB 列）
+  - `p21_w37_kb_consistency`（`kb_consistency_reports` 表 + `chunks.quarantined` / `quarantine_reason`）
+  - 全部带 `downgrade()`，可逐条回滚
+- 详细升级步骤见 `docs/release/v0.7-migration.md`
+
+### Breaking changes
+
+无。所有 API / DB schema 兼容老数据：老 datasets / chunks / messages 不受影响；EvalTemplate 与 KB 一致性都是新增功能；对话树 UI 在新模块 `/conversations`，不动 playground。
+
+### Dataset 增强（P21.1）
+
+- **PII 脱敏 + 三策略（PR #60）** — `chameleon.system.datasets.pii`：三类正则脱敏（email / phone-cn / phone-intl / id_card-18 / id_card-15）+ `apply_pii_strategy` / `apply_pii_strategy_dict`（mask | drop | keep）。`SampleFromLogsRequest` 加 `pii_strategy` 字段（默认 mask）；`SampleResult` 加 `dropped_pii` 字段。preview 字段过 PII 策略；drop 策略下整条 item 跳过。26 单测 + 2 新增 e2e。
+- **Dataset 增强 UI + bulk import（PR #61）** — 后端 `bulk_import_items` service + `POST /v1/admin/datasets/{id}/items/bulk-import` 端点（≤1000 条/次）；前端新模块 `system/datasets/`（types / services / routes / 列表 + 详情页 + sample/import modal）+ sidebar 「Datasets」入口；BulkImportModal 支持 JSONL 或 JSON 数组 paste + 实时解析校验 + PII 策略；SampleFromLogsModal 配 agent/app/limit/PII/success_only。
+
+### EvalTemplate + RAGAS + 自动评估（P21.2）
+
+- **EvalTemplate schema + CRUD（PR #62）** — `eval_templates` 表（metrics jsonb + version 自增 + workspace_scoped + unique 复合键 ws+name+version）。`eval_jobs` 加 `template_id` (FK SET NULL) + `template_version_frozen`。`update` 不原地改，新建 `version+=1` 的新行；`list` 同 name 只返最新 version。7 e2e。
+- **RAGAS 4 内置算子（PR #63）** — `chameleon.core.eval.algorithms` 子包 + 注册表 REGISTRY。`ragas_faithfulness`（answer 切句 + judge 检查每句被 context 支持）/ `ragas_answer_relevance`（judge 反向生成 question + jaccard 相似度）/ `ragas_context_precision`（judge 判断每 chunk 对 question 有用）/ `ragas_context_recall`（judge 判断 GT 句被 contexts 支持）。`judge_helpers` 含 `default_judge_fn` / `parse_yes_no`（多语言） / `jaccard` 词集 + 中文兜底。24 单测。
+- **自动评估调度 + 评分分布卡（PR #64）** — `dataset_run_items` 加 `eval_scores` jsonb；`score_run_with_template` 按 template metrics 遍历 items 评分；多 metric 加权 → `weighted_total`。`runner.run_dataset` 加 `eval_template_id` 可选参数。`GET /v1/admin/datasets/runs/{id}/score-distribution` endpoint（10 桶直方图 + 低分 item_ids）。前端 `ScoreDistributionCard` SVG 直方图 + 低于 threshold 标红。5 e2e。
+
+### KB 一致性扫描 + 修复（P21.3）
+
+- **一致性扫描 + 半软删（PR #65）** — `kb_consistency_reports` 表（status / issues / scanned/quarantined/fixed 计数）；`chunks` 加 `quarantined` / `quarantine_reason`。`scan_kb` 跑 3 类扫描：`orphan_chunk` / `dim_mismatch`（用 `vector_dims()`）/ `zero_vector`（内积归 0）；扫描只标 quarantined，不物理删。`list_reports` / `get_report` / `repair_report`（只能在 `done`/`fixed` 状态触发；物理删 + 更新 fixed_count）。7 e2e。
+- **一致性修复 UI（PR #66）** — 4 admin 端点（scan / list / get / repair）；KB 详情页加「一致性」tab（ShieldCheck 图标）；双卡布局（左历史 + 右详情）；issue 按 type 分组（rose=orphan / amber=dim / orange=zero_vector）；一键修复 confirm modal 显式确认。Chrome MCP UI 验证通过。
+
+### 对话树 + 分支（P21.4）
+
+- **对话树前端 + 切支 UI（PR #67）** — `useMessageTree` 纯 TS hook（构树 + DFS 展开当前分支）；`BranchSwitcher` 组件 ◀ N/M ▶；`/conversations` 列表 + 详情页（按 parent_message_id 构树 + 选最新 child default + 顶部分叉点 badge）。sidebar 加「对话」入口。
+- **regenerate / edit-and-resend 触发分支（PR #68）** — 后端 `branching` service：`regenerate_assistant`（找 assistant 的源 user msg → provider.invoke → 新 assistant 挂同 user 父）+ `edit_and_resend`（新 user msg 作 sibling + 自动 invoke 新 assistant）；2 endpoints + EditAndResendRequest schema。前端详情页 hover 显示 RefreshCw（assistant）/ Edit3（user）按钮；edit 模式 inline Textarea；submit 后自动切到新分支。6 e2e。
+
+### Verification
+
+- 自动化测试：337 core + 38 P21 e2e + 24 RAGAS + 26 PII，全部绿
+- Chrome MCP DOM 验证：Dataset / EvalTemplate / KB 一致性 / 对话树 UI 全部通过
+- 验收报告：`docs/release/v0.7-screenshots/VERIFICATION.md`
+
 ## [0.6.0] — 2026-05-23
 
 **P20 阶段四收官**：真实 Sandbox + Plugin Marketplace 远端 + KB Collection types + Agent 协同。十三个 PR 把生产化与多 agent 编排同时推进：能在 docker 隔离里跑 LLM 生成的用户代码；能浏览/搜索/一键装远端验签插件；能按 FAQ/Wiki/API 类型切分知识库；能在 graph 编辑器里拖出多 agent 辩论节点。
