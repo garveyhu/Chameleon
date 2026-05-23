@@ -15,7 +15,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
-from chameleon.system.kbs import document_service, evaluation_service
+from chameleon.system.kbs import (
+    consistency as consistency_service,
+    document_service,
+    evaluation_service,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -758,3 +762,91 @@ async def delete_collection(
 ) -> Result[None]:
     await cs.delete_collection(session, kb_id, collection_id)
     return Result.ok(None)
+
+
+# ── P21.3 一致性扫描 + 修复 ───────────────────────────────
+
+
+class ConsistencyIssue(BaseModel):
+    type: str
+    chunk_id: int
+    kb_id: int
+    reason: str
+
+
+class ConsistencyReportItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kb_id: int
+    status: str
+    issues: list[dict] | None = None
+    scanned_count: int
+    quarantined_count: int
+    fixed_count: int
+    error_message: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+
+
+@router.post(
+    "/{kb_id}/consistency-reports/scan",
+    response_model=Result[ConsistencyReportItem],
+)
+async def scan_consistency(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ConsistencyReportItem]:
+    """跑一次 KB 一致性扫描；标 quarantined + 落 report；不物理删"""
+    report = await consistency_service.scan_kb(session, kb_id)
+    return Result.ok(ConsistencyReportItem.model_validate(report))
+
+
+@router.get(
+    "/{kb_id}/consistency-reports",
+    response_model=Result[list[ConsistencyReportItem]],
+)
+async def list_consistency_reports(
+    kb_id: int,
+    limit: int = Query(default=50, ge=1, le=200),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[list[ConsistencyReportItem]]:
+    reports = await consistency_service.list_reports(
+        session, kb_id, limit=limit
+    )
+    return Result.ok(
+        [ConsistencyReportItem.model_validate(r) for r in reports]
+    )
+
+
+@router.get(
+    "/{kb_id}/consistency-reports/{report_id}",
+    response_model=Result[ConsistencyReportItem],
+)
+async def get_consistency_report(
+    kb_id: int,
+    report_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[ConsistencyReportItem]:
+    _ = kb_id  # 仅校验路径；service 内部按 report_id 查
+    report = await consistency_service.get_report(session, report_id)
+    return Result.ok(ConsistencyReportItem.model_validate(report))
+
+
+@router.post(
+    "/{kb_id}/consistency-reports/{report_id}/repair",
+    response_model=Result[ConsistencyReportItem],
+)
+async def repair_consistency_report(
+    kb_id: int,
+    report_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ConsistencyReportItem]:
+    """物理删 quarantined chunks（红线：admin 显式确认才到这步）"""
+    _ = kb_id
+    report = await consistency_service.repair_report(session, report_id)
+    return Result.ok(ConsistencyReportItem.model_validate(report))

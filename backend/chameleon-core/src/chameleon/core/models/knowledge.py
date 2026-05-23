@@ -3,6 +3,7 @@
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     ForeignKey,
     Index,
     Integer,
@@ -105,10 +106,18 @@ class Chunk(Base, TimestampMixin):
     qa_question: Mapped[str | None] = mapped_column(Text, nullable=True)
     # API collection：endpoint 标识（"GET /v1/users"）
     api_endpoint: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # P21.3：一致性扫描标记（半软删 —— scan 标 True，repair 时物理删）
+    quarantined: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    quarantine_reason: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),
         Index("ix_chunks_doc_seq", "doc_id", "seq"),
         Index("ix_chunks_collection_index", "collection_id", "index_name"),
+        Index("ix_chunks_quarantined", "quarantined"),
         # HNSW 向量索引在 migration 里手写（SQLAlchemy 不直接支持 HNSW 参数）
     )

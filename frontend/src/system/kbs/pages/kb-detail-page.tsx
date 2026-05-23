@@ -12,6 +12,7 @@ import {
   Layers,
   Search,
   Settings,
+  ShieldCheck,
 } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
@@ -21,6 +22,7 @@ import { SectionCard } from '@/core/components/table';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { CollectionsTab } from '@/system/kbs/components/collections-tab';
+import { ConsistencyTab } from '@/system/kbs/components/consistency-tab';
 import { DocumentTable } from '@/system/kbs/components/document-table';
 import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone';
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
@@ -35,6 +37,7 @@ type TabKey =
   | 'collections'
   | 'search'
   | 'eval'
+  | 'consistency'
   | 'config';
 
 interface TabDef {
@@ -49,6 +52,7 @@ const TABS: TabDef[] = [
   { key: 'collections', label: 'Collections', icon: <Layers className="h-3.5 w-3.5" /> },
   { key: 'search', label: '检索测试', icon: <Search className="h-3.5 w-3.5" /> },
   { key: 'eval', label: '评估', icon: <FlaskConical className="h-3.5 w-3.5" /> },
+  { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   { key: 'config', label: '配置', icon: <Settings className="h-3.5 w-3.5" /> },
 ];
 
@@ -104,6 +108,7 @@ export const KbDetailPage = () => {
               <PlaceholderTab title="检索测试" hint="加载 KB 信息中…" />
             ))}
           {tab === 'eval' && <EvaluationListTab kbId={kbId} />}
+          {tab === 'consistency' && <ConsistencyTab kbId={kbId} />}
           {tab === 'config' &&
             (kbQ.data ? (
               <KbConfigForm kb={kbQ.data} />
