@@ -4,21 +4,54 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
-### Added
+## [0.6.0] — 2026-05-23
+
+**P20 阶段四收官**：真实 Sandbox + Plugin Marketplace 远端 + KB Collection types + Agent 协同。十三个 PR 把生产化与多 agent 编排同时推进：能在 docker 隔离里跑 LLM 生成的用户代码；能浏览/搜索/一键装远端验签插件；能按 FAQ/Wiki/API 类型切分知识库；能在 graph 编辑器里拖出多 agent 辩论节点。
+
+### Migration
+
+- 新增 3 个 alembic changeset（forward-only）：
+  - `p20_w27_plugin_registries`（新建 `plugin_registries`）
+  - `p20_w29_kb_collections`（新建 `kb_collections` + `chunks` 加 4 列）
+  - 全部带 `downgrade()`，可逐条回滚
+- 新增 `ResultCode.NotFound = 40400`（修复早期 eval_jobs / plugins / workspaces 引用未定义码的隐藏 bug）
+- 新增依赖：`docker>=7.1`（沙箱）、`pynacl>=1.5`（插件签名）
+- 详细升级步骤见 `docs/release/v0.6-migration.md`
+
+### Breaking changes
+
+无。所有 API / DB schema 兼容老数据：老 plugins / KB / chunks / agents 不受影响；沙箱节点为新增类型，老 graph 不触发；新建 KB 自动 seed `default` generic collection，老 KB 的 chunks `collection_id=NULL` 兼容。
+
+### Sandbox 真实现（P20.1）
 
 - **Sandbox Runtime 抽象 + Mock 实现（P20.1 PR #45）** — `chameleon.core.sandbox`：`SandboxRuntime` ABC + `SandboxConfig` / `SandboxResult` 不可变 dataclass + 全局 registry（`register_runtime` / `get_runtime` / `list_runtime_names`）；`SandboxConfig.__post_init__` 校验 timeout / memory / cpu 上下界 + 拒绝 `network='full'`；`MockSandboxRuntime` subprocess 实现（dev/test 用，`CHAMELEON_ENV=production` 拒绝加载）—— preexec_fn 容错 setrlimit (CPU/AS/NPROC)、`asyncio.wait_for` 强杀超时、stdout/stderr 各 1MB 截断。19 单测 + 1 Linux-only skip（macOS 上 `RLIMIT_AS` 是 no-op）。
 - **Docker runtime + bootstrap lifespan（P20.1 PR #46）** — `DockerSandboxRuntime` 用 docker-py SDK 包到 `asyncio.to_thread`；代码 base64 经 env 喂给 `sh -c | base64 -d > /tmp/main.py | python` 避免 attach_socket detach 时的 stdin 死锁；安全默认：`network_mode=none` / `read_only=True` rootfs / `tmpfs=/tmp` / `user=65534:65534` nobody / `cap_drop=ALL` / `no-new-privileges` / `pids_limit=64`；docker 不可达自动降级 mock；`bootstrap_runtimes()` lifespan 启动期注册。7 个 docker smoke 测试真跑 container（hello / 非零退出 / runtime error / timeout 杀容器 / stdout 截断 / network=none 阻塞）。
 - **CodeRunnerTool + ToolNode 接通（P20.1 PR #47）** — `chameleon.core.tools.builtins.code_runner.CodeRunnerTool` 调 sandbox runtime；admin config 透传 timeout/memory/cpu/network/image；用户代码非零退出不算 tool fail（数据带 `exit_code` + `user_code_failed` meta）；通过现有 ToolNode → GraphExecutor 链路调度可达，9 个 E2E 覆盖（Tool 层 + Graph 层）。
+
+### Plugin Marketplace 远端（P20.2）
+
 - **Ed25519 manifest 签名 + registry 协议（P20.2 PR #48）** — `chameleon.core.plugins.signing`：`generate_keypair` / `sign_manifest` / `verify_manifest`（PyNaCl 实现）+ `InvalidSignatureError`；`registry_client`：`fetch_index` 拉远端 `<url>/index.json`（含 publishers pinning + plugins entries 列表）+ `fetch_and_verify_manifest` 对单 plugin 拉 manifest + 签名并按 publisher pubkey 验签；`PluginRegistryEntry` ORM + `plugin_registries` 表（pubkey_pinning + cached_entries 缓存）；新增 `ResultCode.NotFound = 40400` 通用 404 码（之前 eval_jobs/plugins/workspaces 用过但未定义）。9 个签名单测覆盖：roundtrip / tampered 拒绝 / 错 pubkey 拒绝 / 缺签名 / 缺 pubkey / 长度非法 / base64 非法。
 - **Marketplace admin API + install_from_remote（P20.2 PR #49）** — `chameleon.system.marketplace`：registries CRUD + `/sync`（fetch + 缓存 publishers/entries 到 DB）+ `/search`（跨所有 enabled registry 缓存搜索 + 标 installed）+ `/install`（按 cached entry 拉 manifest + 验签 + 复用 `plugin_registry.install`）；source='marketplace' 标识来源。
 - **Marketplace UI（P20.2 PR #50）** — `/marketplace` 列表 + 卡片网格：上半部 registry 表（同步/启停/删除）+ 下半部 plugin grid（type 彩色 badge + tags chip + 下载数 + 一键安装）；`AddRegistryModal` 注册新 marketplace；sidebar 加 ShoppingBag 图标的「插件市场」入口。7 个 marketplace E2E：CRUD / 去重 / 合法签名全链路 / 篡改 manifest 拒绝 / 未知 publisher 自动 drop / disabled 拒绝 / 搜索过滤。
+
+### KB Collection types + 多索引（P20.3）
+
 - **KbCollection schema + chunks 列扩展（P20.3 PR #51）** — `kb_collections` 表（kb_id + collection_type + name + indexes JSONB + config）；chunks 加 `collection_id` (FK ondelete=SET NULL) + `index_name`（default='chunk'）+ `qa_question` + `api_endpoint` + 复合索引；老 chunks `collection_id=NULL` 兼容；`COLLECTION_TYPES = (generic, faq, wiki, api)` 常量 + `DEFAULT_INDEXES`。
 - **FAQ / Wiki / API 三套 chunker + dispatch（P20.3 PR #52）** — `chameleon.api.knowledge.chunkers` 子包：`ChunkPayload` 统一形态 + `get_chunker(type)` 注册表 dispatch；`chunk_faq` 按 `## Q:` 切对填 qa_question + 无 Q 头自动回退 generic；`chunk_wiki` 按 `#` heading 切 + heading_path 栈维护 + 单段超 max_chunk_size 再 fixed 子切；`chunk_api` 解析 OpenAPI YAML/JSON 每 endpoint 一 chunk + `api_endpoint` 字段 + tags 过滤 + deprecated 默认跳。14 单测覆盖 dispatch / 三种类型解析 / 回退路径 / 边界。
 - **KB collections admin API + 类型不可改红线（P20.3 PR #53）** — `chameleon.system.kbs.collections_service`：list / create / update / delete + `get_or_create_default` 兜底；`UpdateCollectionRequest` 不含 `collection_type` 字段（红线 plan §2 P20：类型一经写入不可改，必须新建 collection + 重新 ingest）；同 KB 内 name 唯一；删除走 ondelete=SET NULL 保留 chunks。6 E2E：CRUD / 去重 / 未知 type 拒绝 / type 改不动 / 删 / 跨 KB 隔离。
-- **KB Collections tab UI（P20.3 PR #54）** — `/kbs/:id` 详情页加 Collections tab（Layers 图标）：列 collections 表 + 类型彩色 badge + 索引拓扑展开 + 删除；新建 modal 选类型（4 种 + 提示文案）+ 红色横幅警告"类型一经写入不可改"；通过现有 admin auth + apolloy queryClient 缓存。
+- **KB Collections tab UI（P20.3 PR #54）** — `/kbs/:id` 详情页加 Collections tab（Layers 图标）：列 collections 表 + 类型彩色 badge + 索引拓扑展开 + 删除；新建 modal 选类型（4 种 + 提示文案）+ 红色横幅警告"类型一经写入不可改"；通过现有 admin auth + queryClient 缓存。
+
+### Agent 协同（A2A + debate）（P20.4）
+
 - **A2A 协议 + AgentRunner（P20.4 PR #55）** — `chameleon.core.agent.a2a`：`AgentRunner.call_agent(A2ACallSpec)` 统一跨 agent 调用入口；`MAX_DEPTH=3` 嵌套深度上限防递归爆栈；`trace_id` 必传（空字符串拒绝）；`budget_remaining<=0` 拒绝；`observe(ObservationType.AGENT, parent_id=current_observation_id())` 自动串 trace tree 不断链；调用后从 `usage.total_tokens` 扣 budget（floor 0）+ 返 `A2AResult(budget_remaining, budget_consumed, sub_observation_id)`；`call_agent(...)` kwargs helper。10 单测：5 红线（trace_id 空 / budget 0 / 负 budget / depth 满 / target 不在注册表）+ budget 扣减 + 跨 agent 嵌套 observation 验证。
 - **agent_debate 节点 + 状态机（P20.4 PR #56）** — `chameleon.core.graph.nodes.agent_debate.AgentDebateNode` 状态机：proposer → critic ×n → judge（可选）× max_rounds 轮；`MAX_ROUNDS_HARD_CAP=10` 防绕过；critic 答复内含 `agree/同意/consensus/LGTM/达成共识` 等正则关键词 → 标 agreed；`early_stop_on='consensus'` 全 critic 都 agree 时中断；整体 `timeout_total_sec`（默认 120s）软超时返当前最佳；total_budget 跨 agent 共享、耗尽即停；多 critic 需全部 agree 才算 consensus。12 单测覆盖 4 红线 + 3 happy（max_rounds / 无 judge fallback / consensus 短路）+ 多 critic + timeout + budget 耗尽。
 - **graph 编辑器 agent_debate 节点 UI（P20.4 PR #57）** — palette 加 Agent Debate（Users 图标 fuchsia 色系）；inspector `AgentDebateForm` 动态从 `/v1/admin/agents` 拉 enabled agent 列表，按顺序映射 PROPOSER → CRITIC → JUDGE → critic+N，支持上下移 / 删；max_rounds / timeout / early_stop / total_budget 表单字段；底部红线提示 banner（max_rounds≤10 / 超时返最佳 / budget 共享）。Chrome MCP 验收通过：palette 显示节点 / 拖入后 inspector 表单完整 / agent 下拉拉取 4 个示例 agent / 加 2 个后角色自动标。
+
+### Verification
+
+- 自动化测试：313 core + 14 chunker + 22 agent + 53 marketplace/sandbox/KB E2E，全部绿
+- Chrome MCP DOM 验证：marketplace / collections tab / agent_debate 节点 UI 全部通过
+- 验收报告：`docs/release/v0.6-screenshots/VERIFICATION.md`
 
 ## [0.5.0] — 2026-05-23
 

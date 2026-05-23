@@ -1,6 +1,6 @@
 [project]
 name = "chameleon-app"
-version = "0.5.0"
+version = "0.6.0"
 description = "Chameleon FastAPI 启动器（薄，仅装配 chameleon-api + chameleon-system + lifespan + 中间件）"
 requires-python = ">=3.12"
 dependencies = [

@@ -1,6 +1,6 @@
 [project]
 name = "chameleon-core"
-version = "0.5.0"
+version = "0.6.0"
 description = "Chameleon 基础设施 + AI infra + 共享 ORM 模型"
 requires-python = ">=3.12"
 dependencies = [
