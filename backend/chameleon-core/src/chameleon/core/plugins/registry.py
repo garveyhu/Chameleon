@@ -32,6 +32,27 @@ from chameleon.core.plugins.manifest import PluginManifest
 
 _LOAD_TIMEOUT_SEC = 5.0
 
+# Plugin 不许把 entrypoint 指向这些内部模块路径，防越权拿 DB / admin / API 内部能力
+_FORBIDDEN_ENTRYPOINT_PREFIXES = (
+    "chameleon.core.models",
+    "chameleon.core.infra",
+    "chameleon.core.utils.crypto",
+    "chameleon.system",
+    "chameleon.api",
+    "chameleon.app",
+)
+
+
+def assert_entrypoint_not_internal(entrypoint: str) -> None:
+    """SDK 沙箱：拒绝将内部模块直接当 plugin entrypoint 暴露"""
+    module_path, _, _ = entrypoint.partition(":")
+    for prefix in _FORBIDDEN_ENTRYPOINT_PREFIXES:
+        if module_path == prefix or module_path.startswith(prefix + "."):
+            raise ValueError(
+                f"entrypoint 命中内部模块沙箱: {module_path!r}; "
+                f"plugin 不能直接挂载 {prefix}.*"
+            )
+
 
 class PluginEntry:
     """已 resolve 的 plugin 运行时实体"""
@@ -240,7 +261,12 @@ class PluginRegistry:
         source_url: str | None = None,
         config: dict[str, Any] | None = None,
     ) -> PluginEntry:
-        """落 DB + 立刻加载；幂等：plugin_key 已存在则报错（让调用方决定 reinstall）"""
+        """落 DB + 立刻加载；幂等：plugin_key 已存在则报错（让调用方决定 reinstall）
+
+        sandbox：entrypoint 命中内部模块前缀直接拒绝
+        """
+        assert_entrypoint_not_internal(manifest.entrypoint)
+
         existing = (
             await session.execute(
                 select(PluginInstance).where(

@@ -25,6 +25,7 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "graphs": ("read", "write", "delete", "execute"),
     "tools": ("read", "write", "delete"),
     "datasets": ("read", "write", "delete"),
+    "plugins": ("read", "write", "delete"),
     "embed_configs": ("read", "write", "delete"),
     "call_logs": ("read", "write"),
     "audit_logs": ("read",),
