@@ -19,6 +19,7 @@ import {
   ChevronRight,
   Cpu,
   Database,
+  FlaskConical,
   Globe,
   KeyRound,
   KeySquare,
@@ -90,6 +91,7 @@ const AI_GROUP: NavGroup = {
     { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
     { to: '/playground', icon: PlaySquare, i18nKey: 'menu.playground', fallbackTitle: 'Playground', perm: 'playground:invoke' },
     { to: '/graphs', icon: Workflow, i18nKey: 'menu.graphs', fallbackTitle: '工作流', perm: 'graphs:read' },
+    { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
     { to: '/embed-configs', icon: Cpu, i18nKey: 'menu.embed_configs', fallbackTitle: '嵌入式', perm: 'embed_configs:read' },
   ],
 };
