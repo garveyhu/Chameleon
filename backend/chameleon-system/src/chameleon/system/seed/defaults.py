@@ -24,6 +24,7 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "kbs": ("read", "write", "delete"),
     "graphs": ("read", "write", "delete", "execute"),
     "tools": ("read", "write", "delete"),
+    "datasets": ("read", "write", "delete"),
     "embed_configs": ("read", "write", "delete"),
     "call_logs": ("read", "write"),
     "audit_logs": ("read",),
@@ -63,7 +64,7 @@ _ADMIN_PERMS = ["*:*"]
 _DEVELOPER_RESOURCES = {
     "apps", "api_keys", "providers", "channels", "abilities", "models", "agents",
     "kbs", "embed_configs", "call_logs", "dashboard", "playground",
-    "schemas", "graphs", "tools",
+    "schemas", "graphs", "tools", "datasets",
 }
 _DEVELOPER_PERMS = sorted(
     c for c, r, _, _ in all_permissions() if r in _DEVELOPER_RESOURCES
