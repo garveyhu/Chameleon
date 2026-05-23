@@ -32,10 +32,18 @@ _BUILT = False
 # ── Provider 注册（扫 chameleon.providers.* namespace） ─────
 
 
-def build_provider_registry() -> dict[str, Provider]:
-    """扫 chameleon.providers.* namespace 找每个子包的 PROVIDER 实例"""
+def build_provider_registry(
+    disabled_plugin_keys: set[str] | None = None,
+) -> dict[str, Provider]:
+    """扫 chameleon.providers.* namespace 找每个子包的 PROVIDER 实例
+
+    Args:
+        disabled_plugin_keys: 由 PluginRegistry 提供的禁用集（P19.2）；
+            匹配到的 provider.name 会被跳过，实现"不重启进程禁用 builtin plugin"
+    """
     import chameleon.providers as pkg
 
+    disabled = disabled_plugin_keys or set()
     providers: dict[str, Provider] = {}
     for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.providers."):
         if mod_info.name.endswith(".base"):
@@ -57,6 +65,13 @@ def build_provider_registry() -> dict[str, Provider]:
             raise RegistryError(
                 message=f"{mod_info.name}.PROVIDER is not a Provider instance"
             )
+        if provider.name in disabled:
+            logger.info(
+                "provider skipped (plugin disabled) | name={} | from={}",
+                provider.name,
+                mod_info.name,
+            )
+            continue
         if provider.name in providers:
             raise RegistryError(message=f"duplicate provider name: {provider.name}")
         providers[provider.name] = provider
@@ -200,14 +215,35 @@ async def build_agent_registry_from_db(
 
 
 async def init_registry() -> None:
-    """启动期入口（async）：build providers + 扫本地 import + DB 读 agents"""
+    """启动期入口（async）：build providers + 扫本地 import + DB 读 agents
+
+    P19.2：先 seed builtin plugin + 拉 disabled 集，对应 provider 不挂载
+    """
     global _BUILT
     if _BUILT:
         logger.debug("registry already built — skip")
         return
 
+    # Plugin bootstrap：seed builtin manifest + 获取 provider 维度禁用集
+    disabled_provider_keys: set[str] = set()
+    try:
+        from chameleon.core.infra.db import AsyncSessionLocal
+        from chameleon.core.plugins import plugin_registry
+        from chameleon.core.plugins.builtins import BUILTIN_PROVIDERS
+
+        async with AsyncSessionLocal() as s:
+            await plugin_registry.bootstrap_builtin(s, BUILTIN_PROVIDERS)
+            disabled_provider_keys = await plugin_registry.disabled_keys_for_type(
+                s, "provider"
+            )
+    except Exception as e:  # noqa: BLE001
+        # 老库可能还没 p19_w19_plugins 表 / DB 不可用 → 跳过 plugin 层，回到原行为
+        logger.warning(
+            "plugin bootstrap skipped (DB / migration not ready?): {}", e
+        )
+
     PROVIDERS.clear()
-    PROVIDERS.update(build_provider_registry())
+    PROVIDERS.update(build_provider_registry(disabled_provider_keys))
 
     local_class_index = _scan_local_agent_modules()
 

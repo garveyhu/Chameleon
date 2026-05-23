@@ -19,6 +19,7 @@ from chameleon.core.models.dataset import (
     DatasetRunItem,
 )
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
+from chameleon.core.models.plugin import PluginInstance
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.graph import Graph, GraphNodeRun, GraphRun
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
@@ -83,6 +84,8 @@ __all__ = [
     "DatasetRunItem",
     "EvalJob",
     "EvalJobRun",
+    # 插件
+    "PluginInstance",
     # 杂项
     "AuditLog",
     "Setting",
