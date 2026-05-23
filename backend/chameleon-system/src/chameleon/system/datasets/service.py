@@ -17,11 +17,22 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import CallLog, Dataset, DatasetItem
+from chameleon.core.models import (
+    CallLog,
+    Dataset,
+    DatasetItem,
+    DatasetRun,
+    DatasetRunItem,
+)
 from chameleon.system.datasets.schemas import (
+    CompareItemCell,
+    CompareRunsResult,
     CreateDatasetRequest,
     DatasetItem as DatasetItemDTO,
     DatasetItemItem,
+    DatasetRunDetail,
+    DatasetRunItemRow,
+    DatasetRunRow,
     SampleFromLogsRequest,
     SampleResult,
     UpdateDatasetRequest,
@@ -273,6 +284,153 @@ def _shallow_jsonable(v: Any) -> dict[str, Any] | None:
     if isinstance(v, dict):
         return v
     return {"value": v}
+
+
+# ── DatasetRun list / detail / compare ───────────────────
+
+
+async def list_runs(
+    session: AsyncSession, dataset_id: int, limit: int = 50
+) -> list[DatasetRunRow]:
+    await _load_dataset(session, dataset_id)
+    rows = (
+        (
+            await session.execute(
+                select(DatasetRun)
+                .where(DatasetRun.dataset_id == dataset_id)
+                .order_by(DatasetRun.created_at.desc())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [DatasetRunRow.model_validate(r) for r in rows]
+
+
+async def get_run(
+    session: AsyncSession, run_id: int
+) -> DatasetRunDetail:
+    row = (
+        await session.execute(
+            select(DatasetRun).where(DatasetRun.id == run_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"dataset_run 不存在: {run_id}"
+        )
+    return DatasetRunDetail.model_validate(row)
+
+
+async def list_run_items(
+    session: AsyncSession, run_id: int
+) -> list[DatasetRunItemRow]:
+    rows = (
+        (
+            await session.execute(
+                select(DatasetRunItem)
+                .where(DatasetRunItem.dataset_run_id == run_id)
+                .order_by(DatasetRunItem.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [DatasetRunItemRow.model_validate(r) for r in rows]
+
+
+async def compare_runs(
+    session: AsyncSession, run_ids: list[int]
+) -> CompareRunsResult:
+    """item-by-item 对比 N 个 run
+
+    同 dataset 内的 run 才能对比；否则 raise。
+    """
+    runs = (
+        (
+            await session.execute(
+                select(DatasetRun).where(DatasetRun.id.in_(run_ids))
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(runs) != len(run_ids):
+        missing = set(run_ids) - {r.id for r in runs}
+        raise BusinessError(
+            ResultCode.Fail, message=f"以下 run_ids 不存在: {sorted(missing)}"
+        )
+    dataset_ids = {r.dataset_id for r in runs}
+    if len(dataset_ids) > 1:
+        raise BusinessError(
+            ResultCode.Fail,
+            message="只能对比同 dataset 下的 runs",
+        )
+    dataset_id = next(iter(dataset_ids))
+
+    items = (
+        (
+            await session.execute(
+                select(DatasetItem)
+                .where(DatasetItem.dataset_id == dataset_id)
+                .order_by(DatasetItem.created_at.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    run_items = (
+        (
+            await session.execute(
+                select(DatasetRunItem).where(
+                    DatasetRunItem.dataset_run_id.in_(run_ids)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    # 按 (item_id, run_id) 索引
+    by_item_run: dict[tuple[int, int], DatasetRunItem] = {
+        (ri.dataset_item_id, ri.dataset_run_id): ri for ri in run_items
+    }
+
+    rows: list[CompareItemCell] = []
+    for item in items:
+        preview = _extract_preview(item.input_payload)
+        cells: dict[int, DatasetRunItemRow] = {}
+        for run_id in run_ids:
+            ri = by_item_run.get((item.id, run_id))
+            if ri is not None:
+                cells[run_id] = DatasetRunItemRow.model_validate(ri)
+        rows.append(
+            CompareItemCell(
+                dataset_item_id=item.id,
+                input_preview=preview,
+                expected_output=item.expected_output,
+                cells=cells,
+            )
+        )
+
+    return CompareRunsResult(
+        runs=[DatasetRunRow.model_validate(r) for r in runs],
+        rows=rows,
+    )
+
+
+def _extract_preview(input_payload: dict) -> str | None:
+    """从脱敏 input_payload 取一段 preview 用于对比表格展示"""
+    if not isinstance(input_payload, dict):
+        return None
+    for k in ("user_input", "query", "question", "input", "text"):
+        v = input_payload.get(k)
+        if isinstance(v, dict) and isinstance(v.get("preview"), str):
+            return v["preview"]
+        if isinstance(v, str):
+            return v[:80]
+    return None
 
 
 # ── helpers ───────────────────────────────────────────────

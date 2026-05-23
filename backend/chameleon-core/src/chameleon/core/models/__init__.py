@@ -12,7 +12,12 @@ from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
 from chameleon.core.models.channel import Channel, ChannelStatus
 from chameleon.core.models.conversation import Conversation, Message
-from chameleon.core.models.dataset import Dataset, DatasetItem
+from chameleon.core.models.dataset import (
+    Dataset,
+    DatasetItem,
+    DatasetRun,
+    DatasetRunItem,
+)
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.graph import Graph, GraphNodeRun, GraphRun
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
@@ -73,6 +78,8 @@ __all__ = [
     # Eval
     "Dataset",
     "DatasetItem",
+    "DatasetRun",
+    "DatasetRunItem",
     # 杂项
     "AuditLog",
     "Setting",
