@@ -43,6 +43,10 @@ export const graphApi = {
   run: (id: EntityId, input: Record<string, unknown> = {}) =>
     post<GraphRunDetail>(`/v1/admin/graphs/${id}/run`, { input }),
 
+  /** P22.3：发布 draft → freeze published_spec；published_version += 1 */
+  publish: (id: EntityId) =>
+    post<GraphDetail>(`/v1/admin/graphs/${id}/publish`, {}),
+
   listRuns: (id: EntityId) =>
     get<GraphRunItem[]>(`/v1/admin/graphs/${id}/runs`),
 };

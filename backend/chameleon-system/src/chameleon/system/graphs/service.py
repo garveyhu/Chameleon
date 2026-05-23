@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -107,6 +108,33 @@ async def delete_graph(session: AsyncSession, graph_id: int) -> None:
     row.deleted_at = datetime.now(timezone.utc)
     await session.flush()
     await session.commit()
+
+
+async def publish_graph(
+    session: AsyncSession, graph_id: int
+) -> GraphDetail:
+    """发布 draft → freeze 当前 spec 到 published_spec；published_version += 1
+
+    红线（plan §2 P22）：published 版本 freeze；改要新 draft → publish 重走流程。
+    本函数只做 freeze 当前 draft；如要"回滚到老版本"需另开端点（v1.x）。
+    """
+    row = await _load(session, graph_id)
+    # 简单 freeze：从 draft spec 拷贝到 published_spec
+    import copy
+
+    row.published_spec = copy.deepcopy(row.spec)
+    row.published_version = (row.published_version or 0) + 1
+    row.published_at = datetime.now(timezone.utc)
+    await session.flush()
+    await session.refresh(row)
+    item = GraphDetail.model_validate(row)
+    await session.commit()
+    logger.info(
+        "graph published | id={} | version={}",
+        row.id,
+        row.published_version,
+    )
+    return item
 
 
 async def test_run(

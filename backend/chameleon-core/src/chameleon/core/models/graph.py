@@ -42,8 +42,16 @@ class Graph(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     schema_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1
     )
-    # GraphSpec.model_dump() 落 JSONB
+    # GraphSpec.model_dump() 落 JSONB（draft 版本，可改）
     spec: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # P22.3：published 版本快照（freeze；admin publish 时从 spec 拷贝过来）
+    published_spec: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    published_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    published_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True
     )

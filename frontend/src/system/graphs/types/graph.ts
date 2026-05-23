@@ -37,12 +37,18 @@ export interface GraphItem {
   description: string | null;
   schema_version: number;
   enabled: boolean;
+  /** P22.3：已发布版本号（0 = 从未发布） */
+  published_version?: number;
+  /** P22.3：最近一次发布时间 */
+  published_at?: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export interface GraphDetail extends GraphItem {
   spec: GraphSpec;
+  /** P22.3：已发布的 spec 快照（freeze） */
+  published_spec?: GraphSpec | null;
 }
 
 export interface NodeRunItem {

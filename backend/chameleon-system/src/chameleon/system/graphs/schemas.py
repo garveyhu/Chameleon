@@ -19,14 +19,19 @@ class GraphItem(BaseModel):
     description: str | None = None
     schema_version: int = 1
     enabled: bool
+    # P22.3：published 版本字段
+    published_version: int = 0
+    published_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
 
 class GraphDetail(GraphItem):
-    """graph 详情：含完整 spec dict"""
+    """graph 详情：含完整 spec dict（draft + published 快照）"""
 
     spec: dict[str, Any]
+    # P22.3：published 时 freeze 的快照（NULL = 从未 publish）
+    published_spec: dict[str, Any] | None = None
 
 
 class CreateGraphRequest(BaseModel):

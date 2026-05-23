@@ -76,6 +76,19 @@ async def delete_graph(
 
 
 @router.post(
+    "/{graph_id}/publish", response_model=Result[GraphDetail]
+)
+async def publish_graph(
+    graph_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[GraphDetail]:
+    """P22.3：发布 draft → freeze published_spec；published_version += 1"""
+    item = await graph_service.publish_graph(session, graph_id)
+    return Result.ok(item)
+
+
+@router.post(
     "/{graph_id}/test-run", response_model=Result[TestRunResult]
 )
 async def test_run(

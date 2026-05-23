@@ -30,7 +30,14 @@ import type {
 import '@xyflow/react/dist/style.css';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, History, Play, Save, Zap } from 'lucide-react';
+import {
+  ChevronLeft,
+  History,
+  Play,
+  Rocket,
+  Save,
+  Zap,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -279,6 +286,15 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onError: e => toast.error(`执行失败：${(e as Error).message}`),
   });
 
+  const publishMut = useMutation({
+    mutationFn: () => graphApi.publish(graph.id),
+    onSuccess: detail => {
+      toast.success(`已发布 v${detail.published_version}`);
+      onSaved();  // 触发 detailQ 重拉
+    },
+    onError: e => toast.error(`发布失败：${(e as Error).message}`),
+  });
+
   const runsQ = useQuery({
     queryKey: ['graph-runs', graph.id],
     queryFn: () => graphApi.listRuns(graph.id),
@@ -301,6 +317,23 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <span className="font-mono text-[11px] text-stone-500">
             ({graph.graph_key})
           </span>
+          {/* P22.3：发布状态条 */}
+          {graph.published_version && graph.published_version > 0 ? (
+            <span
+              className="ml-2 inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] text-emerald-700"
+              title={
+                graph.published_at
+                  ? `最近发布: ${new Date(graph.published_at).toLocaleString()}`
+                  : ''
+              }
+            >
+              <Rocket className="h-3 w-3" /> 已发布 v{graph.published_version}
+            </span>
+          ) : (
+            <span className="ml-2 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] text-amber-700">
+              草稿
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {runResult && (
@@ -351,6 +384,24 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           >
             <Save className="mr-1 h-3 w-3" />
             保存
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (
+                confirm(
+                  '发布将冻结当前 draft 为新版本；published_version += 1，老版本不可恢复（仅 freeze 在 published_spec）。继续？',
+                )
+              ) {
+                publishMut.mutate();
+              }
+            }}
+            disabled={publishMut.isPending}
+            title="freeze 当前 draft 为新 published 版本"
+          >
+            <Rocket className="mr-1 h-3 w-3" />
+            发布
           </Button>
         </div>
       </header>
