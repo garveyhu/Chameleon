@@ -40,6 +40,8 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import * as React from 'react';
+
+import { WorkspaceSwitcher } from '@/system/workspaces/components/workspace-switcher';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -182,6 +184,9 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
           <PanelLeftClose className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {/* P19.3：workspace 切换器 */}
+      <WorkspaceSwitcher />
 
       {/* nav */}
       <nav className="flex-1 space-y-0.5 overflow-auto px-3 pb-2 pt-1 text-[14px]">

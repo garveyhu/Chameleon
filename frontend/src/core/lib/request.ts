@@ -16,6 +16,7 @@ import axios, {
 import { toast } from '@/core/lib/toast';
 
 import { STORAGE_KEY } from '@/core/constants/app';
+import { getCurrentWorkspaceId } from '@/core/stores/workspace-store';
 import type { Result } from '@/core/types/api';
 import type { TokenPair } from '@/core/types/auth';
 
@@ -100,6 +101,11 @@ async function tryRefresh(): Promise<string | null> {
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
+  }
+  // P19.3：注入 X-Workspace-Id；null = admin "all" 视角
+  const wsId = getCurrentWorkspaceId();
+  if (wsId !== null) {
+    config.headers['X-Workspace-Id'] = wsId;
   }
   return config;
 });
