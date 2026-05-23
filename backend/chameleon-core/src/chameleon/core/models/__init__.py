@@ -21,6 +21,7 @@ from chameleon.core.models.provider import Provider
 from chameleon.core.models.retrieval_evaluation import RetrievalEvaluation
 from chameleon.core.models.score import Score
 from chameleon.core.models.setting import Setting
+from chameleon.core.models.tool import ToolInstance
 from chameleon.core.models.task import Task
 from chameleon.core.models.user import (
     Permission,
@@ -66,6 +67,8 @@ __all__ = [
     "Graph",
     "GraphRun",
     "GraphNodeRun",
+    # 工具
+    "ToolInstance",
     # 杂项
     "AuditLog",
     "Setting",

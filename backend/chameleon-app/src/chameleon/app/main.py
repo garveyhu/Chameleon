@@ -31,6 +31,7 @@ from chameleon.system.channels import channels_router
 from chameleon.system.dashboard import dashboard_router
 from chameleon.system.embed_configs import embed_configs_router
 from chameleon.system.graphs import graphs_router
+from chameleon.system.tools import tools_router
 from chameleon.system.kbs import kbs_admin_router
 from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
@@ -135,6 +136,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(audit_logs_router)
     app.include_router(embed_configs_router)
     app.include_router(graphs_router)
+    app.include_router(tools_router)
     app.include_router(search_router)
     app.include_router(schemas_router)
     app.include_router(scores_router)

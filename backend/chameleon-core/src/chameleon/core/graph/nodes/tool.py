@@ -1,14 +1,17 @@
 """ToolNode —— 调注册的 Tool（P18.2 起接 chameleon.core.tools 实现）
 
-data 配置：
+data 配置（v0.4 起）：
     {
       "tool_key": "http",
       "args": { ... }       # 透传给 Tool.run；也可以从上游 input 拼
     }
 
-执行约定（P18.2 起）：
+执行约定（P18.2 PR #23）：
     1. 从 chameleon.core.tools.get_tool_class(tool_key) 拿 Tool 子类
-    2. 实例化（无配置 → 默认；admin 配的 config 由 graph 持久化层装填）
+    2. 查 tool_instances 表的 admin config（同步路径用独立 session）
+       - 找到且 enabled=True → 用 admin config 实例化
+       - 找到但 enabled=False → 拒绝 + 清晰错误
+       - 未找到（admin 没配过）→ 用代码层默认（空 config）
     3. 用 run_with_validation 跑（按 parameters_schema 校验入参）
     4. 返 {tool_key, ok, data, error, meta}
 
@@ -19,9 +22,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlalchemy import select
+
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.executor import register_node_type
 from chameleon.core.graph.node_base import Node
+from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.models import ToolInstance
 from chameleon.core.tools import (
     Tool,
     ToolContext,
@@ -57,8 +64,26 @@ class ToolNode(Node[Any, dict]):
                 f"tool_key={tk!r} 未注册；可用 keys 由启动期 builtins 扫表得"
             )
 
-        # spec.data.config 可选 —— admin 在持久化层会把 tools 表 config 注入
-        config = self.spec.data.get("config") or {}
+        # 查 admin 配的 tool_instances 实例（含 config + enabled）
+        config: dict[str, Any] = {}
+        if _is_real_tool(tool_cls):
+            inst = await _load_tool_instance(tk)
+            if inst is not None and not inst.enabled:
+                return {
+                    "tool_key": tk,
+                    "ok": False,
+                    "data": None,
+                    "error": f"tool {tk!r} 被 admin 禁用",
+                    "meta": {"instance_id": inst.id},
+                }
+            if inst is not None:
+                config = inst.config or {}
+            # spec.data.config 仍能覆盖（同名字段）
+            if self.spec.data.get("config"):
+                config = {**config, **self.spec.data["config"]}
+        else:
+            config = self.spec.data.get("config") or {}
+
         # 实例化兼容两种形态：真 Tool 子类 / 老 duck-typed 类
         try:
             tool = tool_cls(config) if _is_real_tool(tool_cls) else tool_cls()
@@ -97,6 +122,16 @@ def _is_real_tool(cls: type) -> bool:
         return issubclass(cls, Tool)
     except TypeError:
         return False
+
+
+async def _load_tool_instance(tool_key: str) -> ToolInstance | None:
+    """查 tool_instances 表的 admin 配置（独立 session）"""
+    async with AsyncSessionLocal() as s:
+        return (
+            await s.execute(
+                select(ToolInstance).where(ToolInstance.tool_key == tool_key)
+            )
+        ).scalar_one_or_none()
 
 
 # 防 lint：ToolResult 在模块层 import 后未直接使用，但暴露给 type-checkers / docs

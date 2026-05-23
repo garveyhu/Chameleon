@@ -119,7 +119,11 @@ def _extract_usage(message) -> dict[str, int] | None:
 class LLMNode(Node[Any, dict]):
     """LLM 调用节点
 
-    spec.data 可选 model_name / system_prompt / prompt_template / temperature。
+    spec.data 可选：
+      model_name / system_prompt / prompt_template / temperature / max_tokens /
+      tool_keys: ["http", "sql", ...]    —— 启用 OpenAI function calling
+                                          模型选哪个 tool 就返其 name + args，
+                                          不会自动执行；executor 由后续节点接管
     """
 
     type = "llm"
@@ -135,6 +139,12 @@ class LLMNode(Node[Any, dict]):
             n = int(data["max_tokens"])
             if n < 1:
                 raise ValueError("LLMNode.data.max_tokens 必须 ≥ 1")
+        tks = data.get("tool_keys")
+        if tks is not None:
+            if not isinstance(tks, list) or not all(
+                isinstance(x, str) for x in tks
+            ):
+                raise ValueError("LLMNode.data.tool_keys 必须是 list[str]")
 
     async def execute(self, ctx: NodeContext, input: Any) -> dict:
         from chameleon.core.components.llms.factory import llm as get_llm
@@ -153,21 +163,98 @@ class LLMNode(Node[Any, dict]):
         if self.spec.data.get("max_tokens") is not None:
             invoke_kwargs["max_tokens"] = int(self.spec.data["max_tokens"])
 
+        # function calling：转 OpenAI tools 协议 + bind
+        tool_keys = self.spec.data.get("tool_keys") or []
+        if tool_keys:
+            client = _bind_tools(client, tool_keys)
+
         logger.debug(
-            "LLMNode {} | model={} | msgs={}",
+            "LLMNode {} | model={} | msgs={} | tools={}",
             self.id,
             model_name or "<default>",
             len(messages),
+            tool_keys,
         )
 
         ai_msg = await client.ainvoke(messages, **invoke_kwargs)
-        content = ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+        content = (
+            ai_msg.content if hasattr(ai_msg, "content") else str(ai_msg)
+        )
+
+        # tool_calls：模型决定调哪个 tool，返结构化 list（不自动执行）
+        tool_calls = _extract_tool_calls(ai_msg)
 
         return {
             "answer": content,
+            "tool_calls": tool_calls,
             "usage": _extract_usage(ai_msg),
             "model": getattr(client, "model_name", None) or model_name,
         }
+
+
+def _bind_tools(client, tool_keys: list[str]):
+    """把 tool_keys 转 OpenAI tools 协议 + 绑到 langchain client
+
+    langchain 的 ChatOpenAI 子类支持 .bind_tools([...])；不支持时返回原 client。
+    """
+    from chameleon.core.tools import get_tool_class
+
+    schemas: list[dict[str, Any]] = []
+    for key in tool_keys:
+        cls = get_tool_class(key)
+        if cls is None:
+            continue
+        tool = cls()
+        schemas.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": cls.tool_key,
+                    "description": cls.description,
+                    "parameters": tool.parameters_schema(),
+                },
+            }
+        )
+    if not schemas:
+        return client
+
+    if hasattr(client, "bind_tools"):
+        try:
+            return client.bind_tools(schemas)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(
+                "LLMNode bind_tools failed; falling back to no-tools: {}", e
+            )
+    return client
+
+
+def _extract_tool_calls(ai_msg) -> list[dict[str, Any]]:
+    """从 langchain AIMessage 抽出 tool_calls（统一格式）
+
+    返：[{ "name": "http", "args": {...}, "id": "call_xxx" }, ...]
+    """
+    raw = getattr(ai_msg, "tool_calls", None) or []
+    out: list[dict[str, Any]] = []
+    for tc in raw:
+        # langchain 把 tool_calls 规范化为 dict 形态
+        if isinstance(tc, dict):
+            out.append(
+                {
+                    "name": tc.get("name"),
+                    "args": tc.get("args") or {},
+                    "id": tc.get("id"),
+                }
+            )
+        else:
+            # 兼容 ToolCall pydantic 对象
+            out.append(
+                {
+                    "name": getattr(tc, "name", None),
+                    "args": getattr(tc, "args", None) or {},
+                    "id": getattr(tc, "id", None),
+                }
+            )
+    return out
 
 
 register_node_type(LLMNode)
