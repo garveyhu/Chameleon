@@ -123,11 +123,18 @@ const Header = ({ kb, loading }: HeaderProps) => (
     {loading ? (
       <span className="text-[12.5px] text-stone-400">加载中…</span>
     ) : kb ? (
-      <div className="flex items-baseline gap-2">
+      <div className="flex flex-1 items-baseline gap-2">
         <span className="text-[15px] font-medium text-stone-900">{kb.name}</span>
         <span className="font-mono text-[11.5px] text-stone-500">
           {kb.kb_key}
         </span>
+        <span className="ml-auto" />
+        <Link
+          to={`/kbs/${kb.id}/chunking-preview`}
+          className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-amber-300 hover:bg-amber-50/40 hover:text-amber-700"
+        >
+          ✂︎ 切块预览
+        </Link>
       </div>
     ) : (
       <span className="text-[12.5px] text-stone-400">未找到</span>

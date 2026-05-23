@@ -26,6 +26,13 @@ const module: ModuleRouteConfig = {
         return { Component: m.KbDocumentDetailPage };
       },
     },
+    {
+      path: '/kbs/:id/chunking-preview',
+      lazy: async () => {
+        const m = await import('@/system/kbs/pages/kb-chunking-preview-page');
+        return { Component: m.KbChunkingPreviewPage };
+      },
+    },
   ],
 };
 

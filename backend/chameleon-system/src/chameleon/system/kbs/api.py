@@ -258,6 +258,65 @@ async def update_kb(
     return Result.ok(_kb_to_item(kb, dc, cc))
 
 
+# ── P18.4 chunking 实时预览（不落库） ─────────────────────
+
+
+class ChunkingPreviewRequest(BaseModel):
+    """实时预览切块结果；不需 kb_id（KB 详情页可指定 KB 但本接口不依赖 KB）"""
+
+    text: str = Field(..., min_length=1, max_length=200_000)
+    strategy: dict = Field(default_factory=dict)
+
+
+class ChunkPreviewItem(BaseModel):
+    seq: int
+    content: str
+    char_count: int
+    token_count_approx: int
+
+
+class ChunkingPreviewResponse(BaseModel):
+    mode: str
+    count: int
+    chunks: list[ChunkPreviewItem]
+
+
+@router.post(
+    "/chunking-preview", response_model=Result[ChunkingPreviewResponse]
+)
+async def chunking_preview(
+    req: ChunkingPreviewRequest,
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[ChunkingPreviewResponse]:
+    """对原文按 strategy 实时切块 —— 不落库，仅返结果
+
+    支持 chunker.split 的全部 mode（fixed/paragraph/sentence/regex/token）。
+    """
+    from chameleon.api.knowledge import chunker
+    from chameleon.core.api.exceptions import ValidationError
+
+    try:
+        chunks = chunker.split(req.text, req.strategy)
+    except ValueError as e:
+        raise ValidationError(message=str(e)) from e
+    items = [
+        ChunkPreviewItem(
+            seq=i,
+            content=c,
+            char_count=len(c),
+            token_count_approx=max(1, len(c) // 3),
+        )
+        for i, c in enumerate(chunks)
+    ]
+    return Result.ok(
+        ChunkingPreviewResponse(
+            mode=str(req.strategy.get("mode") or "fixed"),
+            count=len(items),
+            chunks=items,
+        )
+    )
+
+
 # ── KB chunks 浏览（全 KB 维度） ──────────────────────────
 
 
