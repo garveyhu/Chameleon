@@ -164,12 +164,12 @@ def test_tool_node_requires_tool_key():
         ToolNode(NodeSpec(id="t", type="tool", data={}))
 
 
-async def test_tool_node_stub_raises_until_p18_2():
+async def test_tool_node_unknown_key_raises():
     node = ToolNode(
-        NodeSpec(id="t", type="tool", data={"tool_key": "http"})
+        NodeSpec(id="t", type="tool", data={"tool_key": "no-such-tool"})
     )
-    with pytest.raises(NotImplementedError, match="P18.2"):
-        await node.execute(_ctx(), {"url": "x"})
+    with pytest.raises(RuntimeError, match="未注册"):
+        await node.execute(_ctx(), {})
 
 
 async def test_tool_node_with_registered_tool():
