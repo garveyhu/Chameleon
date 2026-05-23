@@ -13,10 +13,14 @@
     "trace": "Trace",
     "audit_logs": "Audit Logs",
     "settings": "Settings",
+    "workspaces": "Workspaces",
     "group": {
       "overview": "Overview",
       "access": "Access Control",
-      "ai": "AI Config",
+      "ai": "AI Capabilities",
+      "routing": "Models & Routing",
+      "observability": "Observability",
+      "extensions": "Extensions",
       "ops": "Ops",
       "system": "System"
     }

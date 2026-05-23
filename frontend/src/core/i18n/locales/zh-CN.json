@@ -12,13 +12,17 @@
     "call_logs": "调用日志",
     "trace": "Trace",
     "audit_logs": "审计日志",
-    "settings": "配置管理",
+    "settings": "系统配置",
+    "workspaces": "Workspaces",
     "group": {
       "overview": "概览",
       "access": "访问控制",
-      "ai": "AI 配置",
+      "ai": "AI 能力",
+      "routing": "模型与路由",
+      "observability": "观测与评估",
+      "extensions": "扩展生态",
       "ops": "运维",
-      "system": "系统"
+      "system": "系统管理"
     }
   },
   "topbar": {

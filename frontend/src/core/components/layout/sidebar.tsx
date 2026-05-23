@@ -15,6 +15,7 @@
 import {
   Activity,
   Bot,
+  Boxes,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -38,6 +39,7 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sparkles,
+  Telescope,
   Users2,
   Workflow,
 } from 'lucide-react';
@@ -77,13 +79,13 @@ interface NavGroup {
   children: NavLeaf[];
 }
 
-// ── 顶部直链 ─────────────────────────────────────────────
+// ── 顶部直链（高频）─────────────────────────────────────
 const TOP_ITEMS: NavLeaf[] = [
   { to: '/dashboard', icon: LayoutDashboard, i18nKey: 'menu.dashboard', fallbackTitle: '仪表盘', perm: 'dashboard:read' },
   { to: '/dashboard/cost', icon: DollarSign, i18nKey: 'menu.cost', fallbackTitle: '成本统计', perm: 'call_logs:read' },
 ];
 
-// ── AI 能力分组 ─────────────────────────────────────────
+// ── 1. AI 能力（编排 + 知识 = 造能力）────────────────────
 const AI_GROUP: NavGroup = {
   to: '/agents',
   icon: Bot,
@@ -91,41 +93,77 @@ const AI_GROUP: NavGroup = {
   fallbackTitle: 'AI 能力',
   children: [
     { to: '/agents', icon: Bot, i18nKey: 'menu.agents', fallbackTitle: '智能体', perm: 'agents:read' },
-    { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
-    { to: '/channels', icon: Plug, i18nKey: 'menu.channels', fallbackTitle: 'Channels', perm: 'channels:read' },
-    { to: '/abilities', icon: Network, i18nKey: 'menu.abilities', fallbackTitle: 'Abilities', perm: 'abilities:read' },
-    { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
-    { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
+    { to: '/graphs', icon: Workflow, i18nKey: 'menu.graphs', fallbackTitle: '工作流', perm: 'graphs:read' },
     { to: '/playground', icon: PlaySquare, i18nKey: 'menu.playground', fallbackTitle: 'Playground', perm: 'playground:invoke' },
     { to: '/conversations', icon: MessageSquare, i18nKey: 'menu.conversations', fallbackTitle: '对话', perm: 'playground:invoke' },
-    { to: '/graphs', icon: Workflow, i18nKey: 'menu.graphs', fallbackTitle: '工作流', perm: 'graphs:read' },
-    { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: 'Datasets', perm: 'datasets:read' },
-    { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
-    { to: '/plugins', icon: Puzzle, i18nKey: 'menu.plugins', fallbackTitle: '插件', perm: 'plugins:read' },
-    { to: '/marketplace', icon: ShoppingBag, i18nKey: 'menu.marketplace', fallbackTitle: '插件市场', perm: 'plugins:read' },
-    { to: '/marketplace/templates', icon: Sparkles, i18nKey: 'menu.app_templates', fallbackTitle: '应用模板', perm: 'plugins:read' },
+    { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
     { to: '/embed-configs', icon: Cpu, i18nKey: 'menu.embed_configs', fallbackTitle: '嵌入式', perm: 'embed_configs:read' },
   ],
 };
 
-// ── 应用 & 调用分组 ─────────────────────────────────────
-const ACCESS_GROUP: NavGroup = {
-  to: '/apps',
-  icon: KeySquare,
-  i18nKey: 'menu.group.access',
-  fallbackTitle: '应用 & 调用',
+// ── 2. 模型与路由（接入大模型）─────────────────────────
+const ROUTING_GROUP: NavGroup = {
+  to: '/providers',
+  icon: Globe,
+  i18nKey: 'menu.group.routing',
+  fallbackTitle: '模型与路由',
   children: [
-    { to: '/apps', icon: KeySquare, i18nKey: 'menu.apps', fallbackTitle: '应用 & API Key', perm: 'apps:read' },
-    { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
-    { to: '/users', icon: Users2, i18nKey: 'menu.users', fallbackTitle: '用户', perm: 'users:read' },
-    { to: '/roles', icon: ShieldCheck, i18nKey: 'menu.roles', fallbackTitle: '角色', perm: 'roles:read' },
+    { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
+    { to: '/channels', icon: Plug, i18nKey: 'menu.channels', fallbackTitle: 'Channels', perm: 'channels:read' },
+    { to: '/abilities', icon: Network, i18nKey: 'menu.abilities', fallbackTitle: 'Abilities', perm: 'abilities:read' },
+    { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
   ],
 };
 
-// ── 系统直链（去掉关于） ─────────────────────────────────
-const SYSTEM_ITEMS: NavLeaf[] = [
-  { to: '/audit-logs', icon: Newspaper, i18nKey: 'menu.audit_logs', fallbackTitle: '审计日志', perm: 'audit_logs:read' },
-  { to: '/settings', icon: Settings, i18nKey: 'menu.settings', fallbackTitle: '系统配置', perm: 'settings:read' },
+// ── 3. 观测与评估（看结果 / 调质量）────────────────────
+const OBSERVABILITY_GROUP: NavGroup = {
+  to: '/traces',
+  icon: Telescope,
+  i18nKey: 'menu.group.observability',
+  fallbackTitle: '观测与评估',
+  children: [
+    { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
+    { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: 'Datasets', perm: 'datasets:read' },
+    { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
+    { to: '/audit-logs', icon: Newspaper, i18nKey: 'menu.audit_logs', fallbackTitle: '审计日志', perm: 'audit_logs:read' },
+  ],
+};
+
+// ── 4. 扩展生态（插件 / 模板 / 市场）────────────────────
+const EXTENSIONS_GROUP: NavGroup = {
+  to: '/plugins',
+  icon: Puzzle,
+  i18nKey: 'menu.group.extensions',
+  fallbackTitle: '扩展生态',
+  children: [
+    { to: '/plugins', icon: Puzzle, i18nKey: 'menu.plugins', fallbackTitle: '插件', perm: 'plugins:read' },
+    { to: '/marketplace', icon: ShoppingBag, i18nKey: 'menu.marketplace', fallbackTitle: '插件市场', perm: 'plugins:read' },
+    { to: '/marketplace/templates', icon: Sparkles, i18nKey: 'menu.app_templates', fallbackTitle: '应用模板', perm: 'plugins:read' },
+  ],
+};
+
+// ── 5. 系统管理（应用 / 人 / 配置）──────────────────────
+const SYSTEM_GROUP: NavGroup = {
+  to: '/apps',
+  icon: Settings,
+  i18nKey: 'menu.group.system',
+  fallbackTitle: '系统管理',
+  children: [
+    { to: '/apps', icon: KeySquare, i18nKey: 'menu.apps', fallbackTitle: '应用 & API Key', perm: 'apps:read' },
+    { to: '/workspaces', icon: Boxes, i18nKey: 'menu.workspaces', fallbackTitle: 'Workspaces', perm: 'workspaces:read' },
+    { to: '/users', icon: Users2, i18nKey: 'menu.users', fallbackTitle: '用户管理', perm: 'users:read' },
+    { to: '/roles', icon: ShieldCheck, i18nKey: 'menu.roles', fallbackTitle: '角色管理', perm: 'roles:read' },
+    { to: '/settings', icon: Settings, i18nKey: 'menu.settings', fallbackTitle: '系统配置', perm: 'settings:read' },
+  ],
+};
+
+// 渲染顺序（顶部直链之后）
+const NAV_GROUPS: NavGroup[] = [
+  AI_GROUP,
+  ROUTING_GROUP,
+  OBSERVABILITY_GROUP,
+  EXTENSIONS_GROUP,
+  SYSTEM_GROUP,
 ];
 
 interface SidebarProps {
@@ -139,10 +177,9 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const [hydrated, setHydrated] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
 
-  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({
-    [AI_GROUP.to]: true,
-    [ACCESS_GROUP.to]: true,
-  });
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
+    Object.fromEntries(NAV_GROUPS.map(g => [g.to, true])),
+  );
   const toggleGroup = (key: string) =>
     setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -155,22 +192,20 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
 
   const isActive = (to: string) => pathname === to || pathname.startsWith(to + '/');
 
+  const visibleGroups = NAV_GROUPS
+    .map(visibleGroup)
+    .filter((g): g is NavGroup => g !== null);
+
   if (collapsed) {
     return (
       <CollapsedSidebar
         pathname={pathname}
         onToggle={onToggle}
         visibleTop={visibleLeaves(TOP_ITEMS)}
-        visibleAi={visibleGroup(AI_GROUP)}
-        visibleAccess={visibleGroup(ACCESS_GROUP)}
-        visibleSystem={visibleLeaves(SYSTEM_ITEMS)}
+        visibleGroups={visibleGroups}
       />
     );
   }
-
-  const visibleAi = visibleGroup(AI_GROUP);
-  const visibleAccess = visibleGroup(ACCESS_GROUP);
-  const sysVisible = visibleLeaves(SYSTEM_ITEMS);
 
   return (
     <aside className="flex h-full w-60 flex-shrink-0 flex-col border-r border-stone-200/70 bg-[var(--color-warm-2)]">
@@ -203,52 +238,19 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
             <NavLeafItem key={item.to} item={item} active={isActive(item.to)} />
           ))}
 
-        {visibleAi && (
-          <>
-            <SectionLabel i18nKey={AI_GROUP.i18nKey} fallback={AI_GROUP.fallbackTitle} />
-            <NavGroupItem
-              group={visibleAi}
-              activePath={pathname}
-              open={openGroups[AI_GROUP.to]}
-              onToggle={() => toggleGroup(AI_GROUP.to)}
-            />
-          </>
-        )}
-
-        {visibleAccess && (
-          <>
-            <SectionLabel i18nKey={ACCESS_GROUP.i18nKey} fallback={ACCESS_GROUP.fallbackTitle} />
-            <NavGroupItem
-              group={visibleAccess}
-              activePath={pathname}
-              open={openGroups[ACCESS_GROUP.to]}
-              onToggle={() => toggleGroup(ACCESS_GROUP.to)}
-            />
-          </>
-        )}
-
-        {sysVisible.length > 0 && (
-          <>
-            <SectionLabel i18nKey="menu.group.system" fallback="系统" />
-            {sysVisible.map(item => (
-              <NavLeafItem key={item.to} item={item} active={isActive(item.to)} />
-            ))}
-          </>
-        )}
+        {visibleGroups.map(g => (
+          <NavGroupItem
+            key={g.to}
+            group={g}
+            activePath={pathname}
+            open={openGroups[g.to] ?? true}
+            onToggle={() => toggleGroup(g.to)}
+          />
+        ))}
       </nav>
 
       <BottomUser />
     </aside>
-  );
-};
-
-// ── 分组标题（UPPERCASE 11px） ───────────────────────────
-const SectionLabel = ({ i18nKey, fallback }: { i18nKey: string; fallback: string }) => {
-  const { t } = useTranslation();
-  return (
-    <div className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-stone-400">
-      {t(i18nKey, fallback)}
-    </div>
   );
 };
 
@@ -434,23 +436,17 @@ const CollapsedSidebar = ({
   pathname,
   onToggle,
   visibleTop,
-  visibleAi,
-  visibleAccess,
-  visibleSystem,
+  visibleGroups,
 }: {
   pathname: string;
   onToggle: () => void;
   visibleTop: NavLeaf[];
-  visibleAi: NavGroup | null;
-  visibleAccess: NavGroup | null;
-  visibleSystem: NavLeaf[];
+  visibleGroups: NavGroup[];
 }) => {
   const { t } = useTranslation();
   const allItems: NavLeaf[] = [
     ...visibleTop,
-    ...(visibleAi ? visibleAi.children : []),
-    ...(visibleAccess ? visibleAccess.children : []),
-    ...visibleSystem,
+    ...visibleGroups.flatMap(g => g.children),
   ];
 
   return (
