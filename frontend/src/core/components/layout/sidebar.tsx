@@ -82,7 +82,6 @@ interface NavGroup {
 // ── 顶部直链（高频）─────────────────────────────────────
 const TOP_ITEMS: NavLeaf[] = [
   { to: '/dashboard', icon: LayoutDashboard, i18nKey: 'menu.dashboard', fallbackTitle: '仪表盘', perm: 'dashboard:read' },
-  { to: '/dashboard/cost', icon: DollarSign, i18nKey: 'menu.cost', fallbackTitle: '成本统计', perm: 'call_logs:read' },
 ];
 
 // ── 1. AI 能力（编排 + 知识 = 造能力）────────────────────
@@ -115,7 +114,7 @@ const ROUTING_GROUP: NavGroup = {
   ],
 };
 
-// ── 3. 观测与评估（看结果 / 调质量）────────────────────
+// ── 3. 观测与评估（看结果 / 调质量 / 成本）─────────────
 const OBSERVABILITY_GROUP: NavGroup = {
   to: '/traces',
   icon: Telescope,
@@ -123,6 +122,7 @@ const OBSERVABILITY_GROUP: NavGroup = {
   fallbackTitle: '观测与评估',
   children: [
     { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
+    { to: '/dashboard/cost', icon: DollarSign, i18nKey: 'menu.cost', fallbackTitle: '成本统计', perm: 'call_logs:read' },
     { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: 'Datasets', perm: 'datasets:read' },
     { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
     { to: '/audit-logs', icon: Newspaper, i18nKey: 'menu.audit_logs', fallbackTitle: '审计日志', perm: 'audit_logs:read' },

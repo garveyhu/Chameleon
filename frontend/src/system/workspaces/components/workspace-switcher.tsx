@@ -70,7 +70,7 @@ export const WorkspaceSwitcher: React.FC = () => {
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            className="mx-3 mb-2 mt-1 flex items-center gap-2 rounded-md border border-stone-200/70 bg-white px-2.5 py-1.5 text-left text-[12px] text-stone-800 transition hover:border-amber-300 hover:bg-amber-50/40"
+            className="mx-3 mb-2 mt-1 flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] text-stone-700 transition hover:bg-[var(--color-paper)] hover:shadow-[var(--shadow-soft)]"
           >
             {currentId === null ? (
               <Globe className="h-3.5 w-3.5 flex-shrink-0 text-stone-500" />
