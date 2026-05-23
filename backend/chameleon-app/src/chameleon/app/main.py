@@ -30,6 +30,8 @@ from chameleon.system.auth import auth_router
 from chameleon.system.channels import channels_router
 from chameleon.system.dashboard import dashboard_router
 from chameleon.system.datasets import datasets_router
+from chameleon.system.eval_jobs import eval_jobs_router
+from chameleon.system.eval_jobs import scheduler as eval_scheduler
 from chameleon.system.embed_configs import embed_configs_router
 from chameleon.system.graphs import graphs_router
 from chameleon.system.tools import tools_router
@@ -95,8 +97,12 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await init_registry()
     _log_registry_summary()
     await _trigger_healthchecks()
+
+    # eval_jobs scheduler 起 cron 触发器（DB 里 enabled=True 的 job 全部注册）
+    await eval_scheduler.start()
     yield
 
+    await eval_scheduler.shutdown()
     await redis_infra.aclose()
 
 
@@ -139,6 +145,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(graphs_router)
     app.include_router(tools_router)
     app.include_router(datasets_router)
+    app.include_router(eval_jobs_router)
     app.include_router(search_router)
     app.include_router(schemas_router)
     app.include_router(scores_router)

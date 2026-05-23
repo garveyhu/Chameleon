@@ -2,6 +2,12 @@
 
 All notable changes to Chameleon. Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Eval Jobs schema + APScheduler 触发器（P19.1 PR #30）** — `eval_jobs` / `eval_job_runs` 两张表；`AsyncIOScheduler` lifespan 接入，CRUD 后路由层 `sync_job` 自动注册/卸载 cron；手动 `/trigger` 端点同步复用 `datasets.runner` 跑一次 + 写 `eval_job_run` + 计算 `delta_score`；alert / regression rule 推 PR #31。
+
 ## [0.4.0] — 2026-05-23
 
 **P18 阶段二收官**：可视化工作流 + Tool 协议 + Eval 闭环。Dify 风 GraphEngine MVP + OpenAI function calling 对齐 + LangFuse 风 dataset/run 评估链路 + FastGPT 风 chunking 实时预览。

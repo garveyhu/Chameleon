@@ -8,6 +8,7 @@ dependencies = [
     "chameleon-providers-base",
     "fastapi>=0.115",
     "pydantic[email]>=2.7",
+    "apscheduler>=3.10,<4",
 ]
 
 [tool.uv.sources]
