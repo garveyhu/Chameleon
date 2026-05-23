@@ -22,6 +22,7 @@ dependencies = [
     "pyjwt[crypto]>=2.8",             # infra/jwt 用（access / refresh token）
     "minio>=7.2",                     # infra/object_store 用（KB 文档原文 / 上传产物）
     "docker>=7.1",                    # sandbox/docker.py 用（P20.1 Code Sandbox runtime）
+    "pynacl>=1.5",                    # plugins/signing.py Ed25519 验签（P20.2 Plugin Marketplace）
 ]
 
 [build-system]

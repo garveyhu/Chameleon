@@ -20,6 +20,7 @@ from chameleon.core.models.dataset import (
 )
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
 from chameleon.core.models.plugin import PluginInstance
+from chameleon.core.models.plugin_registry import PluginRegistryEntry
 from chameleon.core.models.workspace import (
     Membership,
     Team,
@@ -92,6 +93,7 @@ __all__ = [
     "EvalJobRun",
     # 插件
     "PluginInstance",
+    "PluginRegistryEntry",
     # 多租户
     "Workspace",
     "Team",

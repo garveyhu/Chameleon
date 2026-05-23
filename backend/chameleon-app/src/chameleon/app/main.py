@@ -39,6 +39,7 @@ from chameleon.system.kbs import kbs_admin_router
 from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
 from chameleon.system.playground import playground_router
+from chameleon.system.marketplace import marketplace_router
 from chameleon.system.plugins import plugins_router
 from chameleon.system.workspaces import workspaces_router
 from chameleon.system.providers import providers_admin_router
@@ -156,6 +157,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(datasets_router)
     app.include_router(eval_jobs_router)
     app.include_router(plugins_router)
+    app.include_router(marketplace_router)
     app.include_router(workspaces_router)
     app.include_router(search_router)
     app.include_router(schemas_router)

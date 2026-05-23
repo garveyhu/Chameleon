@@ -34,6 +34,7 @@ import {
   Puzzle,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   Users2,
   Workflow,
@@ -96,6 +97,7 @@ const AI_GROUP: NavGroup = {
     { to: '/graphs', icon: Workflow, i18nKey: 'menu.graphs', fallbackTitle: '工作流', perm: 'graphs:read' },
     { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
     { to: '/plugins', icon: Puzzle, i18nKey: 'menu.plugins', fallbackTitle: '插件', perm: 'plugins:read' },
+    { to: '/marketplace', icon: ShoppingBag, i18nKey: 'menu.marketplace', fallbackTitle: '插件市场', perm: 'plugins:read' },
     { to: '/embed-configs', icon: Cpu, i18nKey: 'menu.embed_configs', fallbackTitle: '嵌入式', perm: 'embed_configs:read' },
   ],
 };
