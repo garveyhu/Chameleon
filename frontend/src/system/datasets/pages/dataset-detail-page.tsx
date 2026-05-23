@@ -16,7 +16,8 @@ import type { DatasetItemRow } from '@/system/datasets/types/dataset';
 
 export const DatasetDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const dsId = id ? Number(id) : 0;
+  // ⚠️ dsId 保留 string —— snowflake 64-bit 超 MAX_SAFE_INTEGER，Number() 会精度丢失
+  const dsId = id ?? '';
   const qc = useQueryClient();
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -24,13 +25,13 @@ export const DatasetDetailPage = () => {
   const dsQ = useQuery({
     queryKey: ['datasets', dsId],
     queryFn: () => datasetApi.get(dsId),
-    enabled: dsId > 0,
+    enabled: !!dsId,
   });
 
   const itemsQ = useQuery({
     queryKey: ['datasets', dsId, 'items'],
     queryFn: () => datasetApi.listItems(dsId, 200),
-    enabled: dsId > 0,
+    enabled: !!dsId,
   });
 
   const refreshAll = () => {

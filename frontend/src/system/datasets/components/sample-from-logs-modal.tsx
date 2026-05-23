@@ -16,6 +16,7 @@ import {
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import type { EntityId } from '@/core/types/api';
 import type {
   PiiStrategy,
   SampleFromLogsRequest,
@@ -23,7 +24,7 @@ import type {
 } from '@/system/datasets/types/dataset';
 
 interface Props {
-  datasetId: number;
+  datasetId: EntityId;
   onClose: () => void;
   onDone: () => void;
 }

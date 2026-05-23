@@ -20,6 +20,7 @@ import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
   CreateDatasetRequest,
@@ -37,7 +38,7 @@ export const DatasetsPage = () => {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => datasetApi.delete(id),
+    mutationFn: (id: EntityId) => datasetApi.delete(id),
     onSuccess: () => {
       toast.success('已删除');
       qc.invalidateQueries({ queryKey: ['datasets'] });
@@ -52,7 +53,7 @@ export const DatasetsPage = () => {
       tone: 'danger',
     });
     if (!ok) return;
-    deleteMut.mutate(ds.id as number);
+    deleteMut.mutate(ds.id);
   };
 
   return (

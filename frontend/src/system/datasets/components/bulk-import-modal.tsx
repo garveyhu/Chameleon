@@ -20,6 +20,7 @@ import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import type { EntityId } from '@/core/types/api';
 import type {
   BulkImportItem,
   BulkImportResult,
@@ -27,7 +28,7 @@ import type {
 } from '@/system/datasets/types/dataset';
 
 interface Props {
-  datasetId: number;
+  datasetId: EntityId;
   onClose: () => void;
   onDone: () => void;
 }
