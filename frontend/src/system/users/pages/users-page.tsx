@@ -20,6 +20,7 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { StatusBadge } from '@/core/components/ui/status-badge';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
@@ -102,31 +103,55 @@ export const UsersPage = () => {
   });
 
   const columns: DataTableColumn<UserItem>[] = [
-    { key: 'username', header: t('table.username'), render: u => <span className="font-medium text-stone-900">{u.username}</span> },
-    { key: 'display_name', header: t('table.display_name'), render: u => u.display_name || <span className="text-stone-400">—</span> },
-    { key: 'email', header: t('table.email'), render: u => u.email || <span className="text-stone-400">—</span> },
+    {
+      key: 'user',
+      header: t('table.username'),
+      render: u => {
+        const title = u.display_name || u.username;
+        const sub = [u.display_name ? `@${u.username}` : null, u.email]
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-100 text-[11px] font-medium text-stone-600">
+              {title.slice(0, 1).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate text-[13px] font-medium text-stone-900">{title}</div>
+              {sub && <div className="truncate text-[11px] text-stone-400">{sub}</div>}
+            </div>
+          </div>
+        );
+      },
+    },
     {
       key: 'roles',
       header: t('table.roles'),
+      width: 220,
       render: u => (
         <div className="flex flex-wrap gap-1">
-          {u.role_codes.map(r => (
-            <Badge key={r} variant="primary">
-              {r}
-            </Badge>
-          ))}
+          {u.role_codes.length ? (
+            u.role_codes.map(r => (
+              <Badge key={r} variant="primary">
+                {r}
+              </Badge>
+            ))
+          ) : (
+            <span className="text-[11px] text-stone-400">—</span>
+          )}
         </div>
       ),
     },
     {
       key: 'status',
       header: t('common.status'),
-      width: 80,
-      render: u => (
-        <Badge variant={u.status === 'active' ? 'success' : 'danger'}>
-          {u.status === 'active' ? t('common.active') : t('common.disabled')}
-        </Badge>
-      ),
+      width: 96,
+      render: u =>
+        u.status === 'active' ? (
+          <StatusBadge tone="success">{t('common.active')}</StatusBadge>
+        ) : (
+          <StatusBadge tone="neutral">{t('common.disabled')}</StatusBadge>
+        ),
     },
     {
       key: 'last_login_at',
@@ -180,6 +205,7 @@ export const UsersPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={u => (u.status === 'active' ? 'bg-emerald-400' : 'bg-stone-300')}
           emptyText={
             <EmptyState
               icon={<UsersIcon strokeWidth={1.5} />}
