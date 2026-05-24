@@ -43,6 +43,10 @@ export const graphApi = {
   generate: (payload: { description: string; graph_key: string; name: string }) =>
     post<GraphDetail>('/v1/admin/graphs/generate', payload),
 
+  /** A2：基于一轮问答生成建议追问 */
+  suggestFollowups: (payload: { question: string; answer: string }) =>
+    post<string[]>('/v1/admin/graphs/suggest-followups', payload),
+
   update: (id: EntityId, payload: UpdateGraphPayload) =>
     post<GraphDetail>(`/v1/admin/graphs/${id}/update`, payload),
 

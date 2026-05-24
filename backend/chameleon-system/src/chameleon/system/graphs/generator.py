@@ -114,3 +114,32 @@ async def generate_graph_spec(description: str) -> dict[str, Any]:
         ResultCode.InternalError,
         message=f"AI 编排生成失败（校验不过）：{last_err}",
     )
+
+
+async def suggest_followups(question: str, answer: str) -> list[str]:
+    """A2：基于刚才的问答，让 LLM 给 3 个建议追问（每行一个）。失败返空列表。"""
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from chameleon.core.components.llms.factory import resolve_llm
+
+    try:
+        client = await resolve_llm(None)
+        ai = await client.ainvoke(
+            [
+                SystemMessage(
+                    content="基于刚才的问答，给出 3 个用户可能想接着问的简短问题，"
+                    "每行一个，不要编号 / 不要多余文字。"
+                ),
+                HumanMessage(content=f"问题：{question}\n回答：{answer}\n\n3 个追问："),
+            ]
+        )
+        text = str(ai.content if hasattr(ai, "content") else ai)
+        lines = [
+            ln.strip("-•0123456789. 　\t").strip()
+            for ln in text.splitlines()
+            if ln.strip()
+        ]
+        return [ln for ln in lines if ln][:3]
+    except Exception as e:  # noqa: BLE001
+        logger.warning("suggest_followups failed: {}", e)
+        return []

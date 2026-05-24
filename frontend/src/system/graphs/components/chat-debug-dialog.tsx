@@ -37,6 +37,7 @@ interface ChatMessage {
   content: string;
   steps?: StepLine[];
   citations?: Citation[];
+  followups?: string[];
   error?: string;
   streaming?: boolean;
 }
@@ -110,6 +111,8 @@ export const ChatDebugDialog = ({
 
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    let answerAcc = '';
+    let hadError = false;
     try {
       await graphApi.chatStream(
         graphId,
@@ -119,7 +122,10 @@ export const ChatDebugDialog = ({
           onChunk: chunk => {
             if (chunk.type === 'delta') {
               const t = chunk.data.text ?? '';
-              if (t) patchLast(m => ({ ...m, content: m.content + t }));
+              if (t) {
+                answerAcc += t;
+                patchLast(m => ({ ...m, content: m.content + t }));
+              }
             } else if (chunk.type === 'step') {
               const name = String(chunk.data.name ?? '');
               const status = String(chunk.data.status ?? '');
@@ -144,6 +150,7 @@ export const ChatDebugDialog = ({
               }));
             } else if (chunk.type === 'done') {
               const ans = chunk.data.answer;
+              if (!answerAcc && typeof ans === 'string') answerAcc = ans;
               const cv = chunk.data.conversation_vars;
               if (cv && typeof cv === 'object') {
                 convVarsRef.current = cv as Record<string, unknown>;
@@ -154,6 +161,7 @@ export const ChatDebugDialog = ({
                 streaming: false,
               }));
             } else if (chunk.type === 'error') {
+              hadError = true;
               patchLast(m => ({
                 ...m,
                 error: String(chunk.data.message ?? '执行失败'),
@@ -174,6 +182,19 @@ export const ChatDebugDialog = ({
     } finally {
       patchLast(m => ({ ...m, streaming: false }));
       setBusy(false);
+    }
+
+    // A2：成功后异步取建议追问（失败静默）
+    if (!hadError && !ctrl.signal.aborted && answerAcc) {
+      try {
+        const fups = await graphApi.suggestFollowups({
+          question: text,
+          answer: answerAcc,
+        });
+        if (fups.length) patchLast(m => ({ ...m, followups: fups }));
+      } catch {
+        /* 追问失败不影响主流程 */
+      }
     }
   };
 
@@ -224,7 +245,9 @@ export const ChatDebugDialog = ({
                 )}
               </div>
             ) : (
-              messages.map((m, i) => <Bubble key={i} m={m} />)
+              messages.map((m, i) => (
+                <Bubble key={i} m={m} busy={busy} onFollowup={q => void send(q)} />
+              ))
             )}
           </div>
           <div className="flex items-end gap-2 border-t border-stone-200/70 p-3">
@@ -271,7 +294,15 @@ export const ChatDebugDialog = ({
 const STEP_TONE = (status: string) =>
   status === 'success' ? 'success' : status === 'failed' ? 'error' : 'running';
 
-const Bubble = ({ m }: { m: ChatMessage }) => {
+const Bubble = ({
+  m,
+  busy,
+  onFollowup,
+}: {
+  m: ChatMessage;
+  busy?: boolean;
+  onFollowup?: (q: string) => void;
+}) => {
   if (m.role === 'user') {
     return (
       <div className="flex justify-end">
@@ -335,6 +366,21 @@ const Bubble = ({ m }: { m: ChatMessage }) => {
                   {c.snippet}
                 </div>
               </div>
+            ))}
+          </div>
+        )}
+        {m.followups && m.followups.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            {m.followups.map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => onFollowup?.(q)}
+                disabled={busy}
+                className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11px] text-stone-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+              >
+                {q}
+              </button>
             ))}
           </div>
         )}

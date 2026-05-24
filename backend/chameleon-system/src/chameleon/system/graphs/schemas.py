@@ -87,6 +87,13 @@ class GenerateGraphRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
 
 
+class SuggestFollowupsRequest(BaseModel):
+    """A2：基于一轮问答生成建议追问"""
+
+    question: str = Field(max_length=8000)
+    answer: str = Field(max_length=20000)
+
+
 class NodeRunItem(BaseModel):
     """test-run 返的单节点执行摘要"""
 
