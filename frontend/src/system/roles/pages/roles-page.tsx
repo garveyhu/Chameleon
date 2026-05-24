@@ -66,21 +66,52 @@ export const RolesPage = () => {
   });
 
   const columns: DataTableColumn<RoleItem>[] = [
-    { key: 'code', header: t('table.code'), width: 140, render: r => <span className="font-mono text-[11.5px] text-stone-700">{r.code}</span> },
-    { key: 'name', header: t('common.name'), render: r => <span className="font-medium text-stone-900">{r.name}</span> },
-    { key: 'description', header: t('common.description'), render: r => r.description || <span className="text-stone-400">—</span> },
+    {
+      key: 'role',
+      header: t('common.name'),
+      render: r => (
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-500">
+            {r.is_system ? (
+              <ShieldCheck className="h-3.5 w-3.5" />
+            ) : (
+              <Shield className="h-3.5 w-3.5" />
+            )}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium text-stone-900">{r.name}</div>
+            <div className="truncate font-mono text-[11px] text-stone-400">{r.code}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'description',
+      header: t('common.description'),
+      render: r =>
+        r.description ? (
+          <span className="text-[12px] text-stone-600">{r.description}</span>
+        ) : (
+          <span className="text-stone-400">—</span>
+        ),
+    },
     {
       key: 'is_system',
       header: t('common.type'),
       width: 90,
-      render: r => r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
+      render: r =>
+        r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
     },
     {
       key: 'perms',
       header: t('table.perm_count'),
-      width: 80,
+      width: 110,
       align: 'right',
-      render: r => <span className="tnum font-mono text-[11.5px]">{r.permission_codes.length}</span>,
+      render: r => (
+        <span className="inline-flex items-center rounded-md bg-stone-100 px-2 py-0.5 font-mono text-[11px] text-stone-600">
+          {r.permission_codes.length} 项
+        </span>
+      ),
     },
     {
       key: 'actions',
@@ -127,6 +158,7 @@ export const RolesPage = () => {
           rows={listQ.data || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={r => (r.is_system ? 'bg-sky-400' : 'bg-stone-300')}
           emptyText={
             <EmptyState
               icon={<Shield strokeWidth={1.5} />}
