@@ -21,7 +21,6 @@ from loguru import logger
 
 from chameleon.api.knowledge.chunkers.base import ChunkPayload
 
-
 _HTTP_METHODS = ("get", "post", "put", "patch", "delete", "head", "options")
 
 

@@ -6,7 +6,6 @@ import pytest
 
 from chameleon.api.knowledge import chunker
 
-
 # ── fixed ─────────────────────────────────────────────────
 
 
@@ -104,6 +103,34 @@ def test_token_overlap_validation_disables_when_invalid():
         text, {"mode": "token", "chunk_size": 10, "overlap": 0}
     )
     assert len(out) == len(out_ref)
+
+
+# ── sentence_token mode (B4) ──────────────────────────────
+
+
+def test_sentence_token_mode_packs_sentences():
+    text = "".join(f"这是第{i}个用于测试的句子。" for i in range(20))
+    out = chunker.split(
+        text, {"mode": "sentence_token", "chunk_size": 30, "overlap": 0}
+    )
+    assert len(out) > 1
+    assert all(c.strip() for c in out)
+
+
+def test_sentence_token_mode_keeps_sentences_intact():
+    text = "Alpha beta. Gamma delta. Epsilon zeta. Eta theta."
+    out = chunker.split(
+        text, {"mode": "sentence_token", "chunk_size": 6, "overlap": 0}
+    )
+    for c in out:
+        assert c.rstrip().endswith(".")
+
+
+def test_sentence_token_short_text_single_chunk():
+    out = chunker.split(
+        "one short sentence.", {"mode": "sentence_token", "chunk_size": 200}
+    )
+    assert len(out) == 1
 
 
 # ── error path ───────────────────────────────────────────

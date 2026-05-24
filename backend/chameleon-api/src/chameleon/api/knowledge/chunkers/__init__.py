@@ -15,7 +15,6 @@ from chameleon.api.knowledge.chunkers.faq import chunk_faq
 from chameleon.api.knowledge.chunkers.generic import chunk_generic
 from chameleon.api.knowledge.chunkers.wiki import chunk_wiki
 
-
 _REGISTRY = {
     "generic": chunk_generic,
     "faq": chunk_faq,

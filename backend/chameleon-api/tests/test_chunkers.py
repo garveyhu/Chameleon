@@ -12,7 +12,6 @@ from chameleon.api.knowledge.chunkers import (
     get_chunker,
 )
 
-
 # ── dispatch ───────────────────────────────────────────
 
 
@@ -102,6 +101,31 @@ def test_wiki_long_section_subsplit():
     # 所有 part 共享同一 heading_path
     paths = [p.meta["heading_path"] for p in out]
     assert all(p == paths[0] for p in paths)
+
+
+def test_wiki_merge_small_off_by_default():
+    """默认不合并：3 个小 section → 3 个 chunk（保持 heading→chunk 契约）"""
+    text = "# A\nx\n\n## B\ny\n\n## C\nz"
+    out = chunk_wiki(text)
+    assert len(out) == 3
+
+
+def test_wiki_merge_small_collapses_fragments():
+    """merge_small=true：碎片小 section 并入相邻，chunk 数下降"""
+    text = "# A\nx\n\n## B\ny\n\n## C\nz"
+    out = chunk_wiki(text, {"merge_small": True, "min_chunk_tokens": 50})
+    assert len(out) < 3
+    # 合并后内容覆盖原各 section
+    joined = " ".join(p.content for p in out)
+    assert "x" in joined and "y" in joined and "z" in joined
+
+
+def test_wiki_merge_small_keeps_large_sections_separate():
+    """足够大的 section 不被并入"""
+    big = "这是一段足够长的正文。" * 30
+    text = f"# 章节一\n{big}\n\n# 章节二\n{big}"
+    out = chunk_wiki(text, {"merge_small": True, "min_chunk_tokens": 20})
+    assert len(out) == 2
 
 
 # ── API ───────────────────────────────────────────────
