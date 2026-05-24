@@ -17,12 +17,19 @@ Pipeline（6 步）：
 - ⛔ quarantined chunks 不应出现在结果（半软删保留）
 """
 
+from chameleon.core.retrieval.expander import (
+    CompleteFn,
+    expand_queries,
+    hyde_query,
+)
 from chameleon.core.retrieval.hybrid import (
-    HybridConfig,
     Hit,
+    HybridConfig,
     HybridPipeline,
+    QueryExpander,
     dedupe_by_chunk_id,
     fuse_rrf,
+    fuse_rrf_many,
     metadata_filter,
 )
 from chameleon.core.retrieval.reranker import (
@@ -44,16 +51,21 @@ from chameleon.core.retrieval.vlm_caption import (
 __all__ = [
     "CaptionFn",
     "CaptionResult",
+    "CompleteFn",
     "HybridConfig",
     "Hit",
     "HybridPipeline",
     "JudgeFn",
+    "QueryExpander",
     "Reranker",
     "VLMClient",
     "dedupe_by_chunk_id",
+    "expand_queries",
     "fuse_rrf",
+    "fuse_rrf_many",
     "generate_caption",
     "generate_captions_batch",
+    "hyde_query",
     "make_dedupe_reranker",
     "make_dedupe_then_judge_reranker",
     "make_llm_judge_reranker",
