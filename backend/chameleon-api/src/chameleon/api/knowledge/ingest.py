@@ -21,9 +21,9 @@ from sqlalchemy import select
 from chameleon.api.knowledge import chunker, parsers, storage
 from chameleon.api.task import service as task_service
 from chameleon.core.config import inventory
-from chameleon.core.embedding import get_embedding_client
+from chameleon.core.embedding import ImageEmbedder, get_embedding_client
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Document, KnowledgeBase
+from chameleon.core.models import Chunk, Document, KnowledgeBase
 from chameleon.core.vector import ChunkPayload, get_store
 
 # 模块级 semaphore，按 kb_ingest_concurrency() lazy init
@@ -102,6 +102,20 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
         meta = doc.meta or {}
         embedding_model = kb.embedding_model
         doc_title = doc.title
+        doc_kind = doc.kind
+
+    # 2.5 图片文档：走 caption → 文本向量 流程（B5 多模态）
+    if doc_kind == "image" or (mime_type or "").startswith("image/"):
+        await _ingest_image(
+            task_id=task_id,
+            document_id=document_id,
+            kb_id=kb_id,
+            embedding_model=embedding_model,
+            source_type=source_type,
+            source_uri=source_uri,
+            doc_title=doc_title,
+        )
+        return
 
     # 3. fetch + parse
     parsed = await _fetch_and_parse(
@@ -181,6 +195,75 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
         len(payloads),
         total_tokens,
     )
+
+
+# ── 图片 ingest（B5 多模态） ─────────────────────────────
+
+
+async def _ingest_image(
+    *,
+    task_id: int,
+    document_id: int,
+    kb_id: int,
+    embedding_model: str,
+    source_type: str,
+    source_uri: str | None,
+    doc_title: str,
+) -> None:
+    """图片文档：caption → 文本 embedding → 落 kind='image' chunk（直插 ORM）
+
+    image_url：upload 走 presigned URL（供 VLM caption + 作 source_url 引用）；
+    url 类型直接用 source_uri。无 VLM（cases.vision 未配）时 ImageEmbedder
+    fallback 文件名 caption，图片仍可被检索。
+    """
+    if not source_uri:
+        raise ValueError("image document requires source_uri")
+    image_url = (
+        source_uri
+        if source_type == "url"
+        else storage.presigned_url(source_uri)
+    )
+
+    embedder = ImageEmbedder(embedding_model=embedding_model)
+    result = await embedder.embed_image(image_url, fallback_text=doc_title)
+    logger.info(
+        "image ingest captioned | task={} | doc={} | source={}",
+        task_id,
+        document_id,
+        result.source,
+    )
+
+    # 直插 image chunk（store.upsert 不携带 kind/source_url）；先清旧 chunks
+    store = get_store()
+    await store.delete(kb_id=kb_id, doc_id=document_id)
+    async with AsyncSessionLocal() as session:
+        session.add(
+            Chunk(
+                kb_id=kb_id,
+                doc_id=document_id,
+                seq=1,
+                content=result.caption,
+                embedding=result.vector,
+                token_count=_approx_tokens(result.caption),
+                kind="image",
+                source_url=image_url,
+                meta={"caption_source": result.source},
+            )
+        )
+        d = (
+            await session.execute(select(Document).where(Document.id == document_id))
+        ).scalar_one()
+        d.status = "ready"
+        d.status_message = None
+        d.kind = "image"
+        d.chunk_count = 1
+        d.token_count = _approx_tokens(result.caption)
+        d.updated_at = datetime.now(timezone.utc)
+        await task_service.mark_success(
+            session, task_id, result={"chunks": 1, "kind": "image"}
+        )
+        await session.commit()
+    logger.info("image ingest done | task={} | doc={}", task_id, document_id)
 
 
 # ── helpers ─────────────────────────────────────────────

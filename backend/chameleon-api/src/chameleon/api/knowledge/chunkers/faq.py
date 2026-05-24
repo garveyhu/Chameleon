@@ -28,7 +28,6 @@ from loguru import logger
 
 from chameleon.api.knowledge.chunkers.base import ChunkPayload
 
-
 _DEFAULT_Q_PATTERN = r"^## *Q[:：]"
 
 

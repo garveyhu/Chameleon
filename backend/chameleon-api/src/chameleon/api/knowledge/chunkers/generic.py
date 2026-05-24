@@ -1,4 +1,8 @@
-"""generic collection chunker —— 沿用现有 chunker.split"""
+"""generic collection chunker —— 沿用现有 chunker.split
+
+支持 chunker.split 的全部 mode；B4 起含 token-aware 的 sentence_token
+（句子边界 + token 预算打包），KB 配置 {"mode": "sentence_token", ...} 即启用。
+"""
 
 from __future__ import annotations
 

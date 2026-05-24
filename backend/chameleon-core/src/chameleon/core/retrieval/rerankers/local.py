@@ -1,11 +1,11 @@
-"""Reranker + 内容去重 —— P22.4 PR #80
+"""本地 reranker（无外部模型）—— P22.4 PR #80（B3 迁入 rerankers 包）
 
-提供 3 类 reranker callable，给 HybridPipeline.reranker 用：
+3 类纯本地 reranker，给 HybridPipeline.reranker 用：
 
-1. PassThroughReranker —— 无操作；用于禁用 rerank
-2. CosineDedupeReranker —— 用 query embedding 与 hit content embedding 算余弦再排
-   + 去掉与已选 hit 内容高度相似（>= dedupe_threshold）的后续 hit
-3. LLMJudgeReranker —— 调 judge_fn(query, [contents]) 返排序后的 indices
+1. pass_through                —— 无操作；用于禁用 rerank
+2. make_dedupe_reranker        —— 字符级 Jaccard 去重近义 chunk
+3. make_llm_judge_reranker     —— 调 judge_fn(query, [contents]) 重排
+4. make_dedupe_then_judge_reranker —— 先去重再 judge
 
 这些 reranker 都遵循签名：
     async def reranker(query: str, hits: list[Hit]) -> list[Hit]
@@ -14,18 +14,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Awaitable, Callable
-from typing import Protocol
 
 from chameleon.core.retrieval.hybrid import Hit
-
-
-class Reranker(Protocol):
-    async def __call__(
-        self, query: str, hits: list[Hit]
-    ) -> list[Hit]:
-        ...
-
+from chameleon.core.retrieval.rerankers.base import JudgeFn, Reranker
 
 # ── 1. PassThrough ─────────────────────────────────────
 
@@ -54,9 +45,7 @@ def _jaccard(a: set[str], b: set[str]) -> float:
     return len(inter) / len(union) if union else 0.0
 
 
-def make_dedupe_reranker(
-    *, dedupe_threshold: float = 0.85
-) -> Reranker:
+def make_dedupe_reranker(*, dedupe_threshold: float = 0.85) -> Reranker:
     """按内容 Jaccard 相似度合并近义 chunks
 
     保留 score 最高的；删除与已选 hit 相似度 >= threshold 的后续 hit。
@@ -69,9 +58,7 @@ def make_dedupe_reranker(
         token_sets: list[set[str]] = []
         for h in hits:
             ts = _tokens(h.content)
-            if any(
-                _jaccard(ts, ks) >= dedupe_threshold for ks in token_sets
-            ):
+            if any(_jaccard(ts, ks) >= dedupe_threshold for ks in token_sets):
                 continue
             kept.append(h)
             token_sets.append(ts)
@@ -81,10 +68,6 @@ def make_dedupe_reranker(
 
 
 # ── 3. LLM judge reranker（接 judge_fn callable） ──────
-
-
-#: judge_fn 签名：query + list[content] → list[相对得分（0-1）]
-JudgeFn = Callable[[str, list[str]], Awaitable[list[float]]]
 
 
 def make_llm_judge_reranker(
@@ -110,7 +93,7 @@ def make_llm_judge_reranker(
         for h, s in zip(hits, scores, strict=False):
             h.score = (h.score + float(s)) / 2.0
         ranked = sorted(hits, key=lambda h: h.score, reverse=True)
-        return ranked[: keep_top_k] if keep_top_k else ranked
+        return ranked[:keep_top_k] if keep_top_k else ranked
 
     return reranker
 
@@ -126,9 +109,7 @@ def make_dedupe_then_judge_reranker(
 ) -> Reranker:
     """先 Jaccard 去重，再 LLM judge"""
     dedupe = make_dedupe_reranker(dedupe_threshold=dedupe_threshold)
-    judge = make_llm_judge_reranker(
-        judge_fn=judge_fn, keep_top_k=keep_top_k
-    )
+    judge = make_llm_judge_reranker(judge_fn=judge_fn, keep_top_k=keep_top_k)
 
     async def reranker(query: str, hits: list[Hit]) -> list[Hit]:
         deduped = await dedupe(query, hits)

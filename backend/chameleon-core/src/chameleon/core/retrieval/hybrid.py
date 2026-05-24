@@ -62,6 +62,9 @@ class HybridConfig:
     drop_quarantined: bool = True
     #: 最小 score 阈值（最后一层 cutoff）
     min_score: float = 0.0
+    #: B1 multi-query：注入 query_expander 后扩展出的变体数上限（含原 query）。
+    #: 0/1 = 关闭 multi-query（仅原 query）。
+    multi_query_count: int = 0
 
 
 # ── 单步算子 ────────────────────────────────────────────
@@ -79,28 +82,24 @@ def dedupe_by_chunk_id(hits: Iterable[Hit]) -> list[Hit]:
     return out
 
 
-def fuse_rrf(
-    vec_hits: list[Hit],
-    kw_hits: list[Hit],
+def fuse_rrf_many(
+    ranked_lists: Iterable[list[Hit]],
     *,
     k: int = 60,
 ) -> list[Hit]:
-    """Reciprocal Rank Fusion：score = sum(1/(k + rank+1))
+    """多路 Reciprocal Rank Fusion：score = Σ 1/(k + rank+1)
 
-    返按 RRF score 降序排列的合并列表（去重 by chunk_id）。
+    每个入参列表视为一路有序召回（向量 / BM25 / 各 query 变体…）。
+    返按 RRF score 降序排列的合并列表（去重 by chunk_id，score 归一到 [0,1]）。
     """
     score_by_id: dict[int, float] = {}
     obj_by_id: dict[int, Hit] = {}
 
-    for rank, h in enumerate(vec_hits):
-        cid = h.chunk_id
-        score_by_id[cid] = score_by_id.get(cid, 0.0) + 1.0 / (k + rank + 1)
-        obj_by_id.setdefault(cid, h)
-
-    for rank, h in enumerate(kw_hits):
-        cid = h.chunk_id
-        score_by_id[cid] = score_by_id.get(cid, 0.0) + 1.0 / (k + rank + 1)
-        obj_by_id.setdefault(cid, h)
+    for hits in ranked_lists:
+        for rank, h in enumerate(hits):
+            cid = h.chunk_id
+            score_by_id[cid] = score_by_id.get(cid, 0.0) + 1.0 / (k + rank + 1)
+            obj_by_id.setdefault(cid, h)
 
     if not score_by_id:
         return []
@@ -124,6 +123,16 @@ def fuse_rrf(
         )
         for cid in sorted_ids
     ]
+
+
+def fuse_rrf(
+    vec_hits: list[Hit],
+    kw_hits: list[Hit],
+    *,
+    k: int = 60,
+) -> list[Hit]:
+    """双路 RRF（向量 + BM25）—— fuse_rrf_many 的两路特例"""
+    return fuse_rrf_many([vec_hits, kw_hits], k=k)
 
 
 def metadata_filter(hits: list[Hit], config: HybridConfig) -> list[Hit]:
@@ -151,6 +160,8 @@ def metadata_filter(hits: list[Hit], config: HybridConfig) -> list[Hit]:
 
 #: 召回 callable 签名：query + top_k → list[Hit]
 RecallFn = Callable[[str, int], Awaitable[list[Hit]]]
+#: query 扩展 callable 签名：原 query → query 变体列表（含原 query）
+QueryExpander = Callable[[str], Awaitable[list[str]]]
 
 
 class HybridPipeline:
@@ -166,6 +177,10 @@ class HybridPipeline:
 
     可选注入 reranker_fn（PR #80）：
         pipeline = HybridPipeline(..., reranker=my_rerank_fn)
+
+    可选注入 query_expander（PR B1 multi-query）：
+        pipeline = HybridPipeline(..., query_expander=my_expander)
+        # config.multi_query_count > 1 时，对每个变体各跑两路召回再 RRF 融合
     """
 
     def __init__(
@@ -175,28 +190,45 @@ class HybridPipeline:
         keyword_recall: RecallFn,
         config: HybridConfig | None = None,
         reranker: Callable[[str, list[Hit]], Awaitable[list[Hit]]] | None = None,
+        query_expander: QueryExpander | None = None,
     ) -> None:
         self.vector_recall = vector_recall
         self.keyword_recall = keyword_recall
         self.config = config or HybridConfig()
         self.reranker = reranker
+        self.query_expander = query_expander
+
+    async def _resolve_queries(self, query: str) -> list[str]:
+        """multi-query 开启且注入了 expander → 扩展；否则单 query"""
+        if self.query_expander is None or self.config.multi_query_count <= 1:
+            return [query]
+        try:
+            variants = await self.query_expander(query)
+        except Exception:  # noqa: BLE001 —— expander 失败不拖垮检索
+            return [query]
+        # 截断到 multi_query_count；保证至少含原 query
+        capped = (variants or [query])[: self.config.multi_query_count]
+        return capped or [query]
 
     async def run(self, query: str) -> list[Hit]:
         c = self.config
         recall_n = c.top_k * c.recall_multiplier
 
-        # 1) vector 召回
-        vec_hits = await self.vector_recall(query, recall_n)
-        # 2) BM25 召回
-        kw_hits = await self.keyword_recall(query, recall_n)
-        # 3) dedupe（各路内部）
-        vec_hits = dedupe_by_chunk_id(vec_hits)
-        kw_hits = dedupe_by_chunk_id(kw_hits)
-        # 4) RRF 融合
-        fused = fuse_rrf(vec_hits, kw_hits, k=c.rrf_k)
+        queries = await self._resolve_queries(query)
+
+        # 1-3) 每个 query 变体各跑 vector + BM25 召回 + 各路内部 dedupe
+        ranked_lists: list[list[Hit]] = []
+        for q in queries:
+            vec_hits = dedupe_by_chunk_id(await self.vector_recall(q, recall_n))
+            kw_hits = dedupe_by_chunk_id(await self.keyword_recall(q, recall_n))
+            ranked_lists.append(vec_hits)
+            ranked_lists.append(kw_hits)
+
+        # 4) 多路 RRF 融合（向量 / BM25 × 各变体）
+        fused = fuse_rrf_many(ranked_lists, k=c.rrf_k)
         # 5) metadata filter
         filtered = metadata_filter(fused, c)
-        # 6) optional reranker + top_k cut
+        # 6) optional reranker + top_k cut（用原 query 做 rerank，语义最准）
         if self.reranker is not None and filtered:
             filtered = await self.reranker(query, filtered)
         return filtered[: c.top_k]
