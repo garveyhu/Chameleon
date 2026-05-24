@@ -1,7 +1,7 @@
 /** providers 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cloud, Plus, Trash2 } from 'lucide-react';
+import { Cloud, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/core/lib/toast';
@@ -34,6 +34,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
+import { ProviderConfigSheet } from '@/system/providers/components/provider-config-sheet';
 import { providerApi } from '@/system/providers/services/provider';
 import type { ProviderItem } from '@/system/providers/types/provider';
 
@@ -42,6 +43,7 @@ export const ProvidersPage = () => {
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [delProv, setDelProv] = useState<ProviderItem | null>(null);
+  const [editProv, setEditProv] = useState<ProviderItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
 
@@ -106,16 +108,26 @@ export const ProvidersPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 70,
+      width: 110,
       render: p => (
-        <button
-          type="button"
-          title="删除"
-          className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
-          onClick={() => setDelProv(p)}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="配置"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setEditProv(p)}
+          >
+            <Pencil className="h-3.5 w-3.5" /> 配置
+          </button>
+          <button
+            type="button"
+            title="删除"
+            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+            onClick={() => setDelProv(p)}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ),
     },
   ];
@@ -164,6 +176,7 @@ export const ProvidersPage = () => {
         onConfirm={() => delProv && delMut.mutate(delProv.id)}
         onCancel={() => setDelProv(null)}
       />
+      <ProviderConfigSheet provider={editProv} onClose={() => setEditProv(null)} />
     </div>
   );
 };
