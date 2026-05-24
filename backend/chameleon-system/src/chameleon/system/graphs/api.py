@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
+from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.graphs import runner as graph_runner
@@ -99,6 +100,23 @@ async def test_run(
 ) -> Result[TestRunResult]:
     item = await graph_service.test_run(session, graph_id, req)
     return Result.ok(item)
+
+
+@router.post("/{graph_id}/test-run/stream")
+async def test_run_stream(
+    graph_id: int,
+    req: TestRunRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:execute")),
+):
+    """SSE 流式 Test Run（A1）：边执行边推 graph.node.started/finished/failed
+
+    不落 graph_runs（debug 用）；wire 事件见 SSEEventKind 的 GRAPH_* 成员。
+    """
+    return sse_response(
+        graph_service.test_run_stream(session, graph_id, req),
+        log_label="graphs:test-run-stream",
+    )
 
 
 @router.post("/{graph_id}/run", response_model=Result[GraphRunDetail])

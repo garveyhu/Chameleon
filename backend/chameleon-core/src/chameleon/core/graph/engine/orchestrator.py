@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,12 +28,22 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from chameleon.core.graph.context import NodeContext
+from chameleon.core.graph.engine.event_manager import (
+    GraphEventManager,
+    GraphNodeEventPayload,
+    event_graph_finished,
+    event_graph_node_failed,
+    event_graph_node_finished,
+    event_graph_node_started,
+    event_graph_started,
+)
 from chameleon.core.graph.engine.ready_queue import ReadyQueue
 from chameleon.core.graph.engine.state import GraphExecState
 from chameleon.core.graph.engine.worker_pool import WorkerPool
 from chameleon.core.graph.node_base import Node, NodeStatus
 from chameleon.core.graph.registry import default_factory as _registry_default_factory
-from chameleon.core.graph.results import NodeRunResult, RunResult, duration_ms as _ms
+from chameleon.core.graph.results import NodeRunResult, RunResult
+from chameleon.core.graph.results import duration_ms as _ms
 from chameleon.core.graph.types import GraphSpec, NodeSpec
 
 
@@ -70,8 +80,19 @@ class Orchestrator:
         # 失败标记：任一节点失败后置 True，主循环停止派发新 task
         self._failed_error: dict[str, Any] | None = None
 
-    async def run(self, *, input: Any, ctx: NodeContext) -> RunResult:
-        """跑整张图，返回 RunResult"""
+    async def run(
+        self,
+        *,
+        input: Any,
+        ctx: NodeContext,
+        events: GraphEventManager | None = None,
+    ) -> RunResult:
+        """跑整张图，返回 RunResult
+
+        events 非空时：节点 started/finished/failed + 整图 started/finished 事件
+        推到 GraphEventManager（供 SSE 流式消费）；events 为 None 时零开销，
+        行为与原 batch 模式完全一致。结束时（含异常）保证 events.close()。
+        """
         started_at = datetime.now(timezone.utc)
         deadline = None
         if self.config.total_timeout_seconds:
@@ -87,66 +108,118 @@ class Orchestrator:
         # 把 graph input 注入到 start 节点（通过 VariablePool 的"虚拟 parent"）
         await state.variable_pool.set_global("__graph_input__", input)
 
-        rq = ReadyQueue(self.spec)
-        pool = WorkerPool(concurrency=self.config.concurrency)
-
-        last_output: Any = None
-
-        # 主循环：拉 ready node → submit
-        while not rq.is_drained() and self._failed_error is None:
-            if state.is_deadline_exceeded():
-                self._failed_error = {
-                    "type": "GraphTimeoutError",
-                    "message": f"total_timeout_seconds={self.config.total_timeout_seconds} 超时",
-                }
-                break
-
-            # 拉 ready node；超时 200ms 后检查 in_flight / failed 状态
-            try:
-                node_id = await asyncio.wait_for(rq.get(), timeout=0.2)
-            except asyncio.TimeoutError:
-                # 没有 ready node，但可能有 in-flight 在跑 → 继续 loop
-                if pool.in_flight == 0:
-                    # 既无 ready 又无 in-flight → 图已 drained（防御性 break）
-                    break
-                continue
-
-            await pool.submit(self._run_node(node_id, ctx, rq, state))
-
-        # 等所有 in-flight 完成
-        await pool.drain()
-
-        # 收尾：聚合结果
-        node_runs = await state.runs_snapshot()
-        # 找 end 节点的 output（最后聚合）
-        for n in self.spec.nodes:
-            if n.type == "end":
-                end_out = await state.variable_pool.get_output(n.id)
-                if end_out is not None:
-                    last_output = end_out
-                    break
-
-        finished_at = datetime.now(timezone.utc)
-        if self._failed_error is not None:
-            return RunResult(
-                status=NodeStatus.FAILED,
-                input=input,
-                output=None,
-                error=self._failed_error,
-                started_at=started_at,
-                finished_at=finished_at,
-                duration_ms=_ms(started_at, finished_at),
-                node_runs=node_runs,
+        if events is not None:
+            await events.emit(
+                event_graph_started(
+                    graph_id=ctx.graph_id, run_id=ctx.request_id
+                )
             )
-        return RunResult(
-            status=NodeStatus.SUCCESS,
-            input=input,
-            output=last_output,
-            started_at=started_at,
-            finished_at=finished_at,
-            duration_ms=_ms(started_at, finished_at),
-            node_runs=node_runs,
-        )
+
+        result: RunResult | None = None
+        try:
+            rq = ReadyQueue(self.spec)
+            pool = WorkerPool(concurrency=self.config.concurrency)
+
+            last_output: Any = None
+
+            # 主循环：拉 ready node → submit
+            while not rq.is_drained() and self._failed_error is None:
+                if state.is_deadline_exceeded():
+                    self._failed_error = {
+                        "type": "GraphTimeoutError",
+                        "message": f"total_timeout_seconds={self.config.total_timeout_seconds} 超时",
+                    }
+                    break
+
+                # 拉 ready node；超时 200ms 后检查 in_flight / failed 状态
+                try:
+                    node_id = await asyncio.wait_for(rq.get(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    # 没有 ready node，但可能有 in-flight 在跑 → 继续 loop
+                    if pool.in_flight == 0:
+                        # 既无 ready 又无 in-flight → 图已 drained（防御性 break）
+                        break
+                    continue
+
+                await pool.submit(self._run_node(node_id, ctx, rq, state, events))
+
+            # 等所有 in-flight 完成
+            await pool.drain()
+
+            # 收尾：聚合结果
+            node_runs = await state.runs_snapshot()
+            # 找 end 节点的 output（最后聚合）
+            for n in self.spec.nodes:
+                if n.type == "end":
+                    end_out = await state.variable_pool.get_output(n.id)
+                    if end_out is not None:
+                        last_output = end_out
+                        break
+
+            finished_at = datetime.now(timezone.utc)
+            if self._failed_error is not None:
+                result = RunResult(
+                    status=NodeStatus.FAILED,
+                    input=input,
+                    output=None,
+                    error=self._failed_error,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=_ms(started_at, finished_at),
+                    node_runs=node_runs,
+                )
+            else:
+                result = RunResult(
+                    status=NodeStatus.SUCCESS,
+                    input=input,
+                    output=last_output,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=_ms(started_at, finished_at),
+                    node_runs=node_runs,
+                )
+            return result
+        finally:
+            if events is not None:
+                if result is not None:
+                    await events.emit(
+                        event_graph_finished(
+                            status=result.status.value,
+                            duration_ms=result.duration_ms,
+                            node_count=len(result.node_runs),
+                            output=result.output,
+                            error=result.error,
+                        )
+                    )
+                await events.close()
+
+    async def run_streaming(
+        self, *, input: Any, ctx: NodeContext
+    ) -> AsyncIterator[dict[str, Any]]:
+        """流式跑整张图：边执行边 yield SSE 事件 dict
+
+        producer（run()）在独立 task 里跑，把事件推到 GraphEventManager；
+        本协程顺序消费队列并 yield。run() 的 finally 保证 close()，故
+        em.stream() 一定能正常结束。run task 的最终结果不在此返回 —— 整图
+        摘要随 graph.finished 事件透出（持久化由 GraphRunner service 负责）。
+
+        用法（service 层）：
+            orch = Orchestrator(spec)
+            return sse_response(orch.run_streaming(input=..., ctx=...))
+        """
+        em = GraphEventManager()
+        run_task = asyncio.create_task(self.run(input=input, ctx=ctx, events=em))
+        try:
+            async for chunk in em.stream():
+                yield chunk
+        finally:
+            # run() 内部 finally 已 close em；这里只确保 task 收尾、不吞异常日志
+            try:
+                await run_task
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "graph run_streaming: run task 异常 | run={}", ctx.request_id
+                )
 
     async def _run_node(
         self,
@@ -154,11 +227,23 @@ class Orchestrator:
         ctx: NodeContext,
         rq: ReadyQueue,
         state: GraphExecState,
+        events: GraphEventManager | None = None,
     ) -> None:
         """单节点 worker：拿 input → execute → 写 output → mark_done"""
         node = self._nodes[node_id]
         await state.set_status(node_id, NodeStatus.RUNNING)
         node_started = datetime.now(timezone.utc)
+        if events is not None:
+            await events.emit(
+                event_graph_node_started(
+                    GraphNodeEventPayload(
+                        node_id=node_id,
+                        node_type=node.type,
+                        name=node.name,
+                        status=NodeStatus.RUNNING.value,
+                    )
+                )
+            )
 
         # 1) 拿 input：单 parent 取它的 output；无 parent (start) 取 graph_input
         input_val = await self._resolve_input(node_id, state)
@@ -192,6 +277,19 @@ class Orchestrator:
             await rq.mark_done(node_id, success=False)
             if self._failed_error is None:
                 self._failed_error = err
+            if events is not None:
+                await events.emit(
+                    event_graph_node_failed(
+                        GraphNodeEventPayload(
+                            node_id=node_id,
+                            node_type=node.type,
+                            name=node.name,
+                            status=NodeStatus.FAILED.value,
+                            duration_ms=_ms(node_started, node_finished),
+                            error=err,
+                        )
+                    )
+                )
             logger.exception(
                 "graph engine node failed | run={} | node={}",
                 ctx.request_id,
@@ -215,6 +313,19 @@ class Orchestrator:
                 duration_ms=_ms(node_started, node_finished),
             )
         )
+        if events is not None:
+            await events.emit(
+                event_graph_node_finished(
+                    GraphNodeEventPayload(
+                        node_id=node_id,
+                        node_type=node.type,
+                        name=node.name,
+                        status=NodeStatus.SUCCESS.value,
+                        duration_ms=_ms(node_started, node_finished),
+                        output=output,
+                    )
+                )
+            )
         # 4) if_else 分支决议
         selected = node.selected_branch(output)
         await rq.mark_done(node_id, selected_handle=selected, success=True)

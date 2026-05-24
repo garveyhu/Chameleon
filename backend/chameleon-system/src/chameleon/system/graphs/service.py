@@ -6,7 +6,9 @@ test-run 不落 graph_runs / graph_node_runs（仅 debug 用）；
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import select
@@ -173,6 +175,30 @@ async def test_run(
             for r in result.node_runs
         ],
     )
+
+
+async def test_run_stream(
+    session: AsyncSession, graph_id: int, req: TestRunRequest
+) -> AsyncIterator[dict[str, Any]]:
+    """流式跑一次（SSE）—— 不落 graph_runs；边执行边发 graph.node.* 事件
+
+    与 test_run 同样不持久化（debug 用）；区别是返回 SSE 事件流（A1）。
+    spec 加载 + 校验在首次迭代时用 route session 完成（FastAPI yield 依赖在
+    StreamingResponse 发完前不关 session）；节点内部各自开独立 session。
+    """
+    row = await _load(session, graph_id)
+    spec = _validate_spec(row.spec)
+
+    ctx = NodeContext(
+        request_id=f"testrun-{row.id}-{datetime.now(timezone.utc).timestamp():.0f}",
+        graph_id=row.id,
+        graph_run_id=0,  # 0 = 未持久化
+        depth=0,
+        started_at=datetime.now(timezone.utc),
+    )
+    orch = Orchestrator(spec)
+    async for chunk in orch.run_streaming(input=req.input, ctx=ctx):
+        yield chunk
 
 
 # ── helpers ───────────────────────────────────────────────
