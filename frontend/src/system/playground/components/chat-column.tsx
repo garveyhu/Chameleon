@@ -4,7 +4,7 @@
  */
 
 import { Download, Send, Square, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { MessageActions } from '@/core/components/chat';
 import type {
@@ -12,6 +12,7 @@ import type {
   MessageActionHandlers,
   TranslateLanguage,
 } from '@/core/components/chat';
+import { VirtualList } from '@/core/components/common/virtual-list';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
@@ -84,13 +85,6 @@ export const ChatColumn = ({ columnId, index, onRemove, className }: Props) => {
     );
   }, [params, messages]);
 
-  // 自动滚到底
-  const scrollRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [messages]);
-
   if (!params) return null;
 
   return (
@@ -152,17 +146,21 @@ export const ChatColumn = ({ columnId, index, onRemove, className }: Props) => {
         />
       </div>
 
-      <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3">
-        {messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[12px] text-stone-400">
-            输入消息开始对话
-          </div>
-        ) : (
-          messages.map(m => (
-            <MessageBubble key={m.id} columnId={columnId} msg={m} />
-          ))
-        )}
-      </div>
+      {messages.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center p-3 text-[12px] text-stone-400">
+          输入消息开始对话
+        </div>
+      ) : (
+        <VirtualList
+          items={messages}
+          getKey={m => m.id}
+          estimateSize={88}
+          stickToBottom
+          className="flex-1 px-3 pt-3"
+          itemClassName="pb-2"
+          renderItem={m => <MessageBubble columnId={columnId} msg={m} />}
+        />
+      )}
 
       <footer className="border-t border-stone-200/70 p-2">
         <Textarea

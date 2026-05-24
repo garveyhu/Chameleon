@@ -10,6 +10,7 @@ import type {
   ChatActionMessage,
   ChatActionRole,
 } from '@/core/components/chat';
+import { VirtualList } from '@/core/components/common/virtual-list';
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
@@ -145,39 +146,43 @@ export const ConversationDetailPage = () => {
       </header>
 
       <SectionCard className="!p-0">
-        <div className="divide-y divide-stone-100">
-          {visible.map(item => (
-            <MessageRow
-              key={String(item.message.id)}
-              item={item}
-              onSwitchBranch={onSwitchBranch}
-              isEditing={String(editingId) === String(item.message.id)}
-              editText={editText}
-              setEditText={setEditText}
-              startEdit={() => {
-                setEditingId(item.message.id);
-                setEditText(item.message.content);
-              }}
-              cancelEdit={() => setEditingId(null)}
-              onRegenerate={() => regenMut.mutate(item.message.id)}
-              onSubmitEdit={() =>
-                editMut.mutate({ mid: item.message.id, text: editText })
-              }
-              regenPending={regenMut.isPending}
-              editPending={editMut.isPending}
-            />
-          ))}
-          {msgsQ.data && visible.length === 0 && (
-            <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-              暂无消息
-            </div>
-          )}
-          {msgsQ.isLoading && (
-            <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-              加载消息中…
-            </div>
-          )}
-        </div>
+        {msgsQ.isLoading ? (
+          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
+            加载消息中…
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
+            暂无消息
+          </div>
+        ) : (
+          <VirtualList
+            items={visible}
+            getKey={item => String(item.message.id)}
+            estimateSize={104}
+            className="max-h-[calc(100vh-200px)]"
+            itemClassName="border-b border-stone-100"
+            renderItem={item => (
+              <MessageRow
+                item={item}
+                onSwitchBranch={onSwitchBranch}
+                isEditing={String(editingId) === String(item.message.id)}
+                editText={editText}
+                setEditText={setEditText}
+                startEdit={() => {
+                  setEditingId(item.message.id);
+                  setEditText(item.message.content);
+                }}
+                cancelEdit={() => setEditingId(null)}
+                onRegenerate={() => regenMut.mutate(item.message.id)}
+                onSubmitEdit={() =>
+                  editMut.mutate({ mid: item.message.id, text: editText })
+                }
+                regenPending={regenMut.isPending}
+                editPending={editMut.isPending}
+              />
+            )}
+          />
+        )}
       </SectionCard>
     </div>
   );
