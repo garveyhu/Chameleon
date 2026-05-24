@@ -210,7 +210,13 @@ class HybridPipeline:
         capped = (variants or [query])[: self.config.multi_query_count]
         return capped or [query]
 
-    async def run(self, query: str) -> list[Hit]:
+    async def run(self, query: str, *, rerank_query: str | None = None) -> list[Hit]:
+        """跑检索管道
+
+        rerank_query：reranker 打分用的 query。默认与 query 相同；HyDE 场景下
+        query 是假设答案（用于召回 embed），reranker 应拿**原始用户 query** 打分，
+        故调用方传 rerank_query=原 query。
+        """
         c = self.config
         recall_n = c.top_k * c.recall_multiplier
 
@@ -230,5 +236,5 @@ class HybridPipeline:
         filtered = metadata_filter(fused, c)
         # 6) optional reranker + top_k cut（用原 query 做 rerank，语义最准）
         if self.reranker is not None and filtered:
-            filtered = await self.reranker(query, filtered)
+            filtered = await self.reranker(rerank_query or query, filtered)
         return filtered[: c.top_k]
