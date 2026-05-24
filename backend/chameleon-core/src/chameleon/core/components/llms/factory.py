@@ -15,6 +15,7 @@ import threading
 
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.components.llms.base import BaseLLM
@@ -181,3 +182,67 @@ def llm(name: str | None = None) -> BaseLLM:
 
 def llm_by_name(name: str) -> BaseLLM:
     return LLMFactory.create(name)
+
+
+async def resolve_llm(
+    session: AsyncSession,
+    model_code: str | None = None,
+    *,
+    group_id: int | None = None,
+    temperature: float = 0.7,
+    max_tokens: int | None = None,
+) -> BaseLLM:
+    """按 model_code 经 channel 路由（Ability 路由 + C7 多 key 轮转）构建 per-request
+    LLM 实例 —— 让 channels 的多 key 池 / 优先级真正作用于 LLM 调用（#30）。
+
+    无 Ability / 可用 channel / channel 没配 key / 路由出错时，回退静态 cache
+    （LLMFactory.create，即 #25 行为），保证不回归。
+
+    注：failover（失败切下一 channel）对流式 LLM 较复杂，暂留给非流式 / 后续；
+    本函数只做"选 channel + 选 key + 建实例"。
+    """
+    if _OVERRIDE is not None:
+        return _OVERRIDE
+    target = model_code or _DEFAULT_NAME
+    if not target:
+        return LLMFactory.create(None)  # 触发统一的"未配置默认 LLM"错误
+    try:
+        from chameleon.core.infra.redis import get_redis
+        from chameleon.core.routing import (
+            NoSatisfiedChannelError,
+            build_channel_override,
+            resolve_channel,
+        )
+
+        try:
+            channel = await resolve_channel(
+                session, model_code=target, group_id=group_id
+            )
+        except NoSatisfiedChannelError:
+            return LLMFactory.create(target)  # 无 Ability/channel → 回退 cache
+
+        ov = await build_channel_override(get_redis(), channel)
+        api_key = ov.get("api_key") or ""
+        if not api_key:
+            return LLMFactory.create(target)  # channel 没配 key → 回退
+        base_url = ov.get("base_url")
+        if not base_url:
+            prov = (
+                await session.execute(
+                    select(Provider).where(Provider.id == channel.provider_id)
+                )
+            ).scalar_one_or_none()
+            base_url = (prov.base_url if prov else None) or ""
+        logger.debug(
+            "resolve_llm via channel | model={} | channel_id={}", target, channel.id
+        )
+        return BaseLLM(
+            model=target,
+            api_key=api_key,
+            api_base=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    except Exception:
+        logger.exception("resolve_llm channel routing failed, fallback to cache")
+        return LLMFactory.create(target)

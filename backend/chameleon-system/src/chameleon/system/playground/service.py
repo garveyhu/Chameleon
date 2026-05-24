@@ -22,7 +22,7 @@ from chameleon.core.api.sse_events import (
     event_delta,
     event_end,
 )
-from chameleon.core.components.llms.factory import LLMFactory
+from chameleon.core.components.llms.factory import resolve_llm
 from chameleon.core.models import KnowledgeBase, LLMModel
 from chameleon.system.kbs.document_service import search_chunks
 
@@ -151,6 +151,7 @@ async def invoke_stream(
     )
 
     async for chunk in _stream_llm(
+        session,
         model_name=resolved_model,
         temperature=temperature,
         top_p=top_p,
@@ -161,6 +162,7 @@ async def invoke_stream(
 
 
 async def _stream_llm(
+    session: AsyncSession,
     *,
     model_name: str,
     temperature: float,
@@ -169,7 +171,10 @@ async def _stream_llm(
     messages: list,
 ) -> AsyncIterator[dict]:
     """直接走 LLM .astream，逐 token yield {"delta": str}；末尾 {"end": True, "usage": ...}。"""
-    llm = LLMFactory.create(model_name)
+    # #30：per-request 经 channel 路由（含 C7 key 轮转）解析 LLM；无 channel 回退 cache
+    llm = await resolve_llm(
+        session, model_name, temperature=temperature, max_tokens=max_tokens
+    )
     # 覆盖运行时参数（不污染 cache）
     bound_kwargs: dict = {"temperature": temperature}
     if top_p is not None:
