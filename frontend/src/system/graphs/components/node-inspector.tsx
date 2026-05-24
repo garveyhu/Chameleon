@@ -14,6 +14,7 @@ import {
   KbKeyField,
   ModelNameField,
 } from '@/system/graphs/components/spec-fields';
+import { VarInsert } from '@/system/graphs/components/var-insert';
 import {
   ParallelBranchesField,
   SubgraphField,
@@ -126,14 +127,26 @@ const DataForm = ({
             rows={3}
             className="text-[12px]"
           />
+          <VarInsert
+            onInsert={t =>
+              onPatch({ system_prompt: ((data.system_prompt as string) || '') + t })
+            }
+          />
         </Field>
-        <Field label="prompt_template（可选；用 {field} 引 input）">
+        <Field label="prompt_template（可选；{{#sys.query#}} 等变量引用）">
           <Textarea
             value={(data.prompt_template as string) || ''}
             onChange={e => onPatch({ prompt_template: e.target.value || undefined })}
             rows={2}
-            placeholder="Q: {query}\nA:"
+            placeholder="参考资料 {{#kb1.joined_context#}}\n问题：{{#sys.query#}}"
             className="font-mono text-[12px]"
+          />
+          <VarInsert
+            onInsert={t =>
+              onPatch({
+                prompt_template: ((data.prompt_template as string) || '') + t,
+              })
+            }
           />
         </Field>
         <Field label="temperature">
