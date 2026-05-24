@@ -212,20 +212,20 @@ async def _ingest_image(
 ) -> None:
     """图片文档：caption → 文本 embedding → 落 kind='image' chunk（直插 ORM）
 
-    image_url：upload 走 presigned URL（供 VLM caption + 作 source_url 引用）；
-    url 类型直接用 source_uri。无 VLM（cases.vision 未配）时 ImageEmbedder
-    fallback 文件名 caption，图片仍可被检索。
+    - caption 取图：upload 用临时 presigned URL（供 VLM 抓取），url 类型直接用 URL
+    - chunk.source_url 存**稳定引用**：upload 存 object key（读时由 API 层 presign），
+      url 类型存原始 URL —— 不存会过期的 presigned URL
+    无 VLM（cases.vision 未配）时 ImageEmbedder fallback 文件名 caption，图片仍可检索。
     """
     if not source_uri:
         raise ValueError("image document requires source_uri")
-    image_url = (
-        source_uri
-        if source_type == "url"
-        else storage.presigned_url(source_uri)
-    )
+    is_url = source_type == "url"
+    # 抓图用 URL（presigned，临时）；存库用稳定引用（object key / 原始 URL）
+    fetch_url = source_uri if is_url else storage.presigned_url(source_uri)
+    stable_ref = source_uri
 
     embedder = ImageEmbedder(embedding_model=embedding_model)
-    result = await embedder.embed_image(image_url, fallback_text=doc_title)
+    result = await embedder.embed_image(fetch_url, fallback_text=doc_title)
     logger.info(
         "image ingest captioned | task={} | doc={} | source={}",
         task_id,
@@ -246,7 +246,7 @@ async def _ingest_image(
                 embedding=result.vector,
                 token_count=_approx_tokens(result.caption),
                 kind="image",
-                source_url=image_url,
+                source_url=stable_ref,
                 meta={"caption_source": result.source},
             )
         )
