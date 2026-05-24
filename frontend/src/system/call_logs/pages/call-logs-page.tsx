@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { FileText } from 'lucide-react';
 
@@ -23,6 +24,10 @@ import type { CallLogItem } from '@/system/call_logs/types/call-log';
 
 export const CallLogsPage = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // /traces 走 D4 详情页（树 + 甘特）；/call_logs 仍开轻量 drawer
+  const isTraceRoute = pathname.startsWith('/traces');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [appIdInput, setAppIdInput] = useState('');
@@ -161,7 +166,11 @@ export const CallLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
-          onRowClick={setTraceLog}
+          onRowClick={row =>
+            isTraceRoute
+              ? navigate(`/traces/${encodeURIComponent(row.request_id)}`)
+              : setTraceLog(row)
+          }
           emptyText={
             <EmptyState
               icon={<FileText strokeWidth={1.5} />}

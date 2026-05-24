@@ -35,7 +35,9 @@ async def list_call_logs(
     until: datetime | None = None,
     success: bool | None = None,
 ) -> PageResult[CallLogItem]:
-    stmt = select(CallLog)
+    # 只列 trace 根（parent_id IS NULL）；子 span（tool_rounds / branch_runs /
+    # 节点观测）是内部嵌套，在详情页的树 / 甘特里看，不作独立行刷屏。
+    stmt = select(CallLog).where(CallLog.parent_id.is_(None))
     if app_id is not None:
         stmt = stmt.where(CallLog.app_id == app_id)
     if agent_key is not None:
