@@ -24,14 +24,15 @@ output:
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from loguru import logger
 
 from chameleon.core.graph.context import NodeContext
-from chameleon.core.graph.registry import register_node_type
 from chameleon.core.graph.node_base import Node
+from chameleon.core.graph.registry import register_node_type
 
 
 def _build_messages(
@@ -75,17 +76,35 @@ def _build_messages(
 
     # 形态 4：dict 但没模板 —— 取常见字段当 user message
     if isinstance(input, dict):
-        for key in ("query", "question", "input", "text"):
+        # 4a：常见 query 字段（带 KB joined_context 上下文拼接）
+        for key in ("query", "question", "input", "text", "prompt"):
+            v = input.get(key)
+            if isinstance(v, str) and v.strip():
+                ctx_text = input.get("joined_context")
+                if isinstance(ctx_text, str) and ctx_text.strip():
+                    msgs.append(
+                        HumanMessage(content=f"参考资料：\n{ctx_text}\n\n问题：{v}")
+                    )
+                else:
+                    msgs.append(HumanMessage(content=v))
+                return msgs
+
+        # 4b：上游节点输出的"答案 / 结果"字段
+        #     （LLM 节点 answer / tool 节点 result / 通用 output、content）
+        for key in ("answer", "result", "output", "content"):
             v = input.get(key)
             if isinstance(v, str) and v.strip():
                 msgs.append(HumanMessage(content=v))
-                # 把上下文也拼上（KB 节点的 joined_context 风格）
-                ctx_text = input.get("joined_context")
-                if isinstance(ctx_text, str) and ctx_text.strip():
-                    msgs[-1] = HumanMessage(
-                        content=f"参考资料：\n{ctx_text}\n\n问题：{v}"
-                    )
                 return msgs
+
+        # 4c：兜底 —— 整个 dict 序列化为 JSON 当 user message
+        #     （上游传结构化结果时也能跑，绝不再因 "type=dict" 抛错）
+        msgs.append(
+            HumanMessage(
+                content=json.dumps(input, ensure_ascii=False, default=str)
+            )
+        )
+        return msgs
 
     raise ValueError(
         f"LLMNode 无法从 input 构造 messages：type={type(input).__name__}"
