@@ -19,7 +19,6 @@ from typing import Any
 
 from chameleon.core.graph.node_base import NodeStatus
 
-
 # ── VariablePool ────────────────────────────────────────────────────
 
 

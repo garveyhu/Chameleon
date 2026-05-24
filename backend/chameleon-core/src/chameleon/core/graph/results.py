@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 from chameleon.core.graph.node_base import NodeStatus
 from chameleon.core.graph.types import GraphSpec
 
-
 # ── DTO ──────────────────────────────────────────────────
 
 

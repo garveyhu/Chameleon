@@ -14,6 +14,11 @@ ReadyQueue + GraphExecState）。
     from chameleon.core.graph.engine import Orchestrator
 """
 
+# 触发内置节点（noop / start / end）注册 + 业务节点（kb / llm / tool / if_else / agent_debate）注册
+from chameleon.core.graph import (
+    nodes,  # noqa: F401
+    registry,  # noqa: F401
+)
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.node_base import Node, NodeStatus
 from chameleon.core.graph.results import NodeRunResult, RunResult
@@ -22,10 +27,6 @@ from chameleon.core.graph.types import (
     GraphSpec,
     NodeSpec,
 )
-
-# 触发内置节点（noop / start / end）注册 + 业务节点（kb / llm / tool / if_else / agent_debate）注册
-from chameleon.core.graph import registry  # noqa: F401
-from chameleon.core.graph import nodes  # noqa: F401
 
 __all__ = [
     "EdgeSpec",

@@ -28,8 +28,8 @@ from typing import Any
 from loguru import logger
 
 from chameleon.core.graph.context import NodeContext
-from chameleon.core.graph.registry import register_node_type
 from chameleon.core.graph.node_base import Node
+from chameleon.core.graph.registry import register_node_type
 
 
 def _pick_query(input: Any) -> str:
@@ -70,7 +70,16 @@ class KBNode(Node[Any, dict]):
         min_score = float(self.spec.data.get("min_score") or 0.0)
         separator = self.spec.data.get("context_separator") or "\n\n"
 
-        query = _pick_query(input)
+        # P4：input 里没有 query 时回退 sys.query（KB 不在 start 之后也能检索对话问题）
+        try:
+            query = _pick_query(input)
+        except ValueError:
+            sys_q = ((ctx.extra or {}).get("__vars__", {}).get("sys") or {}).get(
+                "query"
+            )
+            if not isinstance(sys_q, str) or not sys_q.strip():
+                raise
+            query = sys_q
 
         hits = await search_kb(
             kb_key, query, top_k=top_k, min_score=min_score

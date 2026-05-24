@@ -124,6 +124,14 @@ class Orchestrator:
         # 把 graph input 注入到 start 节点（通过 VariablePool 的"虚拟 parent"）
         await state.variable_pool.set_global("__graph_input__", input)
 
+        # 系统变量 sys.*（参考 Dify）：任意节点可经 {{#sys.query#}} 引用 / LLM 节点
+        # 据此回填对话记忆。优先取 ctx.extra["sys"]，否则从 dict 形 input 派生。
+        sys_vars = dict(ctx.extra.get("sys") or {})
+        if isinstance(input, dict):
+            sys_vars.setdefault("query", input.get("query"))
+            sys_vars.setdefault("history", input.get("history"))
+        await state.variable_pool.set_global("sys", sys_vars)
+
         if events is not None:
             await events.emit(
                 event_graph_started(
@@ -299,6 +307,15 @@ class Orchestrator:
         # 1) 拿 input：单 parent 取它的 output；无 parent (start) 取 graph_input
         input_val = await self._resolve_input(node_id, state)
 
+        # 变量快照注入 ctx.extra["__vars__"]：{sys: {...}, <node_id>: <output>, ...}
+        # 供节点解析 {{#sys.query#}} / {{#nodeId.field#}} 引用 + LLM 回填对话记忆。
+        snap = await state.variable_pool.snapshot()
+        node_vars: dict[str, Any] = {"sys": snap["globals"].get("sys") or {}}
+        node_vars.update(snap["outputs"])
+        node_ctx = ctx.model_copy(
+            update={"extra": {**ctx.extra, "__vars__": node_vars}}
+        )
+
         # A6 resume：命中 seed 直接重放该输出（不调 execute），其后继照常推进
         if node_id in self._seed_outputs:
             output = self._seed_outputs[node_id]
@@ -317,7 +334,7 @@ class Orchestrator:
                 await events.emit(event_graph_node_delta(_nid, text))
 
         try:
-            coro = node.execute_stream(ctx, input_val, emit)
+            coro = node.execute_stream(node_ctx, input_val, emit)
             if self.config.node_timeout_seconds:
                 output = await asyncio.wait_for(
                     coro, timeout=self.config.node_timeout_seconds

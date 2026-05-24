@@ -13,7 +13,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
 # 已注册的 node_type 字符串（运行时由 register_node_type 维护）。
 # 这里不收紧到 Literal —— 让测试和未来插件能自由注册类型；
 # 真正的合法性校验在 executor 实例化节点时（factory 查 registry）做。

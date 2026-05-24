@@ -46,11 +46,29 @@ from chameleon.core.graph.nodes.llm_tools import (
     run_tool_calls,
 )
 from chameleon.core.graph.registry import register_node_type
+from chameleon.core.graph.variables import resolve_in_text
 
 #: agentic tool 循环默认轮数
 DEFAULT_MAX_TOOL_ROUNDS = 3
 #: 硬上限（防 prompt 注入把模型卡在无限工具调用）
 MAX_TOOL_ROUNDS_HARD_CAP = 8
+#: 从 input dict 取「当前问题」的候选字段（与 llm_messages 对齐）
+_QUERY_KEYS = ("query", "question", "input", "text", "prompt")
+
+
+def _with_sys_fallback(input: Any, sys_vars: dict[str, Any]) -> Any:
+    """input 是 dict 时，用 sys.history / sys.query 补缺口（显式字段优先）。
+
+    让 RAG / 分支后的 LLM（input 来自 KB / if_else，丢了对话）仍能拿到 history+query。
+    """
+    if not sys_vars or not isinstance(input, dict):
+        return input
+    merged = dict(input)
+    if "history" not in merged and sys_vars.get("history") is not None:
+        merged["history"] = sys_vars["history"]
+    if not any(merged.get(k) for k in _QUERY_KEYS) and sys_vars.get("query"):
+        merged["query"] = sys_vars["query"]
+    return merged
 
 
 class LLMNode(Node[Any, dict]):
@@ -121,10 +139,21 @@ class LLMNode(Node[Any, dict]):
         raw_client = await resolve_llm(model_name)
         client = bind_tools(raw_client, tool_keys) if tool_keys else raw_client
 
+        # P4 变量：解析 {{#sys.query#}} / {{#nodeId.field#}} 引用 + 回填 sys 对话记忆，
+        # 让不直接接 start 的 LLM（RAG / 分支后）也能拿到 query + history。
+        node_vars = (ctx.extra or {}).get("__vars__") or {}
+        sys_vars = node_vars.get("sys") or {}
+        system_prompt = (
+            resolve_in_text(data.get("system_prompt") or "", node_vars) or None
+        )
+        prompt_template = (
+            resolve_in_text(data.get("prompt_template") or "", node_vars) or None
+        )
+
         messages = build_messages(
-            input,
-            data.get("system_prompt"),
-            data.get("prompt_template"),
+            _with_sys_fallback(input, sys_vars),
+            system_prompt,
+            prompt_template,
             memory_window=memory_window,
         )
 

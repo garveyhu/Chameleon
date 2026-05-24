@@ -13,7 +13,6 @@ from __future__ import annotations
 from chameleon.core.graph.node_base import EndNode, Node, NoopNode, StartNode
 from chameleon.core.graph.types import NodeSpec
 
-
 _NODE_REGISTRY: dict[str, type[Node]] = {}
 
 
