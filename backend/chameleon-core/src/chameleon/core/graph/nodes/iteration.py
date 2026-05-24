@@ -34,6 +34,11 @@ from loguru import logger
 
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.node_base import Node
+from chameleon.core.graph.nodes._subgraph import (
+    MAX_NEST_DEPTH,
+    ensure_nest_depth,
+    run_subgraph,
+)
 from chameleon.core.graph.nodes.if_else import eval_condition, validate_condition
 from chameleon.core.graph.registry import register_node_type
 
@@ -42,8 +47,8 @@ DEFAULT_MAX_ITERATIONS = 100
 MAX_ITERATIONS_CAP = 1000
 #: 并行上限
 MAX_ITERATION_CONCURRENCY = 20
-#: 迭代/并行节点最大嵌套深度（防 body 里再套 iteration 无限递归）
-MAX_NEST_DEPTH = 8
+
+__all__ = ["IterationNode", "MAX_NEST_DEPTH"]
 
 
 class IterationNode(Node[Any, dict]):
@@ -89,10 +94,7 @@ class IterationNode(Node[Any, dict]):
             raise ValueError("IterationNode.data.item_input_key 必须是字符串")
 
     async def execute(self, ctx: NodeContext, input: Any) -> dict:
-        if ctx.depth >= MAX_NEST_DEPTH:
-            raise ValueError(
-                f"IterationNode 嵌套过深（depth={ctx.depth} ≥ {MAX_NEST_DEPTH}）"
-            )
+        ensure_nest_depth(ctx, "IterationNode")
 
         from chameleon.core.graph.types import GraphSpec
 
@@ -172,17 +174,11 @@ class IterationNode(Node[Any, dict]):
     async def _run_one(
         self, ctx: NodeContext, idx: int, item: Any, body_spec: Any
     ) -> Any:
-        from chameleon.core.graph.engine import Orchestrator
-
         item_key = self.spec.data.get("item_input_key")
         sub_input = {item_key: item} if item_key else item
-        sub_ctx = ctx.model_copy(
-            update={
-                "depth": ctx.depth + 1,
-                "request_id": f"{ctx.request_id}.iter.{idx}",
-            }
+        result = await run_subgraph(
+            ctx, body_spec, sub_input, request_suffix=f"iter.{idx}"
         )
-        result = await Orchestrator(body_spec).run(input=sub_input, ctx=sub_ctx)
         if result.status.value != "success":
             err = result.error or {}
             raise RuntimeError(

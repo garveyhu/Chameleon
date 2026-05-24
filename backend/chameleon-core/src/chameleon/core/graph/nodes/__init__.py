@@ -10,7 +10,16 @@ from chameleon.core.graph.nodes import (  # noqa: F401
     iteration,
     kb,
     llm,
+    parallel,
     tool,
 )
 
-__all__ = ["agent_debate", "if_else", "iteration", "kb", "llm", "tool"]
+__all__ = [
+    "agent_debate",
+    "if_else",
+    "iteration",
+    "kb",
+    "llm",
+    "parallel",
+    "tool",
+]

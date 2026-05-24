@@ -196,6 +196,14 @@ async def run_graph(
             app_id=app_id,
             agent_key=f"graph:{g.graph_key}",
         )
+        # A5：parallel 节点的各 branch 串成 node 的子观测（并发分支可见）
+        await _record_branch_runs(
+            session,
+            node_output=nr.output,
+            node_rid=node_rid,
+            app_id=app_id,
+            agent_key=f"graph:{g.graph_key}",
+        )
 
     # 写根 call_log（trace 根）
     await record_call(
@@ -288,6 +296,52 @@ async def _record_tool_rounds(
                 parent_id=node_rid,
                 observation_type="tool",
             )
+
+
+async def _record_branch_runs(
+    session: AsyncSession,
+    *,
+    node_output: Any,
+    node_rid: str,
+    app_id: str,
+    agent_key: str,
+) -> None:
+    """把 parallel 节点 output.branch_runs 的每条分支记成 node 的子观测
+
+    parent_id = node_rid，observation_type='span'，duration_ms = 分支实测时长，
+    使 trace tree 呈现并发分支。无 branch_runs（非 parallel 节点）时零开销。
+    """
+    if not isinstance(node_output, dict):
+        return
+    runs = node_output.get("branch_runs")
+    if not isinstance(runs, list) or not runs:
+        return
+
+    for bi, br in enumerate(runs):
+        if not isinstance(br, dict):
+            continue
+        ok = bool(br.get("ok", True))
+        await record_call(
+            session,
+            request_id=f"{node_rid}.branch.{br.get('key', bi)}",
+            app_id=app_id,
+            agent_key=agent_key,
+            session_id=None,
+            stream=False,
+            success=ok,
+            code=200 if ok else 500,
+            error_message=(br.get("error") or {}).get("message")
+            if isinstance(br.get("error"), dict)
+            else None,
+            duration_ms=int(br.get("duration_ms") or 0),
+            request_payload={"key": br.get("key")},
+            response_payload={
+                "started_offset_ms": br.get("started_offset_ms"),
+                "duration_ms": br.get("duration_ms"),
+            },
+            parent_id=node_rid,
+            observation_type="span",
+        )
 
 
 def _ms(t0: datetime, t1: datetime) -> int:
