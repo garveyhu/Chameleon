@@ -215,7 +215,7 @@ async def test_admin_get_quota(
     )
     assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert data["workspace_id"] == temp_workspace
+    assert data["workspace_id"] == str(temp_workspace)
     assert data["token_used_current_month"] == 0
 
 

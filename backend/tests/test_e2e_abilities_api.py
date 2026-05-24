@@ -96,7 +96,7 @@ async def test_create_ability(client: AsyncClient, admin_token: str, tmp_channel
     assert r.status_code == 200, r.text
     a = r.json()["data"]
     assert a["model_code"] == "test-model-a"
-    assert a["channel_id"] == tmp_channel["channel_id"]
+    assert str(a["channel_id"]) == str(tmp_channel["channel_id"])
     assert a["priority"] == 5
     assert a["weight"] == 3
     assert a["enabled"] is True

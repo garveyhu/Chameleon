@@ -223,7 +223,7 @@ async def test_score_distribution_endpoint_returns_buckets(
     )
     assert r.status_code == 200, r.text
     data = r.json()["data"]
-    assert data["run_id"] == seeded_run_and_template["run_id"]
+    assert str(data["run_id"]) == str(seeded_run_and_template["run_id"])
     assert data["total_scored_items"] >= 1
     assert isinstance(data["metrics"], list)
     assert len(data["metrics"]) >= 1

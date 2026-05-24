@@ -264,7 +264,7 @@ async def test_admin_sees_both_workspaces_by_default(
     rows = r.json()["data"]
     # admin 不带 header → 看全：含两个 workspace 的 agent
     ws_ids = {a.get("workspace_id") for a in rows}
-    assert ctx["ws_a_id"] in ws_ids and ctx["ws_b_id"] in ws_ids
+    assert str(ctx["ws_a_id"]) in ws_ids and str(ctx["ws_b_id"]) in ws_ids
 
 
 async def test_admin_can_scope_to_ws_a_via_header(
@@ -323,4 +323,4 @@ async def test_header_all_keyword_admin_sees_all(
     )
     rows = r.json()["data"]
     ws_ids = {a.get("workspace_id") for a in rows}
-    assert ctx["ws_a_id"] in ws_ids and ctx["ws_b_id"] in ws_ids
+    assert str(ctx["ws_a_id"]) in ws_ids and str(ctx["ws_b_id"]) in ws_ids

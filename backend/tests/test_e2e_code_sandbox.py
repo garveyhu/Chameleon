@@ -130,7 +130,7 @@ async def test_tool_node_dispatches_code_runner():
     from datetime import datetime, timezone
 
     from chameleon.core.graph.context import NodeContext
-    from chameleon.core.graph.executor import GraphExecutor
+    from chameleon.core.graph.engine import Orchestrator
     from chameleon.core.graph.types import EdgeSpec, GraphSpec, NodeSpec
 
     spec = GraphSpec(
@@ -153,7 +153,7 @@ async def test_tool_node_dispatches_code_runner():
         ],
     )
 
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     ctx = NodeContext(
         request_id="t-code-sbx",
         graph_id=1,

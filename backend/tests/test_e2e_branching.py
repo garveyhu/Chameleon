@@ -111,7 +111,7 @@ async def test_regenerate_creates_sibling_assistant(
     assert r.status_code == 200, r.text
     new_msg = r.json()["data"]
     assert new_msg["role"] == "assistant"
-    assert new_msg["parent_message_id"] == uid
+    assert str(new_msg["parent_message_id"]) == str(uid)
     assert new_msg["id"] != aid
 
     # 老 assistant 仍存
