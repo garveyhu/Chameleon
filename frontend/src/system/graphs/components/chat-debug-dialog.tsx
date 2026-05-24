@@ -41,6 +41,9 @@ interface Props {
   graphName: string;
   isDirty: boolean;
   save: () => Promise<void>;
+  /** A2：start 节点配置的开场白 / 建议问题 */
+  opener?: string;
+  suggestedQuestions?: string[];
 }
 
 export const ChatDebugDialog = ({
@@ -50,6 +53,8 @@ export const ChatDebugDialog = ({
   graphName,
   isDirty,
   save,
+  opener,
+  suggestedQuestions,
 }: Props) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -72,8 +77,8 @@ export const ChatDebugDialog = ({
       ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)),
     );
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (textArg?: string) => {
+    const text = (textArg ?? input).trim();
     if (!text || busy) return;
 
     if (isDirty) {
@@ -166,10 +171,35 @@ export const ChatDebugDialog = ({
         <ModalBody className="flex min-h-0 flex-1 flex-col gap-0 !p-0">
           <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto p-4">
             {messages.length === 0 ? (
-              <div className="py-12 text-center text-[12px] text-stone-400">
-                把当前画布（draft）当可对话 agent 试聊；不落库、不必先发布。
+              <div className="space-y-3">
+                {opener ? (
+                  <div className="flex justify-start">
+                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-3 py-2 text-[12.5px] text-stone-800">
+                      {opener}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-8 text-center text-[12px] text-stone-400">
+                    把当前画布（draft）当可对话 agent 试聊；不落库、不必先发布。
+                  </div>
+                )}
+                {suggestedQuestions && suggestedQuestions.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {suggestedQuestions.map((q, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => void send(q)}
+                        disabled={busy}
+                        className="rounded-full border border-stone-200 bg-white px-2.5 py-1 text-[11.5px] text-stone-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {isDirty && (
-                  <div className="mt-1 text-[10.5px] text-amber-600">
+                  <div className="text-[10.5px] text-amber-600">
                     有未保存改动 —— 发送前会先自动存草稿。
                   </div>
                 )}

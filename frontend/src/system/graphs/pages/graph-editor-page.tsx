@@ -374,6 +374,18 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const selectedRunView = selectedId ? runner.nodeRuns[selectedId] : undefined;
 
+  // A2：start 节点配置的开场白 / 建议问题（喂给对话调试面板）
+  const startChatCfg = useMemo(() => {
+    const start = nodes.find(n => n.data.nodeType === 'start');
+    const d =
+      (start?.data as { _spec?: { data?: Record<string, unknown> } } | undefined)
+        ?._spec?.data ?? {};
+    return {
+      opener: d.opener as string | undefined,
+      suggested: d.suggested_questions as string[] | undefined,
+    };
+  }, [nodes]);
+
   const onPublish = async () => {
     const ok = await confirm({
       title: '发布当前草稿？',
@@ -570,6 +582,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           graphName={graph.name}
           isDirty={dirty}
           save={save}
+          opener={startChatCfg.opener}
+          suggestedQuestions={startChatCfg.suggested}
         />
       )}
     </div>

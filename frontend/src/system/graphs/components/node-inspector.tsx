@@ -529,7 +529,40 @@ const DataForm = ({
     );
   }
 
-  // start / end / noop 无需配置
+  if (type === 'start') {
+    const suggestions = (data.suggested_questions as string[] | undefined) ?? [];
+    return (
+      <>
+        <Field label="开场白（对话调试 / 聊天开始时展示）">
+          <Textarea
+            value={(data.opener as string) || ''}
+            onChange={e => onPatch({ opener: e.target.value || undefined })}
+            rows={2}
+            placeholder="你好！我是你的助理，有什么可以帮你？"
+            className="text-[12px]"
+          />
+        </Field>
+        <Field label="建议问题（每行一个，点击直接发送）">
+          <Textarea
+            value={suggestions.join('\n')}
+            onChange={e =>
+              onPatch({
+                suggested_questions: e.target.value
+                  .split('\n')
+                  .map(s => s.trim())
+                  .filter(Boolean),
+              })
+            }
+            rows={3}
+            placeholder={'介绍一下你的功能\n帮我写一段文案'}
+            className="text-[12px]"
+          />
+        </Field>
+      </>
+    );
+  }
+
+  // end / noop 无需配置
   return (
     <div className="text-[11.5px] text-stone-500">该节点类型无需配置。</div>
   );
