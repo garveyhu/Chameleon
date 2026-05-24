@@ -166,6 +166,30 @@ async def test_pipeline_multi_query_off_when_count_le_1():
     assert [h.chunk_id for h in out] == [1]
 
 
+async def test_pipeline_rerank_query_overrides_run_query():
+    """rerank_query 注入 → reranker 拿到的是 rerank_query 而非召回 query"""
+    seen_rerank_query: list[str] = []
+
+    async def vec_recall(_q, _n):
+        return [Hit(chunk_id=1), Hit(chunk_id=2)]
+
+    async def kw_recall(_q, _n):
+        return []
+
+    async def rerank(query: str, hits: list[Hit]) -> list[Hit]:
+        seen_rerank_query.append(query)
+        return hits
+
+    pipeline = HybridPipeline(
+        vector_recall=vec_recall,
+        keyword_recall=kw_recall,
+        config=HybridConfig(top_k=3),
+        reranker=rerank,
+    )
+    await pipeline.run("假设答案做召回", rerank_query="原始用户问题")
+    assert seen_rerank_query == ["原始用户问题"]
+
+
 async def test_pipeline_multi_query_expander_failure_degrades():
     """expander 抛错 → 退化为单原 query，不崩"""
 

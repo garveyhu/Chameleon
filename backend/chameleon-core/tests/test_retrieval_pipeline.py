@@ -139,3 +139,51 @@ async def test_hyde_uses_injected_complete_fn():
     out = await _run(params, vec=[(1, 0.9)], kw=[], complete_fn=complete)
     assert calls  # HyDE 调了 complete_fn
     assert [h.chunk_id for h in out] == [1]
+
+
+async def test_hyde_reranks_with_original_query_not_hypothetical():
+    """HyDE + reranker：reranker 应拿原始 query 打分，而非假设答案"""
+    seen: list[str] = []
+
+    async def complete(_prompt: str) -> str:
+        return "这是一段假设性答案"
+
+    async def vec_recall(_q, _n):
+        return [_hit(1), _hit(2)]
+
+    async def kw_recall(_q, _n):
+        return []
+
+    vec_capture: dict[int, float] = {}
+    kw_capture: dict[int, float] = {}
+
+    async def reranker_spy(query, hits):
+        seen.append(query)
+        return hits
+
+    # 用 local_dedupe 之外的方式注入 reranker：直接走 _assemble_and_run 的 reranker_config
+    # 这里改用 monkeypatch 风格不便，故用 hybrid 直测覆盖（见 test_retrieval_expander）。
+    # 本测确认 _assemble_and_run 把原 query 透传给 pipeline.run 的 rerank_query。
+    from chameleon.core.retrieval import pipeline as pl
+
+    params = RetrievalParams(
+        kb_id=1, embedding_model="m", top_k=5, use_hyde=True
+    )
+
+    # 临时桩：让 build_reranker 返回 spy
+    orig = pl.build_reranker
+    pl.build_reranker = lambda cfg: reranker_spy  # type: ignore[assignment]
+    params.reranker_config = {"type": "local_dedupe"}
+    try:
+        await pl._assemble_and_run(
+            params=params,
+            query="原始用户问题",
+            vec_recall=vec_recall,
+            kw_recall=kw_recall,
+            vec_capture=vec_capture,
+            kw_capture=kw_capture,
+            complete_fn=complete,
+        )
+    finally:
+        pl.build_reranker = orig
+    assert seen == ["原始用户问题"]

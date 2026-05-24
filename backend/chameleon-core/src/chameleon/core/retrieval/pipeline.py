@@ -262,7 +262,8 @@ async def _assemble_and_run(
         reranker=reranker,
         query_expander=expander,
     )
-    hits = await pipeline.run(effective_query)
+    # HyDE 下 effective_query 是假设答案（召回用）；reranker 用原始 query 打分
+    hits = await pipeline.run(effective_query, rerank_query=query)
 
     # 回填 score breakdown（B6）
     for h in hits:
