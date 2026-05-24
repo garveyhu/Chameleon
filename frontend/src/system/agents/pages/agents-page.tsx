@@ -102,9 +102,16 @@ export const AgentsPage = () => {
       key: 'source',
       header: t('table.source'),
       width: 90,
-      render: a => (
-        <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>{a.source}</Badge>
-      ),
+      render: a =>
+        a.source === 'graph' ? (
+          <Badge variant="outline" className="bg-sky-50 text-sky-700">
+            工作流
+          </Badge>
+        ) : (
+          <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>
+            {a.source}
+          </Badge>
+        ),
     },
     {
       key: 'tags',

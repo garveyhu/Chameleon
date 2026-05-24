@@ -132,3 +132,19 @@ export type GraphStreamChunk =
   | { 'graph.node.finished': GraphNodeEventPayload }
   | { 'graph.node.failed': GraphNodeEventPayload }
   | { 'graph.finished': GraphFinishedPayload };
+
+// ── 对话调试（把 draft 当可对话 agent 跑）SSE chunk ──────────
+// 后端 /chat/stream 形状：{ type, data }（GraphProvider StreamEvent 镜像）
+
+export interface GraphChatChunk {
+  type: 'delta' | 'step' | 'done' | 'error';
+  data: {
+    text?: string; // delta
+    name?: string; // step
+    status?: string; // step
+    duration_ms?: number | null;
+    answer?: string; // done
+    message?: string; // error
+    [k: string]: unknown;
+  };
+}

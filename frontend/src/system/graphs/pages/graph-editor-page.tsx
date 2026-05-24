@@ -32,7 +32,15 @@ import type {
 import '@xyflow/react/dist/style.css';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, History, Play, Rocket, Save } from 'lucide-react';
+import {
+  Bot,
+  ChevronLeft,
+  History,
+  MessageSquare,
+  Play,
+  Rocket,
+  Save,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -41,6 +49,7 @@ import { Button } from '@/core/components/ui/button';
 import { confirm } from '@/core/lib/confirm';
 import { toast } from '@/core/lib/toast';
 import { useWorkflowStore } from '@/core/stores/workflow';
+import { ChatDebugDialog } from '@/system/graphs/components/chat-debug-dialog';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
 import { RunDialog } from '@/system/graphs/components/run-dialog';
@@ -119,6 +128,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const [dirty, setDirty] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const [runOpen, setRunOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   // 初始 mount：把后端 spec 投到 React Flow（程序化 setNodes 不触发 onNodesChange，不置脏）
   // EditorBody 按 graph.id keyed 重挂，dirty 初值即 false，无需在此重置。
@@ -327,6 +337,18 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onError: e => toast.error(`发布失败：${(e as Error).message}`),
   });
 
+  const publishAgentMut = useMutation({
+    mutationFn: async () => {
+      if (dirty) await saveMut.mutateAsync();
+      return graphApi.publishAsAgent(graph.id);
+    },
+    onSuccess: r => {
+      toast.success(`已发布为智能体：${r.agent_key}（可在「智能体」页调用）`);
+      onSaved();
+    },
+    onError: e => toast.error(`发布为智能体失败：${(e as Error).message}`),
+  });
+
   const runsQ = useQuery({
     queryKey: ['graph-runs', graph.id],
     queryFn: () => graphApi.listRuns(graph.id),
@@ -359,6 +381,14 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         '冻结当前 draft 为新版本（published_version + 1）；老版本仅 freeze 在 published_spec，不可恢复。',
     });
     if (ok) publishMut.mutate();
+  };
+
+  const onPublishAgent = async () => {
+    const ok = await confirm({
+      title: '发布为智能体？',
+      description: `将冻结当前草稿并暴露成一个可对话智能体（agent_key=${graph.graph_key}），可在「智能体」页和统一 agent 端点调用。`,
+    });
+    if (ok) publishAgentMut.mutate();
   };
 
   // ── render ───────────────────────────────────────────────
@@ -431,6 +461,15 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
             运行
           </Button>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setChatOpen(true)}
+            title="把当前 draft 当可对话 agent 多轮试聊（不必先发布）"
+          >
+            <MessageSquare className="mr-1 h-3 w-3" />
+            对话调试
+          </Button>
+          <Button
             size="sm"
             onClick={() => saveMut.mutate()}
             disabled={saveMut.isPending}
@@ -447,6 +486,15 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           >
             <Rocket className="mr-1 h-3 w-3" />
             发布
+          </Button>
+          <Button
+            size="sm"
+            onClick={onPublishAgent}
+            disabled={publishAgentMut.isPending}
+            title="发布并暴露成可对话智能体，走统一 agent 端点"
+          >
+            <Bot className="mr-1 h-3 w-3" />
+            发布为智能体
           </Button>
         </div>
       </header>
@@ -504,6 +552,17 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           isDirty={dirty}
           runner={runner}
           nodeMeta={nodeMeta}
+        />
+      )}
+
+      {chatOpen && (
+        <ChatDebugDialog
+          open={chatOpen}
+          onOpenChange={setChatOpen}
+          graphId={String(graph.id)}
+          graphName={graph.name}
+          isDirty={dirty}
+          save={save}
         />
       )}
     </div>
