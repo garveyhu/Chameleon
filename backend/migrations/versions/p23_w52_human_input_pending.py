@@ -1,9 +1,11 @@
 """P23 v1.1 PR A6: 新增 human_input_pending 表（工作流人工回填断点）
 
-[SCHEMA-CHANGE] 仅新增表，不动既有表。revises 当前 head p22_w47_app_templates。
+[SCHEMA-CHANGE] 仅新增表，不动既有表。合并 train 中 re-parent 到 C 链尾
+p23_w51_channel_keys（原 revises p22_w47_app_templates 与 C 的 p23_w49_calllog_dims
+撞同一 down_revision，故重排）。
 
-Revision ID: p23_w49_human_input_pending
-Revises: p22_w47_app_templates
+Revision ID: p23_w52_human_input_pending
+Revises: p23_w51_channel_keys
 Create Date: 2026-05-24 12:30:00
 """
 
@@ -12,8 +14,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "p23_w49_human_input_pending"
-down_revision: Union[str, Sequence[str], None] = "p22_w47_app_templates"
+revision: str = "p23_w52_human_input_pending"
+down_revision: Union[str, Sequence[str], None] = "p23_w51_channel_keys"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
