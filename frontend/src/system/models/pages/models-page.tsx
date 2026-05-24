@@ -1,7 +1,7 @@
 /** models 管理页 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Plus, Trash2, Zap } from 'lucide-react';
+import { Cpu, Plus, SlidersHorizontal, Trash2, Zap } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/core/lib/toast';
@@ -35,6 +35,7 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
+import { ModelConfigSheet } from '@/system/models/components/model-config-sheet';
 import { TestModelModal } from '@/system/models/components/test-model-modal';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
@@ -46,6 +47,7 @@ export const ModelsPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [delModel, setDelModel] = useState<ModelItem | null>(null);
   const [testModel, setTestModel] = useState<ModelItem | null>(null);
+  const [configModel, setConfigModel] = useState<ModelItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
   const providersQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
@@ -97,11 +99,27 @@ export const ModelsPage = () => {
     {
       key: 'defaults',
       header: t('table.defaults'),
-      render: m => (
-        <span className="font-mono text-[11.5px] text-stone-500">
-          {m.defaults ? JSON.stringify(m.defaults).slice(0, 60) : '—'}
-        </span>
-      ),
+      render: m => {
+        const d = m.defaults || {};
+        const chips: string[] = [];
+        if (typeof d.temperature === 'number') chips.push(`temp ${d.temperature}`);
+        if (typeof d.top_p === 'number') chips.push(`top_p ${d.top_p}`);
+        if (typeof d.max_tokens === 'number') chips.push(`max ${d.max_tokens}`);
+        return chips.length ? (
+          <div className="flex flex-wrap gap-1">
+            {chips.map(c => (
+              <span
+                key={c}
+                className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10.5px] text-stone-600"
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-[11.5px] text-stone-400">默认</span>
+        );
+      },
     },
     {
       key: 'enabled',
@@ -121,6 +139,14 @@ export const ModelsPage = () => {
       width: 110,
       render: m => (
         <div className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            title="配置参数"
+            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            onClick={() => setConfigModel(m)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" /> 配置
+          </button>
           <button
             type="button"
             title={t('common.test')}
@@ -188,6 +214,7 @@ export const ModelsPage = () => {
         onCancel={() => setDelModel(null)}
       />
       <TestModelModal model={testModel} onClose={() => setTestModel(null)} />
+      <ModelConfigSheet model={configModel} onClose={() => setConfigModel(null)} />
     </div>
   );
 };
