@@ -81,7 +81,11 @@ export const graphApi = {
   /** 对话式调试当前 draft（把 graph 当可对话 agent 多轮跑，临时会话不落库） */
   chatStream: (
     id: EntityId,
-    body: { message: string; history: GraphChatTurn[] },
+    body: {
+      message: string;
+      history: GraphChatTurn[];
+      conversation_vars?: Record<string, unknown>;
+    },
     opts: { signal?: AbortSignal; onChunk: (chunk: GraphChatChunk) => void },
   ): Promise<void> =>
     streamSSE<GraphChatChunk>(`/v1/admin/graphs/${id}/chat/stream`, {

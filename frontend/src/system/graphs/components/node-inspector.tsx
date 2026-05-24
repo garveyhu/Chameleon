@@ -360,6 +360,19 @@ const DataForm = ({
     );
   }
 
+  if (type === 'assign') {
+    return (
+      <JsonField
+        label="assignments（{会话变量名: 模板}）"
+        value={data.assignments}
+        fallback={{ user_name: '{{#sys.query#}}' }}
+        onChange={v => onPatch({ assignments: v })}
+        rows={5}
+        hint="写会话变量；跨轮用 {{#conversation.变量名#}} 读回（客户端携带）"
+      />
+    );
+  }
+
   if (type === 'answer') {
     return (
       <Field label="回答模板（可选；留空则透传上游答案）">

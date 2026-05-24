@@ -56,6 +56,8 @@ export const ChatDebugDialog = ({
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // P5-2：跨轮会话变量（客户端携带；assign 节点经 done 回传后更新）
+  const convVarsRef = useRef<Record<string, unknown>>({});
 
   // 卸载时中断在途流
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -99,7 +101,7 @@ export const ChatDebugDialog = ({
     try {
       await graphApi.chatStream(
         graphId,
-        { message: text, history },
+        { message: text, history, conversation_vars: convVarsRef.current },
         {
           signal: ctrl.signal,
           onChunk: chunk => {
@@ -118,6 +120,10 @@ export const ChatDebugDialog = ({
               });
             } else if (chunk.type === 'done') {
               const ans = chunk.data.answer;
+              const cv = chunk.data.conversation_vars;
+              if (cv && typeof cv === 'object') {
+                convVarsRef.current = cv as Record<string, unknown>;
+              }
               patchLast(m => ({
                 ...m,
                 content: m.content || (typeof ans === 'string' ? ans : ''),
@@ -195,7 +201,10 @@ export const ChatDebugDialog = ({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => setMessages([])}
+                onClick={() => {
+                  setMessages([]);
+                  convVarsRef.current = {};
+                }}
                 disabled={busy || messages.length === 0}
                 title="清空对话"
               >

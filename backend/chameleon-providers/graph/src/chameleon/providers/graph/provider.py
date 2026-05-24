@@ -64,6 +64,10 @@ class GraphProvider(Provider):
         query, history = _extract_query_history(ctx)
         graph_input: dict[str, Any] = {"query": query, "history": history}
         answer_node_id = _resolve_answer_node(spec)
+        # P5-2：assign 节点的输出即「会话变量更新」，跑完回传客户端跨轮携带
+        assign_node_ids = {n.id for n in spec.nodes if n.type == "assign"}
+        conv_in = dict((ctx.context_vars or {}).get("conversation_vars") or {})
+        conv_update: dict[str, Any] = {}
 
         node_ctx = NodeContext(
             request_id=ctx.request_id
@@ -72,7 +76,7 @@ class GraphProvider(Provider):
             graph_run_id=0,  # in-memory，不持久化 graph_runs（trace 复用 agent call_log）
             depth=0,
             started_at=datetime.now(timezone.utc),
-            extra=dict(ctx.context_vars) if ctx.context_vars else {},
+            extra={**(dict(ctx.context_vars) if ctx.context_vars else {}), "conversation": conv_in},
         )
 
         logger.debug(
@@ -108,6 +112,10 @@ class GraphProvider(Provider):
                 elif kind == "graph.node.finished":
                     if payload.get("node_id") == answer_node_id:
                         answer_output = payload.get("output")
+                    if payload.get("node_id") in assign_node_ids and isinstance(
+                        payload.get("output"), dict
+                    ):
+                        conv_update.update(payload["output"])
                     yield StreamEvent(
                         type=StreamEventType.step,
                         data={
@@ -147,6 +155,8 @@ class GraphProvider(Provider):
                 "answer": answer,
                 "session_id": ctx.session_id,
                 "request_id": ctx.request_id,
+                # P5-2：回传更新后的会话变量，客户端跨轮携带
+                "conversation_vars": {**conv_in, **conv_update},
             },
         )
 

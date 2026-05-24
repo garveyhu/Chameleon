@@ -131,6 +131,10 @@ class Orchestrator:
             sys_vars.setdefault("query", input.get("query"))
             sys_vars.setdefault("history", input.get("history"))
         await state.variable_pool.set_global("sys", sys_vars)
+        # P5-2 会话变量：{{#conversation.x#}} 跨轮状态（客户端/调用方携带传入）
+        await state.variable_pool.set_global(
+            "conversation", dict(ctx.extra.get("conversation") or {})
+        )
 
         if events is not None:
             await events.emit(
@@ -310,7 +314,10 @@ class Orchestrator:
         # 变量快照注入 ctx.extra["__vars__"]：{sys: {...}, <node_id>: <output>, ...}
         # 供节点解析 {{#sys.query#}} / {{#nodeId.field#}} 引用 + LLM 回填对话记忆。
         snap = await state.variable_pool.snapshot()
-        node_vars: dict[str, Any] = {"sys": snap["globals"].get("sys") or {}}
+        node_vars: dict[str, Any] = {
+            "sys": snap["globals"].get("sys") or {},
+            "conversation": snap["globals"].get("conversation") or {},
+        }
         node_vars.update(snap["outputs"])
         node_ctx = ctx.model_copy(
             update={"extra": {**ctx.extra, "__vars__": node_vars}}

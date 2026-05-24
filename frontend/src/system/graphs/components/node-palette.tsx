@@ -15,6 +15,7 @@ import {
   Split,
   UserCheck,
   Users,
+  Variable,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -107,6 +108,13 @@ const ITEMS: PaletteItem[] = [
     icon: Combine,
     desc: '聚合多节点变量',
     color: 'text-amber-700',
+  },
+  {
+    type: 'assign',
+    label: 'Assign',
+    icon: Variable,
+    desc: '写会话变量（跨轮记忆）',
+    color: 'text-rose-600',
   },
   {
     type: 'template',

@@ -16,6 +16,7 @@ import {
   Split,
   UserCheck,
   Users,
+  Variable,
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -110,6 +111,13 @@ const TYPE_META: Record<
     ring: 'ring-amber-200',
     bg: 'bg-amber-50',
     label: 'Aggregator',
+  },
+  assign: {
+    icon: Variable,
+    color: 'text-rose-700',
+    ring: 'ring-rose-200',
+    bg: 'bg-rose-50',
+    label: 'Assign',
   },
   template: {
     icon: Braces,

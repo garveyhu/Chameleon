@@ -284,6 +284,7 @@ async def chat_stream(
         agent_def=adef,
         input=req.message,
         history=history,
+        context_vars={"conversation_vars": req.conversation_vars},
         session_id=f"graph-debug-{row.id}",
         app_id="__graph_debug__",
         request_id=f"graphdebug-{row.id}-{datetime.now(timezone.utc).timestamp():.0f}",
