@@ -110,15 +110,19 @@ export const EmbedConfigsPage = () => {
 
   const columns: DataTableColumn<EmbedConfigItem>[] = [
     {
-      key: 'embed_key',
-      header: t('table.embed_key'),
-      width: 200,
-      render: e => <span className="font-mono text-[11.5px] text-stone-700">{e.embed_key}</span>,
-    },
-    {
-      key: 'name',
+      key: 'config',
       header: t('common.name'),
-      render: e => <span className="font-medium text-stone-900">{e.name}</span>,
+      render: e => (
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+            <Puzzle className="h-3.5 w-3.5" />
+          </span>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium text-stone-900">{e.name}</div>
+            <div className="truncate font-mono text-[11px] text-stone-400">{e.embed_key}</div>
+          </div>
+        </div>
+      ),
     },
     {
       key: 'allowed_origins',
@@ -156,11 +160,11 @@ export const EmbedConfigsPage = () => {
       align: 'right',
       width: 180,
       render: e => (
-        <div className="inline-flex items-center gap-0.5">
+        <div className="inline-flex items-center justify-end gap-0.5">
           <button
             type="button"
             title="编辑"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => {
               setEditTarget(e);
               setFormOpen(true);
@@ -171,7 +175,7 @@ export const EmbedConfigsPage = () => {
           <button
             type="button"
             title="嵌入代码"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setSnippetCfg(e)}
           >
             <Code2 className="h-3.5 w-3.5" /> 代码
@@ -179,7 +183,7 @@ export const EmbedConfigsPage = () => {
           <button
             type="button"
             title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+            className="shrink-0 rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelCfg(e)}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -212,6 +216,7 @@ export const EmbedConfigsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={e => (e.enabled ? 'bg-emerald-400' : 'bg-stone-300')}
           emptyText={
             <EmptyState
               icon={<Puzzle strokeWidth={1.5} />}
