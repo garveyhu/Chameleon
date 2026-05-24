@@ -67,6 +67,8 @@ export interface TraceTreeNode {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  /** 含子节点递归累加的 USD 成本（Agent C C2 聚合 API；未接入时缺省） */
+  cost_usd?: number | null;
   created_at: string;
   scores: ScoreItem[];
   children: TraceTreeNode[];

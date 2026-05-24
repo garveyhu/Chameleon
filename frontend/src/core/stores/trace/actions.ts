@@ -4,6 +4,7 @@ import type { StateCreator } from 'zustand';
 
 import {
   createInitialTraceState,
+  type TraceViewMode,
   type TraceViewState,
 } from '@/core/stores/trace/state';
 
@@ -12,6 +13,7 @@ export interface TraceActions {
   hover: (id: string | null) => void;
   toggleCollapse: (id: string) => void;
   setGanttZoom: (zoom: number) => void;
+  setViewMode: (mode: TraceViewMode) => void;
   /** 切 trace 时清空视图态 */
   reset: () => void;
 }
@@ -41,5 +43,6 @@ export const createTraceActions: StateCreator<
       false,
       'trace/setGanttZoom',
     ),
+  setViewMode: mode => set({ viewMode: mode }, false, 'trace/setViewMode'),
   reset: () => set(createInitialTraceState(), false, 'trace/reset'),
 });

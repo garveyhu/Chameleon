@@ -4,6 +4,8 @@
  * 切换 trace 时调 reset() 清空。
  */
 
+export type TraceViewMode = 'tree' | 'gantt';
+
 export interface TraceViewState {
   /** 当前选中的节点 request_id（详情面板 + 高亮） */
   selectedId: string | null;
@@ -13,6 +15,8 @@ export interface TraceViewState {
   collapsed: Record<string, boolean>;
   /** Gantt 缩放系数（1 = 适配宽度；>1 放大时间轴） */
   ganttZoom: number;
+  /** 左栏视图：观测树 / 甘特时间轴 */
+  viewMode: TraceViewMode;
 }
 
 export function createInitialTraceState(): TraceViewState {
@@ -21,5 +25,6 @@ export function createInitialTraceState(): TraceViewState {
     hoveredId: null,
     collapsed: {},
     ganttZoom: 1,
+    viewMode: 'tree',
   };
 }
