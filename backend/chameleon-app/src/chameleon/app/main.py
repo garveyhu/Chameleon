@@ -61,7 +61,7 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     code_to_http_status,
 )
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import Result, SafeIntJSONResponse
 from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.core.infra import redis as redis_infra
 from chameleon.core.infra.db import engine
@@ -141,7 +141,12 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     setup_logger()
 
-    app = FastAPI(title="Chameleon", version="0.1.0", lifespan=_lifespan)
+    app = FastAPI(
+        title="Chameleon",
+        version="0.1.0",
+        lifespan=_lifespan,
+        default_response_class=SafeIntJSONResponse,
+    )
 
     _register_middleware(app)
     _register_exception_handlers(app)

@@ -7,13 +7,41 @@
 - 列表接口的 data 类型 = PageResult[T]
 """
 
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from chameleon.core.api.exceptions import ResultCode
 
 T = TypeVar("T")
+
+# JS Number.MAX_SAFE_INTEGER = 2**53 - 1。雪花 ID（约 5e16）超出后，前端
+# JSON.parse 会丢精度（多个不同 ID 塌缩成同一个），导致 model/kb/channel 等
+# ID 对不上。统一在响应序列化边界把超界整数转成字符串——业务侧没有任何
+# 合法整数会逼近这个量级（token/cost/分页都远小于），故按值转换最稳，
+# 不会漏字段。前端 EntityId = number | string 本就兼容。
+_JS_MAX_SAFE_INT = 9007199254740991
+
+
+def _stringify_big_ints(obj: Any) -> Any:
+    """递归把超出 JS 安全整数范围的 int 转成 str（bool 不动）。"""
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, int) and not (-_JS_MAX_SAFE_INT <= obj <= _JS_MAX_SAFE_INT):
+        return str(obj)
+    if isinstance(obj, list):
+        return [_stringify_big_ints(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _stringify_big_ints(v) for k, v in obj.items()}
+    return obj
+
+
+class SafeIntJSONResponse(JSONResponse):
+    """默认响应类：序列化前把雪花 ID 等超界整数转字符串，防前端精度丢失。"""
+
+    def render(self, content: Any) -> bytes:
+        return super().render(_stringify_big_ints(content))
 
 
 class Result(BaseModel, Generic[T]):

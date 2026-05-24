@@ -279,7 +279,7 @@ const CreateModelModal = ({
             disabled={loading || !providerId || !code}
             onClick={() =>
               onSubmit({
-                provider_id: Number(providerId),
+                provider_id: providerId,
                 code,
                 kind,
                 dim: dim ? Number(dim) : undefined,

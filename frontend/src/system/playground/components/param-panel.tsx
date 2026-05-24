@@ -48,7 +48,7 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         <label className="mb-1 block text-stone-600">模型</label>
         <Select
           value={params.model_id ? String(params.model_id) : ''}
-          onValueChange={v => set('model_id', Number(v))}
+          onValueChange={v => set('model_id', v)}
         >
           <SelectTrigger className="h-8">
             <SelectValue placeholder="选模型" />
@@ -107,10 +107,9 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         <Select
           value={params.kb_ids.length > 0 ? String(params.kb_ids[0]) : ''}
           onValueChange={v => {
-            const id = Number(v);
-            const next = params.kb_ids.includes(id)
-              ? params.kb_ids.filter(k => k !== id)
-              : [...params.kb_ids, id];
+            const next = params.kb_ids.includes(v)
+              ? params.kb_ids.filter(k => k !== v)
+              : [...params.kb_ids, v];
             set('kb_ids', next);
           }}
         >
