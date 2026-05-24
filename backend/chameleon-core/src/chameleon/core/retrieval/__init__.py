@@ -32,9 +32,15 @@ from chameleon.core.retrieval.hybrid import (
     fuse_rrf_many,
     metadata_filter,
 )
-from chameleon.core.retrieval.reranker import (
+from chameleon.core.retrieval.rerankers import (
+    BgeReranker,
+    CohereReranker,
     JudgeFn,
     Reranker,
+    RerankScore,
+    apply_rerank_scores,
+    build_reranker,
+    make_client_reranker,
     make_dedupe_reranker,
     make_dedupe_then_judge_reranker,
     make_llm_judge_reranker,
@@ -49,8 +55,10 @@ from chameleon.core.retrieval.vlm_caption import (
 )
 
 __all__ = [
+    "BgeReranker",
     "CaptionFn",
     "CaptionResult",
+    "CohereReranker",
     "CompleteFn",
     "HybridConfig",
     "Hit",
@@ -58,7 +66,10 @@ __all__ = [
     "JudgeFn",
     "QueryExpander",
     "Reranker",
+    "RerankScore",
     "VLMClient",
+    "apply_rerank_scores",
+    "build_reranker",
     "dedupe_by_chunk_id",
     "expand_queries",
     "fuse_rrf",
@@ -66,6 +77,7 @@ __all__ = [
     "generate_caption",
     "generate_captions_batch",
     "hyde_query",
+    "make_client_reranker",
     "make_dedupe_reranker",
     "make_dedupe_then_judge_reranker",
     "make_llm_judge_reranker",
