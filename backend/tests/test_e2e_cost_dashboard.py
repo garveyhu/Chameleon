@@ -175,9 +175,14 @@ def _hdr(t: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {t}"}
 
 
-async def _by_dim(client: AsyncClient, token: str, dimension: str) -> list[dict]:
+async def _by_dim(
+    client: AsyncClient, token: str, dimension: str, *, limit: int = 50
+) -> list[dict]:
+    # limit=50：top-N 是全局聚合，并行/同套件其它用例也会造 workspace 等共享维度的
+    # 数据，用最大 limit 降低被挤出 top-N 的偶发失败
     r = await client.get(
-        f"/v1/admin/dashboard/cost/by-dimension?dimension={dimension}&hours=24",
+        f"/v1/admin/dashboard/cost/by-dimension?dimension={dimension}"
+        f"&hours=24&limit={limit}",
         headers=_hdr(token),
     )
     assert r.status_code == 200, r.text
