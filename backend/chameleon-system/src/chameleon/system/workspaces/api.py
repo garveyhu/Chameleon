@@ -135,9 +135,23 @@ async def add_member(
     ws_id: int,
     req: AddMemberRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[MemberItem]:
-    return Result.ok(await service.add_member(session, ws_id, req))
+    item = await service.add_member(session, ws_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace_member.add",
+        resource_type="workspace_member",
+        resource_id=item.id,
+        after={"workspace_id": ws_id, "user_id": item.user_id, "role": item.role},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post(
@@ -148,11 +162,23 @@ async def update_member_role(
     membership_id: int,
     req: UpdateMemberRoleRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[MemberItem]:
-    return Result.ok(
-        await service.update_member_role(session, ws_id, membership_id, req)
+    item = await service.update_member_role(session, ws_id, membership_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace_member.update_role",
+        resource_type="workspace_member",
+        resource_id=membership_id,
+        after={"workspace_id": ws_id, "role": item.role},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
     )
+    return Result.ok(item)
 
 
 @router.post(
@@ -162,9 +188,22 @@ async def remove_member(
     ws_id: int,
     membership_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[None]:
     await service.remove_member(session, ws_id, membership_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace_member.remove",
+        resource_type="workspace_member",
+        resource_id=membership_id,
+        after={"workspace_id": ws_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 
@@ -185,6 +224,23 @@ async def update_quota(
     ws_id: int,
     req: UpdateQuotaRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[QuotaItem]:
-    return Result.ok(await service.update_quota(session, ws_id, req))
+    item = await service.update_quota(session, ws_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace_quota.update",
+        resource_type="workspace_quota",
+        resource_id=ws_id,
+        after={
+            "token_quota_monthly": item.token_quota_monthly,
+            "request_quota_daily": item.request_quota_daily,
+        },
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)

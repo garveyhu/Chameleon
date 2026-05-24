@@ -29,8 +29,9 @@ from chameleon.core.models import Agent
 from chameleon.core.models.workspace import DEFAULT_WORKSPACE_ID
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import CurrentUser, require_permission
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -168,6 +169,7 @@ async def get_agent(
 async def create_agent(
     req: CreateAgentRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     current: CurrentUser = Depends(require_permission("agents:write")),
 ) -> Result[AgentItem]:
     existing = (
@@ -191,7 +193,20 @@ async def create_agent(
         workspace_id=ws_id,
     )
     session.add(a)
-    return Result.ok(await _serialize_and_commit(session, a))
+    item = await _serialize_and_commit(session, a)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="agent.create",
+        resource_type="agent",
+        resource_id=item.id,
+        after={"agent_key": item.agent_key, "name": item.name, "source": item.source},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 async def _serialize_and_commit(session: AsyncSession, a: Agent) -> AgentItem:
@@ -209,6 +224,7 @@ async def update_agent(
     agent_id: int,
     req: UpdateAgentRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("agents:write")),
 ) -> Result[AgentItem]:
     a = await _get_or_404(session, agent_id)
@@ -224,23 +240,50 @@ async def update_agent(
         a.tags = req.tags
     if req.version is not None:
         a.version = req.version
-    return Result.ok(await _serialize_and_commit(session, a))
+    item = await _serialize_and_commit(session, a)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="agent.update",
+        resource_type="agent",
+        resource_id=item.id,
+        after={"name": item.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{agent_id}/delete", response_model=Result[None])
 async def delete_agent(
     agent_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("agents:delete")),
 ) -> Result[None]:
     a = await _get_or_404(session, agent_id)
     if a.source == "local":
         raise ValidationError(message="本地 agent 不可删除（仅可 disable）")
+    before = {"agent_key": a.agent_key, "name": a.name}
     a.deleted_at = datetime.now(timezone.utc)
     a.agent_key = f"__deleted_{a.id}_{a.agent_key}"
     await session.flush()
     await session.commit()
     await reload_agent_registry()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="agent.delete",
+        resource_type="agent",
+        resource_id=agent_id,
+        before=before,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 

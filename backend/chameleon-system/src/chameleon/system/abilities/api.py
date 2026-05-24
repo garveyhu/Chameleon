@@ -13,6 +13,8 @@ from chameleon.system.abilities.schemas import (
     CreateAbilityRequest,
     UpdateAbilityRequest,
 )
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 
 router = APIRouter(prefix="/v1/admin/abilities", tags=["admin:abilities"])
@@ -42,9 +44,22 @@ async def list_abilities(
 async def create_ability(
     req: CreateAbilityRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("abilities:write")),
 ) -> Result[AbilityItem]:
     item = await ability_service.create_ability(session, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="ability.create",
+        resource_type="ability",
+        resource_id=item.id,
+        after={"model_code": item.model_code, "channel_id": item.channel_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -53,9 +68,22 @@ async def update_ability(
     ability_id: int,
     req: UpdateAbilityRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("abilities:write")),
 ) -> Result[AbilityItem]:
     item = await ability_service.update_ability(session, ability_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="ability.update",
+        resource_type="ability",
+        resource_id=item.id,
+        after={"priority": item.priority, "weight": item.weight, "enabled": item.enabled},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -63,7 +91,19 @@ async def update_ability(
 async def delete_ability(
     ability_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("abilities:delete")),
 ) -> Result[None]:
     await ability_service.delete_ability(session, ability_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="ability.delete",
+        resource_type="ability",
+        resource_id=ability_id,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)

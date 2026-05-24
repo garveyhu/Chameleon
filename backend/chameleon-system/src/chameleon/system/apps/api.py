@@ -18,12 +18,13 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.core.api.response import PageResult, Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Agent, ApiKey, App, AppAgent
 from chameleon.system.api_key.schemas import ApiKeyItem
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
-
 
 # ── DTO ─────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ async def _flush_refresh_validate(session: AsyncSession, app: App) -> AppItem:
 async def create_app(
     req: CreateAppRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("apps:write")),
 ) -> Result[AppItem]:
     existing = (
@@ -145,7 +147,20 @@ async def create_app(
         status="active",
     )
     session.add(app)
-    return Result.ok(await _flush_refresh_validate(session, app))
+    item = await _flush_refresh_validate(session, app)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="app.create",
+        resource_type="app",
+        resource_id=app.id,
+        after={"app_key": app.app_key, "name": app.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{app_id}/update", response_model=Result[AppItem])
@@ -153,6 +168,7 @@ async def update_app(
     app_id: int,
     req: UpdateAppRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("apps:write")),
 ) -> Result[AppItem]:
     app = (
@@ -172,13 +188,27 @@ async def update_app(
         app.qpm_limit = req.qpm_limit
     if req.qpd_limit is not None:
         app.qpd_limit = req.qpd_limit
-    return Result.ok(await _flush_refresh_validate(session, app))
+    item = await _flush_refresh_validate(session, app)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="app.update",
+        resource_type="app",
+        resource_id=app.id,
+        after={"name": app.name, "status": app.status},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{app_id}/delete", response_model=Result[None])
 async def delete_app(
     app_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("apps:delete")),
 ) -> Result[None]:
     app = (
@@ -188,9 +218,22 @@ async def delete_app(
     ).scalar_one_or_none()
     if app is None:
         raise BusinessError(ResultCode.AgentNotFound, message=f"app 不存在: {app_id}")
+    before = {"app_key": app.app_key, "name": app.name}
     app.deleted_at = datetime.now(timezone.utc)
     app.app_key = f"__deleted_{app.id}_{app.app_key}"
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="app.delete",
+        resource_type="app",
+        resource_id=app_id,
+        before=before,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 

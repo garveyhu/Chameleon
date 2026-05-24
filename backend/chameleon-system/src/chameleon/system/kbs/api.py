@@ -11,17 +11,20 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.core.infra.db import get_session
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.kbs import (
     consistency as consistency_service,
+)
+from chameleon.system.kbs import (
     document_service,
     evaluation_service,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -257,6 +260,7 @@ async def update_kb(
     kb_id: int,
     req: UpdateKbAdminRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("kbs:write")),
 ) -> Result[KbAdminItem]:
     kb = await document_service.update_kb(
@@ -267,6 +271,18 @@ async def update_kb(
         chunk_strategy=req.chunk_strategy,
         default_top_k=req.default_top_k,
         recall_mode=req.recall_mode,
+    )
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="knowledge_base.update",
+        resource_type="knowledge_base",
+        resource_id=kb.id,
+        after={"name": kb.name, "recall_mode": kb.recall_mode},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
     )
     _, dc, cc = await document_service.get_kb_with_stats(session, kb.id)
     return Result.ok(_kb_to_item(kb, dc, cc))

@@ -19,12 +19,13 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import PageResult, Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Agent, App, EmbedConfig
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import (
     CurrentUser,
     get_current_user,
     require_permission,
 )
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -152,6 +153,7 @@ async def create_embed_config(
     req: CreateEmbedConfigRequest,
     session: AsyncSession = Depends(get_session),
     user: CurrentUser = Depends(get_current_user),
+    audit: AuditContext = Depends(get_audit_context),
     __: object = Depends(require_permission("embed_configs:write")),
 ) -> Result[EmbedConfigItem]:
     # 校验 agent / app 存在
@@ -200,7 +202,20 @@ async def create_embed_config(
         created_by_user_id=user.id,
     )
     session.add(e)
-    return Result.ok(await _flush_refresh(session, e))
+    item = await _flush_refresh(session, e)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="embed_config.create",
+        resource_type="embed_config",
+        resource_id=e.id,
+        after={"name": e.name, "embed_key": e.embed_key},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{config_id}/update", response_model=Result[EmbedConfigItem])
@@ -208,6 +223,7 @@ async def update_embed_config(
     config_id: int,
     req: UpdateEmbedConfigRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("embed_configs:write")),
 ) -> Result[EmbedConfigItem]:
     e = (
@@ -233,13 +249,27 @@ async def update_embed_config(
         e.behavior = req.behavior
     if req.enabled is not None:
         e.enabled = req.enabled
-    return Result.ok(await _flush_refresh(session, e))
+    item = await _flush_refresh(session, e)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="embed_config.update",
+        resource_type="embed_config",
+        resource_id=e.id,
+        after={"name": e.name, "enabled": e.enabled},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{config_id}/delete", response_model=Result[None])
 async def delete_embed_config(
     config_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("embed_configs:delete")),
 ) -> Result[None]:
     e = (
@@ -253,7 +283,20 @@ async def delete_embed_config(
         raise BusinessError(
             ResultCode.AgentNotFound, message=f"embed_config 不存在: {config_id}"
         )
+    before = {"name": e.name, "embed_key": e.embed_key}
     e.deleted_at = datetime.now(timezone.utc)
     e.embed_key = f"__deleted_{e.id}_{e.embed_key}"
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="embed_config.delete",
+        resource_type="embed_config",
+        resource_id=config_id,
+        before=before,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)

@@ -198,6 +198,7 @@ async def sync_permissions(
     role_id: int,
     req: SyncPermissionsRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("roles:write")),
 ) -> Result[RoleItem]:
     role = (
@@ -227,6 +228,18 @@ async def sync_permissions(
     for pid in perm_ids.values():
         session.add(RolePermission(role_id=role_id, permission_id=pid))
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="role_permission.sync",
+        resource_type="role_permission",
+        resource_id=role_id,
+        after={"permission_codes": req.permission_codes},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
 
     # 重读返回
     role = (
