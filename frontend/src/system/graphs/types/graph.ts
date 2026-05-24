@@ -13,7 +13,9 @@ export type GraphNodeType =
   | 'parallel'
   | 'human_input'
   | 'template'
-  | 'answer';
+  | 'answer'
+  | 'http'
+  | 'aggregator';
 
 export interface NodeSpec {
   id: string;

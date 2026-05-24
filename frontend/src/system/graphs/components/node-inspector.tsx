@@ -251,6 +251,71 @@ const DataForm = ({
     );
   }
 
+  if (type === 'http') {
+    return (
+      <>
+        <Field label="method">
+          <select
+            value={(data.method as string) || 'GET'}
+            onChange={e => onPatch({ method: e.target.value })}
+            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
+          >
+            {['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="url（支持 {{#...#}} 引用）">
+          <Input
+            value={(data.url as string) || ''}
+            onChange={e => onPatch({ url: e.target.value })}
+            placeholder="https://api.example.com/q?x={{#sys.query#}}"
+            className="h-7 font-mono text-[12px]"
+          />
+          <VarInsert
+            onInsert={t => onPatch({ url: ((data.url as string) || '') + t })}
+          />
+        </Field>
+        <JsonField
+          label="headers（可选）"
+          value={data.headers}
+          fallback={{}}
+          onChange={v => onPatch({ headers: v })}
+          rows={3}
+        />
+        <Field label="body（可选；POST/PUT/PATCH，支持引用）">
+          <Textarea
+            value={(data.body as string) || ''}
+            onChange={e => onPatch({ body: e.target.value || undefined })}
+            rows={3}
+            className="font-mono text-[12px]"
+          />
+          <VarInsert
+            onInsert={t => onPatch({ body: ((data.body as string) || '') + t })}
+          />
+        </Field>
+        <div className="text-[10.5px] leading-snug text-stone-500">
+          默认拒绝内网/环回地址；如确需在 JSON 里加 allow_private:true（SSRF 风险自负）。
+        </div>
+      </>
+    );
+  }
+
+  if (type === 'aggregator') {
+    return (
+      <JsonField
+        label="fields（{outKey: 模板}，值用 {{#nodeid.字段#}} 引用）"
+        value={data.fields}
+        fallback={{ ctx: '{{#kb1.joined_context#}}' }}
+        onChange={v => onPatch({ fields: v })}
+        rows={6}
+        hint="把多个节点的字段聚合成一个干净 dict，供下游引用"
+      />
+    );
+  }
+
   if (type === 'answer') {
     return (
       <Field label="回答模板（可选；留空则透传上游答案）">

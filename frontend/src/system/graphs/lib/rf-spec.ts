@@ -79,6 +79,8 @@ export function defaultLabel(type: GraphNodeType, id: string): string {
     human_input: '人工输入',
     template: '模板',
     answer: '回答',
+    http: 'HTTP',
+    aggregator: '聚合',
     end: '终态',
     start: '开始',
     noop: '占位',
