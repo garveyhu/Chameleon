@@ -88,7 +88,7 @@ export const ConsistencyTab = ({ kbId }: Props) => {
       title: '物理删除 quarantined chunks？',
       description: `将不可恢复地删除 ${report.quarantined_count} 个被标记的 chunks（按 reason: orphan / dim_mismatch / zero_vector）。建议先备份。`,
       confirmText: '确认删除',
-      tone: 'danger',
+      danger: true,
     });
     if (!ok) return;
     repairMut.mutate(report.id);
@@ -139,7 +139,7 @@ export const ConsistencyTab = ({ kbId }: Props) => {
             {selected && selected.status === 'done' && selected.quarantined_count > 0 && (
               <Button
                 size="sm"
-                variant="destructive"
+                variant="danger"
                 disabled={repairMut.isPending}
                 onClick={() => handleRepair(selected)}
               >

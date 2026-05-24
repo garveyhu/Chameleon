@@ -50,7 +50,7 @@ export const DatasetsPage = () => {
       title: `删除 dataset "${ds.name}"？`,
       description: `共 ${ds.item_count} 条 items；删除后所有 dataset_runs 关联失效（CASCADE）。不可恢复。`,
       confirmText: '删除',
-      tone: 'danger',
+      danger: true,
     });
     if (!ok) return;
     deleteMut.mutate(ds.id);

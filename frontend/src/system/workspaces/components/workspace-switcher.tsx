@@ -18,7 +18,6 @@ import {
   DropdownMenuTrigger,
 } from '@/core/components/ui/dropdown-menu';
 import { useWorkspaceStore } from '@/core/stores/workspace-store';
-import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import { CreateWorkspaceModal } from '@/system/workspaces/components/create-workspace-modal';
 import { workspaceApi } from '@/system/workspaces/services/workspace';

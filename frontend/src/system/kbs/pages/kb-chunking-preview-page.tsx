@@ -9,7 +9,7 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ChevronLeft, Sparkles, RotateCw } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Spinner } from '@/core/components/common/spinner';
@@ -21,10 +21,7 @@ import { cn } from '@/core/lib/cn';
 import { formatNumber } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { kbApi } from '@/system/kbs/services/kb';
-import type {
-  ChunkingPreviewResult,
-  ChunkingPreviewItem,
-} from '@/system/kbs/services/kb';
+import type { ChunkingPreviewItem } from '@/system/kbs/services/kb';
 import type { KbChunkMode, KbChunkStrategy } from '@/system/kbs/types/kb';
 
 

@@ -13,10 +13,7 @@ import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { workspaceApi } from '@/system/workspaces/services/workspace';
-import type {
-  QuotaItem,
-  UpdateQuotaPayload,
-} from '@/system/workspaces/types/workspace';
+import type { UpdateQuotaPayload } from '@/system/workspaces/types/workspace';
 
 interface Props {
   workspaceId: EntityId;
