@@ -8,7 +8,10 @@ export type GraphNodeType =
   | 'kb'
   | 'tool'
   | 'if_else'
-  | 'agent_debate';
+  | 'agent_debate'
+  | 'iteration'
+  | 'parallel'
+  | 'human_input';
 
 export interface NodeSpec {
   id: string;
@@ -73,7 +76,7 @@ export interface GraphRunItem {
   id: EntityId;
   graph_id: EntityId;
   request_id: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'paused';
   duration_ms: number | null;
   node_count: number | null;
   started_at: string | null;

@@ -7,6 +7,9 @@ import {
   Flag,
   GitBranch,
   PlayCircle,
+  Repeat,
+  Split,
+  UserCheck,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -65,6 +68,27 @@ const ITEMS: PaletteItem[] = [
     icon: Users,
     desc: '多 agent 辩论',
     color: 'text-fuchsia-600',
+  },
+  {
+    type: 'iteration',
+    label: 'Iteration',
+    icon: Repeat,
+    desc: '对列表逐元素跑子图',
+    color: 'text-sky-600',
+  },
+  {
+    type: 'parallel',
+    label: 'Parallel',
+    icon: Split,
+    desc: '并发分支 fork-join',
+    color: 'text-indigo-600',
+  },
+  {
+    type: 'human_input',
+    label: 'Human Input',
+    icon: UserCheck,
+    desc: '暂停等人工回填',
+    color: 'text-pink-600',
   },
   {
     type: 'end',

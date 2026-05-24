@@ -8,6 +8,9 @@ import {
   Flag,
   GitBranch,
   PlayCircle,
+  Repeat,
+  Split,
+  UserCheck,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -68,6 +71,27 @@ const TYPE_META: Record<
     ring: 'ring-fuchsia-200',
     bg: 'bg-fuchsia-50',
     label: 'Agent Debate',
+  },
+  iteration: {
+    icon: Repeat,
+    color: 'text-sky-700',
+    ring: 'ring-sky-200',
+    bg: 'bg-sky-50',
+    label: 'Iteration',
+  },
+  parallel: {
+    icon: Split,
+    color: 'text-indigo-700',
+    ring: 'ring-indigo-200',
+    bg: 'bg-indigo-50',
+    label: 'Parallel',
+  },
+  human_input: {
+    icon: UserCheck,
+    color: 'text-pink-700',
+    ring: 'ring-pink-200',
+    bg: 'bg-pink-50',
+    label: 'Human Input',
   },
   noop: {
     icon: CircleDashed,

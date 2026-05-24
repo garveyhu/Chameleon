@@ -212,11 +212,190 @@ const DataForm = ({
     );
   }
 
+  if (type === 'iteration') {
+    return (
+      <>
+        <JsonField
+          label="body（子图 GraphSpec，必填）"
+          value={data.body}
+          fallback={{ nodes: [], edges: [] }}
+          onChange={v => onPatch({ body: v })}
+          rows={7}
+          hint="对每个 item 跑一遍的子图（含自己的 start/end）"
+        />
+        <Field label="items_path（可选，从 input 取数组的 dot 路径）">
+          <Input
+            value={(data.items_path as string) || ''}
+            onChange={e => onPatch({ items_path: e.target.value || undefined })}
+            placeholder="data.items"
+            className="h-7 font-mono text-[12px]"
+          />
+        </Field>
+        <Field label="item_input_key（可选）">
+          <Input
+            value={(data.item_input_key as string) || ''}
+            onChange={e =>
+              onPatch({ item_input_key: e.target.value || undefined })
+            }
+            placeholder="item"
+            className="h-7 font-mono text-[12px]"
+          />
+        </Field>
+        <Field label="max_iterations（默认 100，cap 1000）">
+          <Input
+            type="number"
+            min={1}
+            max={1000}
+            value={(data.max_iterations as number | undefined) ?? 100}
+            onChange={e => onPatch({ max_iterations: Number(e.target.value) })}
+            className="h-7 text-[12px]"
+          />
+        </Field>
+        <Field label="concurrency（>1 并行，无 early_stop 时）">
+          <Input
+            type="number"
+            min={1}
+            value={(data.concurrency as number | undefined) ?? 1}
+            onChange={e => onPatch({ concurrency: Number(e.target.value) })}
+            className="h-7 text-[12px]"
+          />
+        </Field>
+        <JsonField
+          label="early_stop（可选，if_else 表达式；truthy 则停）"
+          value={data.early_stop}
+          fallback={{}}
+          onChange={v => onPatch({ early_stop: v })}
+          rows={4}
+          hint="设了则强制串行"
+        />
+      </>
+    );
+  }
+
+  if (type === 'parallel') {
+    return (
+      <>
+        <JsonField
+          label="branches（[{key, body}]，2–20 条，必填）"
+          value={data.branches}
+          fallback={[{ key: 'a', body: { nodes: [], edges: [] } }]}
+          onChange={v => onPatch({ branches: v })}
+          rows={8}
+          hint="每条 branch 的 body 是独立子图，同一 input fork 后并发跑"
+        />
+        <Field label="join_strategy">
+          <select
+            value={(data.join_strategy as string) || 'collect'}
+            onChange={e => onPatch({ join_strategy: e.target.value })}
+            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
+          >
+            <option value="collect">collect（等全部成功）</option>
+            <option value="merge">merge（浅合并各分支 dict）</option>
+            <option value="race">race（最先成功者胜）</option>
+          </select>
+        </Field>
+        <Field label="concurrency（默认 = 分支数）">
+          <Input
+            type="number"
+            min={1}
+            value={(data.concurrency as number | undefined) ?? ''}
+            onChange={e =>
+              onPatch({
+                concurrency: e.target.value
+                  ? Number(e.target.value)
+                  : undefined,
+              })
+            }
+            className="h-7 text-[12px]"
+          />
+        </Field>
+      </>
+    );
+  }
+
+  if (type === 'human_input') {
+    return (
+      <>
+        <Field label="prompt（给审核人的提示）">
+          <Textarea
+            value={(data.prompt as string) || ''}
+            onChange={e => onPatch({ prompt: e.target.value || undefined })}
+            rows={2}
+            className="text-[12px]"
+          />
+        </Field>
+        <JsonField
+          label="schema（可选，期望输入的 JSON schema）"
+          value={data.schema}
+          fallback={{}}
+          onChange={v => onPatch({ schema: v })}
+          rows={4}
+          hint="前端据此渲染回填表单"
+        />
+        <Field label="timeout_seconds（可选，超时未回填则该 run failed）">
+          <Input
+            type="number"
+            min={1}
+            value={(data.timeout_seconds as number | undefined) ?? ''}
+            onChange={e =>
+              onPatch({
+                timeout_seconds: e.target.value
+                  ? Number(e.target.value)
+                  : undefined,
+              })
+            }
+            placeholder="86400"
+            className="h-7 text-[12px]"
+          />
+        </Field>
+      </>
+    );
+  }
+
   // start / end / noop 无需配置
   return (
     <div className="text-[11.5px] text-stone-500">该节点类型无需配置。</div>
   );
 };
+
+
+/** 嵌套对象/数组字段的 JSON 编辑（与 if_else condition 同套路：语法错时暂不写回）。
+ *  iteration.body / parallel.branches 这类子图先用 JSON 配，可视化嵌套编辑后续做。 */
+const JsonField = ({
+  label,
+  value,
+  fallback,
+  onChange,
+  rows = 6,
+  hint,
+}: {
+  label: string;
+  value: unknown;
+  fallback: unknown;
+  onChange: (parsed: unknown) => void;
+  rows?: number;
+  hint?: string;
+}) => (
+  <Field label={label}>
+    <Textarea
+      value={JSON.stringify(value ?? fallback, null, 2)}
+      onChange={e => {
+        try {
+          onChange(JSON.parse(e.target.value));
+        } catch {
+          /* 语法暂时错误时不写回，等用户改完 */
+        }
+      }}
+      rows={rows}
+      className="font-mono text-[11.5px]"
+    />
+    {hint && (
+      <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
+        {hint}
+      </div>
+    )}
+  </Field>
+);
 
 
 const Field = ({
