@@ -1,6 +1,6 @@
 /** Playground 单列：参数 panel + 消息流 + 输入框 + 发送/停止
  *
- * 消息状态 / 动作全在 usePlaygroundChat；本组件只管输入态 + 渲染。
+ * 列状态 / 消息动作全在 core/stores/chat（按 columnId）；本组件管输入态 + 渲染。
  */
 
 import { Download, Send, Square, Trash2 } from 'lucide-react';
@@ -15,14 +15,15 @@ import type {
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
-import { toast } from '@/core/lib/toast';
+import {
+  isStreaming,
+  messagesOf,
+  paramsOf,
+  useChatStore,
+} from '@/core/stores/chat';
 import { FileAttachButton } from '@/system/playground/components/file-attach-button';
 import { ParamPanel } from '@/system/playground/components/param-panel';
-import { usePlaygroundChat } from '@/system/playground/hooks/use-playground-chat';
-import type {
-  PlaygroundMessage,
-  PlaygroundParams,
-} from '@/system/playground/types/playground';
+import type { PlaygroundMessage } from '@/system/playground/types/playground';
 import type { UploadResult } from '@/system/files/services/file-upload';
 
 const TRANSLATE_LANGUAGES: TranslateLanguage[] = [
@@ -34,35 +35,35 @@ const TRANSLATE_LANGUAGES: TranslateLanguage[] = [
 ];
 
 interface Props {
+  columnId: string;
   /** 多列模式下用作 key + 标题；单列模式留空 */
   index?: number;
-  params: PlaygroundParams;
-  onParamsChange: (next: PlaygroundParams) => void;
   onRemove?: () => void;
   className?: string;
 }
 
-export const ChatColumn = ({
-  index,
-  params,
-  onParamsChange,
-  onRemove,
-  className,
-}: Props) => {
-  const chat = usePlaygroundChat(params, msg => toast.error(msg));
+export const ChatColumn = ({ columnId, index, onRemove, className }: Props) => {
+  const params = useChatStore(s => paramsOf(s, columnId));
+  const messages = useChatStore(s => messagesOf(s, columnId));
+  const streaming = useChatStore(s => isStreaming(s, columnId));
+  const updateParams = useChatStore(s => s.updateParams);
+  const send = useChatStore(s => s.send);
+  const stop = useChatStore(s => s.stop);
+  const clearMessages = useChatStore(s => s.clearMessages);
+
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<UploadResult[]>([]);
 
-  const send = useCallback(async () => {
+  const doSend = useCallback(async () => {
     const text = input.trim();
     if (!text && attachments.length === 0) return;
     setInput('');
     setAttachments([]);
-    await chat.send(text, attachments);
-  }, [input, attachments, chat]);
+    await send(columnId, text, attachments);
+  }, [input, attachments, send, columnId]);
 
   const exportMd = useCallback(() => {
-    const md = chat.messages
+    const md = messages
       .map(m => {
         const head =
           m.role === 'user'
@@ -74,21 +75,23 @@ export const ChatColumn = ({
       })
       .join('\n\n---\n\n');
     download(md, `playground-${Date.now()}.md`);
-  }, [chat.messages]);
+  }, [messages]);
 
   const exportJson = useCallback(() => {
     download(
-      JSON.stringify({ params, messages: chat.messages }, null, 2),
+      JSON.stringify({ params, messages }, null, 2),
       `playground-${Date.now()}.json`,
     );
-  }, [params, chat.messages]);
+  }, [params, messages]);
 
   // 自动滚到底
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [chat.messages]);
+  }, [messages]);
+
+  if (!params) return null;
 
   return (
     <div
@@ -107,7 +110,7 @@ export const ChatColumn = ({
             title="导出 Markdown"
             className="rounded p-1 hover:bg-stone-100 hover:text-stone-800"
             onClick={exportMd}
-            disabled={chat.messages.length === 0}
+            disabled={messages.length === 0}
           >
             <Download className="h-3.5 w-3.5" />
           </button>
@@ -116,7 +119,7 @@ export const ChatColumn = ({
             title="导出 JSON"
             className="rounded p-1 font-mono text-[10px] hover:bg-stone-100 hover:text-stone-800"
             onClick={exportJson}
-            disabled={chat.messages.length === 0}
+            disabled={messages.length === 0}
           >
             json
           </button>
@@ -124,8 +127,8 @@ export const ChatColumn = ({
             type="button"
             title="清空"
             className="rounded p-1 hover:bg-rose-50 hover:text-rose-600"
-            onClick={chat.clear}
-            disabled={chat.messages.length === 0}
+            onClick={() => clearMessages(columnId)}
+            disabled={messages.length === 0}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -143,17 +146,20 @@ export const ChatColumn = ({
       </header>
 
       <div className="border-b border-stone-200/70 p-3">
-        <ParamPanel params={params} onChange={onParamsChange} />
+        <ParamPanel
+          params={params}
+          onChange={next => updateParams(columnId, next)}
+        />
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3">
-        {chat.messages.length === 0 ? (
+        {messages.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[12px] text-stone-400">
             输入消息开始对话
           </div>
         ) : (
-          chat.messages.map(m => (
-            <MessageBubble key={m.id} msg={m} chat={chat} />
+          messages.map(m => (
+            <MessageBubble key={m.id} columnId={columnId} msg={m} />
           ))
         )}
       </div>
@@ -165,7 +171,7 @@ export const ChatColumn = ({
           onKeyDown={e => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
-              send();
+              doSend();
             }
           }}
           rows={2}
@@ -179,18 +185,18 @@ export const ChatColumn = ({
             onRemove={id =>
               setAttachments(prev => prev.filter(a => a.object_id !== id))
             }
-            disabled={chat.streaming}
+            disabled={streaming}
           />
           <div className="ml-auto flex items-center gap-2">
-            {chat.streaming ? (
-              <Button size="sm" variant="ghost" onClick={chat.stop}>
+            {streaming ? (
+              <Button size="sm" variant="ghost" onClick={() => stop(columnId)}>
                 <Square className="mr-1 h-3 w-3" />
                 停止
               </Button>
             ) : (
               <Button
                 size="sm"
-                onClick={send}
+                onClick={doSend}
                 disabled={!input.trim() && attachments.length === 0}
               >
                 <Send className="mr-1 h-3 w-3" />
@@ -214,26 +220,38 @@ const toActionMessage = (m: PlaygroundMessage): ChatActionMessage => ({
 });
 
 const MessageBubble = ({
+  columnId,
   msg,
-  chat,
 }: {
+  columnId: string;
   msg: PlaygroundMessage;
-  chat: ReturnType<typeof usePlaygroundChat>;
 }) => {
   const isUser = msg.role === 'user';
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(msg.content);
 
+  const editMessage = useChatStore(s => s.editMessage);
+  const regenerate = useChatStore(s => s.regenerate);
+  const deleteMessage = useChatStore(s => s.deleteMessage);
+  const setFeedback = useChatStore(s => s.setFeedback);
+  const translate = useChatStore(s => s.translate);
+  const continueGen = useChatStore(s => s.continueGen);
+  const setPinned = useChatStore(s => s.setPinned);
+
   const handlers: MessageActionHandlers = {
     onEdit: isUser ? () => setEditing(true) : undefined,
     onRegenerate:
-      msg.role === 'assistant' ? () => void chat.regenerate(msg.id) : undefined,
-    onDelete: () => chat.deleteMessage(msg.id),
-    onFeedback: value => chat.setFeedback(msg.id, value),
-    onTranslate: lang => void chat.translate(msg.id, lang),
+      msg.role === 'assistant'
+        ? () => void regenerate(columnId, msg.id)
+        : undefined,
+    onDelete: () => deleteMessage(columnId, msg.id),
+    onFeedback: value => setFeedback(columnId, msg.id, value),
+    onTranslate: lang => void translate(columnId, msg.id, lang),
     onContinue:
-      msg.role === 'assistant' ? () => void chat.continueGen(msg.id) : undefined,
-    onPin: next => chat.setPinned(msg.id, next),
+      msg.role === 'assistant'
+        ? () => void continueGen(columnId, msg.id)
+        : undefined,
+    onPin: next => setPinned(columnId, msg.id, next),
   };
 
   return (
@@ -302,7 +320,7 @@ const MessageBubble = ({
                   return;
                 }
                 setEditing(false);
-                await chat.editMessage(msg.id, next);
+                await editMessage(columnId, msg.id, next);
               }}
               disabled={!editVal.trim()}
             >
