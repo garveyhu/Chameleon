@@ -144,7 +144,7 @@ export type GraphStreamChunk =
 // 后端 /chat/stream 形状：{ type, data }（GraphProvider StreamEvent 镜像）
 
 export interface GraphChatChunk {
-  type: 'delta' | 'step' | 'done' | 'error';
+  type: 'delta' | 'step' | 'done' | 'error' | 'citation';
   data: {
     text?: string; // delta
     name?: string; // step
@@ -152,6 +152,9 @@ export interface GraphChatChunk {
     duration_ms?: number | null;
     answer?: string; // done
     message?: string; // error
+    source?: string; // citation
+    snippet?: string; // citation
+    score?: number | null; // citation
     [k: string]: unknown;
   };
 }

@@ -66,6 +66,8 @@ class GraphProvider(Provider):
         answer_node_id = _resolve_answer_node(spec)
         # P5-2：assign 节点的输出即「会话变量更新」，跑完回传客户端跨轮携带
         assign_node_ids = {n.id for n in spec.nodes if n.type == "assign"}
+        # A2：KB 节点命中 → citation 卡片
+        kb_node_ids = {n.id for n in spec.nodes if n.type == "kb"}
         conv_in = dict((ctx.context_vars or {}).get("conversation_vars") or {})
         conv_update: dict[str, Any] = {}
 
@@ -116,6 +118,19 @@ class GraphProvider(Provider):
                         payload.get("output"), dict
                     ):
                         conv_update.update(payload["output"])
+                    if payload.get("node_id") in kb_node_ids and isinstance(
+                        payload.get("output"), dict
+                    ):
+                        for h in (payload["output"].get("hits") or [])[:8]:
+                            if isinstance(h, dict):
+                                yield StreamEvent(
+                                    type=StreamEventType.citation,
+                                    data={
+                                        "source": str(h.get("doc_id") or h.get("id") or ""),
+                                        "snippet": str(h.get("content") or "")[:200],
+                                        "score": h.get("score"),
+                                    },
+                                )
                     yield StreamEvent(
                         type=StreamEventType.step,
                         data={

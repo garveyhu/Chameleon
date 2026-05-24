@@ -26,10 +26,17 @@ interface StepLine {
   status: string;
 }
 
+interface Citation {
+  source: string;
+  snippet: string;
+  score?: number | null;
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   steps?: StepLine[];
+  citations?: Citation[];
   error?: string;
   streaming?: boolean;
 }
@@ -123,6 +130,18 @@ export const ChatDebugDialog = ({
                 else steps.push({ name, status });
                 return { ...m, steps };
               });
+            } else if (chunk.type === 'citation') {
+              patchLast(m => ({
+                ...m,
+                citations: [
+                  ...(m.citations ?? []),
+                  {
+                    source: String(chunk.data.source ?? ''),
+                    snippet: String(chunk.data.snippet ?? ''),
+                    score: chunk.data.score ?? null,
+                  },
+                ],
+              }));
             } else if (chunk.type === 'done') {
               const ans = chunk.data.answer;
               const cv = chunk.data.conversation_vars;
@@ -290,6 +309,33 @@ const Bubble = ({ m }: { m: ChatMessage }) => {
             )}
           >
             {m.content || (m.streaming ? '思考中…' : '')}
+          </div>
+        )}
+        {m.citations && m.citations.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[10px] uppercase tracking-wide text-stone-400">
+              引用 {m.citations.length}
+            </div>
+            {m.citations.map((c, i) => (
+              <div
+                key={i}
+                className="rounded-md border border-stone-200 bg-stone-50/70 px-2 py-1.5 text-[11px] text-stone-600"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate font-mono text-[10px] text-stone-500">
+                    {c.source || `#${i + 1}`}
+                  </span>
+                  {c.score != null && (
+                    <span className="tnum text-[10px] text-stone-400">
+                      {c.score.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-0.5 line-clamp-2 text-stone-600">
+                  {c.snippet}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
