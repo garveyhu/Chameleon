@@ -56,6 +56,9 @@ async def start() -> None:
     # P19.3 PR #39：注册每日凌晨配额跨期 reset
     _register_quota_reset()
 
+    # P23.C6：注册每 5min channel 健康维护（fail_count 半衰 + 冷却恢复）
+    _register_channel_health()
+
 
 def _register_quota_reset() -> None:
     assert _scheduler is not None
@@ -81,6 +84,30 @@ async def _quota_reset_callback() -> None:
             logger.info("workspace_quota reset done | affected={}", affected)
         except Exception:
             logger.exception("workspace_quota reset failed")
+
+
+def _register_channel_health() -> None:
+    assert _scheduler is not None
+    _scheduler.add_job(
+        _channel_health_callback,
+        trigger=CronTrigger.from_crontab("*/5 * * * *"),  # 每 5min
+        id="channel-health",
+        replace_existing=True,
+        misfire_grace_time=120,
+        coalesce=True,
+        max_instances=1,
+    )
+
+
+async def _channel_health_callback() -> None:
+    """cron 回调：channel fail_count 半衰 + auto_disabled 冷却恢复"""
+    from chameleon.core.jobs import decay_and_recover_channels
+
+    async with AsyncSessionLocal() as session:
+        try:
+            await decay_and_recover_channels(session)
+        except Exception:
+            logger.exception("channel health job failed")
 
 
 async def shutdown() -> None:
