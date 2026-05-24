@@ -15,12 +15,15 @@ from sqlalchemy.ext.asyncio import (
 
 from chameleon.core.config import inventory
 
+# 不用 pool_pre_ping：async + asyncpg 下，pre_ping 的 do_ping 在断连重连路径偶发
+# 落到非 greenlet 上下文 → MissingGreenlet（"首次写偶发失败、重试即成功"的根因）。
+# 改用 pool_recycle 主动回收（短于常见 idle 超时）规避陈旧连接；真断连由 SQLAlchemy
+# 的 connection invalidation 在下次 checkout 自愈。
 engine = create_async_engine(
     inventory.database_url(),
     pool_size=10,
     max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_recycle=1800,
     echo=False,
 )
 
