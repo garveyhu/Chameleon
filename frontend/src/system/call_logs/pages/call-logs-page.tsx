@@ -15,12 +15,22 @@ import {
   TablePagination,
   TableToolbar,
 } from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
 import { Input } from '@/core/components/ui/input';
-import { formatDateTime, formatNumber } from '@/core/lib/format';
+import { StatusBadge } from '@/core/components/ui/status-badge';
+import { formatDateTime, formatDurationMs, formatTokens } from '@/core/lib/format';
 import { TraceDrawer } from '@/system/call_logs/components/trace-drawer';
 import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem } from '@/system/call_logs/types/call-log';
+
+/** 延迟色阶：<1s 静默 / <3s 常规 / <10s 黄 / 更久 红 */
+const latencyClass = (ms: number): string =>
+  ms < 1000
+    ? 'text-stone-500'
+    : ms < 3000
+      ? 'text-stone-700'
+      : ms < 10000
+        ? 'text-amber-600'
+        : 'text-red-600';
 
 export const CallLogsPage = () => {
   const { t } = useTranslation();
@@ -53,59 +63,79 @@ export const CallLogsPage = () => {
     {
       key: 'created_at',
       header: '时间',
-      width: 160,
-      render: l => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(l.created_at)}</span>,
-    },
-    {
-      key: 'app_id',
-      header: t('table.app_key'),
-      width: 140,
-      render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.app_id}</span>,
-    },
-    {
-      key: 'agent_key',
-      header: t('table.agent_key'),
-      width: 160,
-      render: l => <span className="font-mono text-[11.5px] text-stone-700">{l.agent_key}</span>,
+      width: 156,
+      render: l => (
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
+          {formatDateTime(l.created_at)}
+        </span>
+      ),
     },
     {
       key: 'status',
       header: t('common.status'),
-      width: 80,
+      width: 104,
       render: l =>
         l.success ? (
-          <Badge variant="success">成功</Badge>
+          <StatusBadge tone="success">成功</StatusBadge>
         ) : (
-          <Badge variant="danger">{l.code}</Badge>
+          <StatusBadge tone="error">失败 {l.code}</StatusBadge>
         ),
+    },
+    {
+      key: 'agent_key',
+      header: '能力 / 来源',
+      render: l => (
+        <div className="min-w-0">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate font-mono text-[12px] font-medium text-stone-800">
+              {l.agent_key}
+            </span>
+            {l.stream && (
+              <span className="shrink-0 rounded bg-stone-100 px-1 py-0.5 text-[9.5px] text-stone-500">
+                流式
+              </span>
+            )}
+          </div>
+          <div className="truncate font-mono text-[10.5px] text-stone-400">{l.app_id}</div>
+          {!l.success && l.error_message && (
+            <div className="truncate text-[10.5px] text-red-500" title={l.error_message}>
+              {l.error_message}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       key: 'duration',
       header: t('table.duration'),
-      width: 90,
+      width: 96,
       align: 'right',
-      render: l => <span className="tnum font-mono text-[11.5px]">{l.duration_ms} ms</span>,
+      render: l => (
+        <span className={`tnum font-mono text-[11.5px] ${latencyClass(l.duration_ms)}`}>
+          {formatDurationMs(l.duration_ms)}
+        </span>
+      ),
     },
     {
       key: 'tokens',
       header: t('table.tokens'),
-      width: 90,
+      width: 116,
       align: 'right',
       render: l =>
         l.total_tokens ? (
-          <span className="tnum font-mono text-[11.5px] text-stone-500">
-            {formatNumber(l.total_tokens)}
-          </span>
+          <div className="text-right">
+            <div className="tnum font-mono text-[11.5px] text-stone-700">
+              {formatTokens(l.total_tokens)}
+            </div>
+            {l.prompt_tokens != null && l.completion_tokens != null && (
+              <div className="tnum font-mono text-[10px] text-stone-400">
+                ↑{formatTokens(l.prompt_tokens)} ↓{formatTokens(l.completion_tokens)}
+              </div>
+            )}
+          </div>
         ) : (
           <span className="text-stone-400">—</span>
         ),
-    },
-    {
-      key: 'error',
-      header: '错误',
-      render: l => (
-        <span className="text-[11.5px] text-red-600">{l.error_message?.slice(0, 80) || '—'}</span>
-      ),
     },
   ];
 
@@ -166,6 +196,7 @@ export const CallLogsPage = () => {
           rows={listQ.data?.items || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={l => (l.success ? 'bg-emerald-400' : 'bg-red-400')}
           onRowClick={row =>
             isTraceRoute
               ? navigate(`/traces/${encodeURIComponent(row.request_id)}`)
