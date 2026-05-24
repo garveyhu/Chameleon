@@ -1,6 +1,6 @@
 """通用 Webhook 通知
 
-POST 任意 JSON 到 target；接收方收到 `{ text, level, payload }` 结构。
+POST 任意 JSON 到 target；接收方收到 `{ source, level, text, payload }` 结构。
 2xx 视为成功。
 """
 
@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.system.eval_jobs.notifiers.base import Notifier
+from chameleon.core.components.notifier.base import Notifier
 
 
 class WebhookNotifier(Notifier):
@@ -25,7 +25,7 @@ class WebhookNotifier(Notifier):
         payload: dict[str, Any] | None = None,
     ) -> bool:
         body: dict[str, Any] = {
-            "source": "chameleon-eval",
+            "source": "chameleon",
             "level": "alert",
             "text": text,
             "payload": payload or {},
@@ -35,7 +35,7 @@ class WebhookNotifier(Notifier):
                 resp = await client.post(
                     target,
                     json=body,
-                    headers={"User-Agent": "chameleon-eval-notifier/1.0"},
+                    headers={"User-Agent": "chameleon-notifier/1.0"},
                 )
             ok = 200 <= resp.status_code < 300
             if not ok:
