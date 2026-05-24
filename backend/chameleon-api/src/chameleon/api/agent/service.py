@@ -227,6 +227,8 @@ async def invoke(
     code = ResultCode.Success.value
     err_msg: str | None = None
     request_payload = _build_request_payload(req, agent_def, current_input_text)
+    # P23.C1 计费多维：记下实际命中的 channel（failover 后），落 call_log
+    used_channel = None
     try:
         with rec.span("provider_invoke", meta={"provider": agent_def.provider}):
             if routed_model_code:
@@ -273,6 +275,8 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
+            model_code=routed_model_code or None,
+            channel_id=used_channel.id if used_channel else None,
         )
         raise
     except Exception:
@@ -289,6 +293,8 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
+            model_code=routed_model_code or None,
+            channel_id=used_channel.id if used_channel else None,
         )
         raise
 
@@ -335,6 +341,8 @@ async def invoke(
         spans=rec.dump(),
         request_payload=request_payload,
         response_payload=response_payload,
+        model_code=routed_model_code or None,
+        channel_id=used_channel.id if used_channel else None,
     )
 
     return InvokeResponse(

@@ -161,7 +161,11 @@ async def record_call(
     observation_type: str = "generation",
     completion_start_ms: int | None = None,
     # P22.1：model_code 用于查 price 算 cost；缺失则 cost=NULL
+    # P23.C1 起 model_code 同时落库（cost dashboard 按模型聚合）
     model_code: str | None = None,
+    # P23.C1 计费多维：user / channel 落库（API-key 调用 user_id 可能为 NULL）
+    user_id: int | None = None,
+    channel_id: int | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -197,6 +201,9 @@ async def record_call(
         app_id=app_id,
         agent_key=agent_key,
         session_id=session_id,
+        user_id=user_id,
+        model_code=model_code,
+        channel_id=channel_id,
         stream=stream,
         success=success,
         code=code,
