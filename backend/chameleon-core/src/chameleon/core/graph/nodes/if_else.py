@@ -78,6 +78,19 @@ class IfElseNode(Node[Any, dict]):
         return output.get("branch")
 
 
+# ── 表达式校验 + 求值（公开给 IterationNode 等复用）──────────
+
+
+def validate_condition(expr: Any) -> None:
+    """校验条件表达式形态（IterationNode.early_stop 等复用）"""
+    _validate_expr_shape(expr, depth=0)
+
+
+def eval_condition(expr: Any, data: Any) -> Any:
+    """对 data 求值条件表达式，返回结果（truthy 判断由调用方做）"""
+    return _eval_expr(expr, data, depth=0)
+
+
 # ── 表达式校验 + 求值 ──────────────────────────────────────
 
 
