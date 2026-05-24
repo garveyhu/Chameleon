@@ -27,7 +27,7 @@ import { DocumentTable } from '@/system/kbs/components/document-table';
 import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone';
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
 import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
-import { RetrievalTest } from '@/system/kbs/components/retrieval-test';
+import { HitTestPanel } from '@/system/kbs/components/hit-test-panel';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
@@ -103,7 +103,7 @@ export const KbDetailPage = () => {
           {tab === 'collections' && <CollectionsTab kbId={kbId} />}
           {tab === 'search' &&
             (kbQ.data ? (
-              <RetrievalTest kb={kbQ.data} />
+              <HitTestPanel kb={kbQ.data} />
             ) : (
               <PlaceholderTab title="检索测试" hint="加载 KB 信息中…" />
             ))}
