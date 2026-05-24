@@ -18,8 +18,9 @@ import {
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { StatusBadge, type StatusTone } from '@/core/components/ui/status-badge';
 import { Switch } from '@/core/components/ui/switch';
-import { formatRelative } from '@/core/lib/format';
+import { formatDurationMs, formatRelative } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { ChannelConfigSheet } from '@/system/channels/components/channel-config-sheet';
@@ -27,11 +28,24 @@ import { channelApi } from '@/system/channels/services/channel';
 import type { ChannelItem, ChannelStatus } from '@/system/channels/types/channel';
 import { providerApi } from '@/system/providers/services/provider';
 
-const STATUS_LABEL: Record<ChannelStatus, { label: string; variant: 'success' | 'warning' | 'danger' }> = {
-  enabled: { label: '启用', variant: 'success' },
-  auto_disabled: { label: '自动停用', variant: 'warning' },
-  manual_disabled: { label: '手动停用', variant: 'danger' },
+const STATUS_LABEL: Record<
+  ChannelStatus,
+  { label: string; tone: StatusTone; pulse?: boolean; bar: string }
+> = {
+  enabled: { label: '启用', tone: 'success', bar: 'bg-emerald-400' },
+  auto_disabled: { label: '自动停用', tone: 'warning', pulse: true, bar: 'bg-amber-400' },
+  manual_disabled: { label: '手动停用', tone: 'neutral', bar: 'bg-stone-300' },
 };
+
+/** 响应时间色阶：<1s 静默 / <3s 常规 / <10s 黄 / 更久 红 */
+const latencyClass = (ms: number): string =>
+  ms < 1000
+    ? 'text-stone-500'
+    : ms < 3000
+      ? 'text-stone-700'
+      : ms < 10000
+        ? 'text-amber-600'
+        : 'text-red-600';
 
 export const ChannelsPage = () => {
   const qc = useQueryClient();
@@ -123,10 +137,14 @@ export const ChannelsPage = () => {
     {
       key: 'status',
       header: '状态',
-      width: 110,
+      width: 120,
       render: c => {
         const conf = STATUS_LABEL[c.status];
-        return <Badge variant={conf.variant}>{conf.label}</Badge>;
+        return (
+          <StatusBadge tone={conf.tone} pulse={conf.pulse}>
+            {conf.label}
+          </StatusBadge>
+        );
       },
     },
     {
@@ -145,11 +163,15 @@ export const ChannelsPage = () => {
       header: '健康',
       width: 200,
       render: c => (
-        <div className="flex flex-col gap-0.5 text-[11px] text-stone-500">
+        <div className="flex flex-col gap-0.5 text-[11px]">
           <div className="flex items-center gap-2">
-            <span>失败 {c.fail_count}</span>
+            <span className={c.fail_count > 0 ? 'font-medium text-red-600' : 'text-stone-500'}>
+              失败 {c.fail_count}
+            </span>
             {c.response_time_ms !== null ? (
-              <span className="tnum">· {c.response_time_ms}ms</span>
+              <span className={`tnum ${latencyClass(c.response_time_ms)}`}>
+                · {formatDurationMs(c.response_time_ms)}
+              </span>
             ) : null}
           </div>
           <div className="text-[10.5px] text-stone-400">
@@ -236,6 +258,7 @@ export const ChannelsPage = () => {
           rows={listQ.data || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={c => STATUS_LABEL[c.status].bar}
           emptyText={
             <EmptyState
               icon={<Plug strokeWidth={1.5} />}
