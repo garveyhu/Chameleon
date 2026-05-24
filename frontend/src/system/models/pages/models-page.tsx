@@ -136,13 +136,13 @@ export const ModelsPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 110,
+      width: 184,
       render: m => (
-        <div className="inline-flex items-center gap-0.5">
+        <div className="inline-flex items-center justify-end gap-0.5">
           <button
             type="button"
             title="配置参数"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setConfigModel(m)}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" /> 配置
@@ -150,7 +150,7 @@ export const ModelsPage = () => {
           <button
             type="button"
             title={t('common.test')}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setTestModel(m)}
           >
             <Zap className="h-3.5 w-3.5" /> {t('common.test')}
@@ -158,7 +158,7 @@ export const ModelsPage = () => {
           <button
             type="button"
             title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+            className="shrink-0 rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelModel(m)}
           >
             <Trash2 className="h-3.5 w-3.5" />

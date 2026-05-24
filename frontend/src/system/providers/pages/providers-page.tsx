@@ -108,13 +108,13 @@ export const ProvidersPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 110,
+      width: 120,
       render: p => (
-        <div className="inline-flex items-center gap-0.5">
+        <div className="inline-flex items-center justify-end gap-0.5">
           <button
             type="button"
             title="配置"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setEditProv(p)}
           >
             <Pencil className="h-3.5 w-3.5" /> 配置
@@ -122,7 +122,7 @@ export const ProvidersPage = () => {
           <button
             type="button"
             title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+            className="shrink-0 rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelProv(p)}
           >
             <Trash2 className="h-3.5 w-3.5" />
