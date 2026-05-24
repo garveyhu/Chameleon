@@ -26,7 +26,6 @@ from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.graph.registry import register_node_type
 from chameleon.core.graph.results import assert_acyclic
 
-
 # ── 测试用节点 ───────────────────────────────────────────
 
 
@@ -300,22 +299,14 @@ async def test_run_if_else_false_branch():
     assert "t" not in node_ids
 
 
-async def test_run_no_outgoing_non_end_fails():
-    """节点既不是 end，又没有 outgoing 边 → executor 报错"""
+async def test_run_dangling_non_end_node_still_runs():
+    """DAG executor 语义：非 end 的叶子节点（无 outgoing）照常执行后停止
+
+    s 有两条出边：→ dangling（叶子，无后继）和 → e（end）。
+    旧 executor.py 单路径走法会在 dangling 处报"断裂"；
+    PR88b Orchestrator 是拓扑 DAG 执行器：两个分支都跑，输出取 end 节点。
+    """
     spec = GraphSpec(
-        nodes=[
-            NodeSpec(id="s", type="start"),
-            NodeSpec(id="dangling", type="_echo"),
-            NodeSpec(id="e", type="end"),
-        ],
-        edges=[
-            EdgeSpec(id="1", source="s", target="dangling"),
-            # dangling 没有 outgoing；e 没有 incoming → 但 e 可达性靠 incoming，不强制
-            EdgeSpec(id="2", source="dangling", target="e"),
-        ],
-    )
-    # 这个其实是合法的：dangling → e。换成真的 dangling：
-    spec2 = GraphSpec(
         nodes=[
             NodeSpec(id="s", type="start"),
             NodeSpec(id="dangling", type="_echo"),
@@ -326,9 +317,42 @@ async def test_run_no_outgoing_non_end_fails():
             EdgeSpec(id="2", source="s", target="e"),  # s 多出边
         ],
     )
-    # 因为 s 有两条 outgoing，executor 选第一条（dangling）；dangling 没有出边 → 报错
-    executor = Orchestrator(spec2)
-    result = await executor.run(input={}, ctx=_ctx())
-    assert result.status == NodeStatus.FAILED
-    assert result.error is not None
-    assert "断裂" in result.error["message"]
+    executor = Orchestrator(spec)
+    result = await executor.run(input={"hi": 1}, ctx=_ctx())
+    assert result.status == NodeStatus.SUCCESS
+    node_ids = {r.node_id for r in result.node_runs}
+    # dangling 与 end 都执行了
+    assert node_ids == {"s", "dangling", "e"}
+    # 输出取 end 节点（透传 graph input）
+    assert result.output == {"hi": 1}
+
+
+async def test_run_if_else_merge_join_runs_end():
+    """if_else 两分支汇聚到 end（diamond join）—— A0 OR-join 修复回归
+
+    选中 true 分支后 false 分支被 skip；end 入度 2，但只要 true 分支
+    完成就必须执行（不能因 skip 把 end 入度打成负数而永不入队）。
+    """
+    spec = GraphSpec(
+        nodes=[
+            NodeSpec(id="s", type="start"),
+            NodeSpec(id="g", type="if_else"),
+            NodeSpec(id="t", type="_echo"),
+            NodeSpec(id="f", type="_echo"),
+            NodeSpec(id="e", type="end"),
+        ],
+        edges=[
+            EdgeSpec(id="1", source="s", target="g"),
+            EdgeSpec(id="2", source="g", target="t", source_handle="true"),
+            EdgeSpec(id="3", source="g", target="f", source_handle="false"),
+            EdgeSpec(id="4", source="t", target="e"),
+            EdgeSpec(id="5", source="f", target="e"),
+        ],
+    )
+    executor = Orchestrator(spec, node_factory=_factory_with_if_else)
+    result = await executor.run(input={"value": 7}, ctx=_ctx())
+    assert result.status == NodeStatus.SUCCESS
+    node_ids = {r.node_id for r in result.node_runs}
+    assert "t" in node_ids
+    assert "f" not in node_ids  # 未选中分支被 skip
+    assert "e" in node_ids  # 汇聚节点照常执行（OR-join）
