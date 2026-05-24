@@ -5,7 +5,6 @@
 
 import { Trash2 } from 'lucide-react';
 
-import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
 import { AgentDebateForm } from '@/system/graphs/components/agent-debate-form';

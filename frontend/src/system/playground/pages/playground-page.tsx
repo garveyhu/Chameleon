@@ -1,42 +1,17 @@
-/** Playground 页：单列 + 并排（最多 4 列） */
+/** Playground 页：单列 + 并排（最多 4 列）—— 状态全在 core/stores/chat */
 
 import { Plus } from 'lucide-react';
-import { useState } from 'react';
 
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
-import { toast } from '@/core/lib/toast';
+import { MAX_COLUMNS, useChatStore } from '@/core/stores/chat';
 import { ChatColumn } from '@/system/playground/components/chat-column';
-import type { PlaygroundParams } from '@/system/playground/types/playground';
-
-const MAX_COLUMNS = 4;
-
-const newParams = (): PlaygroundParams => ({
-  system_prompt: '',
-  temperature: 0.7,
-  top_p: 1,
-  max_tokens: null,
-  kb_ids: [],
-});
 
 export const PlaygroundPage = () => {
-  const [columns, setColumns] = useState<PlaygroundParams[]>([newParams()]);
-
-  const update = (i: number, next: PlaygroundParams) => {
-    setColumns(prev => prev.map((c, idx) => (idx === i ? next : c)));
-  };
-
-  const add = () => {
-    if (columns.length >= MAX_COLUMNS) {
-      toast.warning(`最多 ${MAX_COLUMNS} 列`);
-      return;
-    }
-    setColumns(prev => [...prev, newParams()]);
-  };
-
-  const remove = (i: number) => {
-    setColumns(prev => prev.filter((_, idx) => idx !== i));
-  };
+  const columns = useChatStore(s => s.columns);
+  const addColumn = useChatStore(s => s.addColumn);
+  const removeColumn = useChatStore(s => s.removeColumn);
+  const multi = columns.length > 1;
 
   return (
     <SectionCard className="!p-0">
@@ -50,7 +25,7 @@ export const PlaygroundPage = () => {
         <Button
           size="sm"
           variant="ghost"
-          onClick={add}
+          onClick={addColumn}
           disabled={columns.length >= MAX_COLUMNS}
         >
           <Plus className="mr-1 h-3.5 w-3.5" />
@@ -64,13 +39,12 @@ export const PlaygroundPage = () => {
         }}
         title="P22.5：移动端 (<md) 强制单列 stack"
       >
-        {columns.map((p, i) => (
+        {columns.map((col, i) => (
           <ChatColumn
-            key={i}
-            index={columns.length > 1 ? i : undefined}
-            params={p}
-            onParamsChange={next => update(i, next)}
-            onRemove={columns.length > 1 ? () => remove(i) : undefined}
+            key={col.id}
+            columnId={col.id}
+            index={multi ? i : undefined}
+            onRemove={multi ? () => removeColumn(col.id) : undefined}
           />
         ))}
       </div>

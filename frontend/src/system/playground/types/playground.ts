@@ -36,6 +36,8 @@ export interface PlaygroundMessage {
   feedback?: 1 | -1 | null;
   /** 该消息是否已被 edit/regenerate 替换（true 时灰显） */
   stale?: boolean;
+  /** 用户置顶标记（本地 UI 态） */
+  pinned?: boolean;
 }
 
 export interface PlaygroundUsage {

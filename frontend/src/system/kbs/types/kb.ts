@@ -93,6 +93,8 @@ export interface SearchRequest {
   doc_ids?: EntityId[];
   tags?: string[];
   mode?: RecallMode;
+  /** B1：multi-query 扩展变体数（后端接入后生效） */
+  multi_query_count?: number;
 }
 
 export interface SearchHitItem {
@@ -100,6 +102,11 @@ export interface SearchHitItem {
   doc_id: EntityId;
   seq: number;
   content: string;
+  /** 综合得分（融合后） */
   score: number;
   document_title: string;
+  /** B6 score breakdown 分项（后端接入后返回；缺省即未启用对应通道） */
+  vector_score?: number | null;
+  bm25_score?: number | null;
+  rerank_score?: number | null;
 }

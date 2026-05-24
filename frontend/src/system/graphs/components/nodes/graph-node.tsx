@@ -87,6 +87,8 @@ const STATUS_COLOR: Record<NodeRunItem['status'], string> = {
 };
 
 export interface GraphNodeData {
+  // React Flow Node<T> 要求 data 满足 Record<string, unknown>
+  [key: string]: unknown;
   label: string;
   nodeType: GraphNodeType;
   selected?: boolean;

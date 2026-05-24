@@ -1,18 +1,16 @@
 /** 对话详情页 —— 树视图 + 分支切换器 + regenerate/edit-and-resend（P21.4 PR #67+#68） */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowLeft,
-  Bot,
-  Edit3,
-  Loader2,
-  RefreshCw,
-  User2,
-  Wrench,
-} from 'lucide-react';
+import { ArrowLeft, Bot, Loader2, User2, Wrench } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
+import { MessageActions } from '@/core/components/chat';
+import type {
+  ChatActionMessage,
+  ChatActionRole,
+} from '@/core/components/chat';
+import { VirtualList } from '@/core/components/common/virtual-list';
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
@@ -48,10 +46,7 @@ export const ConversationDetailPage = () => {
   });
 
   const [selections, setSelections] = useState<BranchSelections>({});
-  const { visible, tree, defaultSelections } = useMessageTree(
-    msgsQ.data?.items,
-    selections,
-  );
+  const { visible, tree } = useMessageTree(msgsQ.data?.items, selections);
 
   const qc = useQueryClient();
   const refresh = () => {
@@ -151,39 +146,43 @@ export const ConversationDetailPage = () => {
       </header>
 
       <SectionCard className="!p-0">
-        <div className="divide-y divide-stone-100">
-          {visible.map(item => (
-            <MessageRow
-              key={String(item.message.id)}
-              item={item}
-              onSwitchBranch={onSwitchBranch}
-              isEditing={String(editingId) === String(item.message.id)}
-              editText={editText}
-              setEditText={setEditText}
-              startEdit={() => {
-                setEditingId(item.message.id);
-                setEditText(item.message.content);
-              }}
-              cancelEdit={() => setEditingId(null)}
-              onRegenerate={() => regenMut.mutate(item.message.id)}
-              onSubmitEdit={() =>
-                editMut.mutate({ mid: item.message.id, text: editText })
-              }
-              regenPending={regenMut.isPending}
-              editPending={editMut.isPending}
-            />
-          ))}
-          {msgsQ.data && visible.length === 0 && (
-            <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-              暂无消息
-            </div>
-          )}
-          {msgsQ.isLoading && (
-            <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-              加载消息中…
-            </div>
-          )}
-        </div>
+        {msgsQ.isLoading ? (
+          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
+            加载消息中…
+          </div>
+        ) : visible.length === 0 ? (
+          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
+            暂无消息
+          </div>
+        ) : (
+          <VirtualList
+            items={visible}
+            getKey={item => String(item.message.id)}
+            estimateSize={104}
+            className="max-h-[calc(100vh-200px)]"
+            itemClassName="border-b border-stone-100"
+            renderItem={item => (
+              <MessageRow
+                item={item}
+                onSwitchBranch={onSwitchBranch}
+                isEditing={String(editingId) === String(item.message.id)}
+                editText={editText}
+                setEditText={setEditText}
+                startEdit={() => {
+                  setEditingId(item.message.id);
+                  setEditText(item.message.content);
+                }}
+                cancelEdit={() => setEditingId(null)}
+                onRegenerate={() => regenMut.mutate(item.message.id)}
+                onSubmitEdit={() =>
+                  editMut.mutate({ mid: item.message.id, text: editText })
+                }
+                regenPending={regenMut.isPending}
+                editPending={editMut.isPending}
+              />
+            )}
+          />
+        )}
       </SectionCard>
     </div>
   );
@@ -275,34 +274,27 @@ const MessageRow = ({
           currentId={item.message.id}
           onSelect={next => onSwitchBranch(parentKey, next)}
         />
-        <span className="ml-auto inline-flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
-          {role === 'user' && !isEditing && (
-            <button
-              type="button"
-              onClick={startEdit}
-              className="rounded p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-              title="编辑 + 重发（创建新分支）"
-            >
-              <Edit3 className="h-3 w-3" />
-            </button>
+        {!isEditing && (
+          <span className="ml-auto">
+            <MessageActions
+              msg={toActionMessage(item.message)}
+              handlers={{
+                onEdit: role === 'user' ? startEdit : undefined,
+                onRegenerate: role === 'assistant' ? onRegenerate : undefined,
+              }}
+              hidden={regenPending ? ['regenerate'] : undefined}
+            />
+          </span>
+        )}
+        <span
+          className={cn(
+            'text-[10.5px] text-stone-400',
+            !isEditing ? '' : 'ml-auto',
           )}
-          {role === 'assistant' && (
-            <button
-              type="button"
-              onClick={onRegenerate}
-              disabled={regenPending}
-              className="rounded p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-800 disabled:opacity-40"
-              title="重新生成（创建新分支）"
-            >
-              {regenPending ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3" />
-              )}
-            </button>
+        >
+          {regenPending && (
+            <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
           )}
-        </span>
-        <span className="text-[10.5px] text-stone-400">
           {formatDateTime(item.message.created_at)}
         </span>
       </div>
@@ -345,6 +337,20 @@ const MessageRow = ({
     </div>
   );
 };
+
+const KNOWN_ROLES: ReadonlySet<string> = new Set([
+  'user',
+  'assistant',
+  'system',
+  'tool',
+]);
+
+function toActionMessage(m: MessageItem): ChatActionMessage {
+  const role: ChatActionRole = KNOWN_ROLES.has(m.role)
+    ? (m.role as ChatActionRole)
+    : 'assistant';
+  return { id: String(m.id), role, content: m.content };
+}
 
 function walkTree(
   nodes: { children: { children: unknown[] }[] }[],

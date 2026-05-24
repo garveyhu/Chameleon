@@ -8,7 +8,9 @@ import { Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { MessageActions } from '@/core/components/chat';
 import { useEmbedChat } from '@/system/embed_iframe/hooks/use-embed-chat';
+import type { ChatMessage } from '@/system/embed_iframe/types/embed-iframe';
 
 export const EmbedIframePage = () => {
   const { embedKey } = useParams<{ embedKey: string }>();
@@ -99,12 +101,16 @@ const MessageBubble = ({
   msg,
   primary,
 }: {
-  msg: { role: 'user' | 'assistant'; content: string; pending?: boolean; error?: boolean };
+  msg: ChatMessage;
   primary: string;
 }) => {
   const isUser = msg.role === 'user';
+  // 公开 widget：仅 assistant 完整消息提供 copy / 朗读 / 分享（内置动作，无受控 handler）
+  const showActions = !isUser && !msg.pending && !msg.error;
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
+    >
       <div
         className={`max-w-[85%] whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-[13.5px] leading-relaxed ${
           isUser
@@ -117,6 +123,14 @@ const MessageBubble = ({
       >
         {msg.pending ? <TypingDots /> : msg.content}
       </div>
+      {showActions && (
+        <div className="mt-1">
+          <MessageActions
+            msg={{ id: msg.id, role: 'assistant', content: msg.content }}
+            hidden={['export']}
+          />
+        </div>
+      )}
     </div>
   );
 };

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Bot, GitBranch } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { JsonViewer } from '@/core/components/common/json-viewer';
@@ -10,14 +10,26 @@ import { SectionCard } from '@/core/components/table';
 import { Skeleton } from '@/core/components/common/skeleton';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { useTraceStore } from '@/core/stores/trace';
+import type { TraceViewMode } from '@/core/stores/trace';
 import { ObservationTree } from '@/system/call_logs/components/observation-tree';
 import type { TraceTreeNode } from '@/system/call_logs/types/call-log';
+import { TraceGantt } from '@/system/traces/components/trace-gantt';
 import { traceApi } from '@/system/traces/services/trace';
 
 export const TraceDetailPage = () => {
   const { requestId } = useParams<{ requestId: string }>();
   const rid = requestId ?? '';
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = useTraceStore(s => s.selectedId);
+  const select = useTraceStore(s => s.select);
+  const reset = useTraceStore(s => s.reset);
+  const viewMode = useTraceStore(s => s.viewMode);
+  const setViewMode = useTraceStore(s => s.setViewMode);
+
+  // 切 trace 时清空视图态（选中 / 折叠 / 缩放）
+  useEffect(() => {
+    reset();
+  }, [rid, reset]);
 
   const treeQ = useQuery({
     queryKey: ['traces', rid, 'tree'],
@@ -53,6 +65,7 @@ export const TraceDetailPage = () => {
           </span>
           <span className="font-mono text-[11px] text-stone-500">{rid}</span>
         </div>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
       </header>
 
       {treeQ.isLoading ? (
@@ -63,6 +76,21 @@ export const TraceDetailPage = () => {
             无法加载 trace tree
           </div>
         </SectionCard>
+      ) : viewMode === 'gantt' ? (
+        <div className="space-y-3">
+          <SectionCard className="!p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-[11.5px] font-medium text-stone-700">
+                甘特时间轴
+              </span>
+              <TreeStats root={root} />
+            </div>
+            <TraceGantt root={root} />
+          </SectionCard>
+          <SectionCard className="!p-3">
+            <NodeDetail tree={root} focusId={focusId} />
+          </SectionCard>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,2fr)_3fr]">
           <SectionCard className="!p-3">
@@ -75,7 +103,7 @@ export const TraceDetailPage = () => {
             <ObservationTree
               root={root}
               selectedId={focusId}
-              onSelect={n => setSelectedId(n.request_id)}
+              onSelect={n => select(n.request_id)}
             />
           </SectionCard>
 
@@ -90,6 +118,32 @@ export const TraceDetailPage = () => {
     </div>
   );
 };
+
+const ViewToggle = ({
+  mode,
+  onChange,
+}: {
+  mode: TraceViewMode;
+  onChange: (m: TraceViewMode) => void;
+}) => (
+  <div className="inline-flex overflow-hidden rounded-md border border-stone-200/70 text-[11.5px]">
+    {(['tree', 'gantt'] as const).map(m => (
+      <button
+        key={m}
+        type="button"
+        onClick={() => onChange(m)}
+        className={cn(
+          'px-2.5 py-1 transition',
+          mode === m
+            ? 'bg-stone-800 text-white'
+            : 'bg-white text-stone-600 hover:bg-stone-100',
+        )}
+      >
+        {m === 'tree' ? '树视图' : '甘特图'}
+      </button>
+    ))}
+  </div>
+);
 
 const TreeStats = ({ root }: { root: TraceTreeNode }) => {
   let totalNodes = 0;
