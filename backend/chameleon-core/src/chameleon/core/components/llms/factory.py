@@ -19,7 +19,7 @@ from sqlalchemy import select
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import LLMModel, Provider
+from chameleon.core.models import Channel, LLMModel, Provider
 from chameleon.core.utils.crypto import get_or_decrypt
 
 # 进程内 cache（启动期一次性 load）
@@ -38,6 +38,19 @@ def set_for_test(client: BaseLLM | None) -> None:
 
 
 # ── 启动期 async load ─────────────────────────────────────
+
+
+def _channel_key(ch: Channel) -> str | None:
+    """取 channel 的明文 key：优先单 key（api_key_encrypted），否则多 key 池首个。
+
+    cache 静态构建只取一个 key；按请求轮转 / failover 需走 core.routing
+    （resolve_channel + key_pool + invoke_with_failover），属后续重构。
+    """
+    if ch.api_key_encrypted:
+        return get_or_decrypt(ch.api_key_encrypted)
+    if ch.keys:
+        return get_or_decrypt(ch.keys[0])
+    return None
 
 
 async def reload_llm_cache(default_name: str | None = None) -> int:
@@ -65,16 +78,42 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
                 )
             )
         ).all()
+        # 凭证按设计走 channels（provider.api_key_encrypted 仅兼容兜底）。
+        # 每 provider 取优先级最高的 enabled channel；priority 同则取后建的。
+        channels = (
+            (
+                await session.execute(
+                    select(Channel)
+                    .where(
+                        Channel.status == "enabled",
+                        Channel.deleted_at.is_(None),
+                    )
+                    .order_by(Channel.priority.desc(), Channel.id.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    channel_by_provider: dict[int, Channel] = {}
+    for ch in channels:
+        channel_by_provider.setdefault(ch.provider_id, ch)
 
     new_cache: dict[str, BaseLLM] = {}
     for model, provider in rows:
         try:
-            api_key = get_or_decrypt(provider.api_key_encrypted) or ""
+            ch = channel_by_provider.get(provider.id)
+            ch_key = _channel_key(ch) if ch is not None else None
+            # 凭证优先级：channel key > provider key（兼容期兜底）
+            api_key = ch_key or get_or_decrypt(provider.api_key_encrypted) or ""
+            api_base = (
+                ch.base_url if ch is not None and ch.base_url else provider.base_url
+            ) or ""
             defaults = model.defaults or {}
             instance = BaseLLM(
                 model=model.code,
                 api_key=api_key,
-                api_base=provider.base_url or "",
+                api_base=api_base,
                 temperature=defaults.get("temperature", 0.7),
                 max_tokens=defaults.get("max_tokens"),
             )
