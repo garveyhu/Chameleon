@@ -19,42 +19,12 @@ from loguru import logger
 from sqlalchemy import text
 
 from chameleon.api.agent import agents_router
-from chameleon.api.embed import embed_router
-from chameleon.api.otel import otel_router
-from chameleon.system.admin import admin_router
-from chameleon.system.agents import agents_admin_router
-from chameleon.system.api_key import api_keys_router
-from chameleon.system.apps import apps_router
-from chameleon.system.abilities import abilities_router
-from chameleon.system.audit_logs import audit_logs_router
-from chameleon.system.auth import auth_router
-from chameleon.system.channels import channels_router
-from chameleon.system.dashboard import dashboard_router
-from chameleon.system.datasets import datasets_router
-from chameleon.system.app_templates import app_templates_router
-from chameleon.system.eval_jobs import eval_jobs_router
-from chameleon.system.eval_jobs import scheduler as eval_scheduler
-from chameleon.system.eval_templates import eval_templates_router
-from chameleon.system.embed_configs import embed_configs_router
-from chameleon.system.graphs import graphs_router
-from chameleon.system.tools import tools_router
-from chameleon.system.kbs import kbs_admin_router
-from chameleon.system.models import models_router
-from chameleon.system.permissions import permissions_router
-from chameleon.system.playground import playground_router
-from chameleon.system.marketplace import marketplace_router
-from chameleon.system.plugins import plugins_router
-from chameleon.system.workspaces import workspaces_router
-from chameleon.system.providers import providers_admin_router
-from chameleon.system.roles import roles_router
-from chameleon.system.schemas import schemas_router
-from chameleon.system.scores import scores_router
-from chameleon.system.search import search_router
-from chameleon.system.settings import settings_router
-from chameleon.system.users import users_router
 from chameleon.api.conversation import conversations_router
+from chameleon.api.embed import embed_router
 from chameleon.api.files import files_router
 from chameleon.api.knowledge import knowledge_router
+from chameleon.api.openai import openai_router
+from chameleon.api.otel import otel_router
 from chameleon.api.task import tasks_router
 from chameleon.core.api.exceptions import (
     BusinessError,
@@ -69,8 +39,39 @@ from chameleon.core.infra.jwt import init_jwt
 from chameleon.core.infra.logger import setup_logger
 from chameleon.core.infra.object_store import get_object_store
 from chameleon.core.utils.crypto import init_crypto
-from chameleon.system.seed import run_seed_if_empty
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
+from chameleon.system.abilities import abilities_router
+from chameleon.system.admin import admin_router
+from chameleon.system.agents import agents_admin_router
+from chameleon.system.api_key import api_keys_router
+from chameleon.system.app_templates import app_templates_router
+from chameleon.system.apps import apps_router
+from chameleon.system.audit_logs import audit_logs_router
+from chameleon.system.auth import auth_router
+from chameleon.system.channels import channels_router
+from chameleon.system.dashboard import dashboard_router
+from chameleon.system.datasets import datasets_router
+from chameleon.system.embed_configs import embed_configs_router
+from chameleon.system.eval_jobs import eval_jobs_router
+from chameleon.system.eval_jobs import scheduler as eval_scheduler
+from chameleon.system.eval_templates import eval_templates_router
+from chameleon.system.graphs import graphs_router
+from chameleon.system.kbs import kbs_admin_router
+from chameleon.system.marketplace import marketplace_router
+from chameleon.system.models import models_router
+from chameleon.system.permissions import permissions_router
+from chameleon.system.playground import playground_router
+from chameleon.system.plugins import plugins_router
+from chameleon.system.providers import providers_admin_router
+from chameleon.system.roles import roles_router
+from chameleon.system.schemas import schemas_router
+from chameleon.system.scores import scores_router
+from chameleon.system.search import search_router
+from chameleon.system.seed import run_seed_if_empty
+from chameleon.system.settings import settings_router
+from chameleon.system.tools import tools_router
+from chameleon.system.users import users_router
+from chameleon.system.workspaces import workspaces_router
 
 REQUEST_ID_HEADER = "X-Request-Id"
 
@@ -197,6 +198,7 @@ def _mount_routers(app: FastAPI) -> None:
     # 业务接口
     app.include_router(conversations_router)
     app.include_router(agents_router)
+    app.include_router(openai_router)
     app.include_router(knowledge_router)
     app.include_router(files_router)
     app.include_router(tasks_router)
