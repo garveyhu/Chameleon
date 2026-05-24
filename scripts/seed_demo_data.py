@@ -34,7 +34,7 @@ for sub in (
 from sqlalchemy import delete, func, select, update  # noqa: E402
 
 from chameleon.core.infra.db import AsyncSessionLocal  # noqa: E402
-from chameleon.core.models import App, CallLog, Graph  # noqa: E402
+from chameleon.core.models import App, CallLog, Channel, Graph, User  # noqa: E402
 
 DEMO_APP_KEY = "demo"
 DEMO_AGENTS = ["weather-bot", "rag-assistant", "code-helper"]
@@ -84,6 +84,17 @@ async def _seed_call_logs(session, target: int) -> int:
 
     now = datetime.now(timezone.utc)
     rng = random.Random(42)
+
+    # C1 计费多维列：user_id / channel_id 受 FK 约束，只能用真实 ID（或 None）。
+    # 取首个 user / channel 作 demo 维度值，与 None 混合制造分组多样性。
+    demo_user_id = (
+        await session.execute(select(User.id).limit(1))
+    ).scalar_one_or_none()
+    demo_channel_id = (
+        await session.execute(select(Channel.id).limit(1))
+    ).scalar_one_or_none()
+    user_pool = [demo_user_id, demo_user_id, None]
+    channel_pool = [demo_channel_id, None, None]
     for i in range(need):
         ts = now - timedelta(
             hours=rng.randint(0, 24 * 7),
@@ -112,6 +123,9 @@ async def _seed_call_logs(session, target: int) -> int:
                 completion_tokens=ct if success else None,
                 total_tokens=(pt + ct) if success else None,
                 cost_usd=cost if success else None,
+                model_code=model,
+                user_id=rng.choice(user_pool),
+                channel_id=rng.choice(channel_pool),
                 request_payload={"model": model, "agent_key": agent},
                 response_payload=(
                     {"answer": "（demo seed 数据）", "model": model}

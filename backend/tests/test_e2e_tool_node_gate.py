@@ -7,11 +7,11 @@ from sqlalchemy import delete
 
 from chameleon.core.graph import (
     EdgeSpec,
-    GraphExecutor,
     GraphSpec,
     NodeContext,
     NodeSpec,
 )
+from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import ToolInstance
 from datetime import datetime, timezone
@@ -72,7 +72,7 @@ async def test_tool_node_uses_admin_config_when_enabled(_clean):
             EdgeSpec(id="2", source="t", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={}, ctx=_ctx())
     tool_run = next(r for r in result.node_runs if r.node_id == "t")
     assert tool_run.status.value == "success"
@@ -109,7 +109,7 @@ async def test_tool_node_refuses_when_disabled(_clean):
             EdgeSpec(id="2", source="t", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={}, ctx=_ctx())
     tool_run = next(r for r in result.node_runs if r.node_id == "t")
     out = tool_run.output
@@ -138,7 +138,7 @@ async def test_tool_node_works_without_instance(_clean):
             EdgeSpec(id="2", source="t", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={}, ctx=_ctx())
     tool_run = next(r for r in result.node_runs if r.node_id == "t")
     out = tool_run.output
