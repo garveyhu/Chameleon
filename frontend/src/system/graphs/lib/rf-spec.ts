@@ -82,6 +82,8 @@ export function defaultLabel(type: GraphNodeType, id: string): string {
     http: 'HTTP',
     aggregator: '聚合',
     assign: '赋值',
+    classifier: '意图分类',
+    code: '代码',
     end: '终态',
     start: '开始',
     noop: '占位',

@@ -16,7 +16,9 @@ export type GraphNodeType =
   | 'answer'
   | 'http'
   | 'aggregator'
-  | 'assign';
+  | 'assign'
+  | 'code'
+  | 'classifier';
 
 export interface NodeSpec {
   id: string;

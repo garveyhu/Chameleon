@@ -373,6 +373,59 @@ const DataForm = ({
     );
   }
 
+  if (type === 'classifier') {
+    return (
+      <>
+        <Field label="模型（留空走默认）">
+          <ModelNameField
+            value={(data.model_name as string) || ''}
+            onChange={v => onPatch({ model_name: v || undefined })}
+          />
+        </Field>
+        <JsonField
+          label="categories（[{key, description}]，≥2）"
+          value={data.categories}
+          fallback={[
+            { key: 'tech', description: '技术 / 代码问题' },
+            { key: 'other', description: '其它' },
+          ]}
+          onChange={v => onPatch({ categories: v })}
+          rows={6}
+          hint="LLM 把问题分类，输出 {category}；下游用 if_else 读 {{#本节点id.category#}} 分流"
+        />
+      </>
+    );
+  }
+
+  if (type === 'code') {
+    return (
+      <>
+        <Field label="语言">
+          <select
+            value={(data.language as string) || 'python'}
+            onChange={e => onPatch({ language: e.target.value })}
+            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
+          >
+            <option value="python">python</option>
+            <option value="node">node</option>
+          </select>
+        </Field>
+        <Field label="代码（input 经 stdin 传入 JSON；stdout 为 JSON 则进 result）">
+          <Textarea
+            value={(data.code as string) || ''}
+            onChange={e => onPatch({ code: e.target.value })}
+            rows={8}
+            placeholder={'import sys, json\ndata = json.load(sys.stdin)\nprint(json.dumps({"n": len(str(data))}))'}
+            className="font-mono text-[11.5px]"
+          />
+        </Field>
+        <div className="text-[10.5px] leading-snug text-stone-500">
+          沙箱执行（docker 优先，dev 兜底 mock）；网络默认禁用。
+        </div>
+      </>
+    );
+  }
+
   if (type === 'answer') {
     return (
       <Field label="回答模板（可选；留空则透传上游答案）">
