@@ -1,76 +1,18 @@
 /** Dashboard 主页：DateRangePicker + 综合指标 + 时序图 + top agents/apps */
 
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Bot, KeySquare, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { Activity, Bot, KeySquare, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
 import { DateRangePicker, type DateRange } from '@/core/components/common/date-range-picker';
 import { PageHeader } from '@/core/components/common/page-header';
 import { Spinner } from '@/core/components/common/spinner';
 import { Card, CardContent } from '@/core/components/ui/card';
-import { cn } from '@/core/lib/cn';
+import { StatTile } from '@/core/components/ui/stat-tile';
+import { TimeSeriesChart } from '@/core/components/ui/time-series-chart';
 import { formatNumber, formatPercent } from '@/core/lib/format';
 import { dashboardApi } from '@/system/dashboard/services/dashboard';
 import type { OverviewItem } from '@/system/dashboard/types/dashboard';
-
-interface StatCardProps {
-  label: string;
-  value: string;
-  hint?: string;
-  delta?: number | null;
-  Icon: ComponentType<{ className?: string }>;
-  tone?: 'primary' | 'success' | 'warning' | 'danger';
-}
-
-const toneClass: Record<NonNullable<StatCardProps['tone']>, string> = {
-  primary: 'bg-primary-50 text-primary-600',
-  success: 'bg-emerald-50 text-emerald-600',
-  warning: 'bg-amber-50 text-amber-600',
-  danger: 'bg-red-50 text-red-600',
-};
-
-const StatCard = ({ label, value, hint, delta, Icon, tone = 'primary' }: StatCardProps) => (
-  <Card>
-    <CardContent className="flex items-start justify-between pt-5">
-      <div>
-        <div className="text-xs text-stone-500">{label}</div>
-        <div className="mt-2 font-mono text-2xl tracking-tight text-stone-900">{value}</div>
-        <div className="mt-1 flex items-center gap-2 text-[11px]">
-          {hint ? <span className="text-stone-400">{hint}</span> : null}
-          {delta !== undefined && delta !== null && Number.isFinite(delta) ? (
-            <span
-              className={cn(
-                'inline-flex items-center gap-0.5 font-medium',
-                delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-red-600' : 'text-stone-400',
-              )}
-            >
-              {delta > 0 ? (
-                <TrendingUp className="h-3 w-3" />
-              ) : delta < 0 ? (
-                <TrendingDown className="h-3 w-3" />
-              ) : null}
-              {delta > 0 ? '+' : ''}
-              {(delta * 100).toFixed(1)}%
-            </span>
-          ) : null}
-        </div>
-      </div>
-      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClass[tone]}`}>
-        <Icon className="h-5 w-5" />
-      </div>
-    </CardContent>
-  </Card>
-);
 
 const defaultRange = (): DateRange => {
   const to = new Date();
@@ -120,19 +62,19 @@ export const DashboardPage = () => {
       </div>
 
       <div className="grid grid-cols-4 gap-4">
-        <StatCard
+        <StatTile
           label="区间内调用"
           value={formatNumber(o?.total_calls_in_range ?? o?.total_calls_24h ?? 0)}
           hint={`上一周期 ${formatNumber(o?.prev_period_calls ?? 0)}`}
           delta={delta}
-          Icon={Activity}
+          icon={Activity}
           tone="primary"
         />
-        <StatCard
+        <StatTile
           label="成功率 (24h)"
           value={formatPercent(o?.success_rate_24h ?? 1)}
           hint={`平均 ${(o?.avg_duration_ms_24h ?? 0).toFixed(0)} ms`}
-          Icon={Sparkles}
+          icon={Sparkles}
           tone={
             (o?.success_rate_24h ?? 1) > 0.95
               ? 'success'
@@ -141,20 +83,20 @@ export const DashboardPage = () => {
                 : 'danger'
           }
         />
-        <StatCard
+        <StatTile
           label="Token 消耗 (24h)"
           value={formatNumber(
             (o?.total_prompt_tokens_24h ?? 0) + (o?.total_completion_tokens_24h ?? 0),
           )}
           hint={`提示 ${formatNumber(o?.total_prompt_tokens_24h ?? 0)} · 完成 ${formatNumber(o?.total_completion_tokens_24h ?? 0)}`}
-          Icon={Bot}
+          icon={Bot}
           tone="primary"
         />
-        <StatCard
+        <StatTile
           label="活跃应用 (24h)"
           value={formatNumber(o?.active_apps_24h ?? 0)}
           hint={`活跃 agent ${o?.active_agents_24h ?? 0}`}
-          Icon={KeySquare}
+          icon={KeySquare}
           tone="primary"
         />
       </div>
@@ -169,55 +111,21 @@ export const DashboardPage = () => {
                 {tsQ.isLoading && <Spinner size="sm" />}
               </div>
             </div>
-            <div className="h-64">
-              {tsQ.data && tsQ.data.points.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={tsQ.data.points}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgb(0 0 0 / 6%)" />
-                    <XAxis
-                      dataKey="ts"
-                      tickFormatter={t =>
-                        tsQ.data?.granularity === 'day'
-                          ? new Date(t).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-                          : new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit' })
-                      }
-                      stroke="#999"
-                      fontSize={11}
-                    />
-                    <YAxis stroke="#999" fontSize={11} />
-                    <Tooltip
-                      labelFormatter={t => new Date(t as string).toLocaleString('zh-CN')}
-                      contentStyle={{
-                        background: 'var(--color-paper)',
-                        border: '1px solid rgb(0 0 0 / 10%)',
-                        borderRadius: 8,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="total"
-                      stroke="var(--color-primary-600)"
-                      strokeWidth={2}
-                      name="总调用"
-                      dot={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="errors"
-                      stroke="#ef4444"
-                      strokeWidth={2}
-                      name="错误数"
-                      dot={false}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-stone-400">
-                  暂无数据
-                </div>
-              )}
-            </div>
+            <TimeSeriesChart
+              data={tsQ.data?.points ?? []}
+              xKey="ts"
+              height={256}
+              series={[
+                { dataKey: 'total', name: '总调用', color: 'var(--color-primary-600)' },
+                { dataKey: 'errors', name: '错误数', color: '#ef4444' },
+              ]}
+              xTickFormatter={t =>
+                tsQ.data?.granularity === 'day'
+                  ? new Date(t).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+                  : new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit' })
+              }
+              labelFormatter={t => new Date(t).toLocaleString('zh-CN')}
+            />
           </CardContent>
         </Card>
 

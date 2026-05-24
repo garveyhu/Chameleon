@@ -7,10 +7,11 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, DollarSign, TrendingUp } from 'lucide-react';
+import { Activity, DollarSign, Gauge, TrendingUp } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { SectionCard } from '@/core/components/table';
+import { StatTile } from '@/core/components/ui/stat-tile';
 import { cn } from '@/core/lib/cn';
 import { dashboardApi } from '@/system/dashboard/services/dashboard';
 import type {
@@ -87,28 +88,32 @@ export const CostDashboardPage = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <TotalsCard
-          title="区间总成本"
-          value={totalsQ.data?.total_usd ?? 0}
-          deltaPct={totalsQ.data?.delta_pct ?? null}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <StatTile
+          label="区间总成本"
+          value={`$${(totalsQ.data?.total_usd ?? 0).toFixed(4)}`}
+          delta={totalsQ.data?.delta_pct != null ? totalsQ.data.delta_pct / 100 : null}
+          deltaInverse
+          icon={DollarSign}
+          tone="success"
           loading={totalsQ.isLoading}
         />
-        <TotalsCard
-          title="调用次数"
-          value={totalsQ.data?.total_calls ?? 0}
-          isInt
+        <StatTile
+          label="调用次数"
+          value={Math.round(totalsQ.data?.total_calls ?? 0).toLocaleString()}
+          icon={Activity}
+          tone="neutral"
           loading={totalsQ.isLoading}
         />
-        <TotalsCard
-          title="平均单次"
-          value={
-            totalsQ.data && totalsQ.data.total_calls > 0
-              ? totalsQ.data.total_usd / totalsQ.data.total_calls
-              : 0
-          }
+        <StatTile
+          label="平均单次"
+          value={`$${(totalsQ.data && totalsQ.data.total_calls > 0
+            ? totalsQ.data.total_usd / totalsQ.data.total_calls
+            : 0
+          ).toFixed(6)}`}
+          icon={Gauge}
+          tone="neutral"
           loading={totalsQ.isLoading}
-          precision={6}
         />
       </div>
 
@@ -155,52 +160,6 @@ export const CostDashboardPage = () => {
     </div>
   );
 };
-
-interface TotalsCardProps {
-  title: string;
-  value: number;
-  deltaPct?: number | null;
-  loading?: boolean;
-  isInt?: boolean;
-  precision?: number;
-}
-
-const TotalsCard = ({
-  title,
-  value,
-  deltaPct,
-  loading,
-  isInt,
-  precision = 4,
-}: TotalsCardProps) => (
-  <div className="rounded-md border border-stone-200/70 bg-white px-3 py-3">
-    <div className="text-[11px] text-stone-500">{title}</div>
-    <div className="mt-1 flex items-baseline gap-2">
-      <span className="font-mono text-[20px] tnum text-stone-900">
-        {loading
-          ? '—'
-          : isInt
-            ? Math.round(value).toLocaleString()
-            : `$${value.toFixed(precision)}`}
-      </span>
-      {deltaPct != null && (
-        <span
-          className={cn(
-            'inline-flex items-center text-[10.5px] font-mono',
-            deltaPct >= 0 ? 'text-rose-600' : 'text-emerald-600',
-          )}
-        >
-          {deltaPct >= 0 ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : (
-            <ArrowDown className="h-3 w-3" />
-          )}
-          {Math.abs(deltaPct).toFixed(1)}%
-        </span>
-      )}
-    </div>
-  </div>
-);
 
 const CostLineChart = ({
   points,
