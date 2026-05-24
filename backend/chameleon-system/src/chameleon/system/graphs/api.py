@@ -106,6 +106,17 @@ async def publish_graph(
     return Result.ok(item)
 
 
+@router.post("/{graph_id}/publish-as-agent", response_model=Result[dict])
+async def publish_as_agent(
+    graph_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[dict]:
+    """把工作流发布并暴露成可对话 agent（source='graph'），走统一 agent 端点。"""
+    result = await graph_service.publish_as_agent(session, graph_id)
+    return Result.ok(result)
+
+
 @router.post(
     "/{graph_id}/test-run", response_model=Result[TestRunResult]
 )

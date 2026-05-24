@@ -17,6 +17,7 @@ members = [
     "chameleon-core",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
+    "chameleon-provider-graph",
     "chameleon-provider-local",
     "chameleon-providers-base",
     "chameleon-system",
@@ -453,6 +454,21 @@ requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "httpx", specifier = ">=0.27" },
+]
+
+[[package]]
+name = "chameleon-provider-graph"
+version = "0.1.0"
+source = { editable = "chameleon-providers/graph" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-providers-base" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
 ]
 
 [[package]]

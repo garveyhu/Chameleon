@@ -155,9 +155,11 @@ async def build_agent_registry_from_db(
     DB 里的 source 字段映射 provider name：
       'local' → providers["local"]
       'dify'  → providers["dify"]
+      'graph' → providers["graph"]（config 预载该 graph 的 published_spec）
       ...
     """
     from chameleon.core.infra.db import AsyncSessionLocal
+    from chameleon.core.models import Graph
 
     if local_class_index is None:
         local_class_index = {}
@@ -175,6 +177,22 @@ async def build_agent_registry_from_db(
             .scalars()
             .all()
         )
+
+        # graph agent：预载关联 graph 的 published_spec（运行时 GraphProvider 用，
+        # invoke 时不再碰 DB）。只取已发布的；未发布的 agent 后续跳过。
+        graph_ids = {
+            r.graph_id for r in rows if r.source == "graph" and r.graph_id
+        }
+        graph_specs: dict[int, dict] = {}
+        if graph_ids:
+            grows = (
+                (await session.execute(select(Graph).where(Graph.id.in_(graph_ids))))
+                .scalars()
+                .all()
+            )
+            for g in grows:
+                if g.published_spec:
+                    graph_specs[g.id] = g.published_spec
 
     agents: dict[str, AgentDef] = {}
     for row in rows:
@@ -195,13 +213,25 @@ async def build_agent_registry_from_db(
             )
             continue
 
+        config = dict(row.config) if row.config else {}
+        # graph agent：config 收敛成 {graph_id, spec}（published_spec）
+        if provider_name == "graph":
+            spec = graph_specs.get(row.graph_id) if row.graph_id else None
+            if spec is None:
+                logger.warning(
+                    "graph agent {} 无 published_spec（未发布 / graph 已删）— 跳过",
+                    row.agent_key,
+                )
+                continue
+            config = {"graph_id": row.graph_id, "spec": spec}
+
         agents[row.agent_key] = AgentDef(
             key=row.agent_key,
             provider=provider_name,
             description=row.description or "",
             version=row.version,
             tags=list(row.tags) if row.tags else [],
-            config=dict(row.config) if row.config else {},
+            config=config,
         )
         logger.info(
             "agent registered (db) | key={} | provider={} | enabled=True",

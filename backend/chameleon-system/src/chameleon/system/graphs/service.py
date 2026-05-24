@@ -21,7 +21,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
-from chameleon.core.models import Graph, GraphRun
+from chameleon.core.models import Agent, Graph, GraphRun
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
     GraphDetail,
@@ -138,6 +138,80 @@ async def publish_graph(
         row.published_version,
     )
     return item
+
+
+async def publish_as_agent(
+    session: AsyncSession, graph_id: int
+) -> dict[str, Any]:
+    """把工作流发布并暴露成一个可对话 agent（source='graph'）。
+
+    - 若未发布则先 freeze published_spec；
+    - upsert 一个 graph-backed Agent（按 graph_id 找已有，否则以 graph_key 为 agent_key 新建）；
+    - reload agent registry，使其立即可从统一端点 /v1/agents/{key}/invoke 调用。
+    """
+    import copy
+
+    row = await _load(session, graph_id)
+    if not row.published_spec:
+        row.published_spec = copy.deepcopy(row.spec)
+        row.published_version = (row.published_version or 0) + 1
+        row.published_at = datetime.now(timezone.utc)
+        await session.flush()
+
+    existing = (
+        await session.execute(
+            select(Agent).where(
+                Agent.source == "graph",
+                Agent.graph_id == row.id,
+                Agent.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        existing.name = row.name
+        existing.description = row.description
+        existing.enabled = True
+        agent = existing
+    else:
+        clash = (
+            await session.execute(
+                select(Agent).where(Agent.agent_key == row.graph_key)
+            )
+        ).scalar_one_or_none()
+        if clash is not None:
+            raise ValidationError(
+                message=(
+                    f"agent_key 已被占用: {row.graph_key}"
+                    "（请改 graph_key，或先处理同名 agent）"
+                )
+            )
+        agent = Agent(
+            agent_key=row.graph_key,
+            name=row.name,
+            description=row.description,
+            source="graph",
+            graph_id=row.id,
+            enabled=True,
+            workspace_id=getattr(row, "workspace_id", None),
+        )
+        session.add(agent)
+
+    await session.flush()
+    await session.refresh(agent)
+    await session.commit()
+
+    # 让新 agent 立即生效（registry 重读 DB + 预载 published_spec）
+    from chameleon.providers.base.registry import reload_agent_registry
+
+    await reload_agent_registry()
+
+    logger.info(
+        "graph published as agent | graph_id={} | agent_key={}",
+        row.id,
+        agent.agent_key,
+    )
+    return {"agent_key": agent.agent_key, "agent_id": agent.id}
 
 
 async def test_run(

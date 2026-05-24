@@ -4,6 +4,7 @@ source 区分来源：
 - 'local'   ：本地 BaseAgent 子类，namespace 扫描入表；只能 enable/disable + 改默认参数
 - 'dify'    ：DIFY 平台 chatflow / workflow / agent
 - 'fastgpt' ：FastGPT 应用
+- 'graph'   ：本平台可视化编排的工作流（graph_id 关联 graphs；运行时服务 published_spec）
 - 其他      ：未来新平台
 
 config provider-specific（dify 要 app_id / api_key_env，local 要 module / class）。
@@ -46,6 +47,10 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
         BigInteger, ForeignKey("providers.id", ondelete="SET NULL"), nullable=True
     )
     local_class_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # source='graph' 时关联编排的工作流；运行时服务其 published_spec
+    graph_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("graphs.id", ondelete="SET NULL"), nullable=True
+    )
     config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     default_model_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("models.id", ondelete="SET NULL"), nullable=True
