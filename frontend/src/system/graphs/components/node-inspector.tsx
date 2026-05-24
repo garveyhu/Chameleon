@@ -15,6 +15,7 @@ import {
   ModelNameField,
 } from '@/system/graphs/components/spec-fields';
 import { VarInsert } from '@/system/graphs/components/var-insert';
+import type { NodeVarOption } from '@/system/graphs/components/var-insert';
 import {
   ParallelBranchesField,
   SubgraphField,
@@ -25,15 +26,50 @@ import type {
   NodeSpec,
 } from '@/system/graphs/types/graph';
 
+/** 各节点类型的输出字段（P5-1 变量选择器据此列出可引用项） */
+const NODE_OUTPUT_FIELDS: Partial<Record<GraphNodeType, string[]>> = {
+  llm: ['answer'],
+  kb: ['joined_context', 'hits', 'query'],
+  http: ['status_code', 'body', 'headers'],
+  template: ['text'],
+  answer: ['answer'],
+  if_else: ['branch', 'value'],
+  agent_debate: ['answer'],
+};
+
+export interface PeerNode {
+  id: string;
+  label: string;
+  type: GraphNodeType;
+}
+
+function peerVarOptions(peers: PeerNode[]): NodeVarOption[] {
+  return peers.flatMap(p => {
+    const fields = NODE_OUTPUT_FIELDS[p.type] ?? ['output'];
+    return fields.map(f => ({
+      token: `{{#${p.id}.${f}#}}`,
+      label: `${p.label}.${f}`,
+    }));
+  });
+}
+
 interface Props {
   node: NodeSpec | null;
   /** 该节点在最近一次运行中的结果（有则在配置下方展示） */
   runView?: NodeRunView;
+  /** 同图其它节点（P5-1：变量选择器列出可引用的上游输出） */
+  peerNodes?: PeerNode[];
   onChange: (next: NodeSpec) => void;
   onDelete: () => void;
 }
 
-export const NodeInspector = ({ node, runView, onChange, onDelete }: Props) => {
+export const NodeInspector = ({
+  node,
+  runView,
+  peerNodes,
+  onChange,
+  onDelete,
+}: Props) => {
   if (!node) {
     return (
       <aside className="flex h-full w-72 shrink-0 flex-col gap-2 border-l border-stone-200/70 bg-warm-2/40 p-3 text-[12px] text-stone-500">
@@ -84,6 +120,7 @@ export const NodeInspector = ({ node, runView, onChange, onDelete }: Props) => {
         type={node.type}
         data={node.data || {}}
         onPatch={setData}
+        nodeVars={peerVarOptions(peerNodes ?? [])}
       />
 
       {runView && (
@@ -106,10 +143,12 @@ const DataForm = ({
   type,
   data,
   onPatch,
+  nodeVars,
 }: {
   type: GraphNodeType;
   data: Record<string, unknown>;
   onPatch: (patch: Record<string, unknown>) => void;
+  nodeVars: NodeVarOption[];
 }) => {
   if (type === 'llm') {
     return (
@@ -128,6 +167,7 @@ const DataForm = ({
             className="text-[12px]"
           />
           <VarInsert
+            nodeVars={nodeVars}
             onInsert={t =>
               onPatch({ system_prompt: ((data.system_prompt as string) || '') + t })
             }
@@ -142,6 +182,7 @@ const DataForm = ({
             className="font-mono text-[12px]"
           />
           <VarInsert
+            nodeVars={nodeVars}
             onInsert={t =>
               onPatch({
                 prompt_template: ((data.prompt_template as string) || '') + t,
@@ -245,6 +286,7 @@ const DataForm = ({
           className="font-mono text-[12px]"
         />
         <VarInsert
+          nodeVars={nodeVars}
           onInsert={t => onPatch({ template: ((data.template as string) || '') + t })}
         />
       </Field>
@@ -275,6 +317,7 @@ const DataForm = ({
             className="h-7 font-mono text-[12px]"
           />
           <VarInsert
+            nodeVars={nodeVars}
             onInsert={t => onPatch({ url: ((data.url as string) || '') + t })}
           />
         </Field>
@@ -293,6 +336,7 @@ const DataForm = ({
             className="font-mono text-[12px]"
           />
           <VarInsert
+            nodeVars={nodeVars}
             onInsert={t => onPatch({ body: ((data.body as string) || '') + t })}
           />
         </Field>
@@ -327,6 +371,7 @@ const DataForm = ({
           className="font-mono text-[12px]"
         />
         <VarInsert
+          nodeVars={nodeVars}
           onInsert={t => onPatch({ answer: ((data.answer as string) || '') + t })}
         />
         <div className="mt-1 text-[10.5px] leading-snug text-stone-500">

@@ -537,6 +537,13 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <NodeInspector
             node={selectedSpec}
             runView={selectedRunView}
+            peerNodes={nodes
+              .filter(n => n.id !== selectedId)
+              .map(n => ({
+                id: n.id,
+                label: n.data.label,
+                type: n.data.nodeType,
+              }))}
             onChange={updateSelectedSpec}
             onDelete={deleteSelected}
           />

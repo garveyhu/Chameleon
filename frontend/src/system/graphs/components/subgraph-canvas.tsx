@@ -207,6 +207,9 @@ const Inner = ({ spec, onChange }: Props) => {
       </div>
       <NodeInspector
         node={selectedSpec}
+        peerNodes={nodes
+          .filter(n => n.id !== selectedId)
+          .map(n => ({ id: n.id, label: n.data.label, type: n.data.nodeType }))}
         onChange={updateSelectedSpec}
         onDelete={deleteSelected}
       />
