@@ -39,6 +39,10 @@ export const graphApi = {
   create: (payload: CreateGraphPayload) =>
     post<GraphDetail>('/v1/admin/graphs', payload),
 
+  /** A4：自然语言描述 → LLM 生成并创建工作流图 */
+  generate: (payload: { description: string; graph_key: string; name: string }) =>
+    post<GraphDetail>('/v1/admin/graphs/generate', payload),
+
   update: (id: EntityId, payload: UpdateGraphPayload) =>
     post<GraphDetail>(`/v1/admin/graphs/${id}/update`, payload),
 

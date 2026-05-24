@@ -75,6 +75,16 @@ class GraphChatRequest(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list)
 
 
+class GenerateGraphRequest(BaseModel):
+    """AI 自动编排（A4）：自然语言描述 → 生成并创建一张工作流图"""
+
+    description: str = Field(min_length=4, max_length=2000)
+    graph_key: str = Field(
+        min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$"
+    )
+    name: str = Field(min_length=1, max_length=128)
+
+
 class NodeRunItem(BaseModel):
     """test-run 返的单节点执行摘要"""
 

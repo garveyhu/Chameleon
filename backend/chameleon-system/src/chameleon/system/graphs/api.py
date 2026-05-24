@@ -9,11 +9,13 @@ from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.graphs import generator as graph_generator
 from chameleon.system.graphs import human_input_service
 from chameleon.system.graphs import runner as graph_runner
 from chameleon.system.graphs import service as graph_service
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
+    GenerateGraphRequest,
     GraphChatRequest,
     GraphDetail,
     GraphItem,
@@ -70,6 +72,23 @@ async def create_graph(
     _: object = Depends(require_permission("graphs:write")),
 ) -> Result[GraphDetail]:
     item = await graph_service.create_graph(session, req)
+    return Result.ok(item)
+
+
+@router.post("/generate", response_model=Result[GraphDetail])
+async def generate_graph(
+    req: GenerateGraphRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[GraphDetail]:
+    """A4：自然语言描述 → LLM 生成 GraphSpec → 创建工作流并返回。"""
+    spec = await graph_generator.generate_graph_spec(req.description)
+    item = await graph_service.create_graph(
+        session,
+        CreateGraphRequest(
+            graph_key=req.graph_key, name=req.name, description=req.description, spec=spec
+        ),
+    )
     return Result.ok(item)
 
 

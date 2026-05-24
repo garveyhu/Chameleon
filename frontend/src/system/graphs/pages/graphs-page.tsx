@@ -1,7 +1,7 @@
 /** 工作流列表页 —— 简版列表 + 新建 + 跳转编辑 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Rocket, Trash2, Workflow } from 'lucide-react';
+import { Plus, Rocket, Sparkles, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -18,6 +18,7 @@ import {
   ModalTitle,
 } from '@/core/components/ui/modal';
 import { StatusBadge } from '@/core/components/ui/status-badge';
+import { Textarea } from '@/core/components/ui/textarea';
 import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
@@ -48,10 +49,31 @@ export const GraphsPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [graphKey, setGraphKey] = useState('');
   const [graphName, setGraphName] = useState('');
+  const [genOpen, setGenOpen] = useState(false);
+  const [genDesc, setGenDesc] = useState('');
+  const [genKey, setGenKey] = useState('');
 
   const listQ = useQuery({
     queryKey: ['graphs'],
     queryFn: () => graphApi.list(),
+  });
+
+  const genMut = useMutation({
+    mutationFn: () =>
+      graphApi.generate({
+        description: genDesc.trim(),
+        graph_key: genKey.trim(),
+        name: genKey.trim(),
+      }),
+    onSuccess: g => {
+      toast.success('AI 已生成工作流');
+      qc.invalidateQueries({ queryKey: ['graphs'] });
+      setGenOpen(false);
+      setGenDesc('');
+      setGenKey('');
+      nav(`/graphs/${g.id}/edit`);
+    },
+    onError: e => toast.error(`生成失败：${(e as Error).message}`),
   });
 
   const createMut = useMutation({
@@ -185,10 +207,21 @@ export const GraphsPage = () => {
             拖连线组装能力，跑出来可在 trace tree 看嵌套结构
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 h-3 w-3" />
-          新建工作流
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setGenOpen(true)}
+            title="用自然语言描述，AI 自动生成工作流图"
+          >
+            <Sparkles className="mr-1 h-3 w-3" />
+            AI 生成
+          </Button>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-3 w-3" />
+            新建工作流
+          </Button>
+        </div>
       </header>
 
       <DataTable
@@ -242,6 +275,58 @@ export const GraphsPage = () => {
               disabled={!graphKey.trim() || createMut.isPending}
             >
               创建并编辑
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal open={genOpen} onOpenChange={o => !o && setGenOpen(false)}>
+        <ModalContent size="md">
+          <ModalHeader>
+            <ModalTitle>AI 生成工作流</ModalTitle>
+          </ModalHeader>
+          <ModalBody className="space-y-3">
+            <div>
+              <label className="mb-1 block text-[12px] text-stone-600">
+                描述你要的智能体（自然语言）
+              </label>
+              <Textarea
+                value={genDesc}
+                onChange={e => setGenDesc(e.target.value)}
+                rows={4}
+                placeholder="例：做一个客服助理，先查 smoke 知识库，再结合资料和对话历史回答用户。"
+                className="text-[12.5px]"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[12px] text-stone-600">
+                graph_key
+                <span className="ml-1 text-stone-400">（唯一；a-zA-Z0-9_-）</span>
+              </label>
+              <Input
+                value={genKey}
+                onChange={e => setGenKey(e.target.value)}
+                placeholder="ai-customer-bot"
+                className="h-8 font-mono"
+              />
+            </div>
+            <p className="text-[10.5px] leading-snug text-stone-400">
+              AI 会据描述生成节点 + 连线，落到画布；可在编辑器里继续微调、对话调试。
+            </p>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setGenOpen(false)}>
+              取消
+            </Button>
+            <Button
+              onClick={() => genMut.mutate()}
+              disabled={
+                genDesc.trim().length < 4 ||
+                !genKey.trim() ||
+                genMut.isPending
+              }
+            >
+              {genMut.isPending ? '生成中…' : '生成并编辑'}
             </Button>
           </ModalFooter>
         </ModalContent>
