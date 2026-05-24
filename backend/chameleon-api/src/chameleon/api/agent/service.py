@@ -37,9 +37,11 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.config.runtime_settings import get_bool
 from chameleon.core.infra.auth import CurrentApp
 from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.infra.redis import get_redis
 from chameleon.core.routing import (
     build_channel_override,
     invoke_with_failover,
+    quarantine_key,
 )
 from chameleon.core.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS, ChannelOverride
@@ -232,14 +234,25 @@ async def invoke(
     try:
         with rec.span("provider_invoke", meta={"provider": agent_def.provider}):
             if routed_model_code:
+                redis = get_redis()
+
                 async def _do_invoke(channel):
-                    override = ChannelOverride(**build_channel_override(channel))
+                    # C7：多 key 池轮转选 key（含 key_index 供失败隔离）
+                    ov = await build_channel_override(redis, channel)
+                    key_index = ov.pop("key_index", None)
+                    override = ChannelOverride(**ov)
                     # InvokeContext frozen=False → 这里用 model_copy 更安全；
                     # 但因为 ctx 还没传给下游，直接 mutate 是 OK 的
                     ctx_with_override = ctx.model_copy(
                         update={"channel_override": override}
                     )
-                    return await provider.invoke(ctx_with_override)
+                    try:
+                        return await provider.invoke(ctx_with_override)
+                    except Exception:
+                        # C7：本次 key 失败 → 隔离，轮转时跳过（best-effort）
+                        if key_index is not None:
+                            await quarantine_key(redis, channel.id, key_index)
+                        raise
 
                 result, used_channel = await invoke_with_failover(
                     session,

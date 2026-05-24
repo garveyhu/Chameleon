@@ -16,6 +16,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     DateTime,
     ForeignKey,
@@ -60,8 +61,10 @@ class Channel(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     )
     # 同一 provider 下唯一名（便于 admin 区分多 key），不强制全局唯一
     name: Mapped[str] = mapped_column(String(64), nullable=False)
-    # AES-GCM 加密（同 provider.api_key_encrypted 主密钥）
+    # AES-GCM 加密（同 provider.api_key_encrypted 主密钥）—— 单 key 模式
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # P23.C7 多 key 池：加密 key 字符串列表；非空时走 key_pool 轮转，空则回退单 key
+    keys: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 可选覆盖 provider.base_url（不同代理 / 不同区域）
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # 生命周期 —— 字符串而非 PG enum（base.py 约定）

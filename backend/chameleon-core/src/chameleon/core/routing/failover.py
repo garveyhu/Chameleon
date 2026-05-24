@@ -139,15 +139,19 @@ async def invoke_with_failover(
     raise NoSatisfiedChannelError(model_code, message="failover exhausted")
 
 
-def build_channel_override(channel: Channel) -> dict:
-    """从 Channel 行构造 ChannelOverride 字段 dict（service 用，解密走 channel.api_key_encrypted）"""
-    from chameleon.core.utils.crypto import get_or_decrypt
+async def build_channel_override(redis, channel: Channel) -> dict:
+    """从 Channel 行构造 ChannelOverride 字段 dict（含本次选中的 key）
 
-    api_key = (
-        get_or_decrypt(channel.api_key_encrypted) if channel.api_key_encrypted else None
-    )
+    多 key 池（channel.keys 非空）走 key_pool round-robin 轮转选一个 key；否则退回
+    单 key（api_key_encrypted）。返回里多带一个 `key_index`：调用方在调用失败时据此
+    `key_pool.quarantine_key` 隔离该 key（None 表示单 key 模式，无需隔离）。
+    """
+    from chameleon.core.routing.key_pool import select_channel_key
+
+    key_index, api_key = await select_channel_key(redis, channel)
     return {
         "channel_id": channel.id,
         "base_url": channel.base_url,
         "api_key": api_key,
+        "key_index": key_index,
     }

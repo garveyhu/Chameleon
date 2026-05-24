@@ -93,6 +93,7 @@ async def create_channel(
         provider_id=provider.id,
         name=req.name,
         api_key_encrypted=encrypt(req.api_key) if req.api_key else None,
+        keys=[encrypt(k) for k in req.keys] if req.keys else None,
         base_url=req.base_url,
         status=ChannelStatus.ENABLED.value,
         weight=req.weight,
@@ -116,6 +117,9 @@ async def update_channel(
     if req.api_key is not None:
         # 空字符串 → 清空；非空 → 加密落盘
         ch.api_key_encrypted = encrypt(req.api_key) if req.api_key else None
+    if req.keys is not None:
+        # [] → 清空池（回退单 key）；非空 → 逐个加密替换
+        ch.keys = [encrypt(k) for k in req.keys] if req.keys else None
     if req.base_url is not None:
         ch.base_url = req.base_url or None
     if req.status is not None:
@@ -199,6 +203,7 @@ def _row_to_item(ch: Channel, provider_code: str | None) -> ChannelItem:
         provider_code=provider_code,
         name=ch.name,
         has_api_key=bool(ch.api_key_encrypted),
+        key_count=len(ch.keys) if ch.keys else 0,
         base_url=ch.base_url,
         status=ch.status,
         weight=ch.weight,
