@@ -8,12 +8,12 @@ import pytest
 
 from chameleon.core.graph import (
     EdgeSpec,
-    GraphExecutor,
     GraphSpec,
     NodeContext,
     NodeSpec,
     NodeStatus,
 )
+from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.graph.nodes.if_else import IfElseNode
 from chameleon.core.graph.nodes.tool import ToolNode, register_tool
 
@@ -228,7 +228,7 @@ async def test_end_to_end_if_else_routes_correctly():
             EdgeSpec(id="5", source="bad", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
 
     # 高分走 good
     result = await executor.run(input={"score": 0.9}, ctx=_ctx())

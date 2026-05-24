@@ -1,9 +1,9 @@
-"""GraphExecutor 单元测试（P18.1 PR #17）
+"""Graph Orchestrator 单元测试
 
 覆盖：
 - spec 校验：唯一 node id / 唯一 edge id / 边引用合法 / 唯一 start / 至少 1 end
 - 拓扑：环检测 / 不可达 / 正常排序
-- 执行：单节点 / 链式 / 分叉（取首边）/ if_else 分支 / 错误传播
+- 执行：单节点 / 链式 / 分叉（并发）/ if_else 分支 / 错误传播
 """
 
 from __future__ import annotations
@@ -16,17 +16,15 @@ from pydantic import ValidationError
 
 from chameleon.core.graph import (
     EdgeSpec,
-    GraphExecutor,
     GraphSpec,
     Node,
     NodeContext,
     NodeSpec,
     NodeStatus,
 )
-from chameleon.core.graph.executor import (
-    assert_acyclic,
-    register_node_type,
-)
+from chameleon.core.graph.engine import Orchestrator
+from chameleon.core.graph.registry import register_node_type
+from chameleon.core.graph.results import assert_acyclic
 
 
 # ── 测试用节点 ───────────────────────────────────────────
@@ -84,7 +82,7 @@ def _ctx() -> NodeContext:
 
 def _factory_with_if_else(spec: NodeSpec) -> Node:
     """测试用 factory：把 'if_else' 路由到 _RealIfElse"""
-    from chameleon.core.graph.executor import _NODE_REGISTRY
+    from chameleon.core.graph.registry import _NODE_REGISTRY
 
     if spec.type == "if_else":
         return _RealIfElse(spec)
@@ -195,7 +193,7 @@ async def test_run_single_node_chain():
         ],
         edges=[EdgeSpec(id="1", source="s", target="e")],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={"hello": "world"}, ctx=_ctx())
     assert result.status == NodeStatus.SUCCESS
     assert result.output == {"hello": "world"}
@@ -219,7 +217,7 @@ async def test_run_chain_of_three():
             EdgeSpec(id="2", source="m", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={"v": 42}, ctx=_ctx())
     assert result.status == NodeStatus.SUCCESS
     # _echo 节点会把 input 包成 {echoed: ..., node: m}
@@ -239,7 +237,7 @@ async def test_run_error_propagation():
             EdgeSpec(id="2", source="b", target="e"),
         ],
     )
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     result = await executor.run(input={}, ctx=_ctx())
     assert result.status == NodeStatus.FAILED
     assert result.error is not None
@@ -268,7 +266,7 @@ async def test_run_if_else_true_branch():
             EdgeSpec(id="5", source="f", target="e"),
         ],
     )
-    executor = GraphExecutor(spec, node_factory=_factory_with_if_else)
+    executor = Orchestrator(spec, node_factory=_factory_with_if_else)
     result = await executor.run(input={"value": 100}, ctx=_ctx())
     assert result.status == NodeStatus.SUCCESS
     # 应走 t 分支：node_runs 含 s/g/t/e，不含 f
@@ -294,7 +292,7 @@ async def test_run_if_else_false_branch():
             EdgeSpec(id="5", source="f", target="e"),
         ],
     )
-    executor = GraphExecutor(spec, node_factory=_factory_with_if_else)
+    executor = Orchestrator(spec, node_factory=_factory_with_if_else)
     result = await executor.run(input={"value": -1}, ctx=_ctx())
     assert result.status == NodeStatus.SUCCESS
     node_ids = [r.node_id for r in result.node_runs]
@@ -329,7 +327,7 @@ async def test_run_no_outgoing_non_end_fails():
         ],
     )
     # 因为 s 有两条 outgoing，executor 选第一条（dangling）；dangling 没有出边 → 报错
-    executor = GraphExecutor(spec2)
+    executor = Orchestrator(spec2)
     result = await executor.run(input={}, ctx=_ctx())
     assert result.status == NodeStatus.FAILED
     assert result.error is not None

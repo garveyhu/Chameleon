@@ -17,12 +17,12 @@ import pytest
 
 from chameleon.core.graph import (
     EdgeSpec,
-    GraphExecutor,
     GraphSpec,
     NodeContext,
     NodeSpec,
     NodeStatus,
 )
+from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.graph.nodes.llm import LLMNode
 from chameleon.core.vector.base import ChunkHit
 
@@ -244,7 +244,7 @@ async def test_chain_kb_then_llm(fake_llm):
         ChunkHit(id=1, doc_id=10, seq=1, content="天空是蓝色的", score=0.9),
         ChunkHit(id=2, doc_id=10, seq=2, content="因为瑞利散射", score=0.8),
     ]
-    executor = GraphExecutor(spec)
+    executor = Orchestrator(spec)
     with patch(
         "chameleon.core.components.inventory.search_kb",
         new=AsyncMock(return_value=fake_hits),

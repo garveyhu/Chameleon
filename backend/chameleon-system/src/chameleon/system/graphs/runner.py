@@ -29,7 +29,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.graph import GraphExecutor, GraphSpec, NodeContext
+from chameleon.core.graph import GraphSpec, NodeContext
+from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     App,
     CallLog,
@@ -140,9 +141,9 @@ async def run_graph(
         started_at=started_at,
     )
     try:
-        executor = GraphExecutor(spec)
+        orch = Orchestrator(spec)
     except Exception as e:  # noqa: BLE001
-        # spec 即使 model_validate 过，executor 实例化（node validate_data）也可能失败
+        # spec 即使 model_validate 过，Orchestrator 实例化（node validate_data）也可能失败
         run.status = "failed"
         run.error = {"type": type(e).__name__, "message": str(e)[:500]}
         run.finished_at = datetime.now(timezone.utc)
@@ -150,7 +151,7 @@ async def run_graph(
         await session.commit()
         return run
 
-    result = await executor.run(input=input or {}, ctx=ctx)
+    result = await orch.run(input=input or {}, ctx=ctx)
     finished_at = datetime.now(timezone.utc)
 
     # 落每节点 graph_node_runs + call_logs

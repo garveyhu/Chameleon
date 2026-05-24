@@ -17,7 +17,8 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.graph import GraphExecutor, GraphSpec, NodeContext
+from chameleon.core.graph import GraphSpec, NodeContext
+from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import Graph, GraphRun
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
@@ -64,7 +65,7 @@ async def create_graph(
     if dup is not None:
         raise ValidationError(message=f"graph_key 已存在: {req.graph_key}")
 
-    # 校验 spec（构 GraphSpec + GraphExecutor 实例化 node：data 校验也走了）
+    # 校验 spec（构 GraphSpec + Orchestrator 实例化 node：data 校验也走了）
     _validate_spec(req.spec)
 
     row = Graph(
@@ -151,8 +152,8 @@ async def test_run(
         depth=0,
         started_at=datetime.now(timezone.utc),
     )
-    executor = GraphExecutor(spec)
-    result = await executor.run(input=req.input, ctx=ctx)
+    orch = Orchestrator(spec)
+    result = await orch.run(input=req.input, ctx=ctx)
 
     return TestRunResult(
         status=result.status.value,
@@ -230,7 +231,7 @@ def _validate_spec(spec: dict) -> GraphSpec:
         raise ValidationError(message=f"spec 非法: {e}") from e
     try:
         # 实例化所有 node 跑 validate_data
-        GraphExecutor(gs)
+        Orchestrator(gs)
     except Exception as e:  # noqa: BLE001
         raise ValidationError(message=f"node config 校验失败: {e}") from e
     return gs

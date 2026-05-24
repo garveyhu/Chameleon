@@ -28,7 +28,7 @@ from typing import Any
 from loguru import logger
 
 from chameleon.core.graph.context import NodeContext
-from chameleon.core.graph.executor import register_node_type
+from chameleon.core.graph.registry import register_node_type
 from chameleon.core.graph.node_base import Node
 
 

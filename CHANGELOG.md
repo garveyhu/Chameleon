@@ -4,6 +4,26 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+### v1.0 收尾（深度审计 + 体验 polish）
+
+- **fix(frontend)**: `/traces` 列表 404 修复 + sidebar 术语统一为 Trace
+- **chore(scripts)**: 新增 `scripts/seed_demo_data.py`，幂等生成 40 条 call_logs + demo app + 修 worlflow-test typo，让 dashboard / cost / trace 不再空
+- **chore(release)**: 同步 uv.lock 到 1.0.0（v1.0 PR #87 release prep 漏 commit）
+- **docs(plans)**: v1.0 深度审计报告 `2026-05-23-v1.0-deep-audit.md`（5 轨道 vs 5 OSS 标杆 / 20 增强项 / Tier 1-3 分层）
+- **docs(plans)**: v1.1 P23 detail plan `2026-05-24-p23-detail.md`（8 周 16 PR / 11 红线 / Tier 1 六项落地）
+- **docs(structure)**: 新增 `docs/zh/project-structure.md` 目录树文档 + 清理 2 个孤儿目录（./src/、./backend/backend/）
+- **feat(layout)**: Sidebar 重构 — AI 配置 15 项 + 访问控制 4 项 → 5 组扁平分组（AI 能力 / 模型与路由 / 观测与评估 / 扩展生态 / 系统管理），加 Workspaces 入口
+- **style(sidebar)**: 成本统计移入观测组 + workspace 切换器去白底融入暖灰背景 + brand 行收紧 + active 所在组自动展开
+
+### v1.1 在途（P23 Tier 1 打深）
+
+- **BREAKING refactor(graph)**: 串行 `executor.GraphExecutor` 整文件删除，由并发 `engine.Orchestrator` 替换；**不留 deprecated 包裹 / 不留 fallback**（项目偏好「弃用直接删」）。Node / NodeSpec / NodeContext / NodeRunResult / RunResult / 节点注册表全部兼容。
+  - **新** `core/graph/engine/`：ReadyQueue（拓扑调度 + if_else 分支 skip 传播）+ WorkerPool（asyncio.Semaphore 并发上限）+ Orchestrator（主循环 + 节点/整图超时 + 失败收尾）+ GraphExecState（VariablePool + 节点状态机 + deadline）
+  - **拆** `core/graph/registry.py`（_NODE_REGISTRY / register_node_type / default_factory）+ `core/graph/results.py`（NodeRunResult / RunResult / assert_acyclic）
+  - **切** 6 处调用：`graph/__init__.py` re-export 去 GraphExecutor / `graphs/service.py` `/runner.py` 用 Orchestrator / 3 个测试文件改 import + sed 替换 GraphExecutor→Orchestrator / 5 个 node 文件 `register_node_type` import 改自 registry
+  - **删** `core/graph/executor.py`（320 LOC）+ rename `tests/test_graph_executor.py` → `test_graph_orchestrator.py`
+  - **Smoke 验证**：5 节点串行 / 菱形并发 join（c 收到 `{a: ..., b: ...}` join dict）/ 失败传播 3 case 全过；service / runner / api 完整 import 链通过
+
 ## [1.0.0] — 2026-05-23 🎉
 
 **v1.0 launch**：22 个阶段 / 17 个 P22 PR / ~8K LOC（项目至此 ≈ 60K+ LOC）。Chameleon 进入对外发版，public API 进入 deprecation policy 周期（保留 1 minor 版本）。

@@ -32,15 +32,9 @@ from chameleon.core.graph.engine.ready_queue import ReadyQueue
 from chameleon.core.graph.engine.state import GraphExecState
 from chameleon.core.graph.engine.worker_pool import WorkerPool
 from chameleon.core.graph.node_base import Node, NodeStatus
+from chameleon.core.graph.registry import default_factory as _registry_default_factory
+from chameleon.core.graph.results import NodeRunResult, RunResult, duration_ms as _ms
 from chameleon.core.graph.types import GraphSpec, NodeSpec
-
-
-# 复用 executor.py 的 NodeRunResult / RunResult（避免重复定义）
-from chameleon.core.graph.executor import (
-    NodeRunResult,
-    RunResult,
-    _NODE_REGISTRY,
-)
 
 
 class OrchestratorConfig(BaseModel):
@@ -69,7 +63,7 @@ class Orchestrator:
     ) -> None:
         self.spec = spec
         self.config = config or OrchestratorConfig()
-        self._factory = node_factory or _default_factory
+        self._factory = node_factory or _registry_default_factory
         self._nodes: dict[str, Node] = {
             n.id: self._factory(n) for n in spec.nodes
         }
@@ -243,15 +237,3 @@ class Orchestrator:
         }
 
 
-def _default_factory(spec: NodeSpec) -> Node:
-    cls = _NODE_REGISTRY.get(spec.type)
-    if cls is None:
-        raise ValueError(
-            f"未知 node type={spec.type!r}；已注册类型："
-            f"{sorted(_NODE_REGISTRY.keys())}"
-        )
-    return cls(spec)
-
-
-def _ms(t0: datetime, t1: datetime) -> int:
-    return int((t1 - t0).total_seconds() * 1000)
