@@ -2,8 +2,10 @@
 
 - 注入 mock provider + agent 到 registry
 - 注入 DeterministicHashEmbedding 替代真实 OpenAI 调用
+- 强制跑在独立 test 库（见 _bootstrap_test_db），不碰 dev 数据
 """
 
+# ruff: noqa: E402 —— 必须在 import chameleon 前设 DATABASE_URL 指向独立 test 库（#29）
 from __future__ import annotations
 
 import hashlib
@@ -15,6 +17,67 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
+
+
+def _bootstrap_test_db() -> None:
+    """强制 DATABASE_URL 指向独立 <db>_test 库，并建库 + 扩展 + alembic 迁移。
+
+    conftest 的 _cleanup 等 fixture 会 delete(CallLog/User) 清表——必须隔离到
+    test 库，否则清空 dev 运行数据（这是历史上"DB 被重置"的真因）。engine 在
+    chameleon import 期绑定 URL，故本函数必须在任何 chameleon import 之前调用。
+    可用 TEST_DATABASE_URL 覆盖（CI）。seed 由既有 _registry_with_mock fixture 跑。
+    """
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parents[1]
+    db = json.loads((backend / "config" / "component.json").read_text())["database"]
+    test_name = f"{db['db']}_test"
+    test_url = os.environ.get("TEST_DATABASE_URL") or (
+        f"postgresql+asyncpg://{db['user']}:{db['password']}"
+        f"@{db['host']}:{db['port']}/{test_name}"
+    )
+    # 安全闸：库名必须含 _test，绝不在非 test 库上跑（防清 dev 数据）
+    assert "_test" in test_url, f"拒绝在非 test 库跑测试: {test_url}"
+    os.environ["DATABASE_URL"] = test_url
+
+    async def _create_db_and_ext() -> None:
+        import asyncpg
+
+        base = f"{db['user']}:{db['password']}@{db['host']}:{db['port']}"
+        admin = await asyncpg.connect(f"postgresql://{base}/postgres")
+        try:
+            if not await admin.fetchval(
+                "select 1 from pg_database where datname=$1", test_name
+            ):
+                await admin.execute(f'create database "{test_name}"')
+        finally:
+            await admin.close()
+        tconn = await asyncpg.connect(f"postgresql://{base}/{test_name}")
+        try:
+            await tconn.execute("create extension if not exists vector")
+        finally:
+            await tconn.close()
+
+    asyncio.run(_create_db_and_ext())
+
+    # alembic 跑在独立子进程：避免在 conftest import 期把 chameleon engine /
+    # 事件循环带进测试进程（会引发 event-loop-closed 连接池级联）。
+    import subprocess
+    import sys
+
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=str(backend),
+        env={**os.environ, "DATABASE_URL": test_url},
+        check=True,
+        capture_output=True,
+    )
+
+
+_bootstrap_test_db()
 
 from chameleon.app.main import create_app
 from chameleon.core.embedding import set_for_test as set_embedding_for_test
