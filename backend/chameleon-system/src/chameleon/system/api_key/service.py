@@ -229,13 +229,17 @@ async def record_call(
         try:
             from chameleon.system.workspaces.quota_service import (
                 increment_usage,
+                settle_request,
                 workspace_id_for_app,
             )
 
             ws_id = await workspace_id_for_app(session, app_id)
+            # 实际用量原子落 SQL（committed 真相）
             await increment_usage(
                 session, ws_id, total_tokens=total_tokens, requests=1
             )
+            # C4 post-consume：释放本次请求的预扣（差额自然返还）
+            await settle_request(session, ws_id, request_id=request_id)
         except Exception:
             # 计数失败绝不污染主请求路径；call_log 已写入
             logger.exception(

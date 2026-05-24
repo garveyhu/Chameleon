@@ -27,6 +27,8 @@ from chameleon.core.observe.billing import (
     PreConsumeAction,
     PreConsumeResult,
     estimate_request_tokens,
+    estimate_text_tokens,
+    post_consume,
     pre_consume,
     release_reservation,
 )
@@ -46,7 +48,9 @@ __all__ = [
     "aggregate_rollups",
     "current_observation_id",
     "estimate_request_tokens",
+    "estimate_text_tokens",
     "observe",
+    "post_consume",
     "pre_consume",
     "release_reservation",
 ]
