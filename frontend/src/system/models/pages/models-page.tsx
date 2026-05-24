@@ -184,6 +184,7 @@ export const ModelsPage = () => {
           rows={listQ.data || []}
           rowKey="id"
           loading={listQ.isLoading}
+          leftBar={m => (m.enabled ? 'bg-emerald-400' : 'bg-stone-300')}
           emptyText={
             <EmptyState
               icon={<Cpu strokeWidth={1.5} />}
