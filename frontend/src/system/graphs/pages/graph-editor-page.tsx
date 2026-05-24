@@ -6,7 +6,8 @@
  *   后端 spec.edges[].source_handle ↔  React Flow edge.sourceHandle
  *   后端 spec.nodes[].data        ↔  React Flow node.data._spec  (避免和 GraphNode 渲染数据冲突)
  *
- * 跑 test-run 后把每个 node_run.status 投影回 React Flow node.data.runStatus，边框变色。
+ * 调试运行（useGraphRunner）：跑前若 dirty 先自动存草稿；Test Run 走 SSE 实时把
+ *   node 状态投到 canvas（边框变色）+ run dialog 逐节点列结果；Run 持久化写 call_logs。
  */
 
 import {
@@ -21,30 +22,32 @@ import {
   useNodesState,
   useReactFlow,
 } from '@xyflow/react';
-import type { Connection, Edge, Node as RFNode } from '@xyflow/react';
+import type {
+  Connection,
+  Edge,
+  EdgeChange,
+  Node as RFNode,
+  NodeChange,
+} from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ChevronLeft,
-  History,
-  Play,
-  Rocket,
-  Save,
-  Zap,
-} from 'lucide-react';
+import { ChevronLeft, History, Play, Rocket, Save } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { Spinner } from '@/core/components/common/spinner';
 import { Button } from '@/core/components/ui/button';
+import { confirm } from '@/core/lib/confirm';
 import { toast } from '@/core/lib/toast';
 import { useWorkflowStore } from '@/core/stores/workflow';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
+import { RunDialog } from '@/system/graphs/components/run-dialog';
 import { RunsPanel } from '@/system/graphs/components/runs-panel';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
+import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
 import { graphApi } from '@/system/graphs/services/graph';
 import type {
   EdgeSpec,
@@ -52,7 +55,6 @@ import type {
   GraphNodeType,
   GraphSpec,
   NodeSpec,
-  TestRunResult,
 } from '@/system/graphs/types/graph';
 
 const NODE_TYPES = {
@@ -69,7 +71,7 @@ export const GraphEditorPage = () => {
 
 const EditorInner = () => {
   const { id } = useParams<{ id: string }>();
-  const graphId = id ?? '';  // 雪花 ID 超 Number.MAX_SAFE_INTEGER，必须保字符串
+  const graphId = id ?? ''; // 雪花 ID 超 Number.MAX_SAFE_INTEGER，必须保字符串
   const nav = useNavigate();
   const qc = useQueryClient();
 
@@ -87,7 +89,14 @@ const EditorInner = () => {
     );
   }
 
-  return <EditorBody graph={detailQ.data} onReturn={() => nav('/graphs')} onSaved={() => qc.invalidateQueries({ queryKey: ['graph', graphId] })} />;
+  return (
+    <EditorBody
+      key={String(detailQ.data.id)}
+      graph={detailQ.data}
+      onReturn={() => nav('/graphs')}
+      onSaved={() => qc.invalidateQueries({ queryKey: ['graph', graphId] })}
+    />
+  );
 };
 
 interface EditorBodyProps {
@@ -103,14 +112,17 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const selectedId = useWorkflowStore(s => s.selectedNodeId);
   const setSelectedId = useWorkflowStore(s => s.selectNode);
-  const runResult = useWorkflowStore(s => s.runResult);
-  const setRunResult = useWorkflowStore(s => s.setRunResult);
   const resetWorkflow = useWorkflowStore(s => s.reset);
   const idSeqRef = useRef(0);
   const rfWrapperRef = useRef<HTMLDivElement>(null);
   const rfInstance = useReactFlow();
 
-  // 初始 mount：把后端 spec 投到 React Flow
+  const [dirty, setDirty] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [runOpen, setRunOpen] = useState(false);
+
+  // 初始 mount：把后端 spec 投到 React Flow（程序化 setNodes 不触发 onNodesChange，不置脏）
+  // EditorBody 按 graph.id keyed 重挂，dirty 初值即 false，无需在此重置。
   useEffect(() => {
     const { rfNodes, rfEdges } = specToRf(graph.spec);
     setNodes(rfNodes);
@@ -124,10 +136,76 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     );
   }, [graph.id, graph.spec, setEdges, setNodes]);
 
-  // 切到另一张图时清空选中 / run 结果（store 全局，需主动重置）
+  // 切到另一张图时清空选中（store 全局，需主动重置）
   useEffect(() => {
     resetWorkflow();
   }, [graph.id, resetWorkflow]);
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const spec = rfToSpec(nodes, edges);
+      return graphApi.update(graph.id, { spec });
+    },
+    onSuccess: () => {
+      setDirty(false);
+      onSaved();
+    },
+  });
+
+  const save = useCallback(async () => {
+    await saveMut.mutateAsync();
+  }, [saveMut]);
+
+  const runner = useGraphRunner({
+    graphId: graph.id,
+    isDirty: dirty,
+    save,
+  });
+
+  // 运行结果回投 canvas：node 边框按 runStatus 染色
+  useEffect(() => {
+    setNodes(ns =>
+      ns.map(n => {
+        const rv = runner.nodeRuns[n.id];
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            runStatus: rv?.status,
+            errorMessage: rv?.error?.message,
+          } as GraphNodeData,
+        };
+      }),
+    );
+  }, [runner.nodeRuns, setNodes]);
+
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<RFNode<GraphNodeData>>[]) => {
+      onNodesChange(changes);
+      if (
+        changes.some(
+          c =>
+            c.type === 'position' ||
+            c.type === 'remove' ||
+            c.type === 'add' ||
+            c.type === 'replace',
+        )
+      ) {
+        setDirty(true);
+      }
+    },
+    [onNodesChange],
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange<Edge>[]) => {
+      onEdgesChange(changes);
+      if (changes.some(c => c.type === 'remove' || c.type === 'add')) {
+        setDirty(true);
+      }
+    },
+    [onEdgesChange],
+  );
 
   const onConnect = useCallback(
     (conn: Connection) => {
@@ -141,6 +219,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           es,
         ),
       );
+      setDirty(true);
     },
     [setEdges],
   );
@@ -159,15 +238,15 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         label: defaultLabel(type, newId),
         nodeType: type,
       };
-      // 把后端态藏在 data._spec
       const rfNode: RFNode<GraphNodeData> = {
         id: newId,
         position: pos,
         type: 'graphNode',
-        data: { ...data, ...({ _spec: { data: {} } } as any) },
+        data: { ...data, ...({ _spec: { data: {} } } as object) },
       };
       setNodes(ns => ns.concat(rfNode));
       setSelectedId(newId);
+      setDirty(true);
     },
     [rfInstance, setNodes, setSelectedId],
   );
@@ -175,7 +254,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      const type = e.dataTransfer.getData('application/x-graph-node-type') as GraphNodeType;
+      const type = e.dataTransfer.getData(
+        'application/x-graph-node-type',
+      ) as GraphNodeType;
       if (!type) return;
       const bounds = rfWrapperRef.current?.getBoundingClientRect();
       const point = rfInstance.screenToFlowPosition({
@@ -198,12 +279,12 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   );
   const selectedSpec: NodeSpec | null = useMemo(() => {
     if (!selectedRfNode) return null;
-    const stored = (selectedRfNode.data as any)?._spec ?? {};
+    const stored = (selectedRfNode.data as { _spec?: { data?: object } })._spec ?? {};
     return {
       id: selectedRfNode.id,
       type: selectedRfNode.data.nodeType,
       name: selectedRfNode.data.label,
-      data: stored.data || {},
+      data: (stored.data as Record<string, unknown>) || {},
       position: selectedRfNode.position,
     };
   }, [selectedRfNode]);
@@ -223,6 +304,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           };
         }),
       );
+      setDirty(true);
     },
     [setNodes],
   );
@@ -230,70 +312,18 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
     setNodes(ns => ns.filter(n => n.id !== selectedId));
-    setEdges(es => es.filter(e => e.source !== selectedId && e.target !== selectedId));
+    setEdges(es =>
+      es.filter(e => e.source !== selectedId && e.target !== selectedId),
+    );
     setSelectedId(null);
+    setDirty(true);
   }, [selectedId, setEdges, setNodes, setSelectedId]);
-
-  // ── save & test-run ──────────────────────────────────────
-
-  const saveMut = useMutation({
-    mutationFn: () => {
-      const spec = rfToSpec(nodes, edges);
-      return graphApi.update(graph.id, { spec });
-    },
-    onSuccess: () => {
-      toast.success('已保存');
-      onSaved();
-    },
-    onError: e => toast.error(`保存失败：${(e as Error).message}`),
-  });
-
-  const applyTestRunResult = useCallback(
-    (r: TestRunResult) => {
-      setRunResult(r);
-      setNodes(ns =>
-        ns.map(n => {
-          const nr = r.node_runs.find(x => x.node_id === n.id);
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              runStatus: nr?.status,
-              errorMessage: nr?.error?.message,
-            } as GraphNodeData,
-          };
-        }),
-      );
-      toast[r.status === 'success' ? 'success' : 'error'](
-        r.status === 'success'
-          ? `执行成功 · ${r.duration_ms}ms`
-          : `执行失败：${r.error?.message || 'unknown'}`,
-      );
-    },
-    [setNodes, setRunResult],
-  );
-
-  const testRunMut = useMutation({
-    mutationFn: () => graphApi.testRun(graph.id, {}),
-    onSuccess: applyTestRunResult,
-    onError: e => toast.error(`执行失败：${(e as Error).message}`),
-  });
-
-  /** 正式 run：持久化 + 写 call_logs（trace tree drawer 可见） */
-  const persistRunMut = useMutation({
-    mutationFn: () => graphApi.run(graph.id, {}),
-    onSuccess: () => {
-      toast.success('已发起持久化执行（trace 写入 call_logs）');
-      runsQ.refetch();
-    },
-    onError: e => toast.error(`执行失败：${(e as Error).message}`),
-  });
 
   const publishMut = useMutation({
     mutationFn: () => graphApi.publish(graph.id),
     onSuccess: detail => {
       toast.success(`已发布 v${detail.published_version}`);
-      onSaved();  // 触发 detailQ 重拉
+      onSaved();
     },
     onError: e => toast.error(`发布失败：${(e as Error).message}`),
   });
@@ -302,7 +332,35 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     queryKey: ['graph-runs', graph.id],
     queryFn: () => graphApi.listRuns(graph.id),
   });
-  const [runsOpen, setRunsOpen] = useState(false);
+
+  // run dialog 关闭后刷新 runs 列表（持久化执行可能新增）
+  useEffect(() => {
+    if (!runOpen && runner.persisted && runner.phase !== 'running') {
+      runsQ.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runOpen]);
+
+  const nodeMeta = useMemo(
+    () =>
+      nodes.map(n => ({
+        id: n.id,
+        label: n.data.label,
+        type: n.data.nodeType,
+      })),
+    [nodes],
+  );
+
+  const selectedRunView = selectedId ? runner.nodeRuns[selectedId] : undefined;
+
+  const onPublish = async () => {
+    const ok = await confirm({
+      title: '发布当前草稿？',
+      description:
+        '冻结当前 draft 为新版本（published_version + 1）；老版本仅 freeze 在 published_spec，不可恢复。',
+    });
+    if (ok) publishMut.mutate();
+  };
 
   // ── render ───────────────────────────────────────────────
 
@@ -320,7 +378,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <span className="font-mono text-[11px] text-stone-500">
             ({graph.graph_key})
           </span>
-          {/* P22.3：发布状态条 */}
           {graph.published_version && graph.published_version > 0 ? (
             <span
               className="ml-2 inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] text-emerald-700"
@@ -337,19 +394,24 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
               草稿
             </span>
           )}
+          {dirty && (
+            <span
+              className="inline-flex items-center gap-1 text-[10.5px] text-amber-600"
+              title="有未保存改动"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              未保存
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {runResult && (
-            <span
-              className={
-                runResult.status === 'success'
-                  ? 'text-[11px] text-emerald-600'
-                  : 'text-[11px] text-rose-600'
-              }
-            >
-              {runResult.status === 'success' ? '✓' : '✗'}{' '}
-              {runResult.duration_ms}ms · {runResult.node_runs.length} nodes
+          {runner.phase === 'success' && (
+            <span className="text-[11px] text-emerald-600">
+              ✓ {runner.durationMs ?? 0}ms
             </span>
+          )}
+          {runner.phase === 'failed' && (
+            <span className="text-[11px] text-rose-600">✗ 执行失败</span>
           )}
           <Button
             variant="ghost"
@@ -363,22 +425,11 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => testRunMut.mutate()}
-            disabled={testRunMut.isPending}
-            title="跑一次但不写 call_logs（debug 用）"
+            onClick={() => setRunOpen(true)}
+            title="给输入、跑一次、看每节点输出"
           >
             <Play className="mr-1 h-3 w-3" />
-            Test Run
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => persistRunMut.mutate()}
-            disabled={persistRunMut.isPending}
-            title="持久化执行：写 graph_runs + call_logs，trace tree drawer 可见"
-          >
-            <Zap className="mr-1 h-3 w-3" />
-            Run
+            运行
           </Button>
           <Button
             size="sm"
@@ -391,15 +442,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              if (
-                confirm(
-                  '发布将冻结当前 draft 为新版本；published_version += 1，老版本不可恢复（仅 freeze 在 published_spec）。继续？',
-                )
-              ) {
-                publishMut.mutate();
-              }
-            }}
+            onClick={onPublish}
             disabled={publishMut.isPending}
             title="freeze 当前 draft 为新 published 版本"
           >
@@ -421,8 +464,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={handleNodesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             onNodeClick={(_e, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
@@ -446,18 +489,29 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         ) : (
           <NodeInspector
             node={selectedSpec}
+            runView={selectedRunView}
             onChange={updateSelectedSpec}
             onDelete={deleteSelected}
           />
         )}
       </div>
+
+      {runOpen && (
+        <RunDialog
+          open={runOpen}
+          onOpenChange={setRunOpen}
+          graphId={String(graph.id)}
+          graphName={graph.name}
+          isDirty={dirty}
+          runner={runner}
+          nodeMeta={nodeMeta}
+        />
+      )}
     </div>
   );
 };
 
-
 // ── 双向映射 ──────────────────────────────────────────────
-
 
 function specToRf(spec: GraphSpec): {
   rfNodes: RFNode<GraphNodeData>[];
@@ -470,7 +524,7 @@ function specToRf(spec: GraphSpec): {
     data: {
       label: n.name || n.id,
       nodeType: n.type,
-      ...({ _spec: { data: n.data || {} } } as any),
+      ...({ _spec: { data: n.data || {} } } as object),
     } as GraphNodeData,
   }));
   const rfEdges: Edge[] = spec.edges.map(e => ({
@@ -483,18 +537,15 @@ function specToRf(spec: GraphSpec): {
   return { rfNodes, rfEdges };
 }
 
-function rfToSpec(
-  nodes: RFNode<GraphNodeData>[],
-  edges: Edge[],
-): GraphSpec {
+function rfToSpec(nodes: RFNode<GraphNodeData>[], edges: Edge[]): GraphSpec {
   return {
     nodes: nodes.map(n => {
-      const stored = (n.data as any)?._spec ?? {};
+      const stored = (n.data as { _spec?: { data?: object } })._spec ?? {};
       return {
         id: n.id,
         type: n.data.nodeType,
         name: n.data.label,
-        data: stored.data || {},
+        data: (stored.data as Record<string, unknown>) || {},
         position: { x: n.position.x, y: n.position.y },
       };
     }),
@@ -506,7 +557,6 @@ function rfToSpec(
     })),
   };
 }
-
 
 function defaultLabel(type: GraphNodeType, id: string): string {
   const t: Partial<Record<GraphNodeType, string>> = {

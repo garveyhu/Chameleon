@@ -8,15 +8,22 @@ import { Trash2 } from 'lucide-react';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
 import { AgentDebateForm } from '@/system/graphs/components/agent-debate-form';
-import type { GraphNodeType, NodeSpec } from '@/system/graphs/types/graph';
+import { NodeRunResult } from '@/system/graphs/components/node-run-result';
+import type {
+  GraphNodeType,
+  NodeRunView,
+  NodeSpec,
+} from '@/system/graphs/types/graph';
 
 interface Props {
   node: NodeSpec | null;
+  /** 该节点在最近一次运行中的结果（有则在配置下方展示） */
+  runView?: NodeRunView;
   onChange: (next: NodeSpec) => void;
   onDelete: () => void;
 }
 
-export const NodeInspector = ({ node, onChange, onDelete }: Props) => {
+export const NodeInspector = ({ node, runView, onChange, onDelete }: Props) => {
   if (!node) {
     return (
       <aside className="flex h-full w-72 shrink-0 flex-col gap-2 border-l border-stone-200/70 bg-warm-2/40 p-3 text-[12px] text-stone-500">
@@ -63,6 +70,15 @@ export const NodeInspector = ({ node, onChange, onDelete }: Props) => {
       </Field>
 
       <DataForm type={node.type} data={node.data || {}} onPatch={setData} />
+
+      {runView && (
+        <div className="mt-1 border-t border-stone-200/70 pt-3">
+          <div className="mb-2 text-[10.5px] uppercase tracking-wider text-stone-500">
+            运行结果
+          </div>
+          <NodeRunResult run={runView} />
+        </div>
+      )}
     </aside>
   );
 };

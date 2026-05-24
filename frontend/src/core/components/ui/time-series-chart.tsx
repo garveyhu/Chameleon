@@ -24,7 +24,8 @@ export interface ChartSeries {
 }
 
 interface TimeSeriesChartProps {
-  data: Record<string, unknown>[];
+  /** 每个点是一个对象，key 对应 xKey / series.dataKey；类型放宽以兼容各页 DTO */
+  data: readonly unknown[];
   xKey: string;
   series: ChartSeries[];
   height?: number;
@@ -56,12 +57,16 @@ export const TimeSeriesChart = ({
   return (
     <div style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data}>
+        <LineChart data={[...data]}>
           <CartesianGrid strokeDasharray="3 3" stroke="rgb(0 0 0 / 6%)" />
           <XAxis dataKey={xKey} tickFormatter={xTickFormatter} stroke="#999" fontSize={11} />
           <YAxis stroke="#999" fontSize={11} />
           <Tooltip
-            labelFormatter={labelFormatter}
+            labelFormatter={
+              labelFormatter
+                ? (label: unknown) => labelFormatter(String(label))
+                : undefined
+            }
             contentStyle={{
               background: 'var(--color-paper)',
               border: '1px solid rgb(0 0 0 / 10%)',

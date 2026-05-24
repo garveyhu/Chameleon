@@ -1,4 +1,5 @@
 import { get, post } from '@/core/lib/request';
+import { streamSSE } from '@/core/lib/sse';
 import type { EntityId } from '@/core/types/api';
 import type {
   GraphDetail,
@@ -6,6 +7,7 @@ import type {
   GraphRunDetail,
   GraphRunItem,
   GraphSpec,
+  GraphStreamChunk,
   TestRunResult,
 } from '@/system/graphs/types/graph';
 
@@ -38,6 +40,18 @@ export const graphApi = {
 
   testRun: (id: EntityId, input: Record<string, unknown> = {}) =>
     post<TestRunResult>(`/v1/admin/graphs/${id}/test-run`, { input }),
+
+  /** 流式 Test Run（不落库）：边执行边推 graph.node.* 事件，节点状态实时回投 canvas */
+  testRunStream: (
+    id: EntityId,
+    input: Record<string, unknown>,
+    opts: { signal?: AbortSignal; onChunk: (chunk: GraphStreamChunk) => void },
+  ): Promise<void> =>
+    streamSSE<GraphStreamChunk>(`/v1/admin/graphs/${id}/test-run/stream`, {
+      body: { input },
+      signal: opts.signal,
+      onChunk: opts.onChunk,
+    }),
 
   /** 正式跑（持久化 + 写 call_logs，串到 trace tree） */
   run: (id: EntityId, input: Record<string, unknown> = {}) =>

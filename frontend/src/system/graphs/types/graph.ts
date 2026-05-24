@@ -89,3 +89,46 @@ export interface GraphRunDetail extends GraphRunItem {
   output?: unknown;
   error?: { type: string; message: string } | null;
 }
+
+// ── 调试运行视图（编辑器内）─────────────────────────────────
+
+/** 单节点在一次运行中的投影：驱动 canvas 染色 + inspector 结果区 */
+export interface NodeRunView {
+  status: NodeRunItem['status'];
+  input?: unknown;
+  output?: unknown;
+  error?: { type: string; message: string } | null;
+  duration_ms?: number;
+  /** 流式累积的 token 文本（LLM 节点 delta，可选） */
+  streamText?: string;
+}
+
+// ── test-run/stream SSE chunk（镜像后端 SSEEventKind 的 graph.* 成员）──
+// wire 形状：扁平 dict { "<kind>": payload }，与 core/api/sse.py 对齐。
+
+export interface GraphNodeEventPayload {
+  node_id: string;
+  node_type?: string | null;
+  name?: string | null;
+  status?: string | null; // running / success / failed
+  duration_ms?: number | null;
+  output?: unknown;
+  error?: { type: string; message: string } | null;
+}
+
+export interface GraphFinishedPayload {
+  status: 'success' | 'failed' | string;
+  duration_ms?: number;
+  node_count?: number;
+  output?: unknown;
+  error?: { type: string; message: string } | null;
+}
+
+/** 任一 chunk 只含一个 kind 键；前端按 key 分派。 */
+export type GraphStreamChunk =
+  | { 'graph.started': Record<string, unknown> }
+  | { 'graph.node.started': GraphNodeEventPayload }
+  | { 'graph.node.delta': { node_id: string; delta: string } }
+  | { 'graph.node.finished': GraphNodeEventPayload }
+  | { 'graph.node.failed': GraphNodeEventPayload }
+  | { 'graph.finished': GraphFinishedPayload };
