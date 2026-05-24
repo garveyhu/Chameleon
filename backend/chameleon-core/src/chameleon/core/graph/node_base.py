@@ -30,6 +30,29 @@ class NodeStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     SKIPPED = "skipped"  # if_else 未选中的分支
+    PAUSED = "paused"  # human_input 节点等待人工回填（A6）
+
+
+class HumanInputRequired(Exception):
+    """HumanInLoopNode 触发的暂停信号（A6）
+
+    节点 execute 抛出 → Orchestrator 不当失败处理，而是把整图置 PAUSED，
+    快照已完成节点输出供 resume 时 seed 重放；持久化与回填由 service 层负责。
+    """
+
+    def __init__(
+        self,
+        node_id: str,
+        *,
+        prompt: str | None = None,
+        schema: dict[str, Any] | None = None,
+        node_input: Any = None,
+    ) -> None:
+        self.node_id = node_id
+        self.prompt = prompt
+        self.schema = schema
+        self.node_input = node_input
+        super().__init__(f"human input required at node {node_id!r}")
 
 
 NodeInputT = TypeVar("NodeInputT")

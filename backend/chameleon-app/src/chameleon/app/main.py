@@ -108,6 +108,11 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # eval_jobs scheduler 起 cron 触发器（DB 里 enabled=True 的 job 全部注册）
     await eval_scheduler.start()
 
+    # A6：human_input 断点超时清扫 cron（每 5min 扫 timeout 未回填的 paused run）
+    from chameleon.system.graphs import human_input_scheduler
+
+    await human_input_scheduler.start()
+
     # P20.1：sandbox runtime 注册（docker 可达 → docker，dev 兜底 mock）
     from chameleon.core.sandbox import bootstrap_runtimes
 
@@ -127,6 +132,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
     await eval_scheduler.shutdown()
+    from chameleon.system.graphs import human_input_scheduler
+
+    await human_input_scheduler.shutdown()
     await redis_infra.aclose()
 
 

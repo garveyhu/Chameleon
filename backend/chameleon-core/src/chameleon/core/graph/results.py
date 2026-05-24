@@ -39,7 +39,7 @@ class NodeRunResult(BaseModel):
 class RunResult(BaseModel):
     """整张图的执行结果"""
 
-    status: NodeStatus  # success / failed
+    status: NodeStatus  # success / failed / paused
     input: Any
     output: Any = None
     error: dict[str, Any] | None = None
@@ -47,6 +47,10 @@ class RunResult(BaseModel):
     finished_at: datetime
     duration_ms: int
     node_runs: list[NodeRunResult] = Field(default_factory=list)
+    # A6 暂停：等待人工回填的节点信息（status=PAUSED 时非空）
+    pending: dict[str, Any] | None = None
+    # A6 暂停：已完成节点输出快照（resume 时作为 seed_outputs 重放，跳过重跑）
+    node_outputs: dict[str, Any] = Field(default_factory=dict)
 
 
 # ── 拓扑校验 ─────────────────────────────────────────────

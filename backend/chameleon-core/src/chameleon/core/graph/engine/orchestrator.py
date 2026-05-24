@@ -41,7 +41,12 @@ from chameleon.core.graph.engine.event_manager import (
 from chameleon.core.graph.engine.ready_queue import ReadyQueue
 from chameleon.core.graph.engine.state import GraphExecState
 from chameleon.core.graph.engine.worker_pool import WorkerPool
-from chameleon.core.graph.node_base import DeltaSink, Node, NodeStatus
+from chameleon.core.graph.node_base import (
+    DeltaSink,
+    HumanInputRequired,
+    Node,
+    NodeStatus,
+)
 from chameleon.core.graph.registry import default_factory as _registry_default_factory
 from chameleon.core.graph.results import NodeRunResult, RunResult
 from chameleon.core.graph.results import duration_ms as _ms
@@ -80,6 +85,10 @@ class Orchestrator:
         }
         # 失败标记：任一节点失败后置 True，主循环停止派发新 task
         self._failed_error: dict[str, Any] | None = None
+        # 暂停标记（A6）：human_input 节点触发后置非空，主循环停止派发，整图 PAUSED
+        self._paused: dict[str, Any] | None = None
+        # resume seed（A6）：run() 时填充
+        self._seed_outputs: dict[str, Any] = {}
 
     async def run(
         self,
@@ -87,13 +96,19 @@ class Orchestrator:
         input: Any,
         ctx: NodeContext,
         events: GraphEventManager | None = None,
+        seed_outputs: dict[str, Any] | None = None,
     ) -> RunResult:
         """跑整张图，返回 RunResult
 
         events 非空时：节点 started/finished/failed + 整图 started/finished 事件
         推到 GraphEventManager（供 SSE 流式消费）；events 为 None 时零开销，
         行为与原 batch 模式完全一致。结束时（含异常）保证 events.close()。
+
+        seed_outputs（A6 resume）：{node_id: output} 预置已完成节点输出。命中的
+        节点直接重放该输出（不调 execute），其后继照常推进 —— 用于 human_input
+        暂停后回填恢复，跳过已跑节点（含被回填的 human_input 节点）。
         """
+        self._seed_outputs = seed_outputs or {}
         started_at = datetime.now(timezone.utc)
         deadline = None
         if self.config.total_timeout_seconds:
@@ -125,7 +140,8 @@ class Orchestrator:
 
             # 主循环（事件驱动）：派发当前所有 ready node → 等任一 task 完成
             # （可能 enqueue 新 ready）→ 再派发。无固定 sleep / 轮询拖尾。
-            while self._failed_error is None:
+            # 失败 / 暂停（human_input）均停止派发新节点。
+            while self._failed_error is None and self._paused is None:
                 if state.is_deadline_exceeded():
                     self._failed_error = {
                         "type": "GraphTimeoutError",
@@ -165,6 +181,8 @@ class Orchestrator:
                         break
 
             finished_at = datetime.now(timezone.utc)
+            # 已完成节点输出快照（resume seed 用）
+            outputs_snapshot = (await state.variable_pool.snapshot())["outputs"]
             if self._failed_error is not None:
                 result = RunResult(
                     status=NodeStatus.FAILED,
@@ -175,6 +193,19 @@ class Orchestrator:
                     finished_at=finished_at,
                     duration_ms=_ms(started_at, finished_at),
                     node_runs=node_runs,
+                    node_outputs=outputs_snapshot,
+                )
+            elif self._paused is not None:
+                result = RunResult(
+                    status=NodeStatus.PAUSED,
+                    input=input,
+                    output=None,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_ms=_ms(started_at, finished_at),
+                    node_runs=node_runs,
+                    pending=self._paused,
+                    node_outputs=outputs_snapshot,
                 )
             else:
                 result = RunResult(
@@ -185,6 +216,7 @@ class Orchestrator:
                     finished_at=finished_at,
                     duration_ms=_ms(started_at, finished_at),
                     node_runs=node_runs,
+                    node_outputs=outputs_snapshot,
                 )
             return result
         finally:
@@ -267,6 +299,14 @@ class Orchestrator:
         # 1) 拿 input：单 parent 取它的 output；无 parent (start) 取 graph_input
         input_val = await self._resolve_input(node_id, state)
 
+        # A6 resume：命中 seed 直接重放该输出（不调 execute），其后继照常推进
+        if node_id in self._seed_outputs:
+            output = self._seed_outputs[node_id]
+            await self._finish_success(
+                node_id, node, input_val, output, node_started, state, rq, events
+            )
+            return
+
         # 2) execute（可选 timeout）
         #    流式模式（events 非空）走 execute_stream + delta emit；
         #    非流式默认 execute_stream 直接转 execute，零差异。
@@ -284,6 +324,35 @@ class Orchestrator:
                 )
             else:
                 output = await coro
+        except HumanInputRequired as hir:
+            # A6 暂停：记 pending，不 mark_done（不传播给下游），整图置 PAUSED
+            node_finished = datetime.now(timezone.utc)
+            await state.set_status(node_id, NodeStatus.PAUSED)
+            await state.append_run(
+                NodeRunResult(
+                    node_id=node_id,
+                    node_type=node.type,
+                    status=NodeStatus.PAUSED,
+                    input=input_val,
+                    output=None,
+                    started_at=node_started,
+                    finished_at=node_finished,
+                    duration_ms=_ms(node_started, node_finished),
+                )
+            )
+            if self._paused is None:
+                self._paused = {
+                    "node_id": hir.node_id,
+                    "prompt": hir.prompt,
+                    "schema": hir.schema,
+                    "node_input": input_val,
+                }
+            logger.info(
+                "graph engine paused (human input) | run={} | node={}",
+                ctx.request_id,
+                node_id,
+            )
+            return
         except Exception as exc:  # noqa: BLE001
             node_finished = datetime.now(timezone.utc)
             err = {"type": type(exc).__name__, "message": str(exc)[:500]}
@@ -324,7 +393,23 @@ class Orchestrator:
             )
             return
 
-        # 3) 成功：写 output + append run + mark_done
+        # 3) 成功：写 output + append run + emit finished + mark_done
+        await self._finish_success(
+            node_id, node, input_val, output, node_started, state, rq, events
+        )
+
+    async def _finish_success(
+        self,
+        node_id: str,
+        node: Node,
+        input_val: Any,
+        output: Any,
+        node_started: datetime,
+        state: GraphExecState,
+        rq: ReadyQueue,
+        events: GraphEventManager | None,
+    ) -> None:
+        """节点成功收尾（正常执行 + seed 重放共用）：写 output / 记录 / 派发后继"""
         node_finished = datetime.now(timezone.utc)
         await state.variable_pool.set_output(node_id, output)
         await state.set_status(node_id, NodeStatus.SUCCESS)
@@ -353,7 +438,7 @@ class Orchestrator:
                     )
                 )
             )
-        # 4) if_else 分支决议
+        # if_else 分支决议
         selected = node.selected_branch(output)
         await rq.mark_done(node_id, selected_handle=selected, success=True)
 

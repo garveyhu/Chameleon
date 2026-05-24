@@ -33,6 +33,7 @@ from chameleon.core.models.workspace import (
 )
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.graph import Graph, GraphNodeRun, GraphRun
+from chameleon.core.models.human_input import HumanInputPending
 from chameleon.core.models.kb_collection import KbCollection
 from chameleon.core.models.knowledge import Chunk, Document, KnowledgeBase
 from chameleon.core.models.model_def import LLMModel
@@ -88,6 +89,7 @@ __all__ = [
     "Graph",
     "GraphRun",
     "GraphNodeRun",
+    "HumanInputPending",
     # 工具
     "ToolInstance",
     # Eval

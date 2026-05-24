@@ -21,7 +21,7 @@ trace 串联约定：
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from loguru import logger
@@ -36,6 +36,7 @@ from chameleon.core.models import (
     Graph,
     GraphNodeRun,
     GraphRun,
+    HumanInputPending,
 )
 from chameleon.system.api_key.service import record_call
 
@@ -150,86 +151,25 @@ async def run_graph(
         return run
 
     result = await orch.run(input=input or {}, ctx=ctx)
-    finished_at = datetime.now(timezone.utc)
 
-    # 落每节点 graph_node_runs + call_logs
-    for nr in result.node_runs:
-        node_rid = f"{root_rid}.{nr.node_id}"
-        gn = GraphNodeRun(
-            graph_run_id=run_id,
-            node_id=nr.node_id,
-            node_type=nr.node_type,
-            status=nr.status.value,
-            input=_jsonable(nr.input),
-            output=_jsonable(nr.output),
-            error=nr.error,
-            request_id=node_rid,
-            started_at=nr.started_at,
-            finished_at=nr.finished_at,
-            duration_ms=nr.duration_ms,
-        )
-        session.add(gn)
-
-        obs_type = _NODE_TO_OBSERVATION_TYPE.get(nr.node_type, "span")
-        await record_call(
-            session,
-            request_id=node_rid,
-            app_id=app_id,
-            agent_key=f"graph:{g.graph_key}",
-            session_id=None,
-            stream=False,
-            success=nr.status.value == "success",
-            code=200 if nr.status.value == "success" else 500,
-            error_message=(nr.error or {}).get("message") if nr.error else None,
-            duration_ms=nr.duration_ms,
-            request_payload=_to_payload(nr.input),
-            response_payload=_to_payload(nr.output),
-            parent_id=root_rid,
-            observation_type=obs_type,
-        )
-
-        # A2：LLM 节点的多轮 tool_call 串成 node 的子观测（trace tree 嵌套）
-        await _record_tool_rounds(
-            session,
-            node_output=nr.output,
-            node_rid=node_rid,
-            app_id=app_id,
-            agent_key=f"graph:{g.graph_key}",
-        )
-        # A5：parallel 节点的各 branch 串成 node 的子观测（并发分支可见）
-        await _record_branch_runs(
-            session,
-            node_output=nr.output,
-            node_rid=node_rid,
-            app_id=app_id,
-            agent_key=f"graph:{g.graph_key}",
-        )
-
-    # 写根 call_log（trace 根）
-    await record_call(
+    await _persist_node_runs(
         session,
-        request_id=root_rid,
+        node_runs=result.node_runs,
+        run_id=run_id,
+        root_rid=root_rid,
         app_id=app_id,
-        agent_key=f"graph:{g.graph_key}",
-        session_id=None,
-        stream=False,
-        success=result.status.value == "success",
-        code=200 if result.status.value == "success" else 500,
-        error_message=(result.error or {}).get("message") if result.error else None,
-        duration_ms=result.duration_ms,
-        request_payload=_to_payload(input or {}),
-        response_payload=_to_payload(result.output),
-        parent_id=None,
-        observation_type="trace",
+        graph_key=g.graph_key,
     )
-
-    # 更新 graph_runs 终态
-    run.status = result.status.value
-    run.output = _jsonable(result.output)
-    run.error = result.error
-    run.finished_at = finished_at
-    run.duration_ms = result.duration_ms
-    run.node_count = len(result.node_runs)
+    await _finalize_run(
+        session,
+        run=run,
+        result=result,
+        spec=spec,
+        root_rid=root_rid,
+        app_id=app_id,
+        graph_key=g.graph_key,
+        request_input=input or {},
+    )
     await session.commit()
     await session.refresh(run)
 
@@ -244,7 +184,243 @@ async def run_graph(
     return run
 
 
+async def resume_run(
+    session: AsyncSession,
+    *,
+    run_id: int,
+    value: dict[str, Any],
+    app_id: str = _SYSTEM_APP_KEY,
+) -> GraphRun:
+    """人工回填后从断点恢复跑（A6）
+
+    取该 run 最新 pending 断点，以 resume_state + {node_id: value} 作 seed 重放
+    已完成节点、续跑下游。可能再次暂停（下一个 human_input）或终态收尾。
+    """
+    run = (
+        await session.execute(select(GraphRun).where(GraphRun.id == run_id))
+    ).scalar_one_or_none()
+    if run is None:
+        raise BusinessError(ResultCode.Fail, message=f"graph_run 不存在: {run_id}")
+    if run.status != "paused":
+        raise BusinessError(
+            ResultCode.Fail, message=f"graph_run 非暂停态（status={run.status}）不可恢复"
+        )
+
+    pending = (
+        await session.execute(
+            select(HumanInputPending)
+            .where(
+                HumanInputPending.graph_run_id == run_id,
+                HumanInputPending.status == "pending",
+            )
+            .order_by(HumanInputPending.created_at.desc())
+        )
+    ).scalars().first()
+    if pending is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"graph_run {run_id} 无待回填断点"
+        )
+
+    g = (
+        await session.execute(select(Graph).where(Graph.id == run.graph_id))
+    ).scalar_one_or_none()
+    if g is None:
+        raise BusinessError(ResultCode.Fail, message="关联 graph 不存在")
+    spec = GraphSpec.model_validate(g.spec)
+
+    if app_id == _SYSTEM_APP_KEY:
+        await _ensure_system_app(session)
+
+    seed: dict[str, Any] = dict(pending.resume_state or {})
+    seed[pending.node_id] = value
+
+    ctx = NodeContext(
+        request_id=run.request_id,
+        graph_id=run.graph_id,
+        graph_run_id=run.id,
+        depth=0,
+        started_at=run.started_at or datetime.now(timezone.utc),
+    )
+    result = await Orchestrator(spec).run(
+        input=run.input, ctx=ctx, seed_outputs=seed
+    )
+
+    # 标记断点已回填
+    pending.status = "resolved"
+    pending.value = value
+    pending.resolved_at = datetime.now(timezone.utc)
+
+    # 只落新跑的节点（seed 命中的已在之前 run 落过，跳过避免重复）
+    await _persist_node_runs(
+        session,
+        node_runs=result.node_runs,
+        run_id=run.id,
+        root_rid=run.request_id,
+        app_id=app_id,
+        graph_key=g.graph_key,
+        skip=set(seed.keys()),
+    )
+    await _finalize_run(
+        session,
+        run=run,
+        result=result,
+        spec=spec,
+        root_rid=run.request_id,
+        app_id=app_id,
+        graph_key=g.graph_key,
+        request_input=run.input,
+    )
+    await session.commit()
+    await session.refresh(run)
+    logger.info(
+        "graph resume | id={} | node={} | status={}",
+        run.id,
+        pending.node_id,
+        run.status,
+    )
+    return run
+
+
 # ── helpers ───────────────────────────────────────────────
+
+
+async def _persist_node_runs(
+    session: AsyncSession,
+    *,
+    node_runs: list,
+    run_id: int,
+    root_rid: str,
+    app_id: str,
+    graph_key: str,
+    skip: set[str] = frozenset(),  # type: ignore[assignment]
+) -> None:
+    """落每节点 graph_node_runs + call_logs + tool/branch 子观测
+
+    skip 里的 node_id 跳过（resume 时已在之前 run 落过，避免重复）。
+    """
+    for nr in node_runs:
+        if nr.node_id in skip:
+            continue
+        node_rid = f"{root_rid}.{nr.node_id}"
+        session.add(
+            GraphNodeRun(
+                graph_run_id=run_id,
+                node_id=nr.node_id,
+                node_type=nr.node_type,
+                status=nr.status.value,
+                input=_jsonable(nr.input),
+                output=_jsonable(nr.output),
+                error=nr.error,
+                request_id=node_rid,
+                started_at=nr.started_at,
+                finished_at=nr.finished_at,
+                duration_ms=nr.duration_ms,
+            )
+        )
+        obs_type = _NODE_TO_OBSERVATION_TYPE.get(nr.node_type, "span")
+        await record_call(
+            session,
+            request_id=node_rid,
+            app_id=app_id,
+            agent_key=f"graph:{graph_key}",
+            session_id=None,
+            stream=False,
+            success=nr.status.value == "success",
+            code=200 if nr.status.value == "success" else 500,
+            error_message=(nr.error or {}).get("message") if nr.error else None,
+            duration_ms=nr.duration_ms,
+            request_payload=_to_payload(nr.input),
+            response_payload=_to_payload(nr.output),
+            parent_id=root_rid,
+            observation_type=obs_type,
+        )
+        await _record_tool_rounds(
+            session,
+            node_output=nr.output,
+            node_rid=node_rid,
+            app_id=app_id,
+            agent_key=f"graph:{graph_key}",
+        )
+        await _record_branch_runs(
+            session,
+            node_output=nr.output,
+            node_rid=node_rid,
+            app_id=app_id,
+            agent_key=f"graph:{graph_key}",
+        )
+
+
+async def _finalize_run(
+    session: AsyncSession,
+    *,
+    run: GraphRun,
+    result: Any,
+    spec: GraphSpec,
+    root_rid: str,
+    app_id: str,
+    graph_key: str,
+    request_input: dict,
+) -> None:
+    """收尾：暂停 → 落 pending 断点 + status=paused；终态 → 根 trace + 终态字段"""
+    if result.status.value == "paused":
+        await _persist_pending(session, run=run, result=result, spec=spec)
+        run.status = "paused"
+        run.node_count = len(result.node_runs)
+        return
+
+    # 终态（success / failed）：写根 call_log（trace 根）+ 更新 graph_run
+    await record_call(
+        session,
+        request_id=root_rid,
+        app_id=app_id,
+        agent_key=f"graph:{graph_key}",
+        session_id=None,
+        stream=False,
+        success=result.status.value == "success",
+        code=200 if result.status.value == "success" else 500,
+        error_message=(result.error or {}).get("message") if result.error else None,
+        duration_ms=result.duration_ms,
+        request_payload=_to_payload(request_input),
+        response_payload=_to_payload(result.output),
+        parent_id=None,
+        observation_type="trace",
+    )
+    run.status = result.status.value
+    run.output = _jsonable(result.output)
+    run.error = result.error
+    run.finished_at = datetime.now(timezone.utc)
+    run.duration_ms = result.duration_ms
+    run.node_count = len(result.node_runs)
+
+
+async def _persist_pending(
+    session: AsyncSession,
+    *,
+    run: GraphRun,
+    result: Any,
+    spec: GraphSpec,
+) -> None:
+    """落 human_input_pending 断点行（resume_state = 已完成节点输出快照）"""
+    pending = result.pending or {}
+    node_id = pending.get("node_id")
+    timeout_at = None
+    node_spec = spec.find_node(node_id) if node_id else None
+    if node_spec is not None:
+        ts = node_spec.data.get("timeout_seconds")
+        if isinstance(ts, int) and ts > 0:
+            timeout_at = datetime.now(timezone.utc) + timedelta(seconds=ts)
+    session.add(
+        HumanInputPending(
+            graph_run_id=run.id,
+            node_id=node_id or "",
+            status="pending",
+            prompt=pending.get("prompt"),
+            input_schema=pending.get("schema"),
+            node_input=_to_payload(pending.get("node_input")),
+            resume_state=_jsonable(result.node_outputs),
+            timeout_at=timeout_at,
+        )
+    )
 
 
 async def _record_tool_rounds(
