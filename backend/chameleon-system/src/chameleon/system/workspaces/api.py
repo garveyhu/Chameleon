@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.workspaces import service
 from chameleon.system.workspaces.schemas import (
@@ -51,9 +53,23 @@ async def get_workspace(
 async def create_workspace(
     req: CreateWorkspaceRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[WorkspaceItem]:
-    return Result.ok(await service.create_workspace(session, req))
+    item = await service.create_workspace(session, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace.create",
+        resource_type="workspace",
+        resource_id=item.id,
+        after={"workspace_key": item.workspace_key, "name": item.name, "plan": item.plan},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{ws_id}/update", response_model=Result[WorkspaceItem])
@@ -61,18 +77,44 @@ async def update_workspace(
     ws_id: int,
     req: UpdateWorkspaceRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_WRITE)),
 ) -> Result[WorkspaceItem]:
-    return Result.ok(await service.update_workspace(session, ws_id, req))
+    item = await service.update_workspace(session, ws_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace.update",
+        resource_type="workspace",
+        resource_id=item.id,
+        after={"name": item.name, "plan": item.plan},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(item)
 
 
 @router.post("/{ws_id}/delete", response_model=Result[None])
 async def delete_workspace(
     ws_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission(_PERM_DELETE)),
 ) -> Result[None]:
     await service.delete_workspace(session, ws_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="workspace.delete",
+        resource_type="workspace",
+        resource_id=ws_id,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 

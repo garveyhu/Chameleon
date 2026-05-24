@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.channels import service as channel_service
 from chameleon.system.channels.schemas import (
@@ -61,9 +63,22 @@ async def get_channel_health(
 async def create_channel(
     req: CreateChannelRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("channels:write")),
 ) -> Result[ChannelItem]:
     item = await channel_service.create_channel(session, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="channel.create",
+        resource_type="channel",
+        resource_id=item.id,
+        after={"name": item.name, "provider_id": item.provider_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -72,9 +87,22 @@ async def update_channel(
     channel_id: int,
     req: UpdateChannelRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("channels:write")),
 ) -> Result[ChannelItem]:
     item = await channel_service.update_channel(session, channel_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="channel.update",
+        resource_type="channel",
+        resource_id=item.id,
+        after={"name": item.name, "status": item.status},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -82,7 +110,19 @@ async def update_channel(
 async def delete_channel(
     channel_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("channels:delete")),
 ) -> Result[None]:
     await channel_service.delete_channel(session, channel_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="channel.delete",
+        resource_type="channel",
+        resource_id=channel_id,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)

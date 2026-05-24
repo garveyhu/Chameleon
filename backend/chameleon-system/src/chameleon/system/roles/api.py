@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, select
@@ -21,8 +19,9 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Permission, Role, RolePermission
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -94,6 +93,7 @@ async def list_roles(
 async def create_role(
     req: CreateRoleRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("roles:write")),
 ) -> Result[RoleItem]:
     existing = (
@@ -106,6 +106,18 @@ async def create_role(
     )
     session.add(role)
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="role.create",
+        resource_type="role",
+        resource_id=role.id,
+        after={"code": role.code, "name": role.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(_role_to_item(role))
 
 
@@ -114,6 +126,7 @@ async def update_role(
     role_id: int,
     req: UpdateRoleRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("roles:write")),
 ) -> Result[RoleItem]:
     role = (
@@ -125,11 +138,25 @@ async def update_role(
     ).scalar_one_or_none()
     if role is None:
         raise BusinessError(ResultCode.AgentNotFound, message=f"role 不存在: {role_id}")
+    before = {"name": role.name, "description": role.description}
     if req.name is not None:
         role.name = req.name
     if req.description is not None:
         role.description = req.description
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="role.update",
+        resource_type="role",
+        resource_id=role.id,
+        before=before,
+        after={"name": role.name, "description": role.description},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(_role_to_item(role))
 
 
@@ -137,6 +164,7 @@ async def update_role(
 async def delete_role(
     role_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("roles:delete")),
 ) -> Result[None]:
     role = (
@@ -146,9 +174,22 @@ async def delete_role(
         raise BusinessError(ResultCode.AgentNotFound, message=f"role 不存在: {role_id}")
     if role.is_system:
         raise ValidationError(message="内置角色不可删除")
+    before = {"code": role.code, "name": role.name}
     # 级联清 role_permissions / user_roles 由 ondelete=CASCADE 处理
     await session.execute(delete(Role).where(Role.id == role_id))
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="role.delete",
+        resource_type="role",
+        resource_id=role_id,
+        before=before,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 

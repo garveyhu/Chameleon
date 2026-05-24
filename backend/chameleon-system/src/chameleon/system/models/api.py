@@ -24,6 +24,8 @@ from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import LLMModel, Provider
 from chameleon.core.utils.crypto import get_or_decrypt
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.models import test_service
 
@@ -100,6 +102,7 @@ async def list_models(
 async def create_model(
     req: CreateModelRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("models:write")),
 ) -> Result[ModelItem]:
     provider = (
@@ -134,6 +137,18 @@ async def create_model(
     )
     session.add(m)
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="model.create",
+        resource_type="model",
+        resource_id=m.id,
+        after={"code": m.code, "kind": m.kind, "provider_id": m.provider_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     await session.commit()
     await reload_llm_cache()
     return Result.ok(_to_item(m, provider.code))
@@ -144,6 +159,7 @@ async def update_model(
     model_id: int,
     req: UpdateModelRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("models:write")),
 ) -> Result[ModelItem]:
     m = (
@@ -164,6 +180,18 @@ async def update_model(
     if req.enabled is not None:
         m.enabled = req.enabled
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="model.update",
+        resource_type="model",
+        resource_id=m.id,
+        after={"code": m.code, "enabled": m.enabled, "dim": m.dim},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     await session.commit()
     await reload_llm_cache()
     return Result.ok(_to_item(m))

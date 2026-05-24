@@ -24,6 +24,8 @@ from chameleon.core.infra.db import get_session
 from chameleon.core.models import Provider
 from chameleon.core.schema import get as get_schema
 from chameleon.core.utils.crypto import encrypt
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 
 # ── DTO ────────────────────────────────────────────────────
@@ -119,6 +121,7 @@ async def list_providers(
 async def create_provider(
     req: CreateProviderRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("providers:write")),
 ) -> Result[ProviderItem]:
     existing = (
@@ -140,6 +143,18 @@ async def create_provider(
     )
     session.add(p)
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="provider.create",
+        resource_type="provider",
+        resource_id=p.id,
+        after={"code": p.code, "kind": p.kind, "name": p.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     await session.commit()  # 提早 commit 让 reload 读到
     await reload_llm_cache()
     return Result.ok(_to_item(p))
@@ -150,6 +165,7 @@ async def update_provider(
     provider_id: int,
     req: UpdateProviderRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("providers:write")),
 ) -> Result[ProviderItem]:
     p = (
@@ -163,6 +179,12 @@ async def update_provider(
         raise BusinessError(
             ResultCode.AgentNotFound, message=f"provider 不存在: {provider_id}"
         )
+    before = {
+        "name": p.name,
+        "base_url": p.base_url,
+        "enabled": p.enabled,
+        "description": p.description,
+    }
     if req.name is not None:
         p.name = req.name
     if req.base_url is not None:
@@ -177,6 +199,24 @@ async def update_provider(
     if req.description is not None:
         p.description = req.description
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="provider.update",
+        resource_type="provider",
+        resource_id=p.id,
+        before=before,
+        after={
+            "name": p.name,
+            "base_url": p.base_url,
+            "enabled": p.enabled,
+            "description": p.description,
+        },
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     await session.commit()
     await reload_llm_cache()
     return Result.ok(_to_item(p))
@@ -186,6 +226,7 @@ async def update_provider(
 async def delete_provider(
     provider_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("providers:delete")),
 ) -> Result[None]:
     p = (
@@ -199,9 +240,22 @@ async def delete_provider(
         raise BusinessError(
             ResultCode.AgentNotFound, message=f"provider 不存在: {provider_id}"
         )
+    before = {"code": p.code, "name": p.name}
     p.deleted_at = datetime.now(timezone.utc)
     p.code = f"__deleted_{p.id}_{p.code}"
     await session.flush()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="provider.delete",
+        resource_type="provider",
+        resource_id=provider_id,
+        before=before,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     await session.commit()
     await reload_llm_cache()
     return Result.ok(None)
