@@ -33,13 +33,11 @@ from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     App,
-    CallLog,
     Graph,
     GraphNodeRun,
     GraphRun,
 )
 from chameleon.system.api_key.service import record_call
-
 
 _NODE_TO_OBSERVATION_TYPE: dict[str, str] = {
     "llm": "generation",
@@ -190,6 +188,15 @@ async def run_graph(
             observation_type=obs_type,
         )
 
+        # A2：LLM 节点的多轮 tool_call 串成 node 的子观测（trace tree 嵌套）
+        await _record_tool_rounds(
+            session,
+            node_output=nr.output,
+            node_rid=node_rid,
+            app_id=app_id,
+            agent_key=f"graph:{g.graph_key}",
+        )
+
     # 写根 call_log（trace 根）
     await record_call(
         session,
@@ -230,6 +237,57 @@ async def run_graph(
 
 
 # ── helpers ───────────────────────────────────────────────
+
+
+async def _record_tool_rounds(
+    session: AsyncSession,
+    *,
+    node_output: Any,
+    node_rid: str,
+    app_id: str,
+    agent_key: str,
+) -> None:
+    """把 LLM 节点 output.tool_rounds 里的每次工具调用记成 node 的子观测
+
+    parent_id = node_rid（LLM 节点的 generation 观测），observation_type='tool'，
+    使 trace tree 呈现：graph → llm(generation) → tool / tool（多轮嵌套）。
+    output 无 tool_rounds（非 LLM 节点 / 未用工具）时直接返回，零开销。
+    """
+    if not isinstance(node_output, dict):
+        return
+    rounds = node_output.get("tool_rounds")
+    if not isinstance(rounds, list) or not rounds:
+        return
+
+    for ri, rnd in enumerate(rounds):
+        results = rnd.get("tool_results") if isinstance(rnd, dict) else None
+        if not isinstance(results, list):
+            continue
+        for ti, rec in enumerate(results):
+            if not isinstance(rec, dict):
+                continue
+            result = rec.get("result") or {}
+            ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+            await record_call(
+                session,
+                request_id=f"{node_rid}.tool.{ri}.{ti}",
+                app_id=app_id,
+                agent_key=agent_key,
+                session_id=None,
+                stream=False,
+                success=ok,
+                code=200 if ok else 500,
+                error_message=(
+                    result.get("error") if isinstance(result, dict) else None
+                ),
+                duration_ms=0,
+                request_payload=_to_payload(
+                    {"name": rec.get("name"), "args": rec.get("args")}
+                ),
+                response_payload=_to_payload(result),
+                parent_id=node_rid,
+                observation_type="tool",
+            )
 
 
 def _ms(t0: datetime, t1: datetime) -> int:

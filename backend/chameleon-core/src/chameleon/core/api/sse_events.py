@@ -74,6 +74,7 @@ class SSEEventKind(StrEnum):
     # kind 集中登记在此枚举 —— 红线：所有 SSE event 必须是 typed kind，禁止匿名 event。
     GRAPH_STARTED = "graph.started"
     GRAPH_NODE_STARTED = "graph.node.started"
+    GRAPH_NODE_DELTA = "graph.node.delta"  # v1.1 PR A2：节点流式 token 片段
     GRAPH_NODE_FINISHED = "graph.node.finished"
     GRAPH_NODE_FAILED = "graph.node.failed"
     GRAPH_FINISHED = "graph.finished"

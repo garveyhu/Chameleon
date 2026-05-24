@@ -69,6 +69,11 @@ def event_graph_node_started(
     return {SSEEventKind.GRAPH_NODE_STARTED.value: _dump(payload)}
 
 
+def event_graph_node_delta(node_id: str, text: str) -> dict[str, Any]:
+    """节点流式 token 片段（A2）—— 前端按 node_id 累积渲染"""
+    return {SSEEventKind.GRAPH_NODE_DELTA.value: {"node_id": node_id, "delta": text}}
+
+
 def event_graph_node_finished(
     payload: GraphNodeEventPayload | dict[str, Any],
 ) -> dict[str, Any]:

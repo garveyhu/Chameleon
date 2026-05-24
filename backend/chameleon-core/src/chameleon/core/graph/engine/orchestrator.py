@@ -32,6 +32,7 @@ from chameleon.core.graph.engine.event_manager import (
     GraphEventManager,
     GraphNodeEventPayload,
     event_graph_finished,
+    event_graph_node_delta,
     event_graph_node_failed,
     event_graph_node_finished,
     event_graph_node_started,
@@ -40,7 +41,7 @@ from chameleon.core.graph.engine.event_manager import (
 from chameleon.core.graph.engine.ready_queue import ReadyQueue
 from chameleon.core.graph.engine.state import GraphExecState
 from chameleon.core.graph.engine.worker_pool import WorkerPool
-from chameleon.core.graph.node_base import Node, NodeStatus
+from chameleon.core.graph.node_base import DeltaSink, Node, NodeStatus
 from chameleon.core.graph.registry import default_factory as _registry_default_factory
 from chameleon.core.graph.results import NodeRunResult, RunResult
 from chameleon.core.graph.results import duration_ms as _ms
@@ -249,14 +250,22 @@ class Orchestrator:
         input_val = await self._resolve_input(node_id, state)
 
         # 2) execute（可选 timeout）
+        #    流式模式（events 非空）走 execute_stream + delta emit；
+        #    非流式默认 execute_stream 直接转 execute，零差异。
+        emit: DeltaSink | None = None
+        if events is not None:
+
+            async def emit(text: str, _nid: str = node_id) -> None:
+                await events.emit(event_graph_node_delta(_nid, text))
+
         try:
+            coro = node.execute_stream(ctx, input_val, emit)
             if self.config.node_timeout_seconds:
                 output = await asyncio.wait_for(
-                    node.execute(ctx, input_val),
-                    timeout=self.config.node_timeout_seconds,
+                    coro, timeout=self.config.node_timeout_seconds
                 )
             else:
-                output = await node.execute(ctx, input_val)
+                output = await coro
         except Exception as exc:  # noqa: BLE001
             node_finished = datetime.now(timezone.utc)
             err = {"type": type(exc).__name__, "message": str(exc)[:500]}

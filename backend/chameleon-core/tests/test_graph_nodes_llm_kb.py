@@ -185,10 +185,10 @@ async def test_llm_node_dict_no_known_field_json_fallback(fake_llm):
 
 def test_build_messages_dict_never_raises_on_dict():
     """回归：任意 dict（含空 dict）都不再抛 '无法从 input 构造 messages：type=dict'"""
-    from chameleon.core.graph.nodes.llm import _build_messages
+    from chameleon.core.graph.nodes.llm_messages import build_messages
 
     for bad in ({}, {"foo": 1}, {"nested": {"a": [1, 2]}}):
-        msgs = _build_messages(bad, None, None)
+        msgs = build_messages(bad, None, None)
         assert len(msgs) == 1
         assert msgs[0].type == "human"
 
