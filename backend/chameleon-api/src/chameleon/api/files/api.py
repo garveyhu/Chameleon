@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import secrets
 from pathlib import PurePosixPath
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends
 
 from chameleon.api.files.schemas import (
     ALLOWED_MIME_TYPES,
@@ -30,40 +28,8 @@ from chameleon.api.files.schemas import (
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import Result
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
-from chameleon.core.infra.jwt import JwtInvalidToken, decode_token_with_blacklist
+from chameleon.core.infra.auth import CurrentApp, current_app_or_admin
 from chameleon.core.infra.object_store import get_object_store
-
-
-async def current_app_or_admin(
-    authorization: Annotated[str | None, Header()] = None,
-    session: AsyncSession = Depends(get_session),
-) -> CurrentApp:
-    """P19.4 PR #42：业务 api_key OR admin JWT 双轨鉴权
-
-    admin UI（Playground / 管理后台）走 JWT；外部业务方走 api_key。
-    JWT 解码成功 → 返合成 CurrentApp（scopes=admin，ws_id=None 全量视角）；
-    否则交给 api_key 解析路径。
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise BusinessError(ResultCode.MissingApiKey)
-    token = authorization.removeprefix("Bearer ").strip()
-    # 先试 JWT（admin / user）
-    try:
-        payload = await decode_token_with_blacklist(token, expected_type="access")
-        if payload.get("sub"):
-            return CurrentApp(
-                id=0,
-                app_id="admin",
-                name=payload.get("username") or "admin",
-                scopes=["admin"],
-                workspace_id=None,
-            )
-    except (JwtInvalidToken, Exception):
-        pass
-    # JWT 不通 → api_key 路径
-    return await current_app(authorization=authorization, session=session)
 
 
 router = APIRouter(prefix="/v1/files", tags=["files"])

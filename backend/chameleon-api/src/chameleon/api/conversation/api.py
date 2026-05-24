@@ -1,7 +1,8 @@
 """conversation 模块 HTTP 路由
 
 挂点：/v1/conversations/*
-鉴权：require API key（不要求 admin）；普通 key 仅看自己 app_id 的
+鉴权：api_key OR admin JWT 双轨（current_app_or_admin）——
+admin 后台走 JWT 看全量；外部业务方走 api_key 仅看自己 app_id 的
 """
 
 from fastapi import APIRouter, Depends, Query
@@ -13,7 +14,7 @@ from chameleon.api.conversation.schemas import (
     ConversationItem,
     MessageItem,
 )
-from chameleon.core.infra.auth import CurrentApp, current_app
+from chameleon.core.infra.auth import CurrentApp, current_app_or_admin
 from chameleon.core.infra.db import get_session
 from chameleon.core.api.response import PageParams, PageResult, Result
 
@@ -26,7 +27,7 @@ async def list_conversations(
     page_size: int = Query(10, ge=1, le=100),
     agent_key: str | None = Query(None),
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[PageResult[ConversationItem]]:
     result = await service.list_conversations(
         session,
@@ -41,7 +42,7 @@ async def list_conversations(
 async def get_conversation(
     session_id: str,
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[ConversationItem]:
     item = await service.get_item(session, session_id, current_app=app)
     return Result.ok(item)
@@ -53,7 +54,7 @@ async def list_messages(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[PageResult[MessageItem]]:
     result = await service.list_messages(
         session,
@@ -68,7 +69,7 @@ async def list_messages(
 async def delete_conversation(
     session_id: str,
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[ConversationItem]:
     item = await service.soft_delete(session, session_id, current_app=app)
     return Result.ok(item)
@@ -89,7 +90,7 @@ async def regenerate_message(
     session_id: str,
     message_id: int,
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[MessageItem]:
     """对某条 assistant 重新生成 → 新 assistant child 挂同 user 父（兄弟分支）
 
@@ -114,7 +115,7 @@ async def edit_and_resend(
     message_id: int,
     req: EditAndResendRequest,
     session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
+    app: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[MessageItem]:
     """编辑某 user message → 新 user sibling 分支 + 自动 invoke 新 assistant
 
