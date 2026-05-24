@@ -22,7 +22,7 @@ import { Switch } from '@/core/components/ui/switch';
 import { formatRelative } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
-import { ChannelFormModal } from '@/system/channels/components/channel-form-modal';
+import { ChannelConfigSheet } from '@/system/channels/components/channel-config-sheet';
 import { channelApi } from '@/system/channels/services/channel';
 import type { ChannelItem, ChannelStatus } from '@/system/channels/types/channel';
 import { providerApi } from '@/system/providers/services/provider';
@@ -188,11 +188,11 @@ export const ChannelsPage = () => {
       align: 'right',
       width: 120,
       render: c => (
-        <div className="inline-flex items-center gap-0.5">
+        <div className="inline-flex items-center justify-end gap-0.5">
           <button
             type="button"
             title="编辑"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => {
               setEditTarget(c);
               setFormOpen(true);
@@ -203,7 +203,7 @@ export const ChannelsPage = () => {
           <button
             type="button"
             title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
+            className="shrink-0 rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
             onClick={() => setDelTarget(c)}
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -258,7 +258,7 @@ export const ChannelsPage = () => {
         />
       </SectionCard>
 
-      <ChannelFormModal
+      <ChannelConfigSheet
         open={formOpen}
         initial={editTarget}
         providers={providersQ.data || []}
