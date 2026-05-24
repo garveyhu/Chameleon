@@ -103,7 +103,7 @@ class LLMNode(Node[Any, dict]):
     async def _run(
         self, ctx: NodeContext, input: Any, emit: DeltaSink | None
     ) -> dict:
-        from chameleon.core.components.llms.factory import llm as get_llm
+        from chameleon.core.components.llms.factory import resolve_llm
 
         data = self.spec.data
         model_name = data.get("model_name")
@@ -117,7 +117,8 @@ class LLMNode(Node[Any, dict]):
         if data.get("max_tokens") is not None:
             invoke_kwargs["max_tokens"] = int(data["max_tokens"])
 
-        raw_client = get_llm(model_name)
+        # #30：per-request 经 channel 路由（无 session → 自开短 session 解析）
+        raw_client = await resolve_llm(model_name)
         client = bind_tools(raw_client, tool_keys) if tool_keys else raw_client
 
         messages = build_messages(

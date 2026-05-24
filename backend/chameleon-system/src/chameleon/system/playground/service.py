@@ -173,7 +173,7 @@ async def _stream_llm(
     """直接走 LLM .astream，逐 token yield {"delta": str}；末尾 {"end": True, "usage": ...}。"""
     # #30：per-request 经 channel 路由（含 C7 key 轮转）解析 LLM；无 channel 回退 cache
     llm = await resolve_llm(
-        session, model_name, temperature=temperature, max_tokens=max_tokens
+        model_name, session=session, temperature=temperature, max_tokens=max_tokens
     )
     # 覆盖运行时参数（不污染 cache）
     bound_kwargs: dict = {"temperature": temperature}
