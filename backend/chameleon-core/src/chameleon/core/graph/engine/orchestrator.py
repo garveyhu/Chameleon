@@ -123,8 +123,9 @@ class Orchestrator:
 
             last_output: Any = None
 
-            # 主循环：拉 ready node → submit
-            while not rq.is_drained() and self._failed_error is None:
+            # 主循环（事件驱动）：派发当前所有 ready node → 等任一 task 完成
+            # （可能 enqueue 新 ready）→ 再派发。无固定 sleep / 轮询拖尾。
+            while self._failed_error is None:
                 if state.is_deadline_exceeded():
                     self._failed_error = {
                         "type": "GraphTimeoutError",
@@ -132,17 +133,23 @@ class Orchestrator:
                     }
                     break
 
-                # 拉 ready node；超时 200ms 后检查 in_flight / failed 状态
-                try:
-                    node_id = await asyncio.wait_for(rq.get(), timeout=0.2)
-                except asyncio.TimeoutError:
-                    # 没有 ready node，但可能有 in-flight 在跑 → 继续 loop
-                    if pool.in_flight == 0:
-                        # 既无 ready 又无 in-flight → 图已 drained（防御性 break）
+                # 派发当前所有 ready node
+                while True:
+                    try:
+                        node_id = rq.get_nowait()
+                    except asyncio.QueueEmpty:
                         break
-                    continue
+                    await pool.submit(
+                        self._run_node(node_id, ctx, rq, state, events)
+                    )
 
-                await pool.submit(self._run_node(node_id, ctx, rq, state, events))
+                # 队列空 + 无 in-flight → 整图执行完
+                if rq.is_drained() and pool.in_flight == 0:
+                    break
+
+                # 等任一 in-flight task 完成（其 mark_done 可能 enqueue 新 ready）；
+                # 有 deadline 时按剩余时间设上界，确保超时可被及时检测
+                await pool.wait_any(timeout=self._wait_budget(state))
 
             # 等所有 in-flight 完成
             await pool.drain()
@@ -193,6 +200,17 @@ class Orchestrator:
                         )
                     )
                 await events.close()
+
+    def _wait_budget(self, state: GraphExecState) -> float | None:
+        """主循环 wait_any 的超时上界
+
+        无 deadline → None（阻塞到任一 task 完成，无拖尾）；
+        有 deadline → 剩余秒数（封顶 1s，保证 deadline 能被及时检测）。
+        """
+        if state.deadline_at is None:
+            return None
+        remaining = (state.deadline_at - datetime.now(timezone.utc)).total_seconds()
+        return max(0.0, min(remaining, 1.0))
 
     async def run_streaming(
         self, *, input: Any, ctx: NodeContext

@@ -92,6 +92,16 @@ class ReadyQueue:
             self._in_flight += 1
         return node_id
 
+    def get_nowait(self) -> str:
+        """非阻塞拿一个 ready node id；无则抛 asyncio.QueueEmpty
+
+        自增 in_flight。同步无 await，单线程 event loop 下与 worker 的
+        mark_done 递减不会交错，无需加锁。
+        """
+        node_id = self._queue.get_nowait()
+        self._in_flight += 1
+        return node_id
+
     async def mark_done(
         self,
         node_id: str,

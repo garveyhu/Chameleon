@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -297,6 +298,29 @@ async def test_run_if_else_false_branch():
     node_ids = [r.node_id for r in result.node_runs]
     assert "f" in node_ids
     assert "t" not in node_ids
+
+
+async def test_run_no_drain_tail_latency():
+    """事件驱动主循环：图跑完即返回，无固定轮询拖尾
+
+    回归旧 0.2s wait_for 拖尾 —— 几个瞬时节点的链应在远小于 200ms 内完成。
+    """
+    spec = GraphSpec(
+        nodes=[
+            NodeSpec(id="s", type="start"),
+            NodeSpec(id="m", type="_echo"),
+            NodeSpec(id="e", type="end"),
+        ],
+        edges=[
+            EdgeSpec(id="1", source="s", target="m"),
+            EdgeSpec(id="2", source="m", target="e"),
+        ],
+    )
+    t0 = time.monotonic()
+    result = await Orchestrator(spec).run(input={"v": 1}, ctx=_ctx())
+    elapsed = time.monotonic() - t0
+    assert result.status == NodeStatus.SUCCESS
+    assert elapsed < 0.1  # 旧实现末尾会卡 ~0.2s
 
 
 async def test_run_dangling_non_end_node_still_runs():

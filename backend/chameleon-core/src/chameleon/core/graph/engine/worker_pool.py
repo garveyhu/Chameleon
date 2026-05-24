@@ -66,6 +66,21 @@ class WorkerPool:
         finally:
             self._sem.release()
 
+    async def wait_any(self, *, timeout: float | None = None) -> None:
+        """等至少一个 in-flight task 完成（无 task 立即返回）
+
+        Orchestrator 主循环用它做事件驱动唤醒：没有 ready node 但有 task 在跑时，
+        等任一 task 完成（可能 enqueue 新 ready node）再继续，避免轮询空转 /
+        固定 sleep 拖尾。timeout 用于配合整图 deadline。
+        """
+        if not self._tasks:
+            return
+        await asyncio.wait(
+            set(self._tasks),
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
     async def drain(self) -> None:
         """等所有 in-flight task 完成（异常不抛，由 task 自己处理）"""
         if not self._tasks:
