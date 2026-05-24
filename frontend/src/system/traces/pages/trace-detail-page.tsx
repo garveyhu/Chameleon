@@ -2,13 +2,14 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Bot, GitBranch } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { JsonViewer } from '@/core/components/common/json-viewer';
 import { SectionCard } from '@/core/components/table';
 import { Skeleton } from '@/core/components/common/skeleton';
 import { cn } from '@/core/lib/cn';
+import { useTraceStore } from '@/core/stores/trace';
 import { formatDateTime } from '@/core/lib/format';
 import { ObservationTree } from '@/system/call_logs/components/observation-tree';
 import type { TraceTreeNode } from '@/system/call_logs/types/call-log';
@@ -17,7 +18,14 @@ import { traceApi } from '@/system/traces/services/trace';
 export const TraceDetailPage = () => {
   const { requestId } = useParams<{ requestId: string }>();
   const rid = requestId ?? '';
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = useTraceStore(s => s.selectedId);
+  const select = useTraceStore(s => s.select);
+  const reset = useTraceStore(s => s.reset);
+
+  // 切 trace 时清空视图态（选中 / 折叠 / 缩放）
+  useEffect(() => {
+    reset();
+  }, [rid, reset]);
 
   const treeQ = useQuery({
     queryKey: ['traces', rid, 'tree'],
@@ -75,7 +83,7 @@ export const TraceDetailPage = () => {
             <ObservationTree
               root={root}
               selectedId={focusId}
-              onSelect={n => setSelectedId(n.request_id)}
+              onSelect={n => select(n.request_id)}
             />
           </SectionCard>
 

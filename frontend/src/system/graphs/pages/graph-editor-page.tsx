@@ -21,12 +21,7 @@ import {
   useNodesState,
   useReactFlow,
 } from '@xyflow/react';
-import type {
-  Connection,
-  Edge,
-  Node as RFNode,
-  ReactFlowInstance,
-} from '@xyflow/react';
+import type { Connection, Edge, Node as RFNode } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -44,6 +39,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Spinner } from '@/core/components/common/spinner';
 import { Button } from '@/core/components/ui/button';
 import { toast } from '@/core/lib/toast';
+import { useWorkflowStore } from '@/core/stores/workflow';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
 import { RunsPanel } from '@/system/graphs/components/runs-panel';
@@ -54,7 +50,6 @@ import type {
   EdgeSpec,
   GraphDetail,
   GraphNodeType,
-  GraphRunItem,
   GraphSpec,
   NodeSpec,
   TestRunResult,
@@ -106,8 +101,11 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     [],
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [runResult, setRunResult] = useState<TestRunResult | null>(null);
+  const selectedId = useWorkflowStore(s => s.selectedNodeId);
+  const setSelectedId = useWorkflowStore(s => s.selectNode);
+  const runResult = useWorkflowStore(s => s.runResult);
+  const setRunResult = useWorkflowStore(s => s.setRunResult);
+  const resetWorkflow = useWorkflowStore(s => s.reset);
   const idSeqRef = useRef(0);
   const rfWrapperRef = useRef<HTMLDivElement>(null);
   const rfInstance = useReactFlow();
@@ -125,6 +123,11 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         .map(id => Number(id.slice(1))),
     );
   }, [graph.id, graph.spec, setEdges, setNodes]);
+
+  // 切到另一张图时清空选中 / run 结果（store 全局，需主动重置）
+  useEffect(() => {
+    resetWorkflow();
+  }, [graph.id, resetWorkflow]);
 
   const onConnect = useCallback(
     (conn: Connection) => {
@@ -166,7 +169,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
       setNodes(ns => ns.concat(rfNode));
       setSelectedId(newId);
     },
-    [rfInstance, setNodes],
+    [rfInstance, setNodes, setSelectedId],
   );
 
   const onDrop = useCallback(
@@ -229,7 +232,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     setNodes(ns => ns.filter(n => n.id !== selectedId));
     setEdges(es => es.filter(e => e.source !== selectedId && e.target !== selectedId));
     setSelectedId(null);
-  }, [selectedId, setEdges, setNodes]);
+  }, [selectedId, setEdges, setNodes, setSelectedId]);
 
   // ── save & test-run ──────────────────────────────────────
 
@@ -267,7 +270,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           : `执行失败：${r.error?.message || 'unknown'}`,
       );
     },
-    [setNodes],
+    [setNodes, setRunResult],
   );
 
   const testRunMut = useMutation({

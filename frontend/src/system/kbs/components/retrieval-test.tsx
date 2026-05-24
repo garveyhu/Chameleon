@@ -2,7 +2,7 @@
 
 import { useMutation } from '@tanstack/react-query';
 import { Search, SearchX } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/core/components/ui/button';
@@ -17,23 +17,31 @@ import {
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
+import { useKbStore } from '@/core/stores/kb';
 import { documentApi } from '@/system/kbs/services/document';
-import type {
-  KbItem,
-  RecallMode,
-  SearchHitItem,
-} from '@/system/kbs/types/kb';
+import type { KbItem, RecallMode, SearchHitItem } from '@/system/kbs/types/kb';
 
 interface Props {
   kb: KbItem;
 }
 
 export const RetrievalTest = ({ kb }: Props) => {
-  const [query, setQuery] = useState('');
-  const [topK, setTopK] = useState(kb.default_top_k);
-  const [mode, setMode] = useState<RecallMode>(kb.recall_mode);
-  const [tagsInput, setTagsInput] = useState('');
-  const [hits, setHits] = useState<SearchHitItem[]>([]);
+  const query = useKbStore(s => s.query);
+  const topK = useKbStore(s => s.topK);
+  const mode = useKbStore(s => s.mode);
+  const tagsInput = useKbStore(s => s.tags);
+  const hits = useKbStore(s => s.hits);
+  const setQuery = useKbStore(s => s.setQuery);
+  const setTopK = useKbStore(s => s.setTopK);
+  const setMode = useKbStore(s => s.setMode);
+  const setTags = useKbStore(s => s.setTags);
+  const setHits = useKbStore(s => s.setHits);
+  const reset = useKbStore(s => s.reset);
+
+  // 切 KB 时重置 hit-test 态，并套用该 KB 的默认 top_k / recall_mode
+  useEffect(() => {
+    reset({ topK: kb.default_top_k, mode: kb.recall_mode });
+  }, [kb.id, kb.default_top_k, kb.recall_mode, reset]);
 
   const searchMut = useMutation({
     mutationFn: () =>
@@ -106,7 +114,7 @@ export const RetrievalTest = ({ kb }: Props) => {
           </label>
           <Input
             value={tagsInput}
-            onChange={e => setTagsInput(e.target.value)}
+            onChange={e => setTags(e.target.value)}
             placeholder="product, faq"
             className="h-8 text-[12.5px]"
           />
