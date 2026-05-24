@@ -30,7 +30,6 @@ from chameleon.core.models import (
 from chameleon.system.datasets.judges import JUDGES
 from chameleon.system.datasets.template_scoring import score_run_with_template
 
-
 _MAX_ITEMS_PER_RUN = 500  # 单次 run 上限
 
 
@@ -43,6 +42,7 @@ async def run_dataset(
     prompt_override: str | None = None,
     judge: str = "exact_match",
     eval_template_id: int | None = None,
+    agent_key: str | None = None,
 ) -> DatasetRun:
     """跑一次 dataset，持久化结果"""
     if judge not in JUDGES:
@@ -82,6 +82,7 @@ async def run_dataset(
     run = DatasetRun(
         dataset_id=ds.id,
         name=name,
+        agent_key=agent_key,
         model_override=model_override,
         prompt_override=prompt_override,
         judge=judge,
@@ -102,11 +103,14 @@ async def run_dataset(
     for item in items:
         item_started = datetime.now(timezone.utc)
         try:
-            actual = await _invoke_for_item(
-                item.input_payload,
-                model_override=model_override,
-                prompt_override=prompt_override,
-            )
+            if agent_key:
+                actual = await _invoke_via_agent(agent_key, item.input_payload)
+            else:
+                actual = await _invoke_for_item(
+                    item.input_payload,
+                    model_override=model_override,
+                    prompt_override=prompt_override,
+                )
             score = await judge_fn(item.expected_output, actual)
             err = None
             ok_count += 1
@@ -211,8 +215,9 @@ async def _invoke_for_item(
     脱敏后 input_payload 没有原文（只有 preview），P18 暂用 preview 跑；
     需要原文的场景靠 admin 在 dataset_items 上人工补 expected_output 然后 LLM 跑回测。
     """
-    from chameleon.core.components.llms.factory import llm as get_llm
     from langchain_core.messages import HumanMessage, SystemMessage
+
+    from chameleon.core.components.llms.factory import llm as get_llm
 
     # 从 input_payload 提 query（脱敏后字段 preview / user_input.preview）
     query = _extract_query_text(input_payload)
@@ -225,6 +230,37 @@ async def _invoke_for_item(
     ai = await client.ainvoke(msgs)
     content = ai.content if hasattr(ai, "content") else str(ai)
     return {"answer": content}
+
+
+async def _invoke_via_agent(
+    agent_key: str, input_payload: dict[str, Any]
+) -> dict[str, Any]:
+    """A3：经 agent（含 graph 编排的）跑单条 —— 走统一 Provider 路径。
+
+    把整个工作流 agent 当被测对象做回归打分；两个 agent / 两个版本各跑一次
+    dataset，再用 compare_runs 做 A/B 胜率对比。
+    """
+    from chameleon.core.api.exceptions import BusinessError, ResultCode
+    from chameleon.providers.base.registry import AGENTS, PROVIDERS
+    from chameleon.providers.base.types import InvokeContext
+
+    adef = AGENTS.get(agent_key)
+    if adef is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"eval agent 未注册: {agent_key}"
+        )
+    prov = PROVIDERS[adef.provider]
+    query = _extract_query_text(input_payload)
+    ctx = InvokeContext(
+        agent_def=adef,
+        input=query,
+        session_id=f"eval-{agent_key}",
+        app_id="__eval__",
+        request_id=f"eval-{agent_key}-{datetime.now(timezone.utc).timestamp():.0f}",
+        stream=False,
+    )
+    result = await prov.invoke(ctx)
+    return {"answer": result.answer or ""}
 
 
 def _extract_query_text(input_payload: dict[str, Any]) -> str:

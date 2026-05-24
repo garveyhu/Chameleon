@@ -216,6 +216,7 @@ async def run_dataset(
         prompt_override=req.prompt_override,
         judge=req.judge,
         eval_template_id=req.eval_template_id,
+        agent_key=req.agent_key,
     )
     return Result.ok(DatasetRunDetail.model_validate(run))
 

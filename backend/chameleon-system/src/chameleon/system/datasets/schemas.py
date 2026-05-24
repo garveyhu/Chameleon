@@ -120,6 +120,8 @@ class DatasetRunRequest(BaseModel):
     judge: str = Field(default="exact_match", max_length=32)
     # P21.2：可选 EvalTemplate 联动；跑完后按 template metrics 评分
     eval_template_id: int | None = None
+    # A3：被测对象设为 agent（含 graph 编排的）；设了则整条工作流当被测，忽略 model_override
+    agent_key: str | None = Field(default=None, max_length=64)
 
 
 class DatasetRunItemRow(BaseModel):
