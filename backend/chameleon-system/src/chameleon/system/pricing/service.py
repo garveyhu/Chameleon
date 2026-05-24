@@ -9,7 +9,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import ModelPricing
+from chameleon.core.models import App, ModelPricing, Workspace, WorkspaceGroup
 
 #: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
 #: 改这里只影响新装的库；已存在 model_pricing 行不会被覆盖（seed_if_empty）
@@ -55,8 +55,14 @@ async def calc_cost(
     prompt_tokens: int | None,
     completion_tokens: int | None,
     at: datetime | None = None,
+    group_ratio: Decimal | float | None = None,
 ) -> Decimal | None:
-    """按当时价目计算 cost_usd；价目缺失返 None（call_log 仍写 token 字段）"""
+    """按当时价目计算 cost；价目缺失返 None（call_log 仍写 token 字段）
+
+    默认（group_ratio=None）返回**原始模型成本**（recorder 据此存 cost_usd，红线：
+    不把分组倍率写进 cost_usd）。传 group_ratio 时返回 effective cost = base × ratio
+    ——供报表 / 预估等想要"实际计费额"的调用方用。
+    """
     if not model_code:
         return None
     if not prompt_tokens and not completion_tokens:
@@ -70,7 +76,51 @@ async def calc_cost(
         * pricing.completion_price_per_1k
         / Decimal(1000)
     )
-    return (p + c).quantize(Decimal("0.000001"))
+    base = p + c
+    if group_ratio is not None:
+        base = base * Decimal(str(group_ratio))
+    return base.quantize(Decimal("0.000001"))
+
+
+# ── 计费分组倍率（P23.C5） ──────────────────────────────
+
+
+async def get_group_ratio(
+    session: AsyncSession, group_code: str | None
+) -> Decimal:
+    """按分组 code 取倍率；code 为空 / 分组不存在 → 默认 1.0"""
+    if not group_code:
+        return Decimal("1.0")
+    row = (
+        await session.execute(
+            select(WorkspaceGroup.ratio).where(
+                WorkspaceGroup.code == group_code
+            )
+        )
+    ).scalar_one_or_none()
+    return row if row is not None else Decimal("1.0")
+
+
+async def group_ratio_for_app(
+    session: AsyncSession, app_id: str
+) -> Decimal:
+    """app_id → 所属 workspace 的分组倍率（一次 join；缺失链路 → 1.0）
+
+    recorder 写 call_log 时调，把当时倍率存死（effective cost 可重放）。
+    """
+    ratio = (
+        await session.execute(
+            select(WorkspaceGroup.ratio)
+            .select_from(App)
+            .join(Workspace, App.workspace_id == Workspace.id)
+            .join(
+                WorkspaceGroup,
+                Workspace.group_code == WorkspaceGroup.code,
+            )
+            .where(App.app_key == app_id)
+        )
+    ).scalar_one_or_none()
+    return ratio if ratio is not None else Decimal("1.0")
 
 
 async def seed_default_pricing(session: AsyncSession) -> int:

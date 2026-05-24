@@ -177,10 +177,12 @@ async def record_call(
     context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
     """
     # P22.1：按当时生效价目算 cost（model_code 缺失 / 价目缺失则保持 NULL）
+    # P23.C5：cost_usd 存原始模型成本（不含倍率）；group_ratio 单独存（红线）
     cost_usd = None
+    group_ratio = None
     if model_code and (prompt_tokens or completion_tokens):
         try:
-            from chameleon.system.pricing import calc_cost
+            from chameleon.system.pricing import calc_cost, group_ratio_for_app
 
             cost_usd = await calc_cost(
                 session,
@@ -188,6 +190,8 @@ async def record_call(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
             )
+            if app_id:
+                group_ratio = await group_ratio_for_app(session, app_id)
         except Exception:
             # cost 计算失败不阻塞 call_log 写入
             logger.exception(
@@ -213,6 +217,7 @@ async def record_call(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         cost_usd=cost_usd,
+        group_ratio=group_ratio,
         spans=spans,
         request_payload=request_payload,
         response_payload=response_payload,
