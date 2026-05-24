@@ -10,9 +10,19 @@ from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import App, CallLog, ModelPricing, Role, User, UserRole
-from chameleon.core.utils.snowflake import next_id
+from chameleon.core.models import (
+    App,
+    CallLog,
+    Channel,
+    ModelPricing,
+    Provider,
+    Role,
+    User,
+    UserRole,
+    Workspace,
+)
 from chameleon.core.utils.passwords import hash_password
+from chameleon.core.utils.snowflake import next_id
 from chameleon.system.seed.runner import run_seed_if_empty
 
 
@@ -94,8 +104,84 @@ async def seeded_calls_with_cost():
         await s.commit()
 
 
+@pytest_asyncio.fixture
+async def seeded_multidim_calls():
+    """C8：造 workspace + user + channel + app，几条带 user/model/channel/group_ratio
+    的 call_log，验证 4 个新维度聚合 + effective cost"""
+    suffix = secrets.token_hex(3)
+    wid = next_id()
+    app_key = f"md-app-{suffix}"
+    model_code = f"md-model-{suffix}"
+    async with AsyncSessionLocal() as s:
+        s.add(Workspace(id=wid, workspace_key=f"md-ws-{suffix}", name="md ws"))
+        await s.flush()
+        s.add(App(app_key=app_key, name="md app", workspace_id=wid))
+        u = User(
+            username=f"md-user-{suffix}",
+            password_hash=hash_password("Pwd123!xx"),
+            status="active",
+            must_change_password=False,
+        )
+        s.add(u)
+        p = Provider(code=f"md-prov-{suffix}", kind="llm", name="md")
+        s.add(p)
+        await s.flush()
+        ch = Channel(provider_id=p.id, name="md-ch")
+        s.add(ch)
+        await s.flush()
+        uid, cid, pid = u.id, ch.id, p.id
+        now = datetime.now(timezone.utc)
+        # 3 条：cost 0.01 / 0.02 / 0.03，group_ratio=2.0 → effective 2×
+        for i, cost in enumerate([0.01, 0.02, 0.03]):
+            s.add(
+                CallLog(
+                    id=next_id(),
+                    request_id=f"rid-md-{suffix}-{i}",
+                    app_id=app_key,
+                    agent_key="md-agent",
+                    user_id=uid,
+                    model_code=model_code,
+                    channel_id=cid,
+                    success=True,
+                    code=200,
+                    duration_ms=100,
+                    cost_usd=cost,
+                    group_ratio=2.0,
+                    parent_id=None,
+                    observation_type="trace",
+                    created_at=now - timedelta(minutes=i),
+                )
+            )
+        await s.commit()
+    yield {
+        "app_key": app_key,
+        "workspace_id": wid,
+        "user_id": uid,
+        "channel_id": cid,
+        "model_code": model_code,
+        "provider_id": pid,
+    }
+    async with AsyncSessionLocal() as s:
+        await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
+        await s.execute(delete(App).where(App.app_key == app_key))
+        await s.execute(delete(Channel).where(Channel.id == cid))
+        await s.execute(delete(Provider).where(Provider.id == pid))
+        await s.execute(delete(User).where(User.id == uid))
+        await s.execute(delete(Workspace).where(Workspace.id == wid))
+        await s.commit()
+
+
 def _hdr(t: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {t}"}
+
+
+async def _by_dim(client: AsyncClient, token: str, dimension: str) -> list[dict]:
+    r = await client.get(
+        f"/v1/admin/dashboard/cost/by-dimension?dimension={dimension}&hours=24",
+        headers=_hdr(token),
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["data"]
 
 
 # ── /cost/totals ─────────────────────────────────────
@@ -174,6 +260,51 @@ async def test_cost_by_invalid_dimension_rejected(
         headers=_hdr(admin_token),
     )
     assert r.status_code in (400, 422)
+
+
+# ── C8 新增 4 维 + effective cost ─────────────────────
+
+
+async def test_cost_by_user_dimension(
+    client: AsyncClient, admin_token: str, seeded_multidim_calls: dict
+):
+    data = await _by_dim(client, admin_token, "user_id")
+    row = next(
+        r for r in data if r["label"] == str(seeded_multidim_calls["user_id"])
+    )
+    assert abs(row["cost_usd"] - 0.06) < 1e-6  # 0.01+0.02+0.03
+    # group_ratio=2.0 → effective = 2 × 0.06 = 0.12
+    assert abs(row["effective_cost_usd"] - 0.12) < 1e-6
+    assert row["calls"] == 3
+
+
+async def test_cost_by_model_dimension(
+    client: AsyncClient, admin_token: str, seeded_multidim_calls: dict
+):
+    data = await _by_dim(client, admin_token, "model_code")
+    labels = [r["label"] for r in data]
+    assert seeded_multidim_calls["model_code"] in labels
+
+
+async def test_cost_by_channel_dimension(
+    client: AsyncClient, admin_token: str, seeded_multidim_calls: dict
+):
+    data = await _by_dim(client, admin_token, "channel_id")
+    labels = [r["label"] for r in data]
+    assert str(seeded_multidim_calls["channel_id"]) in labels
+
+
+async def test_cost_by_workspace_dimension(
+    client: AsyncClient, admin_token: str, seeded_multidim_calls: dict
+):
+    data = await _by_dim(client, admin_token, "workspace_id")
+    row = next(
+        r
+        for r in data
+        if r["label"] == str(seeded_multidim_calls["workspace_id"])
+    )
+    assert abs(row["cost_usd"] - 0.06) < 1e-6
+    assert abs(row["effective_cost_usd"] - 0.12) < 1e-6
 
 
 # ── /cost/timeseries ─────────────────────────────────
