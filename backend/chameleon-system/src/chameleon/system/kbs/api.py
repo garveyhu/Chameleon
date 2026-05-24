@@ -564,10 +564,23 @@ async def delete_document(
     kb_id: int,
     doc_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("kbs:write")),
 ) -> Result[DocumentAdminItem]:
     row = await document_service.delete_document(
         session, kb_id=kb_id, doc_id=doc_id
+    )
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="kb_document.delete",
+        resource_type="kb_document",
+        resource_id=doc_id,
+        after={"kb_id": kb_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
     )
     return Result.ok(DocumentAdminItem.model_validate(row))
 
@@ -663,6 +676,7 @@ async def create_evaluation(
     kb_id: int,
     req: CreateEvaluationRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("kbs:write")),
 ) -> Result[EvaluationItem]:
     row = await evaluation_service.create_evaluation(
@@ -672,6 +686,18 @@ async def create_evaluation(
         queries=[q.model_dump() for q in req.queries],
         recall_mode=req.recall_mode,
         top_k=req.top_k,
+    )
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="kb_evaluation.create",
+        resource_type="kb_evaluation",
+        resource_id=row.id,
+        after={"kb_id": kb_id, "name": req.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
     )
     await session.commit()
     evaluation_service.spawn_eval(eval_id=row.id, kb_id=kb_id)
@@ -726,10 +752,23 @@ async def delete_evaluation(
     kb_id: int,
     eval_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("kbs:write")),
 ) -> Result[EvaluationItem]:
     row = await evaluation_service.delete_evaluation(
         session, kb_id=kb_id, eval_id=eval_id
+    )
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="kb_evaluation.delete",
+        resource_type="kb_evaluation",
+        resource_id=eval_id,
+        after={"kb_id": kb_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
     )
     return Result.ok(EvaluationItem.model_validate(row))
 
@@ -789,9 +828,22 @@ async def delete_collection(
     kb_id: int,
     collection_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("kbs:delete")),
 ) -> Result[None]:
     await cs.delete_collection(session, kb_id, collection_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="kb_collection.delete",
+        resource_type="kb_collection",
+        resource_id=collection_id,
+        after={"kb_id": kb_id},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 

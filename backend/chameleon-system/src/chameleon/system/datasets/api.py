@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
+from chameleon.system.audit_logs import write_audit_log
+from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets import service as ds_service
@@ -68,9 +70,22 @@ async def get_dataset(
 async def create_dataset(
     req: CreateDatasetRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[DatasetItem]:
     item = await ds_service.create_dataset(session, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="dataset.create",
+        resource_type="dataset",
+        resource_id=item.id,
+        after={"name": item.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -79,9 +94,22 @@ async def update_dataset(
     dataset_id: int,
     req: UpdateDatasetRequest,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[DatasetItem]:
     item = await ds_service.update_dataset(session, dataset_id, req)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="dataset.update",
+        resource_type="dataset",
+        resource_id=item.id,
+        after={"name": item.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(item)
 
 
@@ -89,9 +117,21 @@ async def update_dataset(
 async def delete_dataset(
     dataset_id: int,
     session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
     _: object = Depends(require_permission("datasets:delete")),
 ) -> Result[None]:
     await ds_service.delete_dataset(session, dataset_id)
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="dataset.delete",
+        resource_type="dataset",
+        resource_id=dataset_id,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
     return Result.ok(None)
 
 
