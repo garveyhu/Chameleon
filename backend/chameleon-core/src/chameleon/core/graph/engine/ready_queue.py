@@ -9,8 +9,16 @@
    - 若后继入度归 0 → 入队
 4. is_drained() 表示队列空 + 无 in-flight → 整图执行完毕
 
-if_else 分支选择由 mark_done(skip_branches=...) 处理：未选中分支的后继节点
-直接当 "skipped" 处理（递归往后传播 skip）。
+if_else 分支选择由 mark_done(selected_handle=...) 处理：未选中分支的边被
+"kill"，沿该边向后传播 skip。
+
+汇聚（OR-join）语义（v1.1 PR A0 修复）：
+- 一个节点可能有多条入边（diamond join / if_else 两分支汇聚到 end）。
+- 节点 **只要有一条入边是真实完成** 就要执行（OR 语义）；
+  只有 **全部入边都被 skip** 时该节点才整体跳过、继续向后传播 skip。
+- 纯入度计数（AND-join）无法区分"被 skip 的入边"与"真实完成的入边"，
+  所以额外维护 _skipped_in 计数：节点入度归 0 时，若 skipped_in == 入度则
+  跳过该节点，否则入队执行。
 
 红线：
 - 不知道任何 Node 实现细节；只看 GraphSpec 拓扑
@@ -23,7 +31,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 
-from chameleon.core.graph.types import EdgeSpec, GraphSpec
+from chameleon.core.graph.types import GraphSpec
 
 
 class ReadyQueue:
@@ -41,9 +49,13 @@ class ReadyQueue:
         self._spec = spec
         # 邻接表：node_id → [(target_id, edge.source_handle)]
         self._adj: dict[str, list[tuple[str, str | None]]] = defaultdict(list)
-        # 当前剩余入度：node_id → int
+        # 当前剩余入度：node_id → int（真实完成 / skip 的边都会扣减）
         self._remaining_in: dict[str, int] = {}
-        # 内部状态锁（保护 _remaining_in 跨 worker 写）
+        # 原始入度（不可变；用于判断"全部入边都被 skip"）
+        self._total_in: dict[str, int] = {}
+        # 已被 skip 的入边计数：node_id → int
+        self._skipped_in: dict[str, int] = defaultdict(int)
+        # 内部状态锁（保护 _remaining_in / _skipped_in 跨 worker 写）
         self._lock = asyncio.Lock()
         # in-flight 计数（拿出队列但还没 mark_done 的节点数）
         self._in_flight = 0
@@ -60,6 +72,7 @@ class ReadyQueue:
         for e in self._spec.edges:
             self._adj[e.source].append((e.target, e.source_handle))
             self._remaining_in[e.target] += 1
+        self._total_in = dict(self._remaining_in)
 
     def _enqueue_zero_indegree_sync(self) -> None:
         """构造时立刻把入度 0 的节点同步入队（一般只有 start）
@@ -79,6 +92,16 @@ class ReadyQueue:
             self._in_flight += 1
         return node_id
 
+    def get_nowait(self) -> str:
+        """非阻塞拿一个 ready node id；无则抛 asyncio.QueueEmpty
+
+        自增 in_flight。同步无 await，单线程 event loop 下与 worker 的
+        mark_done 递减不会交错，无需加锁。
+        """
+        node_id = self._queue.get_nowait()
+        self._in_flight += 1
+        return node_id
+
     async def mark_done(
         self,
         node_id: str,
@@ -90,12 +113,13 @@ class ReadyQueue:
 
         Args:
             node_id: 完成的节点
-            selected_handle: 仅 if_else 节点用；'true' / 'false'。其余分支会被 skip。
+            selected_handle: 仅 if_else 节点用；'true' / 'false'。未选中 handle 的出边被 kill。
             success: False 时不传播给下游（图级 fail 由 Orchestrator 处理）。
 
         if_else 分支处理：
             假设 if_else 出 'true' / 'false' 两边；selected_handle='true' 时
-            'false' 分支后继节点直接 skip（递归往后）。
+            kill 'false' 出边并沿其向后传播 skip。汇聚节点（多入边）只要还有
+            真实入边会完成就照常执行，详见模块 docstring 的 OR-join 语义。
         """
         async with self._lock:
             self._in_flight -= 1
@@ -108,42 +132,57 @@ class ReadyQueue:
             return
 
         edges = self._adj.get(node_id, [])
-        # 区分要传播的后继 vs 要 skip 的后继（if_else 未选中的分支）
-        propagate: list[str] = []
-        skip_descendants: list[str] = []
         for target, handle in edges:
-            if selected_handle is not None and handle is not None and handle != selected_handle:
-                skip_descendants.append(target)
+            if (
+                selected_handle is not None
+                and handle is not None
+                and handle != selected_handle
+            ):
+                # 未选中分支：kill 这条边（沿边向后传播 skip）
+                await self._kill_edge_to(target)
             else:
-                propagate.append(target)
-
-        # 1) 正常后继：入度 -1，归 0 入队
-        for target in propagate:
-            await self._decrement_and_maybe_enqueue(target)
-
-        # 2) skip 后继：递归 skip 整条分支（每跳一节点都 mark_done(success=False=skip)）
-        for target in skip_descendants:
-            await self._propagate_skip(target)
+                # 真实完成的边：入度 -1，归 0 入队
+                await self._decrement_and_maybe_enqueue(target)
 
     async def _decrement_and_maybe_enqueue(self, target: str) -> None:
+        """一条真实完成的边抵达 target；入度归 0 即入队执行
+
+        因为这条边是真实完成（非 skip），target 必有至少一条真实入边，
+        入度归 0 时一定要跑（OR-join：不需要全部入边都真实完成）。
+        """
         async with self._lock:
             self._remaining_in[target] -= 1
             ready = self._remaining_in[target] == 0
         if ready:
             await self._queue.put(target)
 
-    async def _propagate_skip(self, node_id: str) -> None:
-        """跳过这个节点（标 skipped）并把它的所有出边后继也 skip
+    async def _kill_edge_to(self, target: str) -> None:
+        """一条通往 target 的边被判定不走（if_else 未选中分支）
+
+        入度 -1 且记一次 skip。入度归 0 时：
+        - 全部入边都被 skip → target 整体跳过 → 继续 kill 它的所有出边
+        - 否则（有真实入边完成过）→ target 仍要执行，入队
+        """
+        async with self._lock:
+            self._remaining_in[target] -= 1
+            self._skipped_in[target] += 1
+            resolved = self._remaining_in[target] == 0
+            all_skipped = self._skipped_in[target] >= self._total_in.get(target, 0)
+        if not resolved:
+            return
+        if all_skipped:
+            await self._skip_node(target)
+        else:
+            await self._queue.put(target)
+
+    async def _skip_node(self, node_id: str) -> None:
+        """node_id 整体被跳过：kill 它的所有出边（沿图向后传播 skip）
 
         递归实现；图无环（spec validator 保证），无栈溢出风险。
         """
-        async with self._lock:
-            # 也把 skipped 节点的入度归 0，避免别人 enqueue 它
-            self._remaining_in[node_id] = 0
-
         edges = self._adj.get(node_id, [])
         for target, _handle in edges:
-            await self._propagate_skip(target)
+            await self._kill_edge_to(target)
 
     # ── 内省 ─────────────────────────────────────────────
 

@@ -10,11 +10,16 @@ Node 实现注意事项：
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from enum import StrEnum
 from typing import Any, Generic, TypeVar
 
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.types import NodeSpec
+
+#: 流式节点把文本片段推给上游的回调（Orchestrator 注入；非流式场景为 None）。
+#: 红线：execute() 签名不动 —— 流式走独立可选入口 execute_stream()。
+DeltaSink = Callable[[str], Awaitable[None]]
 
 
 class NodeStatus(StrEnum):
@@ -25,6 +30,29 @@ class NodeStatus(StrEnum):
     SUCCESS = "success"
     FAILED = "failed"
     SKIPPED = "skipped"  # if_else 未选中的分支
+    PAUSED = "paused"  # human_input 节点等待人工回填（A6）
+
+
+class HumanInputRequired(Exception):
+    """HumanInLoopNode 触发的暂停信号（A6）
+
+    节点 execute 抛出 → Orchestrator 不当失败处理，而是把整图置 PAUSED，
+    快照已完成节点输出供 resume 时 seed 重放；持久化与回填由 service 层负责。
+    """
+
+    def __init__(
+        self,
+        node_id: str,
+        *,
+        prompt: str | None = None,
+        schema: dict[str, Any] | None = None,
+        node_input: Any = None,
+    ) -> None:
+        self.node_id = node_id
+        self.prompt = prompt
+        self.schema = schema
+        self.node_input = node_input
+        super().__init__(f"human input required at node {node_id!r}")
 
 
 NodeInputT = TypeVar("NodeInputT")
@@ -70,6 +98,22 @@ class Node(ABC, Generic[NodeInputT, NodeOutputT]):
         正常返回的值会序列化到 graph_node_runs.output。
         """
         raise NotImplementedError
+
+    async def execute_stream(
+        self,
+        ctx: NodeContext,
+        input: NodeInputT,
+        emit: DeltaSink | None,
+    ) -> NodeOutputT:
+        """流式入口（可选）—— Orchestrator 在 SSE 模式下调用
+
+        默认实现 = 非流式：直接 execute()，忽略 emit。流式节点（如 LLMNode）
+        覆盖此方法，边产 token 边 await emit(text)，最后返回与 execute() 同形的
+        完整 output（仍要落 graph_node_runs.output）。
+
+        emit 为 None 时（batch 模式）等价 execute()。
+        """
+        return await self.execute(ctx, input)
 
     def selected_branch(self, output: NodeOutputT) -> str | None:
         """if_else 节点决定走哪个 source_handle（'true' / 'false'）

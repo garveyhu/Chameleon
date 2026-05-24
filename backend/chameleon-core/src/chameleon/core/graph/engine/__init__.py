@@ -15,13 +15,19 @@
 （不直接 cp 代码；Go-flavor → asyncio + dataclass + Pydantic 重写）
 """
 
+from chameleon.core.graph.engine.event_manager import (
+    GraphEventManager,
+    GraphNodeEventPayload,
+)
 from chameleon.core.graph.engine.orchestrator import Orchestrator, OrchestratorConfig
 from chameleon.core.graph.engine.ready_queue import ReadyQueue
 from chameleon.core.graph.engine.state import GraphExecState, VariablePool
 from chameleon.core.graph.engine.worker_pool import WorkerPool
 
 __all__ = [
+    "GraphEventManager",
     "GraphExecState",
+    "GraphNodeEventPayload",
     "Orchestrator",
     "OrchestratorConfig",
     "ReadyQueue",

@@ -106,3 +106,28 @@ class GraphRunDetail(GraphRunItem):
     input: Any | None = None
     output: Any | None = None
     error: dict[str, Any] | None = None
+
+
+# ── A6：human_input 断点 ───────────────────────────────────
+
+
+class PendingInputItem(BaseModel):
+    """待回填断点（human_input 暂停）"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    graph_run_id: int
+    node_id: str
+    status: str
+    prompt: str | None = None
+    input_schema: dict[str, Any] | None = None
+    node_input: Any | None = None
+    timeout_at: datetime | None = None
+    created_at: datetime
+
+
+class ResumeRunRequest(BaseModel):
+    """人工回填恢复：value 作为 human_input 节点的输出注入"""
+
+    value: dict[str, Any] = Field(default_factory=dict)

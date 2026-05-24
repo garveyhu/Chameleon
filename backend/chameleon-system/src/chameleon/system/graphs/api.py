@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
+from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.graphs import human_input_service
 from chameleon.system.graphs import runner as graph_runner
 from chameleon.system.graphs import service as graph_service
 from chameleon.system.graphs.schemas import (
@@ -17,6 +19,8 @@ from chameleon.system.graphs.schemas import (
     GraphRunDetail,
     GraphRunItem,
     GraphRunRequest,
+    PendingInputItem,
+    ResumeRunRequest,
     TestRunRequest,
     TestRunResult,
     UpdateGraphRequest,
@@ -31,6 +35,20 @@ async def list_graphs(
     _: object = Depends(require_permission("graphs:read")),
 ) -> Result[list[GraphItem]]:
     items = await graph_service.list_graphs(session)
+    return Result.ok(items)
+
+
+@router.get("/pending", response_model=Result[list[PendingInputItem]])
+async def list_pending(
+    status: str = "pending",
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:read")),
+) -> Result[list[PendingInputItem]]:
+    """A6：列待人工回填的断点（status=pending/resolved/timeout）
+
+    注：本路由须声明在 /{graph_id} 之前，否则 "pending" 会被当 graph_id 捕获。
+    """
+    items = await human_input_service.list_pending(session, status=status)
     return Result.ok(items)
 
 
@@ -101,6 +119,23 @@ async def test_run(
     return Result.ok(item)
 
 
+@router.post("/{graph_id}/test-run/stream")
+async def test_run_stream(
+    graph_id: int,
+    req: TestRunRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:execute")),
+):
+    """SSE 流式 Test Run（A1）：边执行边推 graph.node.started/finished/failed
+
+    不落 graph_runs（debug 用）；wire 事件见 SSEEventKind 的 GRAPH_* 成员。
+    """
+    return sse_response(
+        graph_service.test_run_stream(session, graph_id, req),
+        log_label="graphs:test-run-stream",
+    )
+
+
 @router.post("/{graph_id}/run", response_model=Result[GraphRunDetail])
 async def run_graph(
     graph_id: int,
@@ -112,6 +147,18 @@ async def run_graph(
     run = await graph_runner.run_graph(
         session, graph_id=graph_id, input=req.input
     )
+    return Result.ok(GraphRunDetail.model_validate(run))
+
+
+@router.post("/runs/{run_id}/resume", response_model=Result[GraphRunDetail])
+async def resume_run(
+    run_id: int,
+    req: ResumeRunRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:execute")),
+) -> Result[GraphRunDetail]:
+    """A6：人工回填后从断点恢复跑（可能再次暂停或终态收尾）"""
+    run = await graph_runner.resume_run(session, run_id=run_id, value=req.value)
     return Result.ok(GraphRunDetail.model_validate(run))
 
 

@@ -155,6 +155,44 @@ async def test_llm_node_temperature_validation():
         LLMNode(NodeSpec(id="n", type="llm", data={"temperature": 3.0}))
 
 
+# ── A3：dict input 不再因 "type=dict" 抛错 ─────────────────
+
+
+async def test_llm_node_dict_upstream_answer_field(fake_llm):
+    """上游 LLM 节点输出 {answer: ...} 直接喂给下游 LLM 节点（无 template）"""
+    node = LLMNode(NodeSpec(id="n", type="llm", data={}))
+    out = await node.execute(
+        _ctx(),
+        {"answer": "上一步的结论", "tool_calls": [], "usage": None, "model": "x"},
+    )
+    assert out["answer"] == "hello world"
+    assert len(fake_llm.captured_messages) == 1
+    assert fake_llm.captured_messages[0].content == "上一步的结论"
+
+
+async def test_llm_node_dict_no_known_field_json_fallback(fake_llm):
+    """dict 无任何已知字段（如 tool 节点结构化输出）→ JSON 兜底，不再抛错"""
+    node = LLMNode(NodeSpec(id="n", type="llm", data={}))
+    tool_output = {"tool_key": "http", "ok": True, "data": {"status": 200}}
+    out = await node.execute(_ctx(), tool_output)
+    assert out["answer"] == "hello world"
+    assert len(fake_llm.captured_messages) == 1
+    content = fake_llm.captured_messages[0].content
+    # 兜底把整个 dict 序列化成 JSON，字段都在
+    assert "tool_key" in content
+    assert "200" in content
+
+
+def test_build_messages_dict_never_raises_on_dict():
+    """回归：任意 dict（含空 dict）都不再抛 '无法从 input 构造 messages：type=dict'"""
+    from chameleon.core.graph.nodes.llm_messages import build_messages
+
+    for bad in ({}, {"foo": 1}, {"nested": {"a": [1, 2]}}):
+        msgs = build_messages(bad, None, None)
+        assert len(msgs) == 1
+        assert msgs[0].type == "human"
+
+
 # ── KBNode 测试（mock search_kb） ───────────────────────
 
 
