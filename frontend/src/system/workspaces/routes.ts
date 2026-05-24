@@ -6,6 +6,13 @@ const module: ModuleRouteConfig = {
   order: 90,
   routes: [
     {
+      path: '/workspaces',
+      lazy: async () => {
+        const m = await import('@/system/workspaces/pages/workspaces-page');
+        return { Component: m.WorkspacesPage };
+      },
+    },
+    {
       path: '/workspaces/:id/members',
       lazy: async () => {
         const m = await import(
