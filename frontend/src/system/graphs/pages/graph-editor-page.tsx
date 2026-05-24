@@ -48,12 +48,11 @@ import { RunsPanel } from '@/system/graphs/components/runs-panel';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
 import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
+import { defaultLabel, rfToSpec, specToRf } from '@/system/graphs/lib/rf-spec';
 import { graphApi } from '@/system/graphs/services/graph';
 import type {
-  EdgeSpec,
   GraphDetail,
   GraphNodeType,
-  GraphSpec,
   NodeSpec,
 } from '@/system/graphs/types/graph';
 
@@ -510,64 +509,3 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     </div>
   );
 };
-
-// ── 双向映射 ──────────────────────────────────────────────
-
-function specToRf(spec: GraphSpec): {
-  rfNodes: RFNode<GraphNodeData>[];
-  rfEdges: Edge[];
-} {
-  const rfNodes: RFNode<GraphNodeData>[] = spec.nodes.map(n => ({
-    id: n.id,
-    type: 'graphNode',
-    position: n.position || { x: 100, y: 100 },
-    data: {
-      label: n.name || n.id,
-      nodeType: n.type,
-      ...({ _spec: { data: n.data || {} } } as object),
-    } as GraphNodeData,
-  }));
-  const rfEdges: Edge[] = spec.edges.map(e => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    sourceHandle: e.source_handle ?? undefined,
-    type: 'smoothstep',
-  }));
-  return { rfNodes, rfEdges };
-}
-
-function rfToSpec(nodes: RFNode<GraphNodeData>[], edges: Edge[]): GraphSpec {
-  return {
-    nodes: nodes.map(n => {
-      const stored = (n.data as { _spec?: { data?: object } })._spec ?? {};
-      return {
-        id: n.id,
-        type: n.data.nodeType,
-        name: n.data.label,
-        data: (stored.data as Record<string, unknown>) || {},
-        position: { x: n.position.x, y: n.position.y },
-      };
-    }),
-    edges: edges.map<EdgeSpec>(e => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      source_handle: (e.sourceHandle as string | null | undefined) ?? null,
-    })),
-  };
-}
-
-function defaultLabel(type: GraphNodeType, id: string): string {
-  const t: Partial<Record<GraphNodeType, string>> = {
-    llm: 'LLM 调用',
-    kb: 'KB 检索',
-    tool: '工具',
-    if_else: '条件分支',
-    agent_debate: 'Agent 辩论',
-    end: '终态',
-    start: '开始',
-    noop: '占位',
-  };
-  return `${t[type] ?? type} · ${id}`;
-}

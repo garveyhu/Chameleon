@@ -14,6 +14,10 @@ import {
   KbKeyField,
   ModelNameField,
 } from '@/system/graphs/components/spec-fields';
+import {
+  ParallelBranchesField,
+  SubgraphField,
+} from '@/system/graphs/components/subgraph-fields';
 import type {
   GraphNodeType,
   NodeRunView,
@@ -220,13 +224,12 @@ const DataForm = ({
   if (type === 'iteration') {
     return (
       <>
-        <JsonField
-          label="body（子图 GraphSpec，必填）"
-          value={data.body}
-          fallback={{ nodes: [], edges: [] }}
-          onChange={v => onPatch({ body: v })}
-          rows={7}
-          hint="对每个 item 跑一遍的子图（含自己的 start/end）"
+        <SubgraphField
+          label="body（对每个 item 跑一遍的子图）"
+          title="迭代子图"
+          spec={data.body}
+          onChange={spec => onPatch({ body: spec })}
+          hint="可视化编辑含自己 start/end 的子图"
         />
         <Field label="items_path（可选，从 input 取数组的 dot 路径）">
           <Input
@@ -280,13 +283,9 @@ const DataForm = ({
   if (type === 'parallel') {
     return (
       <>
-        <JsonField
-          label="branches（[{key, body}]，2–20 条，必填）"
-          value={data.branches}
-          fallback={[{ key: 'a', body: { nodes: [], edges: [] } }]}
-          onChange={v => onPatch({ branches: v })}
-          rows={8}
-          hint="每条 branch 的 body 是独立子图，同一 input fork 后并发跑"
+        <ParallelBranchesField
+          branches={data.branches}
+          onChange={branches => onPatch({ branches })}
         />
         <Field label="join_strategy">
           <select
