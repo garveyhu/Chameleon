@@ -77,6 +77,8 @@ export function defaultLabel(type: GraphNodeType, id: string): string {
     iteration: '迭代',
     parallel: '并行',
     human_input: '人工输入',
+    template: '模板',
+    answer: '回答',
     end: '终态',
     start: '开始',
     noop: '占位',

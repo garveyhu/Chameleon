@@ -3,7 +3,9 @@
 import { Handle, Position } from '@xyflow/react';
 import {
   Bot,
+  Braces,
   CircleDashed,
+  CornerDownLeft,
   Database,
   Flag,
   GitBranch,
@@ -92,6 +94,20 @@ const TYPE_META: Record<
     ring: 'ring-pink-200',
     bg: 'bg-pink-50',
     label: 'Human Input',
+  },
+  template: {
+    icon: Braces,
+    color: 'text-teal-700',
+    ring: 'ring-teal-200',
+    bg: 'bg-teal-50',
+    label: 'Template',
+  },
+  answer: {
+    icon: CornerDownLeft,
+    color: 'text-green-700',
+    ring: 'ring-green-200',
+    bg: 'bg-green-50',
+    label: 'Answer',
   },
   noop: {
     icon: CircleDashed,

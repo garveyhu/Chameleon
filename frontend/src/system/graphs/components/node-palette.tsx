@@ -2,7 +2,9 @@
 
 import {
   Bot,
+  Braces,
   CircleDashed,
+  CornerDownLeft,
   Database,
   Flag,
   GitBranch,
@@ -89,6 +91,20 @@ const ITEMS: PaletteItem[] = [
     icon: UserCheck,
     desc: '暂停等人工回填',
     color: 'text-pink-600',
+  },
+  {
+    type: 'template',
+    label: 'Template',
+    icon: Braces,
+    desc: '变量拼文本（{{#...#}}）',
+    color: 'text-teal-600',
+  },
+  {
+    type: 'answer',
+    label: 'Answer',
+    icon: CornerDownLeft,
+    desc: '显式最终回答',
+    color: 'text-green-600',
   },
   {
     type: 'end',

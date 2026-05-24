@@ -174,12 +174,12 @@ def _extract_query_history(ctx: InvokeContext) -> tuple[str, list[dict[str, str]
 def _resolve_answer_node(spec: GraphSpec) -> str | None:
     """判定哪个节点的输出/流是「答案」：
 
-    1. data.is_answer=true 的节点优先；
+    1. 显式 answer 节点（type='answer'）或 data.is_answer=true 的节点优先；
     2. 否则取指向 end 节点的边的源节点（多个时偏好 llm）；
     3. 都没有 → None（done 时回退用 graph.finished output）。
     """
     for n in spec.nodes:
-        if (n.data or {}).get("is_answer") is True:
+        if n.type == "answer" or (n.data or {}).get("is_answer") is True:
             return n.id
 
     end_ids = {n.id for n in spec.nodes if n.type == "end"}

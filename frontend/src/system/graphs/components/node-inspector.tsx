@@ -234,6 +234,43 @@ const DataForm = ({
     );
   }
 
+  if (type === 'template') {
+    return (
+      <Field label="模板（{{#sys.query#}} / {{#节点id.字段#}} 引用）">
+        <Textarea
+          value={(data.template as string) || ''}
+          onChange={e => onPatch({ template: e.target.value })}
+          rows={5}
+          placeholder="参考资料：{{#kb1.joined_context#}}\n\n问题：{{#sys.query#}}"
+          className="font-mono text-[12px]"
+        />
+        <VarInsert
+          onInsert={t => onPatch({ template: ((data.template as string) || '') + t })}
+        />
+      </Field>
+    );
+  }
+
+  if (type === 'answer') {
+    return (
+      <Field label="回答模板（可选；留空则透传上游答案）">
+        <Textarea
+          value={(data.answer as string) || ''}
+          onChange={e => onPatch({ answer: e.target.value || undefined })}
+          rows={4}
+          placeholder="{{#chat.answer#}}"
+          className="font-mono text-[12px]"
+        />
+        <VarInsert
+          onInsert={t => onPatch({ answer: ((data.answer as string) || '') + t })}
+        />
+        <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
+          标记 graph 的最终回答来源；agent 调用时优先用本节点输出。
+        </div>
+      </Field>
+    );
+  }
+
   if (type === 'iteration') {
     return (
       <>

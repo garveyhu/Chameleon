@@ -11,7 +11,9 @@ export type GraphNodeType =
   | 'agent_debate'
   | 'iteration'
   | 'parallel'
-  | 'human_input';
+  | 'human_input'
+  | 'template'
+  | 'answer';
 
 export interface NodeSpec {
   id: string;
