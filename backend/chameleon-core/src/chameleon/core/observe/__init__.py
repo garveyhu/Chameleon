@@ -19,6 +19,10 @@ Pattern：把"父调用"放进 contextvar，业务侧用 `with observe(...) as o
 本模块只提供"嵌套上下文 + parent_id 自动传递"基础设施。
 """
 
+from chameleon.core.observe.aggregator import (
+    ObservationRollup,
+    aggregate_rollups,
+)
 from chameleon.core.observe.context import (
     ObservationContext,
     ObservationType,
@@ -28,7 +32,9 @@ from chameleon.core.observe.context import (
 
 __all__ = [
     "ObservationContext",
+    "ObservationRollup",
     "ObservationType",
+    "aggregate_rollups",
     "current_observation_id",
     "observe",
 ]

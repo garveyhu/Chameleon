@@ -62,9 +62,16 @@ class TraceTreeNode(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    # 本节点自身 cost（不含子）
+    cost_usd: float | None = None
     created_at: datetime
     scores: list[ScoreItem] = []
     children: list["TraceTreeNode"] = []
+    # P23.C2 subtree 累加（含自身 + 所有后代）—— 由 aggregator 回填
+    rollup_cost_usd: float | None = None
+    rollup_prompt_tokens: int = 0
+    rollup_completion_tokens: int = 0
+    rollup_total_tokens: int = 0
 
 
 class ProviderStatusItem(BaseModel):
