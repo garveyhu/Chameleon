@@ -8,7 +8,12 @@ import { Trash2 } from 'lucide-react';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
 import { AgentDebateForm } from '@/system/graphs/components/agent-debate-form';
+import { IfElseCondition } from '@/system/graphs/components/if-else-condition';
 import { NodeRunResult } from '@/system/graphs/components/node-run-result';
+import {
+  KbKeyField,
+  ModelNameField,
+} from '@/system/graphs/components/spec-fields';
 import type {
   GraphNodeType,
   NodeRunView,
@@ -69,7 +74,12 @@ export const NodeInspector = ({ node, runView, onChange, onDelete }: Props) => {
         />
       </Field>
 
-      <DataForm type={node.type} data={node.data || {}} onPatch={setData} />
+      <DataForm
+        key={node.id}
+        type={node.type}
+        data={node.data || {}}
+        onPatch={setData}
+      />
 
       {runView && (
         <div className="mt-1 border-t border-stone-200/70 pt-3">
@@ -99,12 +109,10 @@ const DataForm = ({
   if (type === 'llm') {
     return (
       <>
-        <Field label="model_name（留空走默认）">
-          <Input
+        <Field label="模型（留空走默认）">
+          <ModelNameField
             value={(data.model_name as string) || ''}
-            onChange={e => onPatch({ model_name: e.target.value || undefined })}
-            placeholder="qwen-plus / gpt-4o-mini …"
-            className="h-7 text-[12px]"
+            onChange={v => onPatch({ model_name: v || undefined })}
           />
         </Field>
         <Field label="system_prompt">
@@ -148,12 +156,10 @@ const DataForm = ({
   if (type === 'kb') {
     return (
       <>
-        <Field label="kb_key（必填）">
-          <Input
+        <Field label="知识库（必填）">
+          <KbKeyField
             value={(data.kb_key as string) || ''}
-            onChange={e => onPatch({ kb_key: e.target.value })}
-            placeholder="smoke / my-kb"
-            className="h-7 font-mono text-[12px]"
+            onChange={v => onPatch({ kb_key: v })}
           />
         </Field>
         <Field label="top_k">
@@ -203,28 +209,11 @@ const DataForm = ({
   }
 
   if (type === 'if_else') {
-    const condStr = JSON.stringify(data.condition || {}, null, 2);
     return (
-      <>
-        <Field label="condition（jsonlogic 风表达式）">
-          <Textarea
-            value={condStr}
-            onChange={e => {
-              try {
-                const parsed = JSON.parse(e.target.value);
-                onPatch({ condition: parsed });
-              } catch {
-                /* 语法暂时错误时不写回，等用户改完 */
-              }
-            }}
-            rows={8}
-            className="font-mono text-[11.5px]"
-          />
-        </Field>
-        <div className="text-[10.5px] leading-snug text-stone-500">
-          支持：var / const / == != &gt; &lt; &gt;= &lt;= / and or not
-        </div>
-      </>
+      <IfElseCondition
+        value={data.condition}
+        onChange={cond => onPatch({ condition: cond })}
+      />
     );
   }
 
