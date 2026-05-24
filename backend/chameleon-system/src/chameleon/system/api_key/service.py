@@ -161,7 +161,11 @@ async def record_call(
     observation_type: str = "generation",
     completion_start_ms: int | None = None,
     # P22.1：model_code 用于查 price 算 cost；缺失则 cost=NULL
+    # P23.C1 起 model_code 同时落库（cost dashboard 按模型聚合）
     model_code: str | None = None,
+    # P23.C1 计费多维：user / channel 落库（API-key 调用 user_id 可能为 NULL）
+    user_id: int | None = None,
+    channel_id: int | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -173,10 +177,12 @@ async def record_call(
     context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
     """
     # P22.1：按当时生效价目算 cost（model_code 缺失 / 价目缺失则保持 NULL）
+    # P23.C5：cost_usd 存原始模型成本（不含倍率）；group_ratio 单独存（红线）
     cost_usd = None
+    group_ratio = None
     if model_code and (prompt_tokens or completion_tokens):
         try:
-            from chameleon.system.pricing import calc_cost
+            from chameleon.system.pricing import calc_cost, group_ratio_for_app
 
             cost_usd = await calc_cost(
                 session,
@@ -184,6 +190,8 @@ async def record_call(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
             )
+            if app_id:
+                group_ratio = await group_ratio_for_app(session, app_id)
         except Exception:
             # cost 计算失败不阻塞 call_log 写入
             logger.exception(
@@ -197,6 +205,9 @@ async def record_call(
         app_id=app_id,
         agent_key=agent_key,
         session_id=session_id,
+        user_id=user_id,
+        model_code=model_code,
+        channel_id=channel_id,
         stream=stream,
         success=success,
         code=code,
@@ -206,6 +217,7 @@ async def record_call(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         cost_usd=cost_usd,
+        group_ratio=group_ratio,
         spans=spans,
         request_payload=request_payload,
         response_payload=response_payload,
@@ -222,13 +234,17 @@ async def record_call(
         try:
             from chameleon.system.workspaces.quota_service import (
                 increment_usage,
+                settle_request,
                 workspace_id_for_app,
             )
 
             ws_id = await workspace_id_for_app(session, app_id)
+            # 实际用量原子落 SQL（committed 真相）
             await increment_usage(
                 session, ws_id, total_tokens=total_tokens, requests=1
             )
+            # C4 post-consume：释放本次请求的预扣（差额自然返还）
+            await settle_request(session, ws_id, request_id=request_id)
         except Exception:
             # 计数失败绝不污染主请求路径；call_log 已写入
             logger.exception(

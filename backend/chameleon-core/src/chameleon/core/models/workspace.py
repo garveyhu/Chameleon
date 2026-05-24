@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
@@ -21,6 +22,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     UniqueConstraint,
     func,
@@ -35,6 +37,28 @@ from chameleon.core.models.base import (
 )
 
 DEFAULT_WORKSPACE_ID = 1
+#: 默认计费分组 code（倍率 1.0；alembic 幂等 seed）
+DEFAULT_GROUP_CODE = "default"
+
+
+class WorkspaceGroup(Base, TimestampMixin):
+    """计费分组 —— 一个 group = 一个成本倍率（P23.C5）
+
+    借鉴 one-api GroupRatio：不同用户群（trial / vip / internal）对同一模型用量
+    乘不同倍率结算。倍率**不写进 call_log.cost_usd**（cost_usd 存原始模型成本，
+    红线"存死不溯源"），而是把 group_ratio 单独记到 call_log，effective cost =
+    cost_usd × group_ratio 在报表层算。
+    """
+
+    __tablename__ = "workspace_groups"
+
+    id: Mapped[int] = snowflake_pk()
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 成本倍率：1.0 原价；2.0 翻倍（trial）；0.5 半价（vip）；0 免费（internal）
+    ratio: Mapped[Decimal] = mapped_column(
+        Numeric(6, 3), nullable=False, server_default="1.000", default=Decimal("1.0")
+    )
 
 
 class WorkspaceScopedMixin:
@@ -64,6 +88,13 @@ class Workspace(Base, TimestampMixin, SoftDeleteMixin):
     # free | pro | enterprise（PR #39 配额用）
     plan: Mapped[str] = mapped_column(
         String(16), nullable=False, default="free"
+    )
+    # P23.C5 计费分组 code → workspace_groups.code（NULL = 走默认倍率 1.0）
+    group_code: Mapped[str | None] = mapped_column(
+        String(32),
+        ForeignKey("workspace_groups.code", ondelete="SET NULL"),
+        nullable=True,
+        server_default=DEFAULT_GROUP_CODE,
     )
     config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

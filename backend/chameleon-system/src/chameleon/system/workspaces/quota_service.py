@@ -19,8 +19,10 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.infra.redis import get_redis
 from chameleon.core.models import App, WorkspaceQuota
 from chameleon.core.models.workspace import DEFAULT_WORKSPACE_ID
+from chameleon.core.observe import post_consume, pre_consume
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,53 @@ async def assert_within_request_quota(
                 f"({snap.token_used_current_month}/{snap.token_quota_monthly})"
             ),
         )
+
+
+# ── 预扣 / 结算（C3/C4：invoke 入口预扣，record_call 末尾结算） ────────
+
+
+async def pre_consume_request(
+    session: AsyncSession,
+    workspace_id: int | None,
+    *,
+    estimated_tokens: int,
+    request_id: str,
+) -> None:
+    """invoke 入口预扣：按预估 token 在 Redis 原子预扣（并发防超发）
+
+    workspace_id=None → 不限额跳过。额度不足 → raise WorkspaceQuotaExceeded(429)。
+    """
+    if workspace_id is None:
+        return
+    snap = await snapshot(session, workspace_id)
+    quota_remaining: int | None = None
+    if snap.token_quota_monthly is not None:
+        quota_remaining = max(
+            0, snap.token_quota_monthly - snap.token_used_current_month
+        )
+    await pre_consume(
+        get_redis(),
+        session,
+        workspace_id=workspace_id,
+        estimated_tokens=estimated_tokens,
+        quota_remaining=quota_remaining,
+        request_id=request_id,
+    )
+
+
+async def settle_request(
+    session: AsyncSession,
+    workspace_id: int | None,
+    *,
+    request_id: str,
+) -> None:
+    """record_call 末尾结算：释放本次请求预扣（实际用量由 increment_usage 落 SQL）
+
+    best-effort：不抛错污染主路径（post_consume 内部已吞 Redis 错）。
+    """
+    if workspace_id is None:
+        return
+    await post_consume(get_redis(), workspace_id=workspace_id, request_id=request_id)
 
 
 # ── 配额累加（record_call 后调） ────────────────────────

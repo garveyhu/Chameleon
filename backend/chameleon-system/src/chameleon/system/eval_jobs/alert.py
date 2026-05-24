@@ -19,10 +19,9 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.core.components.notifier import get_notifier
 from chameleon.core.infra import redis as redis_infra
 from chameleon.core.models import EvalJob, EvalJobRun
-from chameleon.system.eval_jobs.notifiers import get_notifier
-
 
 _DEFAULT_THRESHOLD = Decimal("0.0")  # 不配则不触发
 _DEFAULT_SILENCE_SEC = 3600  # 1 小时
@@ -92,7 +91,7 @@ async def maybe_send_alert(
     payload = _format_payload(job, job_run)
     try:
         sent = await notifier.send(target, text=text, payload=payload)
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("eval_alert notifier raised | job={}", job.id)
         sent = False
 

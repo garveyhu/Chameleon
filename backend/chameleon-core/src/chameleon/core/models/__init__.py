@@ -29,6 +29,7 @@ from chameleon.core.models.workspace import (
     Membership,
     Team,
     Workspace,
+    WorkspaceGroup,
     WorkspaceQuota,
 )
 from chameleon.core.models.embed_config import EmbedConfig
@@ -106,6 +107,7 @@ __all__ = [
     "PluginRegistryEntry",
     # 多租户
     "Workspace",
+    "WorkspaceGroup",
     "Team",
     "Membership",
     "WorkspaceQuota",

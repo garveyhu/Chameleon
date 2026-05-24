@@ -83,6 +83,21 @@ class CallLog(Base):
         nullable=True,
     )
     session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # P23.C1 计费多维：user / model / channel 三维（全 NULLABLE，老数据零迁移）
+    # user_id：发起调用的用户（API-key 调用可能为 NULL，admin/playground 有值）
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # model_code：实际命中的模型编码（路由后），cost dashboard 按模型聚合
+    model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # channel_id：实际命中的上游 channel（failover 后），按渠道聚合 / 成本归因
+    channel_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("channels.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     stream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     code: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -92,8 +107,10 @@ class CallLog(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # P22.1：成本（按当时价目算并存死；改价目不溯源）
+    # P22.1：成本（按当时价目算并存死；改价目不溯源）—— 原始模型成本，不含分组倍率
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6), nullable=True)
+    # P23.C5：计费分组倍率（写入时存死）；effective cost = cost_usd × group_ratio
+    group_ratio: Mapped[float | None] = mapped_column(Numeric(6, 3), nullable=True)
     # P16-E2 trace: spans [{name, start_ms, end_ms, status, error?, meta?}]
     spans: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 入参快照（input + options + history 摘要等）
@@ -122,4 +139,8 @@ class CallLog(Base):
         Index("ix_call_logs_api_key", "api_key_id"),
         Index("ix_call_logs_parent", "parent_id"),
         Index("ix_call_logs_type", "observation_type"),
+        # P23.C1 计费多维聚合（C8 cost dashboard group by dim 在时间窗内）
+        Index("ix_call_logs_user_created", "user_id", "created_at"),
+        Index("ix_call_logs_model_created", "model_code", "created_at"),
+        Index("ix_call_logs_channel_created", "channel_id", "created_at"),
     )

@@ -12,6 +12,10 @@ from chameleon.core.routing.failover import (
     build_channel_override,
     invoke_with_failover,
 )
+from chameleon.core.routing.key_pool import (
+    quarantine_key,
+    select_channel_key,
+)
 from chameleon.core.routing.router import (
     NoSatisfiedChannelError,
     mark_failed,
@@ -27,4 +31,6 @@ __all__ = [
     "should_retry",
     "invoke_with_failover",
     "build_channel_override",
+    "quarantine_key",
+    "select_channel_key",
 ]

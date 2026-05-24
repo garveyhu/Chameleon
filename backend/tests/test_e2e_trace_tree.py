@@ -176,6 +176,31 @@ async def test_tree_full_structure(
     assert gen_node["total_tokens"] == 130
 
 
+async def test_tree_rollup_tokens(
+    client: AsyncClient, admin_token: str, trace_app: dict
+):
+    """P23.C2：root 的 rollup token = 整棵树累加（只有 gen 有 token 50/80/130）"""
+    r = await client.get(
+        f"/v1/admin/call-logs/{trace_app['root']}/tree",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert r.status_code == 200, r.text
+    tree = r.json()["data"]
+    # 自身无 token，但 rollup 含后代 gen
+    assert tree["total_tokens"] is None
+    assert tree["rollup_prompt_tokens"] == 50
+    assert tree["rollup_completion_tokens"] == 80
+    assert tree["rollup_total_tokens"] == 130
+
+    # agent 子树同样累加到 gen
+    agent_node = next(
+        c for c in tree["children"] if c["observation_type"] == "agent"
+    )
+    assert agent_node["rollup_total_tokens"] == 130
+    # 整棵树无 model_code → cost 全 NULL → rollup cost 也 None（非 0）
+    assert tree["rollup_cost_usd"] is None
+
+
 async def test_tree_query_by_subtree_root(
     client: AsyncClient, admin_token: str, trace_app: dict
 ):

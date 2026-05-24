@@ -11,16 +11,17 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.api.response import PageParams, PageResult
+from chameleon.core.models import CallLog, Score
+from chameleon.core.observe import aggregate_rollups
+from chameleon.providers.base import PROVIDERS
 from chameleon.system.admin.schemas import (
     CallLogDetailItem,
     CallLogItem,
     ProviderStatusItem,
     TraceTreeNode,
 )
-from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import CallLog, Score
-from chameleon.core.api.response import PageParams, PageResult
-from chameleon.providers.base import PROVIDERS
 from chameleon.system.scores.schemas import ScoreItem
 
 
@@ -142,10 +143,21 @@ async def get_trace_tree(
             ScoreItem.model_validate(s)
         )
 
+    # P23.C2 subtree cost / token 累加（含自身 + 所有后代）
+    rollups = aggregate_rollups(all_logs.values())
+
     # 组装树
     def to_node(row: CallLog) -> TraceTreeNode:
         node = TraceTreeNode.model_validate(row)
         node.scores = scores_by_rid.get(row.request_id, [])
+        rollup = rollups.get(row.request_id)
+        if rollup is not None:
+            node.rollup_cost_usd = (
+                float(rollup.cost_usd) if rollup.cost_usd is not None else None
+            )
+            node.rollup_prompt_tokens = rollup.prompt_tokens
+            node.rollup_completion_tokens = rollup.completion_tokens
+            node.rollup_total_tokens = rollup.total_tokens
         return node
 
     nodes: dict[str, TraceTreeNode] = {

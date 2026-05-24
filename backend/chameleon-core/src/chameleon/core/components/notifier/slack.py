@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.system.eval_jobs.notifiers.base import Notifier
+from chameleon.core.components.notifier.base import Notifier
 
 
 class SlackNotifier(Notifier):
