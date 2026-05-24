@@ -127,6 +127,10 @@ class SearchRequest(BaseModel):
     doc_ids: list[int] | None = None
     tags: list[str] | None = None
     mode: str | None = Field(default=None, pattern="^(vector|hybrid|keyword)$")
+    # v1.1 hit-test playground 开关（默认走 KB 配置 / 关闭）
+    include_images: bool | None = None
+    multi_query: int = Field(default=0, ge=0, le=5)
+    hyde: bool = False
 
 
 class SearchHitItem(BaseModel):
@@ -136,6 +140,12 @@ class SearchHitItem(BaseModel):
     content: str
     score: float
     document_title: str
+    # v1.1 B5/B6：多模态 + score 分项（UI 渲染留 Agent D）
+    kind: str = "text"
+    source_url: str | None = None
+    vector_score: float | None = None
+    bm25_score: float | None = None
+    rerank_score: float | None = None
 
 
 class EvalQuery(BaseModel):
@@ -590,17 +600,22 @@ async def search_kb(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("kbs:read")),
 ) -> Result[list[SearchHitItem]]:
-    hits = await document_service.search_chunks(
+    from chameleon.api.knowledge.hit_test import run_hit_test
+
+    results = await run_hit_test(
         session,
         kb_id=kb_id,
         query=req.query,
         top_k=req.top_k,
         min_score=req.min_score,
+        mode=req.mode,
         doc_ids=req.doc_ids,
         tags=req.tags,
-        mode=req.mode,
+        include_images=req.include_images,
+        multi_query_count=req.multi_query,
+        use_hyde=req.hyde,
     )
-    return Result.ok([SearchHitItem(**h) for h in hits])
+    return Result.ok([SearchHitItem(**r.to_dict()) for r in results])
 
 
 # ── Retrieval Evaluations ─────────────────────────────────
