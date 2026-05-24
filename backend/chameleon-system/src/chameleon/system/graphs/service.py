@@ -24,6 +24,7 @@ from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import Agent, Graph, GraphRun
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
+    GraphChatRequest,
     GraphDetail,
     GraphItem,
     GraphRunDetail,
@@ -249,6 +250,47 @@ async def test_run(
             for r in result.node_runs
         ],
     )
+
+
+async def chat_stream(
+    session: AsyncSession, graph_id: int, req: GraphChatRequest
+) -> AsyncIterator[dict[str, Any]]:
+    """对话式调试当前 draft：把 graph 当可对话 agent 多轮跑（临时会话，不落库）。
+
+    复用 GraphProvider 的 input 组装 / 答案节点 / 事件翻译；spec 用 draft（不必先发布）。
+    SSE chunk 形如 {"type": "delta"|"step"|"done"|"error", "data": {...}}。
+    """
+    from chameleon.providers.base.registry import PROVIDERS
+    from chameleon.providers.base.types import AgentDef, InvokeContext, Message
+
+    row = await _load(session, graph_id)
+    # 提前校验 draft spec，给出干净错误（provider 内部也会校验）
+    _validate_spec(row.spec)
+
+    prov = PROVIDERS.get("graph")
+    if prov is None:
+        raise BusinessError(
+            ResultCode.InternalError,
+            message="graph provider 未注册（重启后端以加载 chameleon-providers/graph）",
+        )
+
+    adef = AgentDef(
+        key=f"__draft__{row.graph_key}",
+        provider="graph",
+        config={"graph_id": row.id, "spec": row.spec},
+    )
+    history = [Message(role=h.role, content=h.content) for h in req.history]
+    ctx = InvokeContext(
+        agent_def=adef,
+        input=req.message,
+        history=history,
+        session_id=f"graph-debug-{row.id}",
+        app_id="__graph_debug__",
+        request_id=f"graphdebug-{row.id}-{datetime.now(timezone.utc).timestamp():.0f}",
+        stream=True,
+    )
+    async for ev in prov.stream(ctx):
+        yield {"type": ev.type.value, "data": ev.data}
 
 
 async def test_run_stream(

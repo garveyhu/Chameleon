@@ -14,6 +14,7 @@ from chameleon.system.graphs import runner as graph_runner
 from chameleon.system.graphs import service as graph_service
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
+    GraphChatRequest,
     GraphDetail,
     GraphItem,
     GraphRunDetail,
@@ -144,6 +145,23 @@ async def test_run_stream(
     return sse_response(
         graph_service.test_run_stream(session, graph_id, req),
         log_label="graphs:test-run-stream",
+    )
+
+
+@router.post("/{graph_id}/chat/stream")
+async def chat_stream(
+    graph_id: int,
+    req: GraphChatRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:execute")),
+):
+    """对话式调试当前 draft（把 graph 当可对话 agent 多轮跑，临时会话不落库）。
+
+    SSE chunk：{"type": "delta"|"step"|"done"|"error", "data": {...}}。
+    """
+    return sse_response(
+        graph_service.chat_stream(session, graph_id, req),
+        log_label="graphs:chat-stream",
     )
 
 

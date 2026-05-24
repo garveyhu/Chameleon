@@ -58,6 +58,23 @@ class TestRunRequest(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
 
 
+class ChatTurn(BaseModel):
+    """对话调试的一轮历史消息"""
+
+    role: str = Field(pattern="^(user|assistant|system)$")
+    content: str
+
+
+class GraphChatRequest(BaseModel):
+    """编辑器对话式调试：把当前 draft 当可对话 agent 多轮跑（临时会话，不落库）
+
+    history 由前端客户端管理（多轮上下文）；message 为本轮用户输入。
+    """
+
+    message: str = Field(min_length=1, max_length=8000)
+    history: list[ChatTurn] = Field(default_factory=list)
+
+
 class NodeRunItem(BaseModel):
     """test-run 返的单节点执行摘要"""
 
