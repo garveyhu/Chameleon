@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
+from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.config import inventory
 from chameleon.core.embedding.base import EmbeddingClient
 from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
-from chameleon.core.api.exceptions import BusinessError, ResultCode
 
 _CACHE: dict[str, EmbeddingClient] = {}
 _OVERRIDE: EmbeddingClient | None = None  # 测试用

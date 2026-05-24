@@ -239,6 +239,8 @@ async def create_upload_document(
     object_key = storage.object_key(kb.id, doc_id)
     storage.write_upload(kb.id, doc_id, content, content_type=mime)
 
+    # B5：图片上传标 kind=image，ingest 走 caption → 文本向量 流程
+    doc_kind = "image" if (mime or "").startswith("image/") else "text"
     doc = Document(
         id=doc_id,
         kb_id=kb.id,
@@ -246,6 +248,7 @@ async def create_upload_document(
         source_type="upload",
         source_uri=object_key,
         mime_type=mime,
+        kind=doc_kind,
         status="pending",
         size_bytes=len(content),
     )
@@ -608,7 +611,6 @@ async def _keyword_search(
     """PG ts_rank 关键词召回（simple 配置，无中文分词，按空格 / 标点切）"""
     # query → tsquery：用 plainto_tsquery 容错（自动 AND）
     ts_query = func.plainto_tsquery("simple", query)
-    content_tsv = func.to_tsvector("simple", Chunk.content)
     # 用 content_tsv GENERATED 列加速
     # SQLAlchemy 不直接 reflect generated 列，引一个 raw column
     from sqlalchemy import literal_column
