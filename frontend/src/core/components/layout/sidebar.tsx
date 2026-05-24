@@ -177,11 +177,34 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   const [hydrated, setHydrated] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
 
-  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(
-    Object.fromEntries(NAV_GROUPS.map(g => [g.to, true])),
+  // 默认只展开当前 pathname 所在的组；其余折叠以缩短 sidebar 长度
+  const initialOpen = React.useMemo<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        NAV_GROUPS.map(g => [
+          g.to,
+          g.children.some(c => pathname === c.to || pathname.startsWith(c.to + '/')),
+        ]),
+      ),
+    // 故意只在 mount 时计算一次；后续 navigate 由 useEffect 兜活动组
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
   );
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>(initialOpen);
   const toggleGroup = (key: string) =>
     setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // navigate 时若 target leaf 所在组当前是折叠态，自动展开（不动其他组的手动偏好）
+  React.useEffect(() => {
+    const targetGroup = NAV_GROUPS.find(g =>
+      g.children.some(c => pathname === c.to || pathname.startsWith(c.to + '/')),
+    );
+    if (targetGroup && !openGroups[targetGroup.to]) {
+      setOpenGroups(prev => ({ ...prev, [targetGroup.to]: true }));
+    }
+    // openGroups 不应作为 deps，否则用户手动 toggle 后会被反复打开
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const visibleLeaves = (items: NavLeaf[]) =>
     items.filter(it => !it.perm || (hydrated && hasPermission(it.perm)));
@@ -210,13 +233,13 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
   return (
     <aside className="flex h-full w-60 flex-shrink-0 flex-col border-r border-stone-200/70 bg-[var(--color-warm-2)]">
       {/* brand */}
-      <div className="flex h-14 items-center gap-2.5 px-4">
+      <div className="flex h-12 items-center gap-2 px-3">
         <img
           src="/logo-sm.png"
           alt="Chameleon"
-          className="h-7 w-7 flex-shrink-0 object-contain"
+          className="h-6 w-6 flex-shrink-0 object-contain"
         />
-        <span className="text-[15.5px] font-semibold tracking-tight text-stone-800">
+        <span className="text-[14.5px] font-semibold tracking-tight text-stone-800">
           Chameleon
         </span>
         <button
