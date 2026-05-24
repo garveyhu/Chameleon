@@ -56,6 +56,9 @@ backend/logs/
 *.swp
 .DS_Store
 
+# 多 agent 并行：git worktree 子目录（4 个 agent 各一个 branch + 工作区）
+.worktrees/
+
 # Docker 三区运行时数据 / 凭据（绝不入 git）
 docker/containers/data/
 docker/containers/.env
