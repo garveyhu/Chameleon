@@ -155,6 +155,7 @@ class GraphRunItem(BaseModel):
     id: int
     graph_id: int
     request_id: str
+    session_id: str | None = None
     status: str
     duration_ms: int | None = None
     node_count: int | None = None

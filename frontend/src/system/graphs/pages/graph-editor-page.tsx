@@ -52,6 +52,7 @@ import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { toast } from '@/core/lib/toast';
 import { useWorkflowStore } from '@/core/stores/workflow';
+import type { EntityId } from '@/core/types/api';
 import { GraphAppRail } from '@/system/graphs/components/app-shell/graph-app-rail';
 import type { EditorTab } from '@/system/graphs/components/app-shell/graph-app-rail';
 import { ChatDebugDialog } from '@/system/graphs/components/chat-debug-dialog';
@@ -132,6 +133,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const [dirty, setDirty] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
+  // 日志页受控展开的 run（从历史 RUNS 面板跳转过来）
+  const [logRunId, setLogRunId] = useState<EntityId | null>(null);
   const [runOpen, setRunOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   // 本地持有 kind（EditorBody 按 graph.id keyed，初值取一次）；切换时直存不刷详情，避免清空未存画布
@@ -725,6 +728,11 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                         runs={runsQ.data ?? []}
                         loading={runsQ.isLoading}
                         onClose={() => setRunsOpen(false)}
+                        onOpenRun={id => {
+                          setRunsOpen(false);
+                          setLogRunId(id);
+                          setTab('logs');
+                        }}
                       />
                     ) : (
                       <NodeInspector
@@ -748,7 +756,14 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           )}
 
           {tab === 'api' && <ApiDocView graph={graph} />}
-          {tab === 'logs' && <LogsView graphId={graph.id} graphName={graph.name} />}
+          {tab === 'logs' && (
+            <LogsView
+              graphId={graph.id}
+              graphName={graph.name}
+              openRunId={logRunId}
+              onOpenRun={setLogRunId}
+            />
+          )}
           {tab === 'monitor' && <MonitorView graphId={graph.id} />}
         </div>
 

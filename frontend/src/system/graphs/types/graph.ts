@@ -114,6 +114,7 @@ export interface GraphRunItem {
   id: EntityId;
   graph_id: EntityId;
   request_id: string;
+  session_id: string | null;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'paused';
   duration_ms: number | null;
   node_count: number | null;

@@ -29,6 +29,9 @@ import type { GraphRunItem, NodeRunItem } from '@/system/graphs/types/graph';
 interface Props {
   graphId: EntityId;
   graphName: string;
+  /** 受控：当前展开详情的 run（编辑器从历史 RUNS 面板跳转时设置） */
+  openRunId: EntityId | null;
+  onOpenRun: (id: EntityId | null) => void;
 }
 
 const STATUS_TONE: Record<string, StatusTone> = {
@@ -49,10 +52,9 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: '已取消',
 };
 
-export const LogsView = ({ graphId }: Props) => {
+export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [openRunId, setOpenRunId] = useState<EntityId | null>(null);
 
   const q = useQuery({
     queryKey: ['graph-runs', graphId, page, pageSize],
@@ -85,6 +87,17 @@ export const LogsView = ({ graphId }: Props) => {
           {r.duration_ms != null ? `${r.duration_ms}ms` : '—'}
         </span>
       ),
+    },
+    {
+      key: 'session',
+      header: '会话',
+      width: 140,
+      render: r =>
+        r.session_id ? (
+          <span className="truncate font-mono text-[10.5px] text-stone-500">{r.session_id}</span>
+        ) : (
+          <span className="text-[11px] text-stone-300">—</span>
+        ),
     },
     {
       key: 'request_id',
@@ -123,7 +136,7 @@ export const LogsView = ({ graphId }: Props) => {
           rows={q.data?.items ?? []}
           rowKey={r => String(r.id)}
           loading={q.isLoading}
-          onRowClick={r => setOpenRunId(r.id)}
+          onRowClick={r => onOpenRun(r.id)}
           emptyText="还没有运行记录；发布为智能体后对话 / 调用即可在此查看"
         />
         {(q.data?.total ?? 0) > 0 && (
@@ -142,7 +155,7 @@ export const LogsView = ({ graphId }: Props) => {
         )}
       </div>
 
-      <RunDetailSheet runId={openRunId} onClose={() => setOpenRunId(null)} />
+      <RunDetailSheet runId={openRunId} onClose={() => onOpenRun(null)} />
     </div>
   );
 };
@@ -182,6 +195,7 @@ const RunDetailSheet = ({ runId, onClose }: { runId: EntityId | null; onClose: (
                   label="结束"
                   value={run.finished_at ? formatDateTime(run.finished_at) : '—'}
                 />
+                <Meta label="会话 session" value={run.session_id || '—'} mono span2 />
                 <Meta label="request_id" value={run.request_id} mono span2 />
               </div>
 

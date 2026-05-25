@@ -199,6 +199,7 @@ class GraphProvider(Provider):
                 await persist_provider_run(
                     graph_id=gid,
                     request_id=node_ctx.request_id,
+                    session_id=ctx.session_id,
                     graph_input=graph_input,
                     started_at=node_ctx.started_at,
                     finished_at=datetime.now(timezone.utc),

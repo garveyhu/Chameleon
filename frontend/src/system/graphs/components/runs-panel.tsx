@@ -1,24 +1,24 @@
 /** 编辑器右上 History 按钮打开的 runs 列表（替代 NodeInspector）
  *
- * 点击一行跳到 /call-logs?app_id=system 用 trace tree drawer 看嵌套结构。
+ * 点击一行 → 切到「日志」标签并展开该 run 的运行详情（含逐节点）。
  */
-import { useNavigate } from 'react-router-dom';
-
 import { X } from 'lucide-react';
 
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import type { EntityId } from '@/core/types/api';
 import type { GraphRunItem } from '@/system/graphs/types/graph';
 
 interface Props {
   runs: GraphRunItem[];
   loading: boolean;
   onClose: () => void;
+  /** 打开某次 run 的详情（编辑器切到日志页 + 展开抽屉） */
+  onOpenRun: (id: EntityId) => void;
 }
 
-export const RunsPanel = ({ runs, loading, onClose }: Props) => {
-  const nav = useNavigate();
+export const RunsPanel = ({ runs, loading, onClose, onOpenRun }: Props) => {
   return (
     <aside className="bg-warm-2/40 flex h-full w-full flex-col gap-1 overflow-y-auto p-3">
       <header className="mb-1 flex items-center justify-between">
@@ -46,12 +46,12 @@ export const RunsPanel = ({ runs, loading, onClose }: Props) => {
           <button
             key={String(r.id)}
             type="button"
-            onClick={() => nav(`/call-logs?app_id=system`)}
+            onClick={() => onOpenRun(r.id)}
             className={cn(
               'rounded-md border border-stone-200 bg-white px-2 py-1.5 text-left text-[11.5px]',
               'transition hover:border-stone-300 hover:bg-stone-50',
             )}
-            title="跳到调用日志页 · trace tree drawer 看嵌套结构"
+            title="查看本次运行详情（日志 · 逐节点）"
           >
             <div className="flex items-center justify-between">
               <Badge

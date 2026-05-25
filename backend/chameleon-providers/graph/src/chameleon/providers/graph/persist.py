@@ -34,6 +34,7 @@ async def persist_provider_run(
     *,
     graph_id: int,
     request_id: str,
+    session_id: str | None,
     graph_input: dict[str, Any],
     started_at: datetime,
     finished_at: datetime,
@@ -48,6 +49,7 @@ async def persist_provider_run(
             run = GraphRun(
                 graph_id=graph_id,
                 request_id=request_id,
+                session_id=session_id,
                 status=status,
                 input=graph_input or {},
                 output=_as_json_obj(output),

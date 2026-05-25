@@ -76,6 +76,8 @@ class GraphRun(Base):
     request_id: Mapped[str] = mapped_column(
         String(64), unique=True, nullable=False
     )
+    # 对话会话标识（chat 多轮同一 session_id；admin 手动跑为 None）
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pending"
     )  # pending/running/success/failed/cancelled
