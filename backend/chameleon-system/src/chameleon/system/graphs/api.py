@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -250,11 +252,24 @@ async def list_runs(
     graph_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    status: str | None = Query(None, description="success/failed/running/paused/..."),
+    session_id: str | None = Query(None, description="会话标识（模糊匹配）"),
+    since: datetime | None = Query(None, description="起始时间（含）"),
+    until: datetime | None = Query(None, description="结束时间（含）"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("graphs:read")),
 ) -> Result[PageResult[GraphRunItem]]:
     return Result.ok(
-        await graph_service.list_runs(session, graph_id, page=page, page_size=page_size)
+        await graph_service.list_runs(
+            session,
+            graph_id,
+            page=page,
+            page_size=page_size,
+            status=status,
+            session_id=session_id,
+            since=since,
+            until=until,
+        )
     )
 
 

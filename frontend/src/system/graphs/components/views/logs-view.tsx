@@ -11,6 +11,7 @@ import { ChevronRight, ScrollText } from 'lucide-react';
 import { DataTable } from '@/core/components/table';
 import type { DataTableColumn } from '@/core/components/table';
 import { TablePagination } from '@/core/components/table';
+import { Input } from '@/core/components/ui/input';
 import {
   Sheet,
   SheetBody,
@@ -23,6 +24,7 @@ import type { StatusTone } from '@/core/components/ui/status-badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import type { EntityId } from '@/core/types/api';
+import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphRunItem, NodeRunItem } from '@/system/graphs/types/graph';
 
@@ -52,13 +54,45 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: '已取消',
 };
 
+const STATUS_OPTIONS = [
+  { value: 'all', label: '全部状态' },
+  { value: 'success', label: '成功' },
+  { value: 'failed', label: '失败' },
+  { value: 'running', label: '运行中' },
+  { value: 'paused', label: '暂停' },
+  { value: 'cancelled', label: '已取消' },
+];
+
 export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [status, setStatus] = useState('all');
+  const [sessionInput, setSessionInput] = useState('');
+  const [sessionQ, setSessionQ] = useState('');
+  const [since, setSince] = useState('');
+  const [until, setUntil] = useState('');
+
+  const hasFilter = status !== 'all' || !!sessionQ || !!since || !!until;
+  const reset = () => {
+    setStatus('all');
+    setSessionInput('');
+    setSessionQ('');
+    setSince('');
+    setUntil('');
+    setPage(1);
+  };
 
   const q = useQuery({
-    queryKey: ['graph-runs', graphId, page, pageSize],
-    queryFn: () => graphApi.listRuns(graphId, { page, page_size: pageSize }),
+    queryKey: ['graph-runs', graphId, page, pageSize, status, sessionQ, since, until],
+    queryFn: () =>
+      graphApi.listRuns(graphId, {
+        page,
+        page_size: pageSize,
+        status: status === 'all' ? undefined : status,
+        session_id: sessionQ || undefined,
+        since: since ? `${since}T00:00:00` : undefined,
+        until: until ? `${until}T23:59:59` : undefined,
+      }),
   });
 
   const columns: DataTableColumn<GraphRunItem>[] = [
@@ -130,6 +164,61 @@ export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
           <h1 className="text-[16px] font-semibold text-stone-900">运行日志</h1>
           <span className="text-[12px] text-stone-400">共 {q.data?.total ?? 0} 次执行</span>
         </header>
+
+        {/* 筛选条件：状态 / 会话 / 时间范围 */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <EnumSelect
+            value={status}
+            onChange={v => {
+              setStatus(v);
+              setPage(1);
+            }}
+            options={STATUS_OPTIONS}
+            className="h-8 w-28"
+          />
+          <Input
+            value={sessionInput}
+            onChange={e => setSessionInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                setSessionQ(sessionInput.trim());
+                setPage(1);
+              }
+            }}
+            placeholder="会话 session（回车）"
+            className="h-8 w-48 text-[12px]"
+          />
+          <div className="flex items-center gap-1 text-[11.5px] text-stone-500">
+            <input
+              type="date"
+              value={since}
+              onChange={e => {
+                setSince(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 rounded-md border border-stone-200 px-2 text-[12px] text-stone-600"
+            />
+            <span>~</span>
+            <input
+              type="date"
+              value={until}
+              onChange={e => {
+                setUntil(e.target.value);
+                setPage(1);
+              }}
+              className="h-8 rounded-md border border-stone-200 px-2 text-[12px] text-stone-600"
+            />
+          </div>
+          {hasFilter && (
+            <button
+              type="button"
+              onClick={reset}
+              className="h-8 rounded-md px-2.5 text-[12px] text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+            >
+              重置
+            </button>
+          )}
+        </div>
 
         <DataTable
           columns={columns}

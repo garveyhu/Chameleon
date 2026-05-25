@@ -522,10 +522,26 @@ async def _load(session: AsyncSession, graph_id: int) -> Graph:
 
 
 async def list_runs(
-    session: AsyncSession, graph_id: int, *, page: int = 1, page_size: int = 20
+    session: AsyncSession,
+    graph_id: int,
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    status: str | None = None,
+    session_id: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> PageResult[GraphRunItem]:
-    """按 graph_id 分页列 runs（最新在前）"""
+    """按 graph_id 分页列 runs（最新在前），支持状态 / 会话 / 时间范围筛选"""
     base = select(GraphRun).where(GraphRun.graph_id == graph_id)
+    if status:
+        base = base.where(GraphRun.status == status)
+    if session_id:
+        base = base.where(GraphRun.session_id.ilike(f"%{session_id}%"))
+    if since is not None:
+        base = base.where(GraphRun.created_at >= since)
+    if until is not None:
+        base = base.where(GraphRun.created_at <= until)
     total = (
         await session.execute(select(func.count()).select_from(base.subquery()))
     ).scalar_one()

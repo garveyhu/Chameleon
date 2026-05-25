@@ -114,9 +114,18 @@ export const graphApi = {
       onChunk: opts.onChunk,
     }),
 
-  /** 分页列运行记录（最新在前） */
-  listRuns: (id: EntityId, params?: { page?: number; page_size?: number }) =>
-    get<PageResult<GraphRunItem>>(`/v1/admin/graphs/${id}/runs`, { params }),
+  /** 分页列运行记录（最新在前），支持状态 / 会话 / 时间范围筛选 */
+  listRuns: (
+    id: EntityId,
+    params?: {
+      page?: number;
+      page_size?: number;
+      status?: string;
+      session_id?: string;
+      since?: string;
+      until?: string;
+    },
+  ) => get<PageResult<GraphRunItem>>(`/v1/admin/graphs/${id}/runs`, { params }),
 
   /** 单次运行详情（含逐节点执行 node_runs） */
   getRun: (runId: EntityId) => get<GraphRunDetail>(`/v1/admin/graphs/runs/${runId}`),
