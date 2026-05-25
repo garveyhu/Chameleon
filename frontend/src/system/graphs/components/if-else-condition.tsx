@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
+import { EnumSelect } from '@/system/graphs/components/spec-fields';
 
 const BINARY_OPS = ['==', '!=', '>', '<', '>=', '<='] as const;
 type Op = (typeof BINARY_OPS)[number];
@@ -120,20 +121,15 @@ export const IfElseCondition = ({ value, onChange }: Props) => {
               placeholder="字段 (var)，如 user.score"
               className="h-7 flex-1 font-mono text-[12px]"
             />
-            <select
+            <EnumSelect
               value={op}
-              onChange={e => {
-                setOp(e.target.value as Op);
-                emit({ op: e.target.value as Op });
+              onChange={v => {
+                setOp(v as Op);
+                emit({ op: v as Op });
               }}
-              className="h-7 rounded-md border border-stone-200 bg-white px-1.5 text-[12px]"
-            >
-              {BINARY_OPS.map(o => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
+              options={BINARY_OPS.map(o => ({ value: o, label: o }))}
+              className="w-20 shrink-0"
+            />
           </div>
           <Input
             value={valText}

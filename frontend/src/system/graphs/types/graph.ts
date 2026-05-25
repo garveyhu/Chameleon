@@ -40,11 +40,15 @@ export interface GraphSpec {
   edges: EdgeSpec[];
 }
 
+/** 工作流形态：对话型（聊天 I/O，可发布为智能体）/ 流程型（一次性管线） */
+export type GraphKind = 'chatflow' | 'workflow';
+
 export interface GraphItem {
   id: EntityId;
   graph_key: string;
   name: string;
   description: string | null;
+  kind: GraphKind;
   schema_version: number;
   enabled: boolean;
   /** P22.3：已发布版本号（0 = 从未发布） */

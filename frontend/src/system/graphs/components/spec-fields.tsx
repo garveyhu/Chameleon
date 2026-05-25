@@ -10,10 +10,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
+import { cn } from '@/core/lib/cn';
 import { kbApi } from '@/system/kbs/services/kb';
 import { modelApi } from '@/system/models/services/model';
 
 const NONE = '__none__'; // Radix Select.Item 不允许空字符串 value，用哨兵代表「空」
+
+interface EnumOption {
+  value: string;
+  label: string;
+}
+
+/** 简单枚举下拉（method / language / strategy / op 等固定选项），替代原生 <select> */
+export const EnumSelect = ({
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: EnumOption[];
+  className?: string;
+}) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectTrigger className={cn('h-7 text-[12px]', className)}>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      {options.map(o => (
+        <SelectItem key={o.value} value={o.value} className="text-[12px]">
+          {o.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+);
 
 interface SelectOption {
   value: string;

@@ -1,162 +1,9 @@
 /** 通用 graph node 渲染组件 —— 接 React Flow 的 NodeProps */
-
 import { Handle, Position } from '@xyflow/react';
-import {
-  Bot,
-  Braces,
-  CircleDashed,
-  Code2,
-  Combine,
-  CornerDownLeft,
-  Database,
-  Flag,
-  GitBranch,
-  Globe,
-  PlayCircle,
-  Repeat,
-  Shuffle,
-  Split,
-  UserCheck,
-  Users,
-  Variable,
-  Wrench,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/core/lib/cn';
+import { TYPE_META } from '@/system/graphs/lib/node-meta';
 import type { GraphNodeType, NodeRunItem } from '@/system/graphs/types/graph';
-
-const TYPE_META: Record<
-  GraphNodeType,
-  { icon: LucideIcon; color: string; ring: string; bg: string; label: string }
-> = {
-  start: {
-    icon: PlayCircle,
-    color: 'text-emerald-700',
-    ring: 'ring-emerald-200',
-    bg: 'bg-emerald-50',
-    label: 'Start',
-  },
-  end: {
-    icon: Flag,
-    color: 'text-stone-700',
-    ring: 'ring-stone-300',
-    bg: 'bg-stone-50',
-    label: 'End',
-  },
-  llm: {
-    icon: Bot,
-    color: 'text-violet-700',
-    ring: 'ring-violet-200',
-    bg: 'bg-violet-50',
-    label: 'LLM',
-  },
-  kb: {
-    icon: Database,
-    color: 'text-emerald-700',
-    ring: 'ring-emerald-200',
-    bg: 'bg-emerald-50',
-    label: 'KB',
-  },
-  tool: {
-    icon: Wrench,
-    color: 'text-orange-700',
-    ring: 'ring-orange-200',
-    bg: 'bg-orange-50',
-    label: 'Tool',
-  },
-  if_else: {
-    icon: GitBranch,
-    color: 'text-amber-700',
-    ring: 'ring-amber-200',
-    bg: 'bg-amber-50',
-    label: 'If/Else',
-  },
-  agent_debate: {
-    icon: Users,
-    color: 'text-fuchsia-700',
-    ring: 'ring-fuchsia-200',
-    bg: 'bg-fuchsia-50',
-    label: 'Agent Debate',
-  },
-  iteration: {
-    icon: Repeat,
-    color: 'text-sky-700',
-    ring: 'ring-sky-200',
-    bg: 'bg-sky-50',
-    label: 'Iteration',
-  },
-  parallel: {
-    icon: Split,
-    color: 'text-indigo-700',
-    ring: 'ring-indigo-200',
-    bg: 'bg-indigo-50',
-    label: 'Parallel',
-  },
-  human_input: {
-    icon: UserCheck,
-    color: 'text-pink-700',
-    ring: 'ring-pink-200',
-    bg: 'bg-pink-50',
-    label: 'Human Input',
-  },
-  http: {
-    icon: Globe,
-    color: 'text-cyan-700',
-    ring: 'ring-cyan-200',
-    bg: 'bg-cyan-50',
-    label: 'HTTP',
-  },
-  aggregator: {
-    icon: Combine,
-    color: 'text-amber-800',
-    ring: 'ring-amber-200',
-    bg: 'bg-amber-50',
-    label: 'Aggregator',
-  },
-  assign: {
-    icon: Variable,
-    color: 'text-rose-700',
-    ring: 'ring-rose-200',
-    bg: 'bg-rose-50',
-    label: 'Assign',
-  },
-  classifier: {
-    icon: Shuffle,
-    color: 'text-lime-700',
-    ring: 'ring-lime-200',
-    bg: 'bg-lime-50',
-    label: 'Classifier',
-  },
-  code: {
-    icon: Code2,
-    color: 'text-slate-700',
-    ring: 'ring-slate-300',
-    bg: 'bg-slate-50',
-    label: 'Code',
-  },
-  template: {
-    icon: Braces,
-    color: 'text-teal-700',
-    ring: 'ring-teal-200',
-    bg: 'bg-teal-50',
-    label: 'Template',
-  },
-  answer: {
-    icon: CornerDownLeft,
-    color: 'text-green-700',
-    ring: 'ring-green-200',
-    bg: 'bg-green-50',
-    label: 'Answer',
-  },
-  noop: {
-    icon: CircleDashed,
-    color: 'text-stone-500',
-    ring: 'ring-stone-200',
-    bg: 'bg-white',
-    label: 'Noop',
-  },
-};
 
 const STATUS_COLOR: Record<NodeRunItem['status'], string> = {
   pending: 'border-stone-300',
@@ -207,17 +54,12 @@ export const GraphNode = ({ data }: Props) => {
 
       <div className="flex items-center gap-1.5">
         <meta.icon className={cn('h-3.5 w-3.5 shrink-0', meta.color)} />
-        <span className={cn('font-mono text-[10px] font-medium', meta.color)}>
-          {meta.label}
-        </span>
+        <span className={cn('font-mono text-[10px] font-medium', meta.color)}>{meta.label}</span>
         <span className="ml-auto truncate text-stone-800">{data.label}</span>
       </div>
 
       {data.errorMessage && (
-        <div
-          className="mt-1 truncate text-[10px] text-rose-600"
-          title={data.errorMessage}
-        >
+        <div className="mt-1 truncate text-[10px] text-rose-600" title={data.errorMessage}>
           ✗ {data.errorMessage}
         </div>
       )}

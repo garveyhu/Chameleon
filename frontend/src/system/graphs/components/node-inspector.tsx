@@ -2,40 +2,26 @@
  *
  * 现阶段每种 node 手写表单（5 类 + noop）；JSONSchemaForm 串通后改成 schema 驱动（PR 后续）。
  */
-
 import { Trash2 } from 'lucide-react';
 
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
+import { cn } from '@/core/lib/cn';
 import { AgentDebateForm } from '@/system/graphs/components/agent-debate-form';
 import { IfElseCondition } from '@/system/graphs/components/if-else-condition';
-import { NodeRunResult } from '@/system/graphs/components/node-run-result';
+import { CategoriesEditor, KeyValueEditor } from '@/system/graphs/components/kv-editor';
 import {
-  KbKeyField,
-  ModelNameField,
-} from '@/system/graphs/components/spec-fields';
+  OutputVarsSection,
+  PromptField,
+  Section,
+} from '@/system/graphs/components/node-panel/panel-kit';
+import { NodeRunResult } from '@/system/graphs/components/node-run-result';
+import { EnumSelect, KbKeyField, ModelNameField } from '@/system/graphs/components/spec-fields';
+import { ParallelBranchesField, SubgraphField } from '@/system/graphs/components/subgraph-fields';
 import { VarInsert } from '@/system/graphs/components/var-insert';
 import type { NodeVarOption } from '@/system/graphs/components/var-insert';
-import {
-  ParallelBranchesField,
-  SubgraphField,
-} from '@/system/graphs/components/subgraph-fields';
-import type {
-  GraphNodeType,
-  NodeRunView,
-  NodeSpec,
-} from '@/system/graphs/types/graph';
-
-/** 各节点类型的输出字段（P5-1 变量选择器据此列出可引用项） */
-const NODE_OUTPUT_FIELDS: Partial<Record<GraphNodeType, string[]>> = {
-  llm: ['answer'],
-  kb: ['joined_context', 'hits', 'query'],
-  http: ['status_code', 'body', 'headers'],
-  template: ['text'],
-  answer: ['answer'],
-  if_else: ['branch', 'value'],
-  agent_debate: ['answer'],
-};
+import { NODE_OUTPUT_FIELDS, TYPE_META } from '@/system/graphs/lib/node-meta';
+import type { GraphNodeType, NodeRunView, NodeSpec } from '@/system/graphs/types/graph';
 
 export interface PeerNode {
   id: string;
@@ -48,7 +34,8 @@ function peerVarOptions(peers: PeerNode[]): NodeVarOption[] {
     const fields = NODE_OUTPUT_FIELDS[p.type] ?? ['output'];
     return fields.map(f => ({
       token: `{{#${p.id}.${f}#}}`,
-      label: `${p.label}.${f}`,
+      label: f,
+      group: p.label,
     }));
   });
 }
@@ -63,16 +50,10 @@ interface Props {
   onDelete: () => void;
 }
 
-export const NodeInspector = ({
-  node,
-  runView,
-  peerNodes,
-  onChange,
-  onDelete,
-}: Props) => {
+export const NodeInspector = ({ node, runView, peerNodes, onChange, onDelete }: Props) => {
   if (!node) {
     return (
-      <aside className="flex h-full w-72 shrink-0 flex-col gap-2 border-l border-stone-200/70 bg-warm-2/40 p-3 text-[12px] text-stone-500">
+      <aside className="bg-warm-2/40 flex h-full w-full flex-col gap-2 p-3 text-[12px] text-stone-500">
         <div className="font-medium text-stone-700">未选中节点</div>
         <div className="text-[11px] leading-snug">
           点画布上一个节点查看 / 编辑其配置；或从左侧 palette 拖一个新节点到画布。
@@ -84,60 +65,72 @@ export const NodeInspector = ({
   const setData = (patch: Record<string, unknown>) =>
     onChange({ ...node, data: { ...(node.data || {}), ...patch } });
 
+  const meta = TYPE_META[node.type] ?? TYPE_META.noop;
+
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col gap-3 overflow-y-auto border-l border-stone-200/70 bg-warm-2/40 p-3">
-      <header className="flex items-center justify-between">
-        <div>
-          <div className="text-[10.5px] uppercase tracking-wider text-stone-500">
-            {node.type}
+    <aside className="bg-warm-2/40 flex h-full w-full flex-col overflow-y-auto">
+      {/* 面板头：图标 + 类型 + 可编辑名 + 删除 */}
+      <header className="bg-warm-2/95 sticky top-0 z-10 flex items-start gap-2.5 border-b border-stone-200/70 px-4 py-3.5 backdrop-blur">
+        <span
+          className={cn(
+            'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+            meta.bg,
+            meta.color,
+          )}
+        >
+          <meta.icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex items-center gap-1.5">
+            <span className="text-[10px] font-medium tracking-wide text-stone-400 uppercase">
+              {meta.label}
+            </span>
+            <span className="font-mono text-[10px] text-stone-300">{node.id}</span>
           </div>
-          <div className="font-mono text-[11px] text-stone-700">
-            id={node.id}
-          </div>
+          <Input
+            value={node.name || ''}
+            onChange={e => onChange({ ...node, name: e.target.value })}
+            placeholder="节点显示名"
+            className="-ml-1.5 h-7 border-transparent bg-transparent px-1.5 text-[13.5px] font-semibold text-stone-900 transition hover:bg-white/70 focus:border-stone-300 focus:bg-white"
+          />
         </div>
         {node.type !== 'start' && (
           <button
             type="button"
             onClick={onDelete}
             title="删除节点"
-            className="rounded p-1 text-stone-400 hover:bg-rose-50 hover:text-rose-600"
+            className="mt-0.5 rounded-md p-1.5 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
       </header>
 
-      <Field label="显示名">
-        <Input
-          value={node.name || ''}
-          onChange={e => onChange({ ...node, name: e.target.value })}
-          className="h-7 text-[12px]"
+      <div className="px-4 pb-4">
+        <DataForm
+          key={node.id}
+          type={node.type}
+          data={node.data || {}}
+          onPatch={setData}
+          nodeVars={peerVarOptions(peerNodes ?? [])}
         />
-      </Field>
 
-      <DataForm
-        key={node.id}
-        type={node.type}
-        data={node.data || {}}
-        onPatch={setData}
-        nodeVars={peerVarOptions(peerNodes ?? [])}
-      />
+        <OutputVarsSection type={node.type} />
 
-      {runView && (
-        <div className="mt-1 border-t border-stone-200/70 pt-3">
-          <div className="mb-2 text-[10.5px] uppercase tracking-wider text-stone-500">
-            运行结果
+        {runView && (
+          <div className="mt-1 border-t border-stone-200/70 pt-3 pb-3">
+            <div className="mb-2 text-[10.5px] tracking-wider text-stone-500 uppercase">
+              运行结果
+            </div>
+            <NodeRunResult run={runView} />
           </div>
-          <NodeRunResult run={runView} />
-        </div>
-      )}
+        )}
+      </div>
     </aside>
   );
 };
 
-
 // ── per-type forms ───────────────────────────────────────
-
 
 const DataForm = ({
   type,
@@ -153,60 +146,57 @@ const DataForm = ({
   if (type === 'llm') {
     return (
       <>
-        <Field label="模型（留空走默认）">
+        <Section title="模型">
           <ModelNameField
             value={(data.model_name as string) || ''}
             onChange={v => onPatch({ model_name: v || undefined })}
           />
-        </Field>
-        <Field label="system_prompt">
-          <Textarea
+          <p className="mt-1 text-[10.5px] text-stone-400">留空走系统默认 chat 模型</p>
+        </Section>
+
+        <Section title="提示词">
+          <PromptField
+            label="System"
             value={(data.system_prompt as string) || ''}
-            onChange={e => onPatch({ system_prompt: e.target.value || undefined })}
-            rows={3}
-            className="text-[12px]"
-          />
-          <VarInsert
+            onChange={v => onPatch({ system_prompt: v || undefined })}
+            onInsert={t => onPatch({ system_prompt: ((data.system_prompt as string) || '') + t })}
             nodeVars={nodeVars}
-            onInsert={t =>
-              onPatch({ system_prompt: ((data.system_prompt as string) || '') + t })
-            }
+            rows={4}
+            placeholder="设定角色与回答风格，如：你是一个简洁友好的中文助理…"
           />
-        </Field>
-        <Field label="prompt_template（可选；{{#sys.query#}} 等变量引用）">
-          <Textarea
+          <PromptField
+            label="用户提示词模板（可选）"
             value={(data.prompt_template as string) || ''}
-            onChange={e => onPatch({ prompt_template: e.target.value || undefined })}
-            rows={2}
-            placeholder="参考资料 {{#kb1.joined_context#}}\n问题：{{#sys.query#}}"
-            className="font-mono text-[12px]"
-          />
-          <VarInsert
-            nodeVars={nodeVars}
+            onChange={v => onPatch({ prompt_template: v || undefined })}
             onInsert={t =>
               onPatch({
                 prompt_template: ((data.prompt_template as string) || '') + t,
               })
             }
+            nodeVars={nodeVars}
+            rows={3}
+            mono
+            placeholder={'参考资料 {{#kb1.joined_context#}}\n问题：{{#sys.query#}}'}
           />
-        </Field>
-        <Field label="temperature">
-          <Input
-            type="number"
-            min={0}
-            max={2}
-            step={0.1}
-            value={(data.temperature as number | undefined) ?? ''}
-            onChange={e =>
-              onPatch({
-                temperature: e.target.value
-                  ? Number(e.target.value)
-                  : undefined,
-              })
-            }
-            className="h-7 text-[12px]"
-          />
-        </Field>
+        </Section>
+
+        <Section title="参数" defaultOpen={false}>
+          <Field label="temperature">
+            <Input
+              type="number"
+              min={0}
+              max={2}
+              step={0.1}
+              value={(data.temperature as number | undefined) ?? ''}
+              onChange={e =>
+                onPatch({
+                  temperature: e.target.value ? Number(e.target.value) : undefined,
+                })
+              }
+              className="h-7 text-[12px]"
+            />
+          </Field>
+        </Section>
       </>
     );
   }
@@ -268,28 +258,22 @@ const DataForm = ({
 
   if (type === 'if_else') {
     return (
-      <IfElseCondition
-        value={data.condition}
-        onChange={cond => onPatch({ condition: cond })}
-      />
+      <IfElseCondition value={data.condition} onChange={cond => onPatch({ condition: cond })} />
     );
   }
 
   if (type === 'template') {
     return (
-      <Field label="模板（{{#sys.query#}} / {{#节点id.字段#}} 引用）">
-        <Textarea
-          value={(data.template as string) || ''}
-          onChange={e => onPatch({ template: e.target.value })}
-          rows={5}
-          placeholder="参考资料：{{#kb1.joined_context#}}\n\n问题：{{#sys.query#}}"
-          className="font-mono text-[12px]"
-        />
-        <VarInsert
-          nodeVars={nodeVars}
-          onInsert={t => onPatch({ template: ((data.template as string) || '') + t })}
-        />
-      </Field>
+      <PromptField
+        label="模板"
+        value={(data.template as string) || ''}
+        onChange={v => onPatch({ template: v })}
+        onInsert={t => onPatch({ template: ((data.template as string) || '') + t })}
+        nodeVars={nodeVars}
+        rows={6}
+        mono
+        placeholder={'参考资料：{{#kb1.joined_context#}}\n\n问题：{{#sys.query#}}'}
+      />
     );
   }
 
@@ -297,17 +281,14 @@ const DataForm = ({
     return (
       <>
         <Field label="method">
-          <select
+          <EnumSelect
             value={(data.method as string) || 'GET'}
-            onChange={e => onPatch({ method: e.target.value })}
-            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
-          >
-            {['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            onChange={v => onPatch({ method: v })}
+            options={['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].map(m => ({
+              value: m,
+              label: m,
+            }))}
+          />
         </Field>
         <Field label="url（支持 {{#...#}} 引用）">
           <Input
@@ -321,25 +302,22 @@ const DataForm = ({
             onInsert={t => onPatch({ url: ((data.url as string) || '') + t })}
           />
         </Field>
-        <JsonField
+        <KeyValueEditor
           label="headers（可选）"
           value={data.headers}
-          fallback={{}}
           onChange={v => onPatch({ headers: v })}
-          rows={3}
+          keyPlaceholder="Header"
+          valuePlaceholder="值"
         />
-        <Field label="body（可选；POST/PUT/PATCH，支持引用）">
-          <Textarea
-            value={(data.body as string) || ''}
-            onChange={e => onPatch({ body: e.target.value || undefined })}
-            rows={3}
-            className="font-mono text-[12px]"
-          />
-          <VarInsert
-            nodeVars={nodeVars}
-            onInsert={t => onPatch({ body: ((data.body as string) || '') + t })}
-          />
-        </Field>
+        <PromptField
+          label="body（POST/PUT/PATCH）"
+          value={(data.body as string) || ''}
+          onChange={v => onPatch({ body: v || undefined })}
+          onInsert={t => onPatch({ body: ((data.body as string) || '') + t })}
+          nodeVars={nodeVars}
+          rows={3}
+          mono
+        />
         <div className="text-[10.5px] leading-snug text-stone-500">
           默认拒绝内网/环回地址；如确需在 JSON 里加 allow_private:true（SSRF 风险自负）。
         </div>
@@ -349,12 +327,14 @@ const DataForm = ({
 
   if (type === 'aggregator') {
     return (
-      <JsonField
-        label="fields（{outKey: 模板}，值用 {{#nodeid.字段#}} 引用）"
+      <KeyValueEditor
+        label="聚合字段（输出键 = 模板）"
         value={data.fields}
-        fallback={{ ctx: '{{#kb1.joined_context#}}' }}
         onChange={v => onPatch({ fields: v })}
-        rows={6}
+        keyPlaceholder="输出键"
+        valuePlaceholder="{{#kb1.joined_context#}}"
+        valueMono
+        nodeVars={nodeVars}
         hint="把多个节点的字段聚合成一个干净 dict，供下游引用"
       />
     );
@@ -362,13 +342,15 @@ const DataForm = ({
 
   if (type === 'assign') {
     return (
-      <JsonField
-        label="assignments（{会话变量名: 模板}）"
+      <KeyValueEditor
+        label="会话变量赋值（变量名 = 模板）"
         value={data.assignments}
-        fallback={{ user_name: '{{#sys.query#}}' }}
         onChange={v => onPatch({ assignments: v })}
-        rows={5}
-        hint="写会话变量；跨轮用 {{#conversation.变量名#}} 读回（客户端携带）"
+        keyPlaceholder="变量名"
+        valuePlaceholder="{{#sys.query#}}"
+        valueMono
+        nodeVars={nodeVars}
+        hint="跨轮用 {{#conversation.变量名#}} 读回（客户端携带）"
       />
     );
   }
@@ -382,17 +364,7 @@ const DataForm = ({
             onChange={v => onPatch({ model_name: v || undefined })}
           />
         </Field>
-        <JsonField
-          label="categories（[{key, description}]，≥2）"
-          value={data.categories}
-          fallback={[
-            { key: 'tech', description: '技术 / 代码问题' },
-            { key: 'other', description: '其它' },
-          ]}
-          onChange={v => onPatch({ categories: v })}
-          rows={6}
-          hint="LLM 把问题分类，输出 {category}；下游用 if_else 读 {{#本节点id.category#}} 分流"
-        />
+        <CategoriesEditor value={data.categories} onChange={v => onPatch({ categories: v })} />
       </>
     );
   }
@@ -401,21 +373,23 @@ const DataForm = ({
     return (
       <>
         <Field label="语言">
-          <select
+          <EnumSelect
             value={(data.language as string) || 'python'}
-            onChange={e => onPatch({ language: e.target.value })}
-            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
-          >
-            <option value="python">python</option>
-            <option value="node">node</option>
-          </select>
+            onChange={v => onPatch({ language: v })}
+            options={[
+              { value: 'python', label: 'python' },
+              { value: 'node', label: 'node' },
+            ]}
+          />
         </Field>
         <Field label="代码（input 经 stdin 传入 JSON；stdout 为 JSON 则进 result）">
           <Textarea
             value={(data.code as string) || ''}
             onChange={e => onPatch({ code: e.target.value })}
             rows={8}
-            placeholder={'import sys, json\ndata = json.load(sys.stdin)\nprint(json.dumps({"n": len(str(data))}))'}
+            placeholder={
+              'import sys, json\ndata = json.load(sys.stdin)\nprint(json.dumps({"n": len(str(data))}))'
+            }
             className="font-mono text-[11.5px]"
           />
         </Field>
@@ -428,22 +402,21 @@ const DataForm = ({
 
   if (type === 'answer') {
     return (
-      <Field label="回答模板（可选；留空则透传上游答案）">
-        <Textarea
+      <>
+        <PromptField
+          label="回答模板（可选，留空透传上游答案）"
           value={(data.answer as string) || ''}
-          onChange={e => onPatch({ answer: e.target.value || undefined })}
-          rows={4}
-          placeholder="{{#chat.answer#}}"
-          className="font-mono text-[12px]"
-        />
-        <VarInsert
-          nodeVars={nodeVars}
+          onChange={v => onPatch({ answer: v || undefined })}
           onInsert={t => onPatch({ answer: ((data.answer as string) || '') + t })}
+          nodeVars={nodeVars}
+          rows={4}
+          mono
+          placeholder="{{#chat.answer#}}"
         />
-        <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
+        <div className="mt-1.5 text-[10.5px] leading-snug text-stone-500">
           标记 graph 的最终回答来源；agent 调用时优先用本节点输出。
         </div>
-      </Field>
+      </>
     );
   }
 
@@ -468,9 +441,7 @@ const DataForm = ({
         <Field label="item_input_key（可选）">
           <Input
             value={(data.item_input_key as string) || ''}
-            onChange={e =>
-              onPatch({ item_input_key: e.target.value || undefined })
-            }
+            onChange={e => onPatch({ item_input_key: e.target.value || undefined })}
             placeholder="item"
             className="h-7 font-mono text-[12px]"
           />
@@ -514,15 +485,15 @@ const DataForm = ({
           onChange={branches => onPatch({ branches })}
         />
         <Field label="join_strategy">
-          <select
+          <EnumSelect
             value={(data.join_strategy as string) || 'collect'}
-            onChange={e => onPatch({ join_strategy: e.target.value })}
-            className="h-7 w-full rounded-md border border-stone-200 bg-white px-2 text-[12px]"
-          >
-            <option value="collect">collect（等全部成功）</option>
-            <option value="merge">merge（浅合并各分支 dict）</option>
-            <option value="race">race（最先成功者胜）</option>
-          </select>
+            onChange={v => onPatch({ join_strategy: v })}
+            options={[
+              { value: 'collect', label: 'collect（等全部成功）' },
+              { value: 'merge', label: 'merge（浅合并各分支 dict）' },
+              { value: 'race', label: 'race（最先成功者胜）' },
+            ]}
+          />
         </Field>
         <Field label="concurrency（默认 = 分支数）">
           <Input
@@ -531,9 +502,7 @@ const DataForm = ({
             value={(data.concurrency as number | undefined) ?? ''}
             onChange={e =>
               onPatch({
-                concurrency: e.target.value
-                  ? Number(e.target.value)
-                  : undefined,
+                concurrency: e.target.value ? Number(e.target.value) : undefined,
               })
             }
             className="h-7 text-[12px]"
@@ -569,9 +538,7 @@ const DataForm = ({
             value={(data.timeout_seconds as number | undefined) ?? ''}
             onChange={e =>
               onPatch({
-                timeout_seconds: e.target.value
-                  ? Number(e.target.value)
-                  : undefined,
+                timeout_seconds: e.target.value ? Number(e.target.value) : undefined,
               })
             }
             placeholder="86400"
@@ -616,11 +583,8 @@ const DataForm = ({
   }
 
   // end / noop 无需配置
-  return (
-    <div className="text-[11.5px] text-stone-500">该节点类型无需配置。</div>
-  );
+  return <div className="text-[11.5px] text-stone-500">该节点类型无需配置。</div>;
 };
-
 
 /** 嵌套对象/数组字段的 JSON 编辑（与 if_else condition 同套路：语法错时暂不写回）。
  *  iteration.body / parallel.branches 这类子图先用 JSON 配，可视化嵌套编辑后续做。 */
@@ -652,22 +616,11 @@ const JsonField = ({
       rows={rows}
       className="font-mono text-[11.5px]"
     />
-    {hint && (
-      <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
-        {hint}
-      </div>
-    )}
+    {hint && <div className="mt-1 text-[10.5px] leading-snug text-stone-500">{hint}</div>}
   </Field>
 );
 
-
-const Field = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) => (
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
     <label className="mb-1 block text-[11px] text-stone-600">{label}</label>
     {children}

@@ -5,6 +5,7 @@ import type {
   GraphChatChunk,
   GraphDetail,
   GraphItem,
+  GraphKind,
   GraphRunDetail,
   GraphRunItem,
   GraphSpec,
@@ -21,12 +22,14 @@ export interface CreateGraphPayload {
   graph_key: string;
   name: string;
   description?: string | null;
+  kind?: GraphKind;
   spec: GraphSpec;
 }
 
 export interface UpdateGraphPayload {
   name?: string;
   description?: string | null;
+  kind?: GraphKind;
   spec?: GraphSpec;
   enabled?: boolean;
 }

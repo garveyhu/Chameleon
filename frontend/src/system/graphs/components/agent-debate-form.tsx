@@ -9,8 +9,14 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, GripVertical, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, GripVertical, Plus, X } from 'lucide-react';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/core/components/ui/dropdown-menu';
 import { Input } from '@/core/components/ui/input';
 import { agentApi } from '@/system/agents/services/agent';
 
@@ -79,29 +85,37 @@ export const AgentDebateForm = ({ data, onPatch }: Props) => {
             ))
           )}
         </div>
-        <div className="mt-1 flex items-center gap-2">
-          <select
-            onChange={e => {
-              addAgent(e.target.value);
-              e.target.value = '';
-            }}
-            defaultValue=""
-            className="h-7 flex-1 rounded-md border border-stone-200 bg-white px-2 text-[12px] text-stone-700"
-            disabled={unselected.length === 0 || agentsQ.isLoading}
-          >
-            <option value="" disabled>
-              {agentsQ.isLoading
-                ? '加载中…'
-                : unselected.length === 0
-                  ? '全部已加入'
-                  : '+ 添加 agent'}
-            </option>
-            {unselected.map(k => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
+        <div className="mt-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={unselected.length === 0 || agentsQ.isLoading}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 text-[12px] text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus className="h-3 w-3" />
+                {agentsQ.isLoading
+                  ? '加载中…'
+                  : unselected.length === 0
+                    ? '全部已加入'
+                    : '添加 agent'}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="max-h-64 overflow-y-auto"
+            >
+              {unselected.map(k => (
+                <DropdownMenuItem
+                  key={k}
+                  onSelect={() => addAgent(k)}
+                  className="font-mono text-[12px]"
+                >
+                  {k}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
