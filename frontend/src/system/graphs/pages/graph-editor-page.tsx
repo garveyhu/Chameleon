@@ -27,7 +27,19 @@ import {
 } from '@xyflow/react';
 import type { Connection, Edge, EdgeChange, NodeChange, Node as RFNode } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Bot, ChevronDown, History, MessageSquare, Play, Rocket, Save } from 'lucide-react';
+import {
+  Bot,
+  ChevronDown,
+  Copy,
+  History,
+  MessageSquare,
+  Play,
+  Rocket,
+  Save,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+} from 'lucide-react';
 
 import { RequireAuth } from '@/core/components/common/permission-guard';
 import { Spinner } from '@/core/components/common/spinner';
@@ -36,6 +48,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/core/components/ui/dropdown-menu';
 import { cn } from '@/core/lib/cn';
@@ -56,6 +69,7 @@ import { LogsView } from '@/system/graphs/components/views/logs-view';
 import { MonitorView } from '@/system/graphs/components/views/monitor-view';
 import { useGraphHistory } from '@/system/graphs/hooks/use-graph-history';
 import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
+import { lintGraph } from '@/system/graphs/lib/lint';
 import { TYPE_META } from '@/system/graphs/lib/node-meta';
 import { defaultLabel, rfToSpec, specToRf } from '@/system/graphs/lib/rf-spec';
 import { graphApi } from '@/system/graphs/services/graph';
@@ -149,6 +163,14 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const [pendingType, setPendingType] = useState<GraphNodeType | null>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
 
+  // 节点右键菜单（复制 / 删除）
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number;
+    y: number;
+    nodeId: string;
+    nodeType: GraphNodeType;
+  } | null>(null);
+
   // 初始 mount：把后端 spec 投到 React Flow（程序化 setNodes 不触发 onNodesChange，不置脏）
   // EditorBody 按 graph.id keyed 重挂，dirty 初值即 false，无需在此重置。
   useEffect(() => {
@@ -175,6 +197,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setPendingType(null);
+        setCtxMenu(null);
         return;
       }
       if (!(e.metaKey || e.ctrlKey)) return;
@@ -376,14 +399,47 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     [setNodes, histCommit],
   );
 
+  const deleteNode = useCallback(
+    (id: string) => {
+      const node = nodes.find(n => n.id === id);
+      if (!node || node.data.nodeType === 'start') return; // start 不可删
+      histCommit();
+      setNodes(ns => ns.filter(n => n.id !== id));
+      setEdges(es => es.filter(e => e.source !== id && e.target !== id));
+      setSelectedId(null);
+      setDirty(true);
+    },
+    [nodes, setEdges, setNodes, setSelectedId, histCommit],
+  );
+
   const deleteSelected = useCallback(() => {
-    if (!selectedId) return;
-    histCommit();
-    setNodes(ns => ns.filter(n => n.id !== selectedId));
-    setEdges(es => es.filter(e => e.source !== selectedId && e.target !== selectedId));
-    setSelectedId(null);
-    setDirty(true);
-  }, [selectedId, setEdges, setNodes, setSelectedId, histCommit]);
+    if (selectedId) deleteNode(selectedId);
+  }, [selectedId, deleteNode]);
+
+  const duplicateNode = useCallback(
+    (id: string) => {
+      const src = nodes.find(n => n.id === id);
+      if (!src || src.data.nodeType === 'start') return; // start 唯一，不复制
+      histCommit();
+      const newId = nextNodeId();
+      const srcData = (src.data as { _spec?: { data?: Record<string, unknown> } })._spec?.data;
+      const clone: RFNode<GraphNodeData> = {
+        ...src,
+        id: newId,
+        position: { x: src.position.x + 48, y: src.position.y + 48 },
+        selected: false,
+        data: {
+          ...src.data,
+          label: `${src.data.label} 副本`,
+          _spec: { data: { ...(srcData ?? {}) } },
+        } as GraphNodeData,
+      };
+      setNodes(ns => ns.concat(clone));
+      setSelectedId(newId);
+      setDirty(true);
+    },
+    [nodes, setNodes, setSelectedId, histCommit],
+  );
 
   const kindMut = useMutation({
     mutationFn: (next: GraphKind) => graphApi.update(graph.id, { kind: next }),
@@ -441,6 +497,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const selectedRunView = selectedId ? runner.nodeRuns[selectedId] : undefined;
 
+  // 变量检查：扫描坏引用（指向不存在节点的 {{#...#}}）
+  const lintIssues = useMemo(() => lintGraph(nodes), [nodes]);
+
   // A2：start 节点配置的开场白 / 建议问题（喂给对话调试面板）
   const startChatCfg = useMemo(() => {
     const start = nodes.find(n => n.data.nodeType === 'start');
@@ -481,7 +540,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
           onKindChange={k => kindMut.mutate(k)}
           tab={tab}
           onTab={setTab}
-          onOpenChat={() => setChatOpen(true)}
           onReturn={onReturn}
           dirty={dirty}
           saving={saveMut.isPending}
@@ -510,8 +568,21 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                   onEdgesChange={handleEdgesChange}
                   onConnect={onConnect}
                   onNodeDragStart={() => histCommit()}
-                  onNodeClick={(_e, n) => setSelectedId(n.id)}
+                  onNodeClick={(_e, n) => {
+                    setSelectedId(n.id);
+                    setCtxMenu(null);
+                  }}
+                  onNodeContextMenu={(e, n) => {
+                    e.preventDefault();
+                    setCtxMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      nodeId: n.id,
+                      nodeType: n.data.nodeType,
+                    });
+                  }}
                   onPaneClick={e => {
+                    setCtxMenu(null);
                     if (pendingType) {
                       const pos = rfInstance.screenToFlowPosition({
                         x: e.clientX,
@@ -583,6 +654,47 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
                 {/* 浮层工具条 —— 钉右上角；撤销/重做走 ⌘Z 快捷键不占位 */}
                 <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-stone-200/70 bg-white/85 px-2 py-1.5 shadow-md backdrop-blur">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="sm" title="变量检查">
+                        {lintIssues.length > 0 ? (
+                          <ShieldAlert className="h-3 w-3 text-amber-500" />
+                        ) : (
+                          <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                        )}
+                        {lintIssues.length > 0 ? ` ${lintIssues.length}` : ''}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="max-h-72 w-72 overflow-y-auto">
+                      {lintIssues.length === 0 ? (
+                        <div className="px-3 py-2 text-[12px] text-emerald-600">
+                          ✓ 未发现变量问题
+                        </div>
+                      ) : (
+                        <>
+                          <DropdownMenuLabel className="text-[11px] text-stone-500">
+                            {lintIssues.length} 个变量问题
+                          </DropdownMenuLabel>
+                          {lintIssues.map((it, i) => (
+                            <DropdownMenuItem
+                              key={i}
+                              onSelect={() => setSelectedId(it.nodeId)}
+                              className="flex-col items-start gap-0.5"
+                            >
+                              <span className="text-[12px] font-medium text-stone-800">
+                                {it.nodeLabel}
+                              </span>
+                              <span className="text-[10.5px] text-stone-500">
+                                <code className="font-mono text-rose-600">{it.token}</code> ·{' '}
+                                {it.reason}
+                              </span>
+                            </DropdownMenuItem>
+                          ))}
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <span className="h-4 w-px bg-stone-200" />
                   <Button
                     variant="ghost"
                     size="sm"
@@ -711,6 +823,55 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
             opener={startChatCfg.opener}
             suggestedQuestions={startChatCfg.suggested}
           />
+        )}
+
+        {/* 节点右键菜单 */}
+        {ctxMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setCtxMenu(null)}
+              onContextMenu={e => {
+                e.preventDefault();
+                setCtxMenu(null);
+              }}
+            />
+            <div
+              className="shadow-pop fixed z-50 min-w-[150px] overflow-hidden rounded-lg border border-stone-200 bg-white py-1"
+              style={{ left: ctxMenu.x, top: ctxMenu.y }}
+            >
+              {ctxMenu.nodeType === 'start' ? (
+                <div className="px-3 py-1.5 text-[12px] text-stone-400">
+                  起始节点不可复制 / 删除
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      duplicateNode(ctxMenu.nodeId);
+                      setCtxMenu(null);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-stone-700 transition hover:bg-stone-100"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-stone-400" />
+                    复制节点
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteNode(ctxMenu.nodeId);
+                      setCtxMenu(null);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[12.5px] text-rose-600 transition hover:bg-rose-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    删除节点
+                  </button>
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
     </RequireAuth>

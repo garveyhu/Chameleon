@@ -200,7 +200,7 @@ export const NodePalette = ({ onAdd }: Props) => {
         collapsed ? 'w-12' : 'w-44',
       )}
     >
-      <div className="flex items-center justify-between px-2 py-2">
+      <div className="flex items-center justify-between px-3 py-2.5">
         {!collapsed && (
           <span className="text-[10.5px] tracking-wider text-stone-500 uppercase">节点</span>
         )}
