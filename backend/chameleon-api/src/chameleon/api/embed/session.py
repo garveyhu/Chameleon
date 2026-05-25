@@ -12,11 +12,13 @@ import secrets
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.infra.redis import get_redis
+from chameleon.core.utils.snowflake import next_session_id
 
 SESSION_TTL_SECONDS = 60 * 60  # 1h
 RATE_LIMIT_PER_MINUTE = 5
 
 _SESSION_PREFIX = "chameleon:embed:session:"
+_SID_PREFIX = "chameleon:embed:sid:"
 _RATE_PREFIX = "chameleon:embed:ratelimit:"
 
 
@@ -28,15 +30,24 @@ def _session_key(token: str) -> str:
     return f"{_SESSION_PREFIX}{token}"
 
 
+def _sid_key(token: str) -> str:
+    return f"{_SID_PREFIX}{token}"
+
+
 def _rate_key(token: str) -> str:
     return f"{_RATE_PREFIX}{token}"
 
 
 async def create_session(embed_config_id: int) -> tuple[str, int]:
-    """颁发新 session_token。返 (token, ttl_seconds)"""
+    """颁发新 session_token。返 (token, ttl_seconds)
+
+    同时为该窗口绑定一个稳定的 session_id —— 同一 token 多轮调用共用，
+    落 graph_runs / call_logs 时归为同一会话。
+    """
     client = get_redis()
     token = _token()
     await client.set(_session_key(token), str(embed_config_id), ex=SESSION_TTL_SECONDS)
+    await client.set(_sid_key(token), next_session_id(), ex=SESSION_TTL_SECONDS)
     return token, SESSION_TTL_SECONDS
 
 
@@ -49,6 +60,20 @@ async def resolve_session(token: str) -> int:
             ResultCode.JwtInvalid, message="embed session 已过期或无效"
         )
     return int(raw)
+
+
+async def resolve_session_id(token: str) -> str:
+    """token → 绑定的会话 ID（同一窗口稳定）。
+
+    老 token / 续期等情况下若缺失，则补发一个并续上 TTL，保证后续多轮稳定。
+    """
+    client = get_redis()
+    sid = await client.get(_sid_key(token))
+    if sid is not None:
+        return sid
+    fresh = next_session_id()
+    await client.set(_sid_key(token), fresh, ex=SESSION_TTL_SECONDS)
+    return fresh
 
 
 async def check_rate_limit(token: str) -> None:

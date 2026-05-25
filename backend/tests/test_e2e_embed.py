@@ -221,6 +221,30 @@ async def test_invoke_with_valid_session(
     assert data["session_id"]
 
 
+async def test_invoke_same_token_shares_session_id(
+    client: AsyncClient, embed_setup
+):
+    """同一 session_token 多轮调用应归为同一会话（session_id 稳定）"""
+    embed_key = embed_setup["embed_key"]
+    r = await client.post(
+        f"/v1/embed/{embed_key}/session",
+        headers={"Origin": "https://allowed.example.com"},
+    )
+    token = r.json()["data"]["session_token"]
+
+    sids = []
+    for i in range(2):
+        r = await client.post(
+            f"/v1/embed/{embed_key}/invoke",
+            headers={"Origin": "https://allowed.example.com"},
+            json={"session_token": token, "input": f"hello-{i}"},
+        )
+        assert r.status_code == 200, r.text
+        sids.append(r.json()["data"]["session_id"])
+
+    assert sids[0] == sids[1], "同一窗口两轮消息的 session_id 应一致"
+
+
 async def test_invoke_with_invalid_token(client: AsyncClient, embed_setup):
     embed_key = embed_setup["embed_key"]
     r = await client.post(

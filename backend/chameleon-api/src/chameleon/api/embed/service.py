@@ -29,7 +29,6 @@ from chameleon.core.api.sse_events import (
     event_meta,
 )
 from chameleon.core.models import Agent, App, EmbedConfig
-from chameleon.core.utils.snowflake import next_session_id
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.errors import ProviderError
 from chameleon.providers.base.types import (
@@ -102,13 +101,19 @@ async def _resolve_app_key(session: AsyncSession, embed: EmbedConfig) -> str:
 
 
 def _make_context(
-    *, agent_key: str, app_key: str, user_input: str, request_id: str | None, stream: bool
+    *,
+    agent_key: str,
+    app_key: str,
+    user_input: str,
+    request_id: str | None,
+    stream: bool,
+    session_id: str,
 ) -> InvokeContext:
     agent_def = AGENTS[agent_key]
     return InvokeContext(
         agent_def=agent_def,
         input=user_input,
-        session_id=next_session_id(),
+        session_id=session_id,
         app_id=app_key,
         stream=stream,
         request_id=request_id,
@@ -191,12 +196,14 @@ async def invoke_once(
     agent = await _resolve_agent(session, embed)
     app_key = await _resolve_app_key(session, embed)
     rid = request_id or uuid.uuid4().hex
+    sid = await embed_session.resolve_session_id(session_token)
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
         user_input=user_input,
         request_id=rid,
         stream=False,
+        session_id=sid,
     )
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
@@ -256,12 +263,14 @@ async def stream_invoke(
     agent = await _resolve_agent(session, embed)
     app_key = await _resolve_app_key(session, embed)
     rid = request_id or uuid.uuid4().hex
+    sid = await embed_session.resolve_session_id(session_token)
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
         user_input=user_input,
         request_id=rid,
         stream=True,
+        session_id=sid,
     )
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
