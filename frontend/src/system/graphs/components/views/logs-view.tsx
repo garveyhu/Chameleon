@@ -1,18 +1,30 @@
-/** 日志视图 —— 该 graph 的历史运行（graph_runs）列表
+/** 日志视图 —— 该 graph 的历史运行（graph_runs）分页列表 + 点击查看详情
  *
- * 复用 graphApi.listRuns 的真实运行记录；状态 / 节点数 / 耗时 / 时间 / request_id。
+ * 列表走 graphApi.listRuns（分页）；点行打开 Sheet 看运行详情（含逐节点 node_runs、
+ * 入参 / 输出 / 错误）。数据全部来自真实 graph_runs / graph_node_runs。
  */
+import { useState } from 'react';
+
 import { useQuery } from '@tanstack/react-query';
-import { ScrollText } from 'lucide-react';
+import { ChevronRight, ScrollText } from 'lucide-react';
 
 import { DataTable } from '@/core/components/table';
 import type { DataTableColumn } from '@/core/components/table';
+import { TablePagination } from '@/core/components/table';
+import {
+  Sheet,
+  SheetBody,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/core/components/ui/sheet';
 import { StatusBadge } from '@/core/components/ui/status-badge';
 import type { StatusTone } from '@/core/components/ui/status-badge';
+import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import type { EntityId } from '@/core/types/api';
 import { graphApi } from '@/system/graphs/services/graph';
-import type { GraphRunItem } from '@/system/graphs/types/graph';
+import type { GraphRunItem, NodeRunItem } from '@/system/graphs/types/graph';
 
 interface Props {
   graphId: EntityId;
@@ -38,9 +50,13 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export const LogsView = ({ graphId }: Props) => {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [openRunId, setOpenRunId] = useState<EntityId | null>(null);
+
   const q = useQuery({
-    queryKey: ['graph-runs', graphId],
-    queryFn: () => graphApi.listRuns(graphId),
+    queryKey: ['graph-runs', graphId, page, pageSize],
+    queryFn: () => graphApi.listRuns(graphId, { page, page_size: pageSize }),
   });
 
   const columns: DataTableColumn<GraphRunItem>[] = [
@@ -85,6 +101,12 @@ export const LogsView = ({ graphId }: Props) => {
         <span className="font-mono text-[11px] text-stone-500">{formatDateTime(r.created_at)}</span>
       ),
     },
+    {
+      key: 'arrow',
+      header: '',
+      width: 36,
+      render: () => <ChevronRight className="h-3.5 w-3.5 text-stone-300" />,
+    },
   ];
 
   return (
@@ -93,16 +115,189 @@ export const LogsView = ({ graphId }: Props) => {
         <header className="mb-4 flex items-center gap-2">
           <ScrollText className="h-4 w-4 text-stone-500" />
           <h1 className="text-[16px] font-semibold text-stone-900">运行日志</h1>
-          <span className="text-[12px] text-stone-400">最近 {q.data?.length ?? 0} 次执行</span>
+          <span className="text-[12px] text-stone-400">共 {q.data?.total ?? 0} 次执行</span>
         </header>
+
         <DataTable
           columns={columns}
-          rows={q.data ?? []}
+          rows={q.data?.items ?? []}
           rowKey={r => String(r.id)}
           loading={q.isLoading}
-          emptyText="还没有运行记录；在编排页点「运行」跑一次"
+          onRowClick={r => setOpenRunId(r.id)}
+          emptyText="还没有运行记录；发布为智能体后对话 / 调用即可在此查看"
         />
+        {(q.data?.total ?? 0) > 0 && (
+          <div className="mt-3">
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              total={q.data?.total ?? 0}
+              onPageChange={setPage}
+              onPageSizeChange={s => {
+                setPageSize(s);
+                setPage(1);
+              }}
+            />
+          </div>
+        )}
       </div>
+
+      <RunDetailSheet runId={openRunId} onClose={() => setOpenRunId(null)} />
     </div>
+  );
+};
+
+// ── 运行详情抽屉 ───────────────────────────────────────────
+
+const RunDetailSheet = ({ runId, onClose }: { runId: EntityId | null; onClose: () => void }) => {
+  const q = useQuery({
+    queryKey: ['graph-run', runId],
+    queryFn: () => graphApi.getRun(runId as EntityId),
+    enabled: runId != null,
+  });
+  const run = q.data;
+
+  return (
+    <Sheet open={runId != null} onOpenChange={o => !o && onClose()}>
+      <SheetContent side="right" width="w-[560px]" className="flex flex-col p-0">
+        <SheetHeader className="border-b border-stone-200/70 px-5 py-3.5">
+          <SheetTitle className="flex items-center gap-2 text-[14px]">
+            运行详情
+            {run && (
+              <StatusBadge tone={STATUS_TONE[run.status] ?? 'neutral'}>
+                {STATUS_LABEL[run.status] ?? run.status}
+              </StatusBadge>
+            )}
+          </SheetTitle>
+        </SheetHeader>
+        <SheetBody className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {q.isLoading && <div className="text-[12px] text-stone-400">加载中…</div>}
+          {run && (
+            <>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[12px]">
+                <Meta label="耗时" value={run.duration_ms != null ? `${run.duration_ms}ms` : '—'} />
+                <Meta label="节点数" value={String(run.node_count ?? run.node_runs.length)} />
+                <Meta label="开始" value={run.started_at ? formatDateTime(run.started_at) : '—'} />
+                <Meta
+                  label="结束"
+                  value={run.finished_at ? formatDateTime(run.finished_at) : '—'}
+                />
+                <Meta label="request_id" value={run.request_id} mono span2 />
+              </div>
+
+              {run.error && (
+                <Field label="错误">
+                  <pre className="overflow-x-auto rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 font-mono text-[11px] whitespace-pre-wrap text-rose-700">
+                    {run.error.type}: {run.error.message}
+                  </pre>
+                </Field>
+              )}
+
+              <Field label="输入">
+                <Json value={run.input} />
+              </Field>
+              <Field label="输出">
+                <Json value={run.output} />
+              </Field>
+
+              <Field label={`节点执行（${run.node_runs.length}）`}>
+                {run.node_runs.length ? (
+                  <div className="space-y-2">
+                    {run.node_runs.map((n, i) => (
+                      <NodeRunCard key={`${n.node_id}-${i}`} n={n} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-stone-200 px-3 py-2 text-[11.5px] text-stone-400">
+                    无逐节点记录
+                  </div>
+                )}
+              </Field>
+            </>
+          )}
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+const NodeRunCard = ({ n }: { n: NodeRunItem }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+      >
+        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-600">
+          {n.node_type}
+        </span>
+        <span className="truncate font-mono text-[11.5px] text-stone-700">{n.node_id}</span>
+        <StatusBadge tone={STATUS_TONE[n.status] ?? 'neutral'}>
+          {STATUS_LABEL[n.status] ?? n.status}
+        </StatusBadge>
+        <span className="ml-auto font-mono text-[10.5px] text-stone-400">{n.duration_ms}ms</span>
+        <ChevronRight
+          className={cn('h-3.5 w-3.5 text-stone-300 transition', open && 'rotate-90')}
+        />
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-stone-100 px-3 py-2">
+          {n.error && (
+            <pre className="overflow-x-auto rounded border border-rose-200 bg-rose-50 px-2 py-1.5 font-mono text-[10.5px] whitespace-pre-wrap text-rose-700">
+              {n.error.type}: {n.error.message}
+            </pre>
+          )}
+          <div>
+            <div className="mb-1 text-[10.5px] text-stone-400">输出</div>
+            <Json value={n.output} small />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ── 小组件 ────────────────────────────────────────────────
+
+const Meta = ({
+  label,
+  value,
+  mono,
+  span2,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  span2?: boolean;
+}) => (
+  <div className={cn(span2 && 'col-span-2')}>
+    <div className="text-[10.5px] text-stone-400">{label}</div>
+    <div className={cn('truncate text-stone-700', mono && 'font-mono text-[11px]')}>{value}</div>
+  </div>
+);
+
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <div className="mb-1.5 text-[11.5px] font-medium text-stone-600">{label}</div>
+    {children}
+  </div>
+);
+
+const Json = ({ value, small }: { value: unknown; small?: boolean }) => {
+  if (value == null || (typeof value === 'object' && Object.keys(value).length === 0)) {
+    return <div className="text-[11px] text-stone-400">—</div>;
+  }
+  const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+  return (
+    <pre
+      className={cn(
+        'max-h-64 overflow-auto rounded-lg bg-stone-900 px-3 py-2 font-mono leading-relaxed text-stone-100',
+        small ? 'text-[10.5px]' : 'text-[11px]',
+      )}
+    >
+      {text}
+    </pre>
   );
 };

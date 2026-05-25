@@ -163,11 +163,12 @@ class GraphRunItem(BaseModel):
 
 
 class GraphRunDetail(GraphRunItem):
-    """graph_runs 详情：含 input / output / error"""
+    """graph_runs 详情：含 input / output / error + 逐节点执行（node_runs）"""
 
     input: Any | None = None
     output: Any | None = None
     error: dict[str, Any] | None = None
+    node_runs: list[NodeRunItem] = Field(default_factory=list)
 
 
 # ── A6：human_input 断点 ───────────────────────────────────

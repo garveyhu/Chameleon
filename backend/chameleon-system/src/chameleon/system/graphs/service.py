@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -20,9 +20,17 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
+from chameleon.core.api.response import PageResult
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
-from chameleon.core.models import Agent, App, EmbedConfig, Graph, GraphRun
+from chameleon.core.models import (
+    Agent,
+    App,
+    EmbedConfig,
+    Graph,
+    GraphNodeRun,
+    GraphRun,
+)
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
     GraphChatRequest,
@@ -506,22 +514,30 @@ async def _load(session: AsyncSession, graph_id: int) -> Graph:
 
 
 async def list_runs(
-    session: AsyncSession, graph_id: int, limit: int = 50
-) -> list[GraphRunItem]:
-    """按 graph_id 列 runs（最新在前）"""
+    session: AsyncSession, graph_id: int, *, page: int = 1, page_size: int = 20
+) -> PageResult[GraphRunItem]:
+    """按 graph_id 分页列 runs（最新在前）"""
+    base = select(GraphRun).where(GraphRun.graph_id == graph_id)
+    total = (
+        await session.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
     rows = (
         (
             await session.execute(
-                select(GraphRun)
-                .where(GraphRun.graph_id == graph_id)
-                .order_by(GraphRun.created_at.desc())
-                .limit(limit)
+                base.order_by(GraphRun.created_at.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
         )
         .scalars()
         .all()
     )
-    return [GraphRunItem.model_validate(r) for r in rows]
+    return PageResult(
+        items=[GraphRunItem.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
 
 
 async def get_run(session: AsyncSession, run_id: int) -> GraphRunDetail:
@@ -532,7 +548,31 @@ async def get_run(session: AsyncSession, run_id: int) -> GraphRunDetail:
         raise BusinessError(
             ResultCode.Fail, message=f"graph_run 不存在: {run_id}"
         )
-    return GraphRunDetail.model_validate(row)
+    node_rows = (
+        (
+            await session.execute(
+                select(GraphNodeRun)
+                .where(GraphNodeRun.graph_run_id == run_id)
+                .order_by(GraphNodeRun.started_at.asc(), GraphNodeRun.id.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    detail = GraphRunDetail.model_validate(row)
+    detail.node_runs = [
+        NodeRunItem(
+            node_id=n.node_id,
+            node_type=n.node_type,
+            status=n.status,
+            input=n.input,
+            output=n.output,
+            error=n.error,
+            duration_ms=n.duration_ms or 0,
+        )
+        for n in node_rows
+    ]
+    return detail
 
 
 def _validate_spec(spec: dict) -> GraphSpec:

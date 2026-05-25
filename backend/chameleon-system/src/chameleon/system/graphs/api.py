@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import PageResult, Result
 from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
@@ -243,14 +243,17 @@ async def resume_run(
     return Result.ok(GraphRunDetail.model_validate(run))
 
 
-@router.get("/{graph_id}/runs", response_model=Result[list[GraphRunItem]])
+@router.get("/{graph_id}/runs", response_model=Result[PageResult[GraphRunItem]])
 async def list_runs(
     graph_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("graphs:read")),
-) -> Result[list[GraphRunItem]]:
-    items = await graph_service.list_runs(session, graph_id)
-    return Result.ok(items)
+) -> Result[PageResult[GraphRunItem]]:
+    return Result.ok(
+        await graph_service.list_runs(session, graph_id, page=page, page_size=page_size)
+    )
 
 
 @router.get("/runs/{run_id}", response_model=Result[GraphRunDetail])

@@ -110,6 +110,7 @@ export interface GraphRunDetail extends GraphRunItem {
   input?: unknown;
   output?: unknown;
   error?: { type: string; message: string } | null;
+  node_runs: NodeRunItem[];
 }
 
 // ── 调试运行视图（编辑器内）─────────────────────────────────

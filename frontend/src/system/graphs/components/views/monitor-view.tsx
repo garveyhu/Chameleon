@@ -18,13 +18,15 @@ interface Props {
 }
 
 export const MonitorView = ({ graphId }: Props) => {
+  // 取较多近期记录算指标；总运行数用 PageResult.total（全量）
   const q = useQuery({
-    queryKey: ['graph-runs', graphId],
-    queryFn: () => graphApi.listRuns(graphId),
+    queryKey: ['graph-run-metrics', graphId],
+    queryFn: () => graphApi.listRuns(graphId, { page: 1, page_size: 200 }),
   });
-  const { total, successPct, avgMs, failed, daily } = useMemo(() => {
-    const runs = q.data ?? [];
-    const total = runs.length;
+  const { total, sampled, successPct, avgMs, failed, daily } = useMemo(() => {
+    const runs = q.data?.items ?? [];
+    const total = q.data?.total ?? 0;
+    const sampled = runs.length;
     const succ = runs.filter(r => r.status === 'success').length;
     const failed = runs.filter(r => r.status === 'failed').length;
     const durs = runs.map(r => r.duration_ms).filter((d): d is number => d != null);
@@ -46,7 +48,8 @@ export const MonitorView = ({ graphId }: Props) => {
 
     return {
       total,
-      successPct: total ? Math.round((succ / total) * 100) : 0,
+      sampled,
+      successPct: sampled ? Math.round((succ / sampled) * 100) : 0,
       avgMs,
       failed,
       daily,
@@ -59,7 +62,9 @@ export const MonitorView = ({ graphId }: Props) => {
         <header className="mb-4 flex items-center gap-2">
           <Activity className="h-4 w-4 text-stone-500" />
           <h1 className="text-[16px] font-semibold text-stone-900">监测</h1>
-          <span className="text-[12px] text-stone-400">基于最近 {total} 次运行</span>
+          <span className="text-[12px] text-stone-400">
+            共 {total} 次{sampled < total ? ` · 指标基于最近 ${sampled} 次` : ''}
+          </span>
         </header>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">

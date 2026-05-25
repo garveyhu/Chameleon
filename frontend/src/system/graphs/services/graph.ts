@@ -1,6 +1,6 @@
 import { get, post } from '@/core/lib/request';
 import { streamSSE } from '@/core/lib/sse';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   GraphChatChunk,
   GraphDetail,
@@ -112,5 +112,10 @@ export const graphApi = {
       onChunk: opts.onChunk,
     }),
 
-  listRuns: (id: EntityId) => get<GraphRunItem[]>(`/v1/admin/graphs/${id}/runs`),
+  /** 分页列运行记录（最新在前） */
+  listRuns: (id: EntityId, params?: { page?: number; page_size?: number }) =>
+    get<PageResult<GraphRunItem>>(`/v1/admin/graphs/${id}/runs`, { params }),
+
+  /** 单次运行详情（含逐节点执行 node_runs） */
+  getRun: (runId: EntityId) => get<GraphRunDetail>(`/v1/admin/graphs/runs/${runId}`),
 };

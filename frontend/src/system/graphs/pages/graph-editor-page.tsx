@@ -474,7 +474,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const runsQ = useQuery({
     queryKey: ['graph-runs', graph.id],
-    queryFn: () => graphApi.listRuns(graph.id),
+    queryFn: () => graphApi.listRuns(graph.id, { page: 1, page_size: 50 }).then(r => r.items),
   });
 
   // run dialog 关闭后刷新 runs 列表（持久化执行可能新增）
