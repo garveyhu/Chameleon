@@ -36,6 +36,7 @@ from chameleon.providers.base.types import (
     StreamEvent,
     StreamEventType,
 )
+from chameleon.providers.graph.persist import persist_provider_run
 
 
 class GraphProvider(Provider):
@@ -92,69 +93,120 @@ class GraphProvider(Provider):
         answer_output: Any = None  # 答案节点 finished 时的 output
         final_output: Any = None  # graph.finished 兜底 output
 
+        # graph 视图持久化（编辑器日志/监测）—— 收集节点轨迹，finally 补落 graph_runs
+        gid = int(graph_id) if graph_id else 0
+        node_recs: dict[str, dict[str, Any]] = {}
+        run_status = "running"
+        run_error: dict[str, Any] | None = None
+
         orch = Orchestrator(spec)
-        async for chunk in orch.run_streaming(input=graph_input, ctx=node_ctx):
-            for kind, payload in chunk.items():
-                if kind == "graph.node.delta":
-                    if payload.get("node_id") == answer_node_id:
-                        text = payload.get("delta", "")
-                        if text:
-                            streamed_any = True
-                            yield StreamEvent(
-                                type=StreamEventType.delta, data={"text": text}
-                            )
-                elif kind == "graph.node.started":
-                    yield StreamEvent(
-                        type=StreamEventType.step,
-                        data={
-                            "name": payload.get("name") or payload.get("node_id"),
-                            "status": "running",
-                        },
-                    )
-                elif kind == "graph.node.finished":
-                    if payload.get("node_id") == answer_node_id:
-                        answer_output = payload.get("output")
-                    if payload.get("node_id") in assign_node_ids and isinstance(
-                        payload.get("output"), dict
-                    ):
-                        conv_update.update(payload["output"])
-                    if payload.get("node_id") in kb_node_ids and isinstance(
-                        payload.get("output"), dict
-                    ):
-                        for h in (payload["output"].get("hits") or [])[:8]:
-                            if isinstance(h, dict):
+        try:
+            async for chunk in orch.run_streaming(input=graph_input, ctx=node_ctx):
+                for kind, payload in chunk.items():
+                    if kind == "graph.node.delta":
+                        if payload.get("node_id") == answer_node_id:
+                            text = payload.get("delta", "")
+                            if text:
+                                streamed_any = True
                                 yield StreamEvent(
-                                    type=StreamEventType.citation,
-                                    data={
-                                        "source": str(h.get("doc_id") or h.get("id") or ""),
-                                        "snippet": str(h.get("content") or "")[:200],
-                                        "score": h.get("score"),
-                                    },
+                                    type=StreamEventType.delta, data={"text": text}
                                 )
-                    yield StreamEvent(
-                        type=StreamEventType.step,
-                        data={
-                            "name": payload.get("name") or payload.get("node_id"),
-                            "status": "success",
-                            "duration_ms": payload.get("duration_ms"),
-                        },
-                    )
-                elif kind == "graph.node.failed":
-                    err = payload.get("error") or {}
-                    yield StreamEvent(
-                        type=StreamEventType.error,
-                        data={"message": err.get("message", "graph 节点执行失败")},
-                    )
-                    return
-                elif kind == "graph.finished":
-                    if payload.get("status") != "success":
+                    elif kind == "graph.node.started":
+                        nid = payload.get("node_id")
+                        if nid:
+                            node_recs[nid] = {
+                                "node_id": nid,
+                                "node_type": payload.get("node_type"),
+                                "status": "running",
+                                "started_at": datetime.now(timezone.utc),
+                            }
+                        yield StreamEvent(
+                            type=StreamEventType.step,
+                            data={
+                                "name": payload.get("name") or payload.get("node_id"),
+                                "status": "running",
+                            },
+                        )
+                    elif kind == "graph.node.finished":
+                        nid = payload.get("node_id")
+                        if nid:
+                            rec = node_recs.setdefault(
+                                nid, {"node_id": nid, "node_type": payload.get("node_type")}
+                            )
+                            rec["status"] = "success"
+                            rec["output"] = payload.get("output")
+                            rec["duration_ms"] = payload.get("duration_ms")
+                            rec["finished_at"] = datetime.now(timezone.utc)
+                        if nid == answer_node_id:
+                            answer_output = payload.get("output")
+                        if nid in assign_node_ids and isinstance(
+                            payload.get("output"), dict
+                        ):
+                            conv_update.update(payload["output"])
+                        if nid in kb_node_ids and isinstance(
+                            payload.get("output"), dict
+                        ):
+                            for h in (payload["output"].get("hits") or [])[:8]:
+                                if isinstance(h, dict):
+                                    yield StreamEvent(
+                                        type=StreamEventType.citation,
+                                        data={
+                                            "source": str(h.get("doc_id") or h.get("id") or ""),
+                                            "snippet": str(h.get("content") or "")[:200],
+                                            "score": h.get("score"),
+                                        },
+                                    )
+                        yield StreamEvent(
+                            type=StreamEventType.step,
+                            data={
+                                "name": payload.get("name") or payload.get("node_id"),
+                                "status": "success",
+                                "duration_ms": payload.get("duration_ms"),
+                            },
+                        )
+                    elif kind == "graph.node.failed":
+                        nid = payload.get("node_id")
                         err = payload.get("error") or {}
+                        if nid:
+                            rec = node_recs.setdefault(nid, {"node_id": nid})
+                            rec["status"] = "failed"
+                            rec["error"] = err
+                            rec["finished_at"] = datetime.now(timezone.utc)
+                        run_status = "failed"
+                        run_error = err
                         yield StreamEvent(
                             type=StreamEventType.error,
-                            data={"message": err.get("message", "工作流执行失败")},
+                            data={"message": err.get("message", "graph 节点执行失败")},
                         )
                         return
-                    final_output = payload.get("output")
+                    elif kind == "graph.finished":
+                        if payload.get("status") != "success":
+                            err = payload.get("error") or {}
+                            run_status = "failed"
+                            run_error = err
+                            yield StreamEvent(
+                                type=StreamEventType.error,
+                                data={"message": err.get("message", "工作流执行失败")},
+                            )
+                            return
+                        run_status = "success"
+                        final_output = payload.get("output")
+
+            if run_status == "running":  # drained 未见 graph.finished（兜底）
+                run_status = "success"
+        finally:
+            if gid:
+                await persist_provider_run(
+                    graph_id=gid,
+                    request_id=node_ctx.request_id,
+                    graph_input=graph_input,
+                    started_at=node_ctx.started_at,
+                    finished_at=datetime.now(timezone.utc),
+                    status=run_status,
+                    output=final_output if final_output is not None else answer_output,
+                    error=run_error,
+                    node_records=list(node_recs.values()),
+                )
 
         # done：流式累积优先（answer="" 让聚合器用 delta 累积），否则提取答案节点/整图输出
         answer = (
