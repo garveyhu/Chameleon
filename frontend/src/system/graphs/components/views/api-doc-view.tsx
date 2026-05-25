@@ -1,12 +1,15 @@
-/** 访问 API 视图 —— 编辑器内 API 文档页（Dify 套路）
+/** 访问 API 视图 —— 编辑器内 API 文档页（Dify 套路 + 右侧锚点目录）
  *
  * 工作流发布为智能体后，走统一对外端点（agent_key = graph_key）：
+ *   - 智能体详情：GET  /v1/agents/{key}
+ *   - 原生调用：  POST /v1/agents/{key}/invoke（stream 由 body 字段控制）
  *   - OpenAI 兼容：POST /v1/chat/completions（model = agent_key）
- *   - 原生 invoke：POST /v1/agents/{key}/invoke
- *   - 文件上传：POST /v1/files/presigned-upload
+ *   - 文件上传：  POST /v1/files/presigned-upload
  * 鉴权：Authorization: Bearer <api_key>（在「应用 API Key」页创建）。
+ *
+ * 顶栏右侧放「通用端点 + 管理密钥」，正文右侧锚点目录随滚动高亮。
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Check, Copy, KeyRound } from 'lucide-react';
@@ -19,53 +22,181 @@ interface Props {
   graph: GraphDetail;
 }
 
+interface SecMeta {
+  id: string;
+  label: string;
+  method?: 'GET' | 'POST';
+}
+
+const SECTIONS: SecMeta[] = [
+  { id: 'sec-base', label: 'Base URL' },
+  { id: 'sec-auth', label: '鉴权' },
+  { id: 'sec-detail', label: '智能体详情', method: 'GET' },
+  { id: 'sec-invoke', label: '原生调用', method: 'POST' },
+  { id: 'sec-stream', label: '流式调用 (SSE)', method: 'POST' },
+  { id: 'sec-openai', label: 'OpenAI 兼容', method: 'POST' },
+  { id: 'sec-files', label: '文件上传', method: 'POST' },
+];
+
 export const ApiDocView = ({ graph }: Props) => {
   const nav = useNavigate();
   const base = `${window.location.origin}/v1`;
   const key = graph.graph_key;
   const published = (graph.published_version ?? 0) > 0;
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<string>(SECTIONS[0].id);
+
+  // 滚动监听 → 高亮目录当前章节（IO 回调里 setState，非 effect 体内同步调用）
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (!root) return;
+    const els = Array.from(root.querySelectorAll<HTMLElement>('[data-sec]'));
+    if (!els.length) return;
+    const visible = new Set<string>();
+    const io = new IntersectionObserver(
+      entries => {
+        for (const e of entries) {
+          const id = (e.target as HTMLElement).dataset.sec!;
+          if (e.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        }
+        const first = els.find(el => visible.has(el.dataset.sec!));
+        if (first) setActive(first.dataset.sec!);
+      },
+      { root, rootMargin: '0px 0px -68% 0px', threshold: [0, 1] },
+    );
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
+  const goto = (id: string) => {
+    scrollRef.current
+      ?.querySelector<HTMLElement>(`[data-sec="${id}"]`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="px-10 py-8">
-        <header className="mb-6">
-          <h1 className="text-[20px] font-semibold text-stone-900">
-            {graph.kind === 'chatflow' ? '对话型应用 API' : '工作流应用 API'}
-          </h1>
-          <p className="mt-1 text-[12.5px] text-stone-500">
-            发布为智能体后，可通过统一对外端点调用（agent_key ={' '}
-            <code className="font-mono text-stone-700">{key}</code>）。
-            {!published && (
-              <span className="ml-1 text-amber-600">
-                · 当前未发布，先在编排页点「发布为智能体」。
-              </span>
-            )}
-          </p>
-        </header>
-
-        <Block title="Base URL">
-          <Code text={base} />
-        </Block>
-
-        <Block title="鉴权（Authentication）">
-          <p className="mb-2 text-[12.5px] leading-relaxed text-stone-600">
-            所有请求在 HTTP Header 携带 API Key：
-          </p>
-          <Code text="Authorization: Bearer {API_KEY}" />
-          <Button size="sm" variant="outline" className="mt-2" onClick={() => nav('/apps')}>
-            <KeyRound className="mr-1 h-3 w-3" />
-            创建 / 管理 API 密钥
+    <div className="flex h-full flex-col">
+      {/* 顶栏：标题 + 状态 ·· 通用端点 + 管理密钥 */}
+      <div className="flex items-center justify-between gap-3 border-b border-stone-200/70 bg-white/70 px-8 py-2.5 backdrop-blur">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-[14.5px] font-semibold text-stone-900">访问 API</h1>
+          {published ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              服务运行中
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10.5px] text-amber-700">
+              未发布 —— 去编排页「发布为智能体」
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white py-1 pr-1 pl-2.5 shadow-sm">
+            <span className="text-[10.5px] text-stone-400">通用端点</span>
+            <code className="font-mono text-[12px] text-stone-700">{base}</code>
+            <CopyButton text={base} />
+          </div>
+          <Button size="sm" variant="outline" onClick={() => nav('/apps')}>
+            <KeyRound className="mr-1 h-3.5 w-3.5" />
+            管理密钥
           </Button>
-        </Block>
+        </div>
+      </div>
 
-        <Block
-          title="OpenAI 兼容 · Chat Completions"
-          desc="标准 OpenAI 协议，model 传 agent_key 即可。适合直接接入 OpenAI SDK / 第三方工具。"
-          method="POST"
-          path="/v1/chat/completions"
-        >
-          <Code
-            text={`curl -X POST '${base}/chat/completions' \\
+      {/* 正文 + 右侧目录 */}
+      <div className="flex min-h-0 flex-1">
+        <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto scroll-smooth">
+          <div className="max-w-[860px] px-8 py-7">
+            <p className="mb-7 text-[12.5px] leading-relaxed text-stone-500">
+              {graph.kind === 'chatflow' ? '对话型应用' : '工作流应用'}
+              发布为智能体后，通过统一对外端点调用，
+              <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
+                agent_key = {key}
+              </code>
+              。所有请求在 Header 携带 API Key。
+            </p>
+
+            {/* Base URL —— 显眼卡 */}
+            <Section meta={SECTIONS[0]}>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-gradient-to-r from-stone-50 to-white px-4 py-3 shadow-sm">
+                <code className="truncate font-mono text-[15px] font-medium text-stone-800">
+                  {base}
+                </code>
+                <CopyButton text={base} solid />
+              </div>
+            </Section>
+
+            <Section meta={SECTIONS[1]}>
+              <p className="mb-2.5 text-[12.5px] leading-relaxed text-stone-600">
+                Service API 使用 API-Key 鉴权，强烈建议存放在后端、勿泄露到客户端。每个请求都在{' '}
+                <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
+                  Authorization
+                </code>{' '}
+                头携带：
+              </p>
+              <Code text="Authorization: Bearer {API_KEY}" />
+              <Button size="sm" variant="outline" className="mt-2.5" onClick={() => nav('/apps')}>
+                <KeyRound className="mr-1 h-3 w-3" />
+                创建 / 管理 API 密钥
+              </Button>
+            </Section>
+
+            <Section
+              meta={SECTIONS[2]}
+              path={`/v1/agents/${key}`}
+              desc="获取该智能体的基本信息（名称、类型、是否在线）。"
+            >
+              <Code
+                text={`curl '${base}/agents/${key}' \\
+  -H 'Authorization: Bearer {API_KEY}'`}
+              />
+            </Section>
+
+            <Section
+              meta={SECTIONS[3]}
+              path={`/v1/agents/${key}/invoke`}
+              desc="本平台原生协议，返回 answer / session_id / request_id。"
+            >
+              <Code
+                text={`curl -X POST '${base}/agents/${key}/invoke' \\
+  -H 'Authorization: Bearer {API_KEY}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "input": "你好",
+    "stream": false
+  }'`}
+              />
+            </Section>
+
+            <Section
+              meta={SECTIONS[4]}
+              path={`/v1/agents/${key}/invoke`}
+              desc="同一端点，body 传 stream:true 即走 SSE。每行 data: {JSON}，末尾 data: [DONE]。"
+            >
+              <Code
+                text={`curl -N -X POST '${base}/agents/${key}/invoke' \\
+  -H 'Authorization: Bearer {API_KEY}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "input": "你好", "stream": true }'
+
+# 响应（text/event-stream）
+data: {"delta": "你"}
+data: {"delta": "好"}
+data: {"end": true, "answer": "你好", "usage": {...}}
+data: [DONE]`}
+              />
+            </Section>
+
+            <Section
+              meta={SECTIONS[5]}
+              path="/v1/chat/completions"
+              desc="标准 OpenAI 协议，model 传 agent_key。可直接接入 OpenAI SDK / 第三方工具。"
+            >
+              <Code
+                text={`curl -X POST '${base}/chat/completions' \\
   -H 'Authorization: Bearer {API_KEY}' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -75,39 +206,59 @@ export const ApiDocView = ({ graph }: Props) => {
     ],
     "stream": false
   }'`}
-          />
-        </Block>
+              />
+            </Section>
 
-        <Block
-          title="原生调用 · Agent Invoke"
-          desc="本平台原生协议，返回 answer / session_id / request_id。stream=true 走 SSE 流式。"
-          method="POST"
-          path={`/v1/agents/${key}/invoke`}
-        >
-          <Code
-            text={`curl -X POST '${base}/agents/${key}/invoke' \\
-  -H 'Authorization: Bearer {API_KEY}' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "input": "你好",
-    "stream": false
-  }'`}
-          />
-        </Block>
-
-        <Block
-          title="文件上传"
-          desc="多模态场景：先取预签名地址上传文件，再在调用里引用。"
-          method="POST"
-          path="/v1/files/presigned-upload"
-        >
-          <Code
-            text={`curl -X POST '${base}/files/presigned-upload' \\
+            <Section
+              meta={SECTIONS[6]}
+              path="/v1/files/presigned-upload"
+              desc="多模态场景：先取预签名地址上传文件，再在调用里引用。"
+            >
+              <Code
+                text={`curl -X POST '${base}/files/presigned-upload' \\
   -H 'Authorization: Bearer {API_KEY}' \\
   -H 'Content-Type: application/json' \\
   -d '{ "filename": "doc.pdf", "content_type": "application/pdf" }'`}
-          />
-        </Block>
+              />
+            </Section>
+          </div>
+        </div>
+
+        {/* 右侧锚点目录 */}
+        <aside className="hidden w-60 shrink-0 overflow-y-auto border-l border-stone-200/70 px-3 py-7 xl:block">
+          <div className="sticky top-0">
+            <div className="mb-2 px-2 text-[11px] font-medium tracking-wide text-stone-400 uppercase">
+              目录
+            </div>
+            <nav className="flex flex-col gap-0.5">
+              {SECTIONS.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => goto(s.id)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition',
+                    active === s.id
+                      ? 'bg-stone-900 text-white'
+                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+                  )}
+                >
+                  {s.method && (
+                    <span
+                      className={cn(
+                        'rounded px-1 py-0.5 font-mono text-[8.5px] font-bold',
+                        active === s.id ? 'bg-white/20 text-white' : METHOD_TONE[s.method],
+                      )}
+                    >
+                      {s.method}
+                    </span>
+                  )}
+                  <span className="truncate">{s.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -120,42 +271,53 @@ const METHOD_TONE: Record<string, string> = {
   GET: 'bg-sky-100 text-sky-700',
 };
 
-const Block = ({
-  title,
-  desc,
-  method,
+const Section = ({
+  meta,
   path,
+  desc,
   children,
 }: {
-  title: string;
-  desc?: string;
-  method?: string;
+  meta: SecMeta;
   path?: string;
+  desc?: string;
   children: React.ReactNode;
 }) => (
-  <section className="mb-7">
-    <h2 className="text-[14px] font-medium text-stone-900">{title}</h2>
-    {(method || path) && (
-      <div className="mt-1.5 flex items-center gap-2">
-        {method && (
-          <span
-            className={cn(
-              'rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold',
-              METHOD_TONE[method] ?? 'bg-stone-100 text-stone-600',
-            )}
-          >
-            {method}
-          </span>
-        )}
-        {path && <code className="font-mono text-[12px] text-stone-600">{path}</code>}
-      </div>
-    )}
+  <section data-sec={meta.id} className="mb-8 scroll-mt-4">
+    <div className="flex flex-wrap items-center gap-2.5">
+      <h2 className="text-[15px] font-semibold text-stone-900">{meta.label}</h2>
+      {meta.method && (
+        <span
+          className={cn(
+            'rounded px-2 py-0.5 font-mono text-[10.5px] font-bold tracking-wide',
+            METHOD_TONE[meta.method],
+          )}
+        >
+          {meta.method}
+        </span>
+      )}
+      {path && (
+        <code className="rounded-md border border-stone-200 bg-stone-50 px-2 py-0.5 font-mono text-[12.5px] text-stone-700">
+          {path}
+        </code>
+      )}
+    </div>
     {desc && <p className="mt-1.5 text-[12.5px] leading-relaxed text-stone-500">{desc}</p>}
-    <div className="mt-2.5">{children}</div>
+    <div className="mt-3">{children}</div>
   </section>
 );
 
-const Code = ({ text }: { text: string }) => {
+const Code = ({ text }: { text: string }) => (
+  <div className="group relative">
+    <pre className="overflow-x-auto rounded-xl bg-stone-900 px-4 py-3.5 font-mono text-[12px] leading-relaxed text-stone-100 shadow-sm">
+      {text}
+    </pre>
+    <div className="absolute top-2.5 right-2.5">
+      <CopyButton text={text} dark />
+    </div>
+  </div>
+);
+
+const CopyButton = ({ text, dark, solid }: { text: string; dark?: boolean; solid?: boolean }) => {
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     void navigator.clipboard.writeText(text).then(() => {
@@ -163,23 +325,40 @@ const Code = ({ text }: { text: string }) => {
       setTimeout(() => setCopied(false), 1500);
     });
   };
-  return (
-    <div className="group relative">
-      <pre className="overflow-x-auto rounded-lg bg-stone-900 px-3.5 py-3 font-mono text-[12px] leading-relaxed text-stone-100">
-        {text}
-      </pre>
+  if (solid) {
+    return (
       <button
         type="button"
         onClick={onCopy}
         title="复制"
-        className="absolute top-2 right-2 rounded p-1 text-stone-400 opacity-0 transition group-hover:opacity-100 hover:bg-stone-700 hover:text-stone-100"
+        className="flex shrink-0 items-center gap-1 rounded-md bg-stone-900 px-2.5 py-1.5 text-[11.5px] text-white transition hover:bg-stone-700"
       >
         {copied ? (
           <Check className="h-3.5 w-3.5 text-emerald-400" />
         ) : (
           <Copy className="h-3.5 w-3.5" />
         )}
+        {copied ? '已复制' : '复制'}
       </button>
-    </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onCopy}
+      title="复制"
+      className={cn(
+        'rounded p-1 transition',
+        dark
+          ? 'text-stone-400 opacity-0 group-hover:opacity-100 hover:bg-stone-700 hover:text-stone-100'
+          : 'text-stone-400 hover:bg-stone-100 hover:text-stone-700',
+      )}
+    >
+      {copied ? (
+        <Check className="h-3.5 w-3.5 text-emerald-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
   );
 };
