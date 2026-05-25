@@ -28,7 +28,11 @@ import {
 
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
-import { WebAppDialog, type WebAppTab } from '@/system/graphs/components/app-shell/web-app-dialogs';
+import {
+  EmbedAppModal,
+  WebAppDialog,
+  type WebAppTab,
+} from '@/system/graphs/components/app-shell/web-app-dialogs';
 import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/graph';
@@ -68,6 +72,7 @@ export const GraphAppRail = ({
   const apiBase = `${window.location.origin}/v1`;
 
   const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
+  const [embedAppOpen, setEmbedAppOpen] = useState(false);
   const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
 
   // 确保 Web App（embed）存在，拿到 embed_key；用途由 after 决定
@@ -95,6 +100,11 @@ export const GraphAppRail = ({
     const info = await ensureMut.mutateAsync();
     setWebApp(info);
     setDialogTab(tab);
+  };
+  const openEmbedApp = async () => {
+    const info = await ensureMut.mutateAsync();
+    setWebApp(info);
+    setEmbedAppOpen(true);
   };
 
   const copy = (text: string, label: string) => {
@@ -195,7 +205,7 @@ export const GraphAppRail = ({
           >
             <div className="flex gap-1.5">
               <RailAction label="对话页打开" icon={ExternalLink} onClick={openPublicChat} />
-              <RailAction label="嵌入代码" icon={Code2} onClick={() => void openDialog('embed')} />
+              <RailAction label="嵌入式应用" icon={Code2} onClick={openEmbedApp} />
             </div>
           </Card>
 
@@ -227,6 +237,9 @@ export const GraphAppRail = ({
           onSave={p => saveMut.mutate(p)}
           saving={saveMut.isPending}
         />
+      )}
+      {embedAppOpen && webApp && (
+        <EmbedAppModal open onClose={() => setEmbedAppOpen(false)} embedKey={webApp.embed_key} />
       )}
     </>
   );

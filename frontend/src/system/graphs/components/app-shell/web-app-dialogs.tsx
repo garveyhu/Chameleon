@@ -1,8 +1,9 @@
-/** Web App 配置弹窗 —— 外观 / 行为 / 嵌入代码 三页，右侧实时预览
+/** Web App 配置弹窗 —— 外观 / 行为 两页 + 右侧实时预览
  *
  * 全部在编辑器内完成，不跳系统页面。公开聊天页为 /embed/{embed_key}。
  * 开场白 / 建议问题由「开始节点」单一拥有（ensure 时回灌），这里只读展示，
  * 去编排里改；其余外观/行为字段写回 embed_config（graph /web-app/update）。
+ * 嵌入式应用（<script> bubble widget）的接入代码见 EmbedAppModal。
  */
 import { useState } from 'react';
 
@@ -24,12 +25,11 @@ import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import type { WebAppInfo } from '@/system/graphs/types/graph';
 
-export type WebAppTab = 'appearance' | 'behavior' | 'embed';
+export type WebAppTab = 'appearance' | 'behavior';
 
 const TABS: { key: WebAppTab; label: string; icon: LucideIcon }[] = [
   { key: 'appearance', label: '外观', icon: Palette },
   { key: 'behavior', label: '行为', icon: MessageSquare },
-  { key: 'embed', label: '嵌入代码', icon: Code2 },
 ];
 
 interface SavePayload {
@@ -210,8 +210,6 @@ export const WebAppDialog = ({ open, onClose, info, onSave, saving, initialTab }
                   </ReadOnlyField>
                 </>
               )}
-
-              {tab === 'embed' && <EmbedTab embedKey={info.embed_key} />}
             </div>
 
             {/* 实时预览 */}
@@ -229,72 +227,94 @@ export const WebAppDialog = ({ open, onClose, info, onSave, saving, initialTab }
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            关闭
+          <Button onClick={submit} disabled={saving}>
+            {saving ? '保存中…' : '保存'}
           </Button>
-          {tab !== 'embed' && (
-            <Button onClick={submit} disabled={saving}>
-              {saving ? '保存中…' : '保存'}
-            </Button>
-          )}
         </ModalFooter>
       </ModalContent>
     </Modal>
   );
 };
 
-// ── 嵌入代码 ───────────────────────────────────────────────
+// ── 嵌入式应用（<script> bubble widget + iframe）────────────
 
-const EmbedTab = ({ embedKey }: { embedKey: string }) => {
+const CodeBlock = ({ code }: { code: string }) => {
+  const { copied, copy } = useCopy();
+  return (
+    <div className="group relative">
+      <pre className="overflow-x-auto rounded-lg bg-stone-900 px-3.5 py-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-stone-100">
+        {code}
+      </pre>
+      <button
+        type="button"
+        onClick={() => copy(code)}
+        title="复制"
+        className="absolute top-2 right-2 rounded p-1 text-stone-400 transition hover:bg-stone-700 hover:text-stone-100"
+      >
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-emerald-400" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
+      </button>
+    </div>
+  );
+};
+
+export const EmbedAppModal = ({
+  open,
+  onClose,
+  embedKey,
+}: {
+  open: boolean;
+  onClose: () => void;
+  embedKey: string;
+}) => {
   const origin = window.location.origin;
   const url = `${origin}/embed/${embedKey}`;
+  const script = `<script
+  src="${origin}/widget.js"
+  data-embed-key="${embedKey}"
+  defer>
+</script>`;
   const iframe = `<iframe
   src="${url}"
   style="width: 100%; height: 100%; min-height: 640px; border: 0;"
   allow="microphone">
 </iframe>`;
-  const urlCopy = useCopy();
-  const iframeCopy = useCopy();
 
   return (
-    <div className="space-y-4">
-      <Field label="公开访问 URL">
-        <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-md border border-stone-200 bg-stone-50 px-2 py-1.5 font-mono text-[12px] text-stone-700">
-            {url}
-          </code>
-          <Button size="sm" variant="outline" onClick={() => urlCopy.copy(url)}>
-            {urlCopy.copied ? (
-              <Check className="h-3 w-3 text-emerald-500" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => window.open(url, '_blank')}>
-            <ExternalLink className="h-3 w-3" />
-          </Button>
-        </div>
-      </Field>
-      <Field label="将以下 iframe 嵌入到你网站的目标位置">
-        <div className="group relative">
-          <pre className="overflow-x-auto rounded-lg bg-stone-900 px-3.5 py-3 font-mono text-[12px] leading-relaxed text-stone-100">
-            {iframe}
-          </pre>
-          <button
-            type="button"
-            onClick={() => iframeCopy.copy(iframe)}
-            title="复制"
-            className="absolute top-2 right-2 rounded p-1 text-stone-400 transition hover:bg-stone-700 hover:text-stone-100"
-          >
-            {iframeCopy.copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </button>
-        </div>
-      </Field>
-    </div>
+    <Modal open={open} onOpenChange={o => !o && onClose()}>
+      <ModalContent size="lg">
+        <ModalHeader>
+          <ModalTitle className="flex items-center gap-2">
+            <Code2 className="h-4 w-4 text-stone-500" />
+            嵌入式应用
+          </ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-4">
+          <Field label="悬浮气泡（推荐）—— 把这段脚本贴到网站 </body> 前">
+            <CodeBlock code={script} />
+            <p className="mt-1.5 text-[11px] text-stone-400">
+              访客页面右下角出现可点开的对话气泡；外观 / 开场白在「设置」里配置。
+            </p>
+          </Field>
+          <Field label="整页内嵌 —— 用 iframe 嵌到目标容器">
+            <CodeBlock code={iframe} />
+          </Field>
+          <Field label="公开访问 URL">
+            <div className="flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-md border border-stone-200 bg-stone-50 px-2 py-1.5 font-mono text-[12px] text-stone-700">
+                {url}
+              </code>
+              <Button size="sm" variant="outline" onClick={() => window.open(url, '_blank')}>
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          </Field>
+        </ModalBody>
+      </ModalContent>
+    </Modal>
   );
 };
 

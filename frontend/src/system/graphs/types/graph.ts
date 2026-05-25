@@ -76,6 +76,21 @@ export interface WebAppInfo {
   enabled: boolean;
 }
 
+/** 智能体级 API 密钥（仅对该 agent 有效，区别于全局应用密钥） */
+export interface AgentApiKey {
+  id: EntityId;
+  name: string;
+  key_prefix: string;
+  /** 明文 key（留存，支持重复复制；老数据为 null 只能看前缀） */
+  plain_key: string | null;
+  agent_key: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export type AgentApiKeyCreated = AgentApiKey;
+
 export interface NodeRunItem {
   node_id: string;
   node_type: string;

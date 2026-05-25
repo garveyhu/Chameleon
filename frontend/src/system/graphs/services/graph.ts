@@ -2,6 +2,8 @@ import { get, post } from '@/core/lib/request';
 import { streamSSE } from '@/core/lib/sse';
 import type { EntityId, PageResult } from '@/core/types/api';
 import type {
+  AgentApiKey,
+  AgentApiKeyCreated,
   GraphChatChunk,
   GraphDetail,
   GraphItem,
@@ -118,4 +120,15 @@ export const graphApi = {
 
   /** 单次运行详情（含逐节点执行 node_runs） */
   getRun: (runId: EntityId) => get<GraphRunDetail>(`/v1/admin/graphs/runs/${runId}`),
+
+  /** 智能体级密钥：列未吊销 */
+  listAgentKeys: (graphId: EntityId) => get<AgentApiKey[]>(`/v1/admin/graphs/${graphId}/api-keys`),
+
+  /** 智能体级密钥：新建（明文仅此响应可见） */
+  createAgentKey: (graphId: EntityId, name: string) =>
+    post<AgentApiKeyCreated>(`/v1/admin/graphs/${graphId}/api-keys`, { name }),
+
+  /** 智能体级密钥：吊销 */
+  revokeAgentKey: (graphId: EntityId, keyId: EntityId) =>
+    post<AgentApiKey>(`/v1/admin/graphs/${graphId}/api-keys/${keyId}/revoke`, {}),
 };

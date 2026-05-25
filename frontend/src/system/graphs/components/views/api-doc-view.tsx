@@ -10,12 +10,12 @@
  * 顶栏右侧放「通用端点 + 管理密钥」，正文右侧锚点目录随滚动高亮。
  */
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
-import { Check, Copy, KeyRound } from 'lucide-react';
+import { Check, Copy, KeyRound, PanelRightClose, PanelRightOpen } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import { cn } from '@/core/lib/cn';
+import { AgentKeysModal } from '@/system/graphs/components/app-shell/agent-keys-modal';
 import type { GraphDetail } from '@/system/graphs/types/graph';
 
 interface Props {
@@ -29,7 +29,6 @@ interface SecMeta {
 }
 
 const SECTIONS: SecMeta[] = [
-  { id: 'sec-base', label: 'Base URL' },
   { id: 'sec-auth', label: '鉴权' },
   { id: 'sec-detail', label: '智能体详情', method: 'GET' },
   { id: 'sec-invoke', label: '原生调用', method: 'POST' },
@@ -39,13 +38,14 @@ const SECTIONS: SecMeta[] = [
 ];
 
 export const ApiDocView = ({ graph }: Props) => {
-  const nav = useNavigate();
   const base = `${window.location.origin}/v1`;
   const key = graph.graph_key;
   const published = (graph.published_version ?? 0) > 0;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState<string>(SECTIONS[0].id);
+  const [tocOpen, setTocOpen] = useState(true);
+  const [keysOpen, setKeysOpen] = useState(false);
 
   // 滚动监听 → 高亮目录当前章节（IO 回调里 setState，非 effect 体内同步调用）
   useEffect(() => {
@@ -99,53 +99,51 @@ export const ApiDocView = ({ graph }: Props) => {
             <code className="font-mono text-[12px] text-stone-700">{base}</code>
             <CopyButton text={base} />
           </div>
-          <Button size="sm" variant="outline" onClick={() => nav('/apps')}>
+          <Button size="sm" variant="outline" onClick={() => setKeysOpen(true)}>
             <KeyRound className="mr-1 h-3.5 w-3.5" />
             管理密钥
           </Button>
+          <button
+            type="button"
+            onClick={() => setTocOpen(o => !o)}
+            title={tocOpen ? '收起目录' : '展开目录'}
+            className="rounded-md border border-stone-200 bg-white p-1.5 text-stone-500 shadow-sm transition hover:bg-stone-50 hover:text-stone-800"
+          >
+            {tocOpen ? (
+              <PanelRightClose className="h-3.5 w-3.5" />
+            ) : (
+              <PanelRightOpen className="h-3.5 w-3.5" />
+            )}
+          </button>
         </div>
       </div>
 
       {/* 正文 + 右侧目录 */}
       <div className="flex min-h-0 flex-1">
         <div ref={scrollRef} className="min-w-0 flex-1 overflow-y-auto scroll-smooth">
-          <div className="max-w-[860px] px-8 py-7">
+          <div className="mx-auto max-w-4xl px-6 py-7">
             <p className="mb-7 text-[12.5px] leading-relaxed text-stone-500">
               {graph.kind === 'chatflow' ? '对话型应用' : '工作流应用'}
-              发布为智能体后，通过统一对外端点调用，
+              发布为智能体后，通过统一对外端点调用（Base URL 见右上角「通用端点」），
               <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
                 agent_key = {key}
               </code>
               。所有请求在 Header 携带 API Key。
             </p>
 
-            {/* Base URL —— 显眼卡 */}
             <Section meta={SECTIONS[0]}>
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-stone-200 bg-gradient-to-r from-stone-50 to-white px-4 py-3 shadow-sm">
-                <code className="truncate font-mono text-[15px] font-medium text-stone-800">
-                  {base}
-                </code>
-                <CopyButton text={base} solid />
-              </div>
-            </Section>
-
-            <Section meta={SECTIONS[1]}>
               <p className="mb-2.5 text-[12.5px] leading-relaxed text-stone-600">
                 Service API 使用 API-Key 鉴权，强烈建议存放在后端、勿泄露到客户端。每个请求都在{' '}
                 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
                   Authorization
                 </code>{' '}
-                头携带：
+                头携带（右上角「管理密钥」生成本智能体专属 Key）：
               </p>
               <Code text="Authorization: Bearer {API_KEY}" />
-              <Button size="sm" variant="outline" className="mt-2.5" onClick={() => nav('/apps')}>
-                <KeyRound className="mr-1 h-3 w-3" />
-                创建 / 管理 API 密钥
-              </Button>
             </Section>
 
             <Section
-              meta={SECTIONS[2]}
+              meta={SECTIONS[1]}
               path={`/v1/agents/${key}`}
               desc="获取该智能体的基本信息（名称、类型、是否在线）。"
             >
@@ -156,7 +154,7 @@ export const ApiDocView = ({ graph }: Props) => {
             </Section>
 
             <Section
-              meta={SECTIONS[3]}
+              meta={SECTIONS[2]}
               path={`/v1/agents/${key}/invoke`}
               desc="本平台原生协议，返回 answer / session_id / request_id。"
             >
@@ -172,7 +170,7 @@ export const ApiDocView = ({ graph }: Props) => {
             </Section>
 
             <Section
-              meta={SECTIONS[4]}
+              meta={SECTIONS[3]}
               path={`/v1/agents/${key}/invoke`}
               desc="同一端点，body 传 stream:true 即走 SSE。每行 data: {JSON}，末尾 data: [DONE]。"
             >
@@ -191,7 +189,7 @@ data: [DONE]`}
             </Section>
 
             <Section
-              meta={SECTIONS[5]}
+              meta={SECTIONS[4]}
               path="/v1/chat/completions"
               desc="标准 OpenAI 协议，model 传 agent_key。可直接接入 OpenAI SDK / 第三方工具。"
             >
@@ -210,7 +208,7 @@ data: [DONE]`}
             </Section>
 
             <Section
-              meta={SECTIONS[6]}
+              meta={SECTIONS[5]}
               path="/v1/files/presigned-upload"
               desc="多模态场景：先取预签名地址上传文件，再在调用里引用。"
             >
@@ -224,42 +222,46 @@ data: [DONE]`}
           </div>
         </div>
 
-        {/* 右侧锚点目录 */}
-        <aside className="hidden w-60 shrink-0 overflow-y-auto border-l border-stone-200/70 px-3 py-7 xl:block">
-          <div className="sticky top-0">
-            <div className="mb-2 px-2 text-[11px] font-medium tracking-wide text-stone-400 uppercase">
-              目录
+        {/* 右侧锚点目录（可收起） */}
+        {tocOpen && (
+          <aside className="w-60 shrink-0 overflow-y-auto border-l border-stone-200/70 px-3 py-7">
+            <div className="sticky top-0">
+              <div className="mb-2 px-2 text-[11px] font-medium tracking-wide text-stone-400 uppercase">
+                目录
+              </div>
+              <nav className="flex flex-col gap-0.5">
+                {SECTIONS.map(s => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => goto(s.id)}
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition',
+                      active === s.id
+                        ? 'bg-stone-900 text-white'
+                        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+                    )}
+                  >
+                    {s.method && (
+                      <span
+                        className={cn(
+                          'rounded px-1 py-0.5 font-mono text-[8.5px] font-bold',
+                          active === s.id ? 'bg-white/20 text-white' : METHOD_TONE[s.method],
+                        )}
+                      >
+                        {s.method}
+                      </span>
+                    )}
+                    <span className="truncate">{s.label}</span>
+                  </button>
+                ))}
+              </nav>
             </div>
-            <nav className="flex flex-col gap-0.5">
-              {SECTIONS.map(s => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => goto(s.id)}
-                  className={cn(
-                    'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12px] transition',
-                    active === s.id
-                      ? 'bg-stone-900 text-white'
-                      : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
-                  )}
-                >
-                  {s.method && (
-                    <span
-                      className={cn(
-                        'rounded px-1 py-0.5 font-mono text-[8.5px] font-bold',
-                        active === s.id ? 'bg-white/20 text-white' : METHOD_TONE[s.method],
-                      )}
-                    >
-                      {s.method}
-                    </span>
-                  )}
-                  <span className="truncate">{s.label}</span>
-                </button>
-              ))}
-            </nav>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
+
+      <AgentKeysModal graphId={graph.id} open={keysOpen} onClose={() => setKeysOpen(false)} />
     </div>
   );
 };
