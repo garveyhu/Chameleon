@@ -17,6 +17,8 @@ class GraphItem(BaseModel):
     graph_key: str
     name: str
     description: str | None = None
+    # chatflow（对话型）/ workflow（流程型）
+    kind: str = "chatflow"
     schema_version: int = 1
     enabled: bool
     # P22.3：published 版本字段
@@ -40,6 +42,7 @@ class CreateGraphRequest(BaseModel):
     )
     name: str = Field(min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    kind: str = Field(default="chatflow", pattern=r"^(chatflow|workflow)$")
     spec: dict[str, Any] = Field(
         description="GraphSpec.model_dump()；后端会再校验一次"
     )
@@ -48,6 +51,7 @@ class CreateGraphRequest(BaseModel):
 class UpdateGraphRequest(BaseModel):
     name: str | None = Field(default=None, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    kind: str | None = Field(default=None, pattern=r"^(chatflow|workflow)$")
     spec: dict[str, Any] | None = None
     enabled: bool | None = None
 

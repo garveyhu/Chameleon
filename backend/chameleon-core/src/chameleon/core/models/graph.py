@@ -39,6 +39,10 @@ class Graph(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 工作流形态：chatflow（对话型，有聊天 I/O，可发布为智能体）/ workflow（流程型，一次性管线）
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="chatflow", server_default="chatflow"
+    )
     schema_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1
     )

@@ -75,6 +75,7 @@ async def create_graph(
         graph_key=req.graph_key,
         name=req.name,
         description=req.description,
+        kind=req.kind,
         spec=req.spec,
         enabled=True,
     )
@@ -94,6 +95,8 @@ async def update_graph(
         row.name = req.name
     if req.description is not None:
         row.description = req.description
+    if req.kind is not None:
+        row.kind = req.kind
     if req.spec is not None:
         _validate_spec(req.spec)
         row.spec = req.spec
