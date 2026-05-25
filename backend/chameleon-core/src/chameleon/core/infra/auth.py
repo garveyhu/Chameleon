@@ -21,15 +21,15 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.infra.db import get_session
-from chameleon.core.infra.jwt import (
-    JwtInvalidToken,
-    decode_token_with_blacklist,
-)
 from chameleon.core.api.exceptions import (
     BusinessError,
     PermissionDeniedError,
     ResultCode,
+)
+from chameleon.core.infra.db import get_session
+from chameleon.core.infra.jwt import (
+    JwtInvalidToken,
+    decode_token_with_blacklist,
 )
 from chameleon.core.models import ApiKey, App
 
@@ -48,6 +48,8 @@ class CurrentApp:
     scopes: list[str]
     # P19.3 PR #39：app → workspace 归属，配额检查 / 业务过滤都靠这个
     workspace_id: int | None = None
+    # 智能体级密钥的作用域：None = 应用级（所有 agent）；非空 = 仅该 agent_key
+    agent_key: str | None = None
 
 
 # ── key 生成与校验 ────────────────────────────────────────
@@ -115,6 +117,7 @@ async def current_app(
         name=row.name,
         scopes=list(row.scopes or []),
         workspace_id=ws_id,
+        agent_key=row.agent_key,
     )
 
 

@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.api.response import PageResult, Result
 from chameleon.core.api.sse import sse_response
 from chameleon.core.infra.db import get_session
+from chameleon.system.api_key.schemas import ApiKeyCreated, ApiKeyItem
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.graphs import generator as graph_generator
 from chameleon.system.graphs import human_input_service
 from chameleon.system.graphs import runner as graph_runner
 from chameleon.system.graphs import service as graph_service
 from chameleon.system.graphs.schemas import (
+    CreateAgentKeyRequest,
     CreateGraphRequest,
     GenerateGraphRequest,
     GraphChatRequest,
@@ -264,3 +266,35 @@ async def get_run(
 ) -> Result[GraphRunDetail]:
     item = await graph_service.get_run(session, run_id)
     return Result.ok(item)
+
+
+# ── 智能体级 API 密钥（编辑器「管理密钥」）──────────────────
+
+
+@router.get("/{graph_id}/api-keys", response_model=Result[list[ApiKeyItem]])
+async def list_agent_keys(
+    graph_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:read")),
+) -> Result[list[ApiKeyItem]]:
+    return Result.ok(await graph_service.list_agent_keys(session, graph_id))
+
+
+@router.post("/{graph_id}/api-keys", response_model=Result[ApiKeyCreated])
+async def create_agent_key(
+    graph_id: int,
+    req: CreateAgentKeyRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[ApiKeyCreated]:
+    return Result.ok(await graph_service.create_agent_key(session, graph_id, req.name))
+
+
+@router.post("/{graph_id}/api-keys/{key_id}/revoke", response_model=Result[ApiKeyItem])
+async def revoke_agent_key(
+    graph_id: int,
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[ApiKeyItem]:
+    return Result.ok(await graph_service.revoke_agent_key(session, graph_id, key_id))

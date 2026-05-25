@@ -171,6 +171,12 @@ class GraphRunDetail(GraphRunItem):
     node_runs: list[NodeRunItem] = Field(default_factory=list)
 
 
+class CreateAgentKeyRequest(BaseModel):
+    """编辑器「管理密钥」生成智能体级密钥的入参"""
+
+    name: str = Field(default="", max_length=128, description="密钥可读名称")
+
+
 # ── A6：human_input 断点 ───────────────────────────────────
 
 

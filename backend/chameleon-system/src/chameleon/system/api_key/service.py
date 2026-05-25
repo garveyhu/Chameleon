@@ -51,8 +51,10 @@ async def create_api_key(
         name=req.name,
         key_hash=key_hash,
         key_prefix=key_prefix,
+        plain_key=plaintext,  # 留存明文，支持后续重复复制
         scopes=req.scopes,
         description=req.description,
+        agent_key=req.agent_key,
         created_by_user_id=created_by_user_id,
     )
     session.add(row)
@@ -60,8 +62,9 @@ async def create_api_key(
     await session.refresh(row)
 
     logger.info(
-        "api_key created | app_id={} | scopes={} | by={}",
+        "api_key created | app_id={} | agent_key={} | scopes={} | by={}",
         row.app_id,
+        row.agent_key,
         row.scopes,
         created_by_user_id,
     )
@@ -72,6 +75,7 @@ async def create_api_key(
         key_prefix=row.key_prefix,
         scopes=row.scopes,
         description=row.description,
+        agent_key=row.agent_key,
         created_at=row.created_at,
         last_used_at=row.last_used_at,
         revoked_at=row.revoked_at,

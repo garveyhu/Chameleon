@@ -25,11 +25,18 @@ from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     Agent,
+    ApiKey,
     App,
     EmbedConfig,
     Graph,
     GraphNodeRun,
     GraphRun,
+)
+from chameleon.system.api_key import service as api_key_service
+from chameleon.system.api_key.schemas import (
+    ApiKeyCreated,
+    ApiKeyItem,
+    CreateApiKeyRequest,
 )
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
@@ -587,3 +594,76 @@ def _validate_spec(spec: dict) -> GraphSpec:
     except Exception as e:  # noqa: BLE001
         raise ValidationError(message=f"node config 校验失败: {e}") from e
     return gs
+
+
+# ── 智能体级 API 密钥（编辑器「管理密钥」）──────────────────
+
+
+async def _graph_agent(session: AsyncSession, graph_id: int) -> tuple[Graph, Agent]:
+    """取 graph + 其已发布 Agent；未发布抛业务错误。"""
+    g = (
+        await session.execute(
+            select(Graph).where(Graph.id == graph_id, Graph.deleted_at.is_(None))
+        )
+    ).scalar_one_or_none()
+    if g is None:
+        raise BusinessError(ResultCode.Fail, message=f"graph 不存在: {graph_id}")
+    agent = (
+        await session.execute(
+            select(Agent).where(
+                Agent.graph_id == graph_id, Agent.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one_or_none()
+    if agent is None:
+        raise BusinessError(
+            ResultCode.Fail,
+            message="该工作流尚未发布为智能体，请先在编排页「发布为智能体」",
+        )
+    return g, agent
+
+
+async def create_agent_key(
+    session: AsyncSession, graph_id: int, name: str
+) -> ApiKeyCreated:
+    """为该 graph 的 agent 生成一个智能体级密钥（仅对该 agent 有效）。"""
+    g, agent = await _graph_agent(session, graph_id)
+    req = CreateApiKeyRequest(
+        app_id=f"graph-{g.graph_key}",
+        name=name or f"{g.name} 密钥",
+        agent_key=agent.agent_key,
+    )
+    return await api_key_service.create_api_key(session, req)
+
+
+async def list_agent_keys(session: AsyncSession, graph_id: int) -> list[ApiKeyItem]:
+    """列该 graph agent 的未吊销密钥（最新在前）。"""
+    _, agent = await _graph_agent(session, graph_id)
+    rows = (
+        (
+            await session.execute(
+                select(ApiKey)
+                .where(
+                    ApiKey.agent_key == agent.agent_key,
+                    ApiKey.revoked_at.is_(None),
+                )
+                .order_by(ApiKey.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [ApiKeyItem.model_validate(r) for r in rows]
+
+
+async def revoke_agent_key(
+    session: AsyncSession, graph_id: int, key_id: int
+) -> ApiKeyItem:
+    """吊销该 graph agent 名下的某个密钥（校验归属）。"""
+    _, agent = await _graph_agent(session, graph_id)
+    row = (
+        await session.execute(select(ApiKey).where(ApiKey.id == key_id))
+    ).scalar_one_or_none()
+    if row is None or row.agent_key != agent.agent_key:
+        raise BusinessError(ResultCode.Fail, message="密钥不存在或不属于该智能体")
+    return await api_key_service.revoke_api_key(session, key_id)
