@@ -21,7 +21,7 @@ export const MonitorView = ({ graphId }: Props) => {
   // 取较多近期记录算指标；总运行数用 PageResult.total（全量）
   const q = useQuery({
     queryKey: ['graph-run-metrics', graphId],
-    queryFn: () => graphApi.listRuns(graphId, { page: 1, page_size: 200 }),
+    queryFn: () => graphApi.listRuns(graphId, { page: 1, page_size: 100 }),
   });
   const { total, sampled, successPct, avgMs, failed, daily } = useMemo(() => {
     const runs = q.data?.items ?? [];

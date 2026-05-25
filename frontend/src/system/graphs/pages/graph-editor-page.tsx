@@ -36,8 +36,6 @@ import {
   Play,
   Rocket,
   Save,
-  ShieldAlert,
-  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 
@@ -48,7 +46,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from '@/core/components/ui/dropdown-menu';
 import { cn } from '@/core/lib/cn';
@@ -69,7 +66,6 @@ import { LogsView } from '@/system/graphs/components/views/logs-view';
 import { MonitorView } from '@/system/graphs/components/views/monitor-view';
 import { useGraphHistory } from '@/system/graphs/hooks/use-graph-history';
 import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
-import { lintGraph } from '@/system/graphs/lib/lint';
 import { TYPE_META } from '@/system/graphs/lib/node-meta';
 import { defaultLabel, rfToSpec, specToRf } from '@/system/graphs/lib/rf-spec';
 import { graphApi } from '@/system/graphs/services/graph';
@@ -497,9 +493,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const selectedRunView = selectedId ? runner.nodeRuns[selectedId] : undefined;
 
-  // 变量检查：扫描坏引用（指向不存在节点的 {{#...#}}）
-  const lintIssues = useMemo(() => lintGraph(nodes), [nodes]);
-
   // A2：start 节点配置的开场白 / 建议问题（喂给对话调试面板）
   const startChatCfg = useMemo(() => {
     const start = nodes.find(n => n.data.nodeType === 'start');
@@ -654,47 +647,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
                 {/* 浮层工具条 —— 钉右上角；撤销/重做走 ⌘Z 快捷键不占位 */}
                 <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-stone-200/70 bg-white/85 px-2 py-1.5 shadow-md backdrop-blur">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="sm" title="变量检查">
-                        {lintIssues.length > 0 ? (
-                          <ShieldAlert className="h-3 w-3 text-amber-500" />
-                        ) : (
-                          <ShieldCheck className="h-3 w-3 text-emerald-500" />
-                        )}
-                        {lintIssues.length > 0 ? ` ${lintIssues.length}` : ''}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="max-h-72 w-72 overflow-y-auto">
-                      {lintIssues.length === 0 ? (
-                        <div className="px-3 py-2 text-[12px] text-emerald-600">
-                          ✓ 未发现变量问题
-                        </div>
-                      ) : (
-                        <>
-                          <DropdownMenuLabel className="text-[11px] text-stone-500">
-                            {lintIssues.length} 个变量问题
-                          </DropdownMenuLabel>
-                          {lintIssues.map((it, i) => (
-                            <DropdownMenuItem
-                              key={i}
-                              onSelect={() => setSelectedId(it.nodeId)}
-                              className="flex-col items-start gap-0.5"
-                            >
-                              <span className="text-[12px] font-medium text-stone-800">
-                                {it.nodeLabel}
-                              </span>
-                              <span className="text-[10.5px] text-stone-500">
-                                <code className="font-mono text-rose-600">{it.token}</code> ·{' '}
-                                {it.reason}
-                              </span>
-                            </DropdownMenuItem>
-                          ))}
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <span className="h-4 w-px bg-stone-200" />
                   <Button
                     variant="ghost"
                     size="sm"

@@ -32,6 +32,7 @@ import type { EntityId } from '@/core/types/api';
 import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-modal';
 import { embedConfigApi } from '@/system/embed_configs/services/embed';
 import type { EmbedConfigItem, UpdateEmbedConfigRequest } from '@/system/embed_configs/types/embed';
+import { AgentKeysModal } from '@/system/graphs/components/app-shell/agent-keys-modal';
 import { WebAppDialog, type WebAppTab } from '@/system/graphs/components/app-shell/web-app-dialogs';
 import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
@@ -39,9 +40,9 @@ import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/g
 
 export type EditorTab = 'orchestrate' | 'api' | 'logs' | 'monitor';
 
+// 访问 API 不在二级导航——由下方「后端服务 API」卡片的「API 文档」入口覆盖
 const NAV: { key: EditorTab; label: string; icon: LucideIcon }[] = [
   { key: 'orchestrate', label: '编排', icon: Layers },
-  { key: 'api', label: '访问 API', icon: Code2 },
   { key: 'logs', label: '日志', icon: ScrollText },
   { key: 'monitor', label: '监测', icon: Activity },
 ];
@@ -73,6 +74,7 @@ export const GraphAppRail = ({
 
   const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
   const [embedCfg, setEmbedCfg] = useState<EmbedConfigItem | null>(null);
+  const [keysOpen, setKeysOpen] = useState(false);
   const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
 
   const updateEmbedMut = useMutation({
@@ -226,18 +228,17 @@ export const GraphAppRail = ({
 
           {/* 后端服务 API */}
           <Card icon={Server} title="后端服务 API" tone={isChat ? 'on' : 'off'}>
-            <div className="text-[10px] text-stone-500">API 端点</div>
             <button
               type="button"
               onClick={() => copy(apiBase, 'API 端点')}
-              className="mt-0.5 flex w-full items-center gap-1 rounded border border-stone-200 bg-white px-1.5 py-1 text-left font-mono text-[10px] text-stone-600 transition hover:bg-stone-50"
+              className="flex w-full items-center gap-1 rounded border border-stone-200 bg-white px-1.5 py-1 text-left font-mono text-[10px] text-stone-600 transition hover:bg-stone-50"
             >
               <span className="min-w-0 flex-1 truncate">{apiBase}</span>
               <Copy className="h-3 w-3 shrink-0 opacity-50" />
             </button>
             <div className="mt-1.5 flex gap-1.5">
               <RailAction label="API 文档" icon={Code2} onClick={() => onTab('api')} />
-              <RailAction label="API 密钥" icon={KeyRound} onClick={() => onTab('api')} />
+              <RailAction label="API 密钥" icon={KeyRound} onClick={() => setKeysOpen(true)} />
             </div>
           </Card>
         </div>
@@ -263,6 +264,7 @@ export const GraphAppRail = ({
           onSubmitUpdate={(id, req) => updateEmbedMut.mutate({ id, req })}
         />
       )}
+      <AgentKeysModal graphId={graph.id} open={keysOpen} onClose={() => setKeysOpen(false)} />
     </>
   );
 };
