@@ -3,10 +3,11 @@
  * 走 /v1/admin/graphs/{id}/chat/stream：临时会话、不落库、不必先发布。
  * history 客户端管理；delta 累积成回答，step 显示执行过程。dirty 时跑前自动存草稿。
  */
-
-import { Eraser, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { Eraser, Send } from 'lucide-react';
+
+import { Markdown } from '@/core/components/chat/markdown';
 import { Button } from '@/core/components/ui/button';
 import {
   Modal,
@@ -81,9 +82,7 @@ export const ChatDebugDialog = ({
   }, [messages]);
 
   const patchLast = (fn: (m: ChatMessage) => ChatMessage) =>
-    setMessages(ms =>
-      ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)),
-    );
+    setMessages(ms => ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)));
 
   const send = async (textArg?: string) => {
     const text = (textArg ?? input).trim();
@@ -200,11 +199,7 @@ export const ChatDebugDialog = ({
 
   return (
     <Modal open={open} onOpenChange={onOpenChange}>
-      <ModalContent
-        size="lg"
-        className="flex h-[82vh] flex-col"
-        closeOnBackdrop={false}
-      >
+      <ModalContent size="lg" className="flex h-[82vh] flex-col" closeOnBackdrop={false}>
         <ModalHeader>
           <ModalTitle>对话调试 · {graphName}</ModalTitle>
         </ModalHeader>
@@ -214,7 +209,7 @@ export const ChatDebugDialog = ({
               <div className="space-y-3">
                 {opener ? (
                   <div className="flex justify-start">
-                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-3 py-2 text-[12.5px] text-stone-800">
+                    <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-3 py-2 text-[12.5px] whitespace-pre-wrap text-stone-800">
                       {opener}
                     </div>
                   </div>
@@ -306,7 +301,7 @@ const Bubble = ({
   if (m.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-blue-600 px-3 py-2 text-[12.5px] text-white">
+        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-blue-600 px-3 py-2 text-[12.5px] whitespace-pre-wrap text-white">
           {m.content}
         </div>
       </div>
@@ -318,11 +313,7 @@ const Bubble = ({
         {m.steps && m.steps.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {m.steps.map((s, i) => (
-              <StatusBadge
-                key={i}
-                tone={STEP_TONE(s.status)}
-                pulse={s.status === 'running'}
-              >
+              <StatusBadge key={i} tone={STEP_TONE(s.status)} pulse={s.status === 'running'}>
                 {s.name}
               </StatusBadge>
             ))}
@@ -335,16 +326,20 @@ const Bubble = ({
         ) : (
           <div
             className={cn(
-              'whitespace-pre-wrap rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-3 py-2 text-[12.5px] text-stone-800',
+              'rounded-2xl rounded-bl-sm border border-stone-200 bg-white px-3 py-2 text-[12.5px] text-stone-800',
               m.streaming && !m.content && 'text-stone-400',
             )}
           >
-            {m.content || (m.streaming ? '思考中…' : '')}
+            {m.streaming ? (
+              <span className="whitespace-pre-wrap">{m.content || '思考中…'}</span>
+            ) : m.content ? (
+              <Markdown content={m.content} className="text-[12.5px]" />
+            ) : null}
           </div>
         )}
         {m.citations && m.citations.length > 0 && (
           <div className="space-y-1">
-            <div className="text-[10px] uppercase tracking-wide text-stone-400">
+            <div className="text-[10px] tracking-wide text-stone-400 uppercase">
               引用 {m.citations.length}
             </div>
             {m.citations.map((c, i) => (
@@ -357,14 +352,10 @@ const Bubble = ({
                     {c.source || `#${i + 1}`}
                   </span>
                   {c.score != null && (
-                    <span className="tnum text-[10px] text-stone-400">
-                      {c.score.toFixed(2)}
-                    </span>
+                    <span className="tnum text-[10px] text-stone-400">{c.score.toFixed(2)}</span>
                   )}
                 </div>
-                <div className="mt-0.5 line-clamp-2 text-stone-600">
-                  {c.snippet}
-                </div>
+                <div className="mt-0.5 line-clamp-2 text-stone-600">{c.snippet}</div>
               </div>
             ))}
           </div>
