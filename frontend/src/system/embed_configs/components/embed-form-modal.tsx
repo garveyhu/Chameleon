@@ -4,11 +4,15 @@
  * - 中间表单
  * - 右侧静态预览（实时响应 ui_config + behavior）
  */
+import { useEffect, useMemo, useState } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import {
   Bot,
+  Check,
+  Code2,
   Cog,
+  Copy,
   HelpCircle,
   MessageCircle,
   MessageSquare,
@@ -20,7 +24,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -66,7 +69,7 @@ import {
   mergeUiConfig,
 } from '@/system/embed_configs/types/embed';
 
-type TabKey = 'basic' | 'appearance' | 'behavior' | 'security';
+type TabKey = 'basic' | 'appearance' | 'behavior' | 'security' | 'access';
 
 interface TabDef {
   key: TabKey;
@@ -79,6 +82,7 @@ const TABS: TabDef[] = [
   { key: 'appearance', label: '外观', Icon: Palette },
   { key: 'behavior', label: '行为', Icon: Settings },
   { key: 'security', label: '安全', Icon: ShieldCheck },
+  { key: 'access', label: '嵌入', Icon: Code2 },
 ];
 
 interface EmbedFormModalProps {
@@ -114,7 +118,8 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   // 安全
   const [origins, setOrigins] = useState('');
 
-  // 打开 / 切换 initial 时填充表单
+  // 打开 / 切换 initial 时把外部 initial 同步进表单（合法的"开局重置"副作用）
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!open) return;
     setTab('basic');
@@ -136,6 +141,7 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
       setOrigins('');
     }
   }, [open, initial]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const agentsQ = useQuery({ queryKey: ['agents', 'all'], queryFn: () => agentApi.list() });
   const appsQ = useQuery({
@@ -179,10 +185,7 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
 
   return (
     <Modal open={open} onOpenChange={o => !o && onClose()}>
-      <ModalContent
-        size="xl"
-        className="w-[1080px] max-w-[95vw]"
-      >
+      <ModalContent size="xl" className="w-[1080px] max-w-[95vw]">
         <ModalHeader>
           <ModalTitle className="flex items-center gap-2">
             <Bot className="h-4 w-4 text-blue-600" />
@@ -197,7 +200,7 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
         <ModalBody className="!p-0">
           <div className="flex h-[600px]">
             {/* tab nav */}
-            <nav className="w-32 shrink-0 border-r border-stone-200/70 bg-warm-2/30 p-2">
+            <nav className="bg-warm-2/30 w-32 shrink-0 border-r border-stone-200/70 p-2">
               {TABS.map(t => (
                 <button
                   key={t.key}
@@ -236,8 +239,13 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
               {tab === 'appearance' ? <AppearanceTab ui={ui} onChange={setUi} /> : null}
               {tab === 'behavior' ? <BehaviorTab v={behavior} onChange={setBehavior} /> : null}
               {tab === 'security' ? (
-                <SecurityTab origins={origins} onChange={setOrigins} originCount={originList.length} />
+                <SecurityTab
+                  origins={origins}
+                  onChange={setOrigins}
+                  originCount={originList.length}
+                />
               ) : null}
+              {tab === 'access' ? <AccessTab embedKey={initial?.embed_key ?? null} /> : null}
             </div>
 
             {/* preview */}
@@ -521,10 +529,7 @@ const AppearanceTab: React.FC<{
             </Select>
           </Field>
           <Field label="字体大小">
-            <Select
-              value={ui.font_size}
-              onValueChange={v => patch('font_size', v as FontSize)}
-            >
+            <Select value={ui.font_size} onValueChange={v => patch('font_size', v as FontSize)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -649,6 +654,61 @@ const SecurityTab: React.FC<{
   </div>
 );
 
+// ── 接入方式：JS Widget + iframe 代码片段 ──────────────────────
+const AccessTab: React.FC<{ embedKey: string | null }> = ({ embedKey }) => {
+  if (!embedKey) {
+    return (
+      <div className="rounded-lg border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
+        保存后可在此获取接入代码
+      </div>
+    );
+  }
+  const origin = window.location.origin;
+  const script = `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer></script>`;
+  const iframe = `<iframe src="${origin}/embed/${embedKey}" style="width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)"></iframe>`;
+  return (
+    <div className="space-y-3">
+      <SnippetCard title="JS Widget" hint="推荐：右下角浮动气泡" code={script} />
+      <SnippetCard title="iframe" hint="嵌入到页面内某个区域" code={iframe} />
+    </div>
+  );
+};
+
+const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
+  title,
+  hint,
+  code,
+}) => {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <div className="overflow-hidden rounded-lg border border-stone-200">
+      <div className="flex items-center justify-between bg-stone-50 px-3 py-1.5">
+        <span className="text-[12.5px] font-medium text-stone-800">
+          {title}
+          <span className="ml-1.5 text-[11px] font-normal text-stone-400">· {hint}</span>
+        </span>
+        <button
+          type="button"
+          onClick={copy}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11.5px] text-stone-500 transition hover:bg-stone-200/70 hover:text-stone-800"
+        >
+          {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+          {copied ? '已复制' : '复制'}
+        </button>
+      </div>
+      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed break-all whitespace-pre-wrap text-stone-700">
+        {code}
+      </pre>
+    </div>
+  );
+};
+
 // ── 子组件 ────────────────────────────────────────────────────
 
 const Section: React.FC<{
@@ -724,7 +784,7 @@ const NumberWithUnit: React.FC<{
       }}
       className="pr-10"
     />
-    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] text-stone-400">
+    <span className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-[11px] text-stone-400">
       {unit}
     </span>
   </div>
@@ -736,7 +796,7 @@ const ToggleField: React.FC<{
   checked: boolean;
   onChange: (c: boolean) => void;
 }> = ({ label, hint, checked, onChange }) => (
-  <div className="flex items-center justify-between rounded-md border border-stone-200/60 bg-paper px-3 py-2">
+  <div className="bg-paper flex items-center justify-between rounded-md border border-stone-200/60 px-3 py-2">
     <div className="space-y-0.5">
       <div className="text-[12.5px] font-medium text-stone-800">{label}</div>
       {hint ? <div className="text-[11px] text-stone-500">{hint}</div> : null}
@@ -775,10 +835,7 @@ const SuggestedQuestionsEditor: React.FC<{
       <Button variant="outline" size="sm" onClick={add} disabled={items.length >= 8}>
         <Plus className="h-3.5 w-3.5" /> 添加推荐问题
       </Button>
-      {items.length >= 8 ? (
-        <div className="text-[10.5px] text-stone-400">最多 8 条</div>
-      ) : null}
+      {items.length >= 8 ? <div className="text-[10.5px] text-stone-400">最多 8 条</div> : null}
     </div>
   );
 };
-
