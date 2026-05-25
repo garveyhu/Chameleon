@@ -1,4 +1,5 @@
 import type { EntityId } from '@/core/types/api';
+
 export interface AppItem {
   id: EntityId;
   app_key: string;
@@ -26,6 +27,8 @@ export interface ApiKeyItem {
   app_id: string;
   name: string;
   key_prefix: string;
+  /** 明文 key（留存，支持重复复制；老数据为 null 只能看前缀） */
+  plain_key: string | null;
   scopes: string[];
   description: string | null;
   last_used_at: string | null;

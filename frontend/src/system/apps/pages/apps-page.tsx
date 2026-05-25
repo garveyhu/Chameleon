@@ -1,10 +1,9 @@
 /** apps + api_keys 管理页 */
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Key, KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from '@/core/lib/toast';
+
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Check, Copy, Eye, EyeOff, Key, KeyRound, Plus, Trash2 } from 'lucide-react';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -45,6 +44,7 @@ import {
 } from '@/core/components/ui/sheet';
 import { Textarea } from '@/core/components/ui/textarea';
 import { formatDateTime } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import { apiKeyApi, appApi } from '@/system/apps/services/app';
 import type { ApiKeyCreated, AppItem } from '@/system/apps/types/app';
 
@@ -81,8 +81,16 @@ export const AppsPage = () => {
   });
 
   const columns: DataTableColumn<AppItem>[] = [
-    { key: 'app_key', header: t('table.app_key'), render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span> },
-    { key: 'name', header: t('common.name'), render: a => <span className="font-medium text-stone-900">{a.name}</span> },
+    {
+      key: 'app_key',
+      header: t('table.app_key'),
+      render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span>,
+    },
+    {
+      key: 'name',
+      header: t('common.name'),
+      render: a => <span className="font-medium text-stone-900">{a.name}</span>,
+    },
     {
       key: 'status',
       header: t('common.status'),
@@ -107,7 +115,11 @@ export const AppsPage = () => {
       key: 'created_at',
       header: t('common.created_at'),
       width: 160,
-      render: a => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(a.created_at)}</span>,
+      render: a => (
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
+          {formatDateTime(a.created_at)}
+        </span>
+      ),
     },
     {
       key: 'actions',
@@ -321,11 +333,11 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
           <SheetBody className="space-y-6">
             {/* 新建 key */}
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-              <div className="mb-1 text-xs font-semibold uppercase text-stone-500">
+              <div className="mb-1 text-xs font-semibold text-stone-500 uppercase">
                 签发新 API Key
               </div>
               <p className="mb-3 text-[11.5px] text-stone-500">
-                密钥由系统随机生成，签发完成后会弹一次明文，请立即复制保存（之后只能看到前缀）。
+                密钥由系统随机生成，签发后留存明文，可随时在下方列表展开 / 复制。
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -363,21 +375,23 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
 
             {/* 已签发 key 列表 */}
             <div>
-              <div className="mb-2 text-xs font-semibold uppercase text-stone-500">已签发</div>
+              <div className="mb-2 text-xs font-semibold text-stone-500 uppercase">已签发</div>
               <table className="w-full text-sm">
                 <thead className="text-xs text-stone-500">
                   <tr>
-                    <th className="text-left py-1">前缀</th>
-                    <th className="text-left py-1">名称</th>
-                    <th className="text-left py-1">scopes</th>
-                    <th className="text-left py-1">状态</th>
+                    <th className="py-1 text-left">前缀</th>
+                    <th className="py-1 text-left">名称</th>
+                    <th className="py-1 text-left">scopes</th>
+                    <th className="py-1 text-left">状态</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
                   {(keysQ.data || []).map(k => (
                     <tr key={k.id}>
-                      <td className="py-2 font-mono text-xs">{k.key_prefix}...</td>
+                      <td className="py-2">
+                        <KeyCopyCell prefix={k.key_prefix} plain={k.plain_key} />
+                      </td>
                       <td>{k.name}</td>
                       <td>
                         {k.scopes.length === 0 ? (
@@ -425,20 +439,18 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
         </SheetContent>
       </Sheet>
 
-      {/* 新签发明文 token 仅一次显示 */}
+      {/* 新签发明文 token（也可随时在列表展开复制） */}
       <Dialog open={!!plain} onOpenChange={o => !o && setPlain(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新 API Key 已签发</DialogTitle>
             <DialogDescription>
-              这是<strong className="text-red-600">唯一一次</strong>看到明文 token 的机会，请立即保存。
+              明文已留存，可随时在下方列表展开 / 复制；建议立即保存到安全位置。
             </DialogDescription>
           </DialogHeader>
-          <div className="overflow-hidden rounded-lg border border-stone-200/80 bg-warm-2/40">
+          <div className="bg-warm-2/40 overflow-hidden rounded-lg border border-stone-200/80">
             <div className="flex items-center justify-between border-b border-stone-200/70 bg-white/40 px-3 py-1.5">
-              <span className="text-[11.5px] font-medium text-stone-700">
-                API Key（明文）
-              </span>
+              <span className="text-[11.5px] font-medium text-stone-700">API Key（明文）</span>
               <button
                 type="button"
                 onClick={() => {
@@ -453,7 +465,7 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
                 复制
               </button>
             </div>
-            <pre className="overflow-x-auto whitespace-pre-wrap break-all px-3.5 py-3 font-mono text-[12.5px] leading-relaxed text-stone-800">
+            <pre className="overflow-x-auto px-3.5 py-3 font-mono text-[12.5px] leading-relaxed break-all whitespace-pre-wrap text-stone-800">
               {plain?.plain_key}
             </pre>
           </div>
@@ -474,5 +486,49 @@ const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => vo
         </DialogContent>
       </Dialog>
     </>
+  );
+};
+
+/** 列表里的密钥单元格：默认掩码，点眼睛展开全文，点复制拷全文（老数据无明文只显前缀） */
+const KeyCopyCell = ({ prefix, plain }: { prefix: string; plain: string | null }) => {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (!plain) return;
+    void navigator.clipboard.writeText(plain).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <div className="flex items-center gap-1.5">
+      <code className="font-mono text-xs text-stone-600">
+        {plain ? (shown ? plain : `${prefix}${'•'.repeat(8)}`) : `${prefix}...`}
+      </code>
+      {plain && (
+        <>
+          <button
+            type="button"
+            onClick={() => setShown(s => !s)}
+            title={shown ? '隐藏' : '显示'}
+            className="text-stone-400 transition hover:text-stone-700"
+          >
+            {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={copy}
+            title="复制"
+            className="text-stone-400 transition hover:text-stone-700"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-500" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </>
+      )}
+    </div>
   );
 };
