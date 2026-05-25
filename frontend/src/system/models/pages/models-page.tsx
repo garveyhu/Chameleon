@@ -1,11 +1,9 @@
 /** models 管理页 */
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, Plus, SlidersHorizontal, Trash2, Zap } from 'lucide-react';
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { toast } from '@/core/lib/toast';
-import type { EntityId } from '@/core/types/api';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -13,20 +11,13 @@ import {
   DataTable,
   type DataTableColumn,
   SectionCard,
+  TablePagination,
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
-import { Switch } from '@/core/components/ui/switch';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/core/components/ui/select';
 import {
   Modal,
   ModalBody,
@@ -35,6 +26,17 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
+import { Switch } from '@/core/components/ui/switch';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
+import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
 import { ModelConfigSheet } from '@/system/models/components/model-config-sheet';
 import { TestModelModal } from '@/system/models/components/test-model-modal';
 import { modelApi } from '@/system/models/services/model';
@@ -50,6 +52,7 @@ export const ModelsPage = () => {
   const [configModel, setConfigModel] = useState<ModelItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
+  const pg = useClientPagination(listQ.data ?? []);
   const providersQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
 
   const createMut = useMutation({
@@ -87,7 +90,13 @@ export const ModelsPage = () => {
   });
 
   const columns: DataTableColumn<ModelItem>[] = [
-    { key: 'code', header: t('table.code'), render: m => <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span> },
+    {
+      key: 'code',
+      header: t('table.code'),
+      render: m => (
+        <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span>
+      ),
+    },
     {
       key: 'provider_code',
       header: t('table.provider'),
@@ -95,7 +104,13 @@ export const ModelsPage = () => {
       render: m => <Badge variant="primary">{m.provider_code || '?'}</Badge>,
     },
     { key: 'kind', header: t('common.type'), width: 100, render: m => <Badge>{m.kind}</Badge> },
-    { key: 'dim', header: t('table.dim'), width: 80, align: 'right', render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span> },
+    {
+      key: 'dim',
+      header: t('table.dim'),
+      width: 80,
+      align: 'right',
+      render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span>,
+    },
     {
       key: 'defaults',
       header: t('table.defaults'),
@@ -142,7 +157,7 @@ export const ModelsPage = () => {
           <button
             type="button"
             title="配置参数"
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11.5px] whitespace-nowrap text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setConfigModel(m)}
           >
             <SlidersHorizontal className="h-3.5 w-3.5" /> 配置
@@ -150,7 +165,7 @@ export const ModelsPage = () => {
           <button
             type="button"
             title={t('common.test')}
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11.5px] whitespace-nowrap text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => setTestModel(m)}
           >
             <Zap className="h-3.5 w-3.5" /> {t('common.test')}
@@ -181,7 +196,7 @@ export const ModelsPage = () => {
         />
         <DataTable
           columns={columns}
-          rows={listQ.data || []}
+          rows={pg.rows}
           rowKey="id"
           loading={listQ.isLoading}
           leftBar={m => (m.enabled ? 'bg-emerald-400' : 'bg-stone-300')}
@@ -196,6 +211,13 @@ export const ModelsPage = () => {
               }
             />
           }
+        />
+        <TablePagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          total={pg.total}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
         />
       </SectionCard>
       <CreateModelModal
@@ -230,7 +252,12 @@ const CreateModelModal = ({
   open: boolean;
   providers: { id: EntityId; code: string }[];
   onClose: () => void;
-  onSubmit: (req: { provider_id: EntityId; code: string; kind: 'chat' | 'embedding'; dim?: number }) => void;
+  onSubmit: (req: {
+    provider_id: EntityId;
+    code: string;
+    kind: 'chat' | 'embedding';
+    dim?: number;
+  }) => void;
   loading: boolean;
 }) => {
   const [providerId, setProviderId] = useState<string>('');

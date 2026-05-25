@@ -1,18 +1,11 @@
 /** 工作流列表页 —— 简版列表 + 新建 + 跳转编辑 */
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  MessageSquare,
-  Plus,
-  Rocket,
-  Sparkles,
-  Trash2,
-  Workflow,
-} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { DataTable, SectionCard } from '@/core/components/table';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MessageSquare, Plus, Rocket, Sparkles, Trash2, Workflow } from 'lucide-react';
+
+import { DataTable, SectionCard, TablePagination } from '@/core/components/table';
 import type { DataTableColumn } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -26,6 +19,7 @@ import {
 } from '@/core/components/ui/modal';
 import { StatusBadge } from '@/core/components/ui/status-badge';
 import { Textarea } from '@/core/components/ui/textarea';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
 import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
@@ -67,10 +61,7 @@ const CHATFLOW_SPEC: GraphSpec = {
   ],
 };
 
-const KIND_META: Record<
-  GraphKind,
-  { label: string; chip: string; desc: string }
-> = {
+const KIND_META: Record<GraphKind, { label: string; chip: string; desc: string }> = {
   chatflow: {
     label: '对话型',
     chip: 'bg-violet-50 text-violet-700',
@@ -87,10 +78,7 @@ const KindBadge = ({ kind }: { kind: GraphKind }) => {
   const m = KIND_META[kind];
   return (
     <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px]',
-        m.chip,
-      )}
+      className={cn('inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px]', m.chip)}
     >
       {kind === 'chatflow' ? (
         <MessageSquare className="h-3 w-3" />
@@ -132,6 +120,7 @@ export const GraphsPage = () => {
     () => (kindFilter === 'all' ? rows : rows.filter(g => g.kind === kindFilter)),
     [rows, kindFilter],
   );
+  const pg = useClientPagination(filtered);
 
   const genMut = useMutation({
     mutationFn: () =>
@@ -200,12 +189,8 @@ export const GraphsPage = () => {
             <Workflow className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[12.5px] font-medium text-stone-900">
-              {g.name}
-            </div>
-            <div className="truncate font-mono text-[10.5px] text-stone-400">
-              {g.graph_key}
-            </div>
+            <div className="truncate text-[12.5px] font-medium text-stone-900">{g.name}</div>
+            <div className="truncate font-mono text-[10.5px] text-stone-400">{g.graph_key}</div>
           </div>
         </div>
       ),
@@ -234,11 +219,7 @@ export const GraphsPage = () => {
         g.published_version && g.published_version > 0 ? (
           <span
             className="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] text-emerald-700"
-            title={
-              g.published_at
-                ? `最近发布: ${formatDateTime(g.published_at)}`
-                : ''
-            }
+            title={g.published_at ? `最近发布: ${formatDateTime(g.published_at)}` : ''}
           >
             <Rocket className="h-3 w-3" /> v{g.published_version}
           </span>
@@ -251,9 +232,7 @@ export const GraphsPage = () => {
       header: '创建时间',
       width: 168,
       render: g => (
-        <span className="font-mono text-[11px] text-stone-500">
-          {formatDateTime(g.created_at)}
-        </span>
+        <span className="font-mono text-[11px] text-stone-500">{formatDateTime(g.created_at)}</span>
       ),
     },
     {
@@ -269,7 +248,7 @@ export const GraphsPage = () => {
             e.stopPropagation();
             void onDelete(g);
           }}
-          className="rounded p-1 text-stone-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100"
+          className="rounded p-1 text-stone-400 opacity-0 transition group-hover:opacity-100 hover:bg-rose-50 hover:text-rose-600"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -286,8 +265,8 @@ export const GraphsPage = () => {
             工作流
           </h2>
           <p className="mt-0.5 text-[11.5px] text-stone-500">
-            可视化编排：节点 = LLM / KB / Tool / 条件 / End；
-            拖连线组装能力，跑出来可在 trace tree 看嵌套结构
+            可视化编排：节点 = LLM / KB / Tool / 条件 / End； 拖连线组装能力，跑出来可在 trace tree
+            看嵌套结构
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -341,12 +320,19 @@ export const GraphsPage = () => {
 
       <DataTable
         columns={columns}
-        rows={filtered}
+        rows={pg.rows}
         rowKey={g => String(g.id)}
         loading={listQ.isLoading}
         leftBar={g => (g.enabled ? 'bg-emerald-400' : 'bg-stone-300')}
         onRowClick={g => nav(`/graphs/${g.id}/edit`)}
         emptyText='还没有工作流；点右上"新建"开始'
+      />
+      <TablePagination
+        page={pg.page}
+        pageSize={pg.pageSize}
+        total={pg.total}
+        onPageChange={pg.setPage}
+        onPageSizeChange={pg.setPageSize}
       />
 
       <Modal open={createOpen} onOpenChange={o => !o && setCreateOpen(false)}>
@@ -356,9 +342,7 @@ export const GraphsPage = () => {
           </ModalHeader>
           <ModalBody className="space-y-3">
             <div>
-              <label className="mb-1.5 block text-[12px] text-stone-600">
-                类型
-              </label>
+              <label className="mb-1.5 block text-[12px] text-stone-600">类型</label>
               <div className="grid grid-cols-2 gap-2">
                 {(['chatflow', 'workflow'] as const).map(k => {
                   const m = KIND_META[k];
@@ -383,9 +367,7 @@ export const GraphsPage = () => {
                         )}
                         {m.label}
                       </div>
-                      <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
-                        {m.desc}
-                      </div>
+                      <div className="mt-1 text-[10.5px] leading-snug text-stone-500">{m.desc}</div>
                     </button>
                   );
                 })}
@@ -394,9 +376,7 @@ export const GraphsPage = () => {
             <div>
               <label className="mb-1 block text-[12px] text-stone-600">
                 graph_key
-                <span className="ml-1 text-stone-400">
-                  （唯一；可用 a-zA-Z0-9_-）
-                </span>
+                <span className="ml-1 text-stone-400">（唯一；可用 a-zA-Z0-9_-）</span>
               </label>
               <Input
                 value={graphKey}
@@ -406,9 +386,7 @@ export const GraphsPage = () => {
               />
             </div>
             <div>
-              <label className="mb-1 block text-[12px] text-stone-600">
-                显示名
-              </label>
+              <label className="mb-1 block text-[12px] text-stone-600">显示名</label>
               <Input
                 value={graphName}
                 onChange={e => setGraphName(e.target.value)}
@@ -471,11 +449,7 @@ export const GraphsPage = () => {
             </Button>
             <Button
               onClick={() => genMut.mutate()}
-              disabled={
-                genDesc.trim().length < 4 ||
-                !genKey.trim() ||
-                genMut.isPending
-              }
+              disabled={genDesc.trim().length < 4 || !genKey.trim() || genMut.isPending}
             >
               {genMut.isPending ? '生成中…' : '生成并编辑'}
             </Button>

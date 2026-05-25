@@ -1,11 +1,9 @@
 /** agents 管理页：启停 + 测试 invoke */
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bot, Play, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
-import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -13,19 +11,13 @@ import {
   DataTable,
   type DataTableColumn,
   SectionCard,
+  TablePagination,
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/core/components/ui/select';
 import {
   Modal,
   ModalBody,
@@ -34,6 +26,13 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
 import {
   Sheet,
   SheetBody,
@@ -44,6 +43,9 @@ import {
 } from '@/core/components/ui/sheet';
 import { Switch } from '@/core/components/ui/switch';
 import { Textarea } from '@/core/components/ui/textarea';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
+import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
+import { toast } from '@/core/lib/toast';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
 
@@ -56,6 +58,7 @@ export const AgentsPage = () => {
   const [delAgent, setDelAgent] = useState<AgentItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['agents'], queryFn: () => agentApi.list() });
+  const pg = useClientPagination(listQ.data ?? []);
 
   const toggleMut = useMutation({
     mutationFn: (args: { id: import('@/core/types/api').EntityId; enabled: boolean }) =>
@@ -97,7 +100,11 @@ export const AgentsPage = () => {
       width: 180,
       render: a => <span className="font-mono text-[11.5px] text-stone-700">{a.agent_key}</span>,
     },
-    { key: 'name', header: t('common.name'), render: a => <span className="font-medium text-stone-900">{a.name}</span> },
+    {
+      key: 'name',
+      header: t('common.name'),
+      render: a => <span className="font-medium text-stone-900">{a.name}</span>,
+    },
     {
       key: 'source',
       header: t('table.source'),
@@ -108,9 +115,7 @@ export const AgentsPage = () => {
             工作流
           </Badge>
         ) : (
-          <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>
-            {a.source}
-          </Badge>
+          <Badge variant={a.source === 'local' ? 'primary' : 'outline'}>{a.source}</Badge>
         ),
     },
     {
@@ -190,7 +195,7 @@ export const AgentsPage = () => {
         />
         <DataTable
           columns={columns}
-          rows={listQ.data || []}
+          rows={pg.rows}
           rowKey="id"
           loading={listQ.isLoading}
           onRowClick={a =>
@@ -219,6 +224,13 @@ export const AgentsPage = () => {
               }
             />
           }
+        />
+        <TablePagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          total={pg.total}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
         />
       </SectionCard>
 
@@ -261,7 +273,9 @@ const CreateAgentModal = ({
   const [key, setKey] = useState('');
   const [name, setName] = useState('');
   const [source, setSource] = useState<'dify' | 'fastgpt' | 'coze'>('dify');
-  const [configRaw, setConfigRaw] = useState('{\n  "endpoint": "https://...",\n  "api_key_env": "..."\n}');
+  const [configRaw, setConfigRaw] = useState(
+    '{\n  "endpoint": "https://...",\n  "api_key_env": "..."\n}',
+  );
 
   const submit = () => {
     let config: Record<string, unknown> | undefined;

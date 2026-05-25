@@ -2,10 +2,10 @@
  *
  * 矩阵语义见后端 chameleon-core/routing/router.py。
  */
+import { useMemo, useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Network, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -13,20 +13,19 @@ import {
   DataTable,
   type DataTableColumn,
   SectionCard,
+  TablePagination,
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Switch } from '@/core/components/ui/switch';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { AbilityFormModal } from '@/system/abilities/components/ability-form-modal';
 import { abilityApi } from '@/system/abilities/services/ability';
-import type {
-  AbilityItem,
-  UpdateAbilityRequest,
-} from '@/system/abilities/types/ability';
+import type { AbilityItem, UpdateAbilityRequest } from '@/system/abilities/types/ability';
 import { channelApi } from '@/system/channels/services/channel';
 
 export const AbilitiesPage = () => {
@@ -42,6 +41,7 @@ export const AbilitiesPage = () => {
     queryKey: ['channels'],
     queryFn: () => channelApi.list(),
   });
+  const pg = useClientPagination(listQ.data ?? []);
 
   const createMut = useMutation({
     mutationFn: abilityApi.create,
@@ -94,7 +94,9 @@ export const AbilitiesPage = () => {
     {
       key: 'model_code',
       header: 'Model Code',
-      render: a => <span className="font-mono text-[12.5px] font-medium text-stone-900">{a.model_code}</span>,
+      render: a => (
+        <span className="font-mono text-[12.5px] font-medium text-stone-900">{a.model_code}</span>
+      ),
     },
     {
       key: 'channel',
@@ -129,7 +131,7 @@ export const AbilitiesPage = () => {
           value={a.priority}
           min={0}
           step={1}
-          className="w-16 text-right tnum"
+          className="tnum w-16 text-right"
           onChange={e => {
             const v = Number(e.target.value);
             if (Number.isFinite(v) && v >= 0 && v !== a.priority) {
@@ -150,7 +152,7 @@ export const AbilitiesPage = () => {
           value={a.weight}
           min={0}
           step={1}
-          className="w-16 text-right tnum"
+          className="tnum w-16 text-right"
           onChange={e => {
             const v = Number(e.target.value);
             if (Number.isFinite(v) && v >= 0 && v !== a.weight) {
@@ -202,7 +204,7 @@ export const AbilitiesPage = () => {
         />
         <DataTable
           columns={columns}
-          rows={listQ.data || []}
+          rows={pg.rows}
           rowKey="id"
           loading={listQ.isLoading}
           emptyText={
@@ -217,6 +219,13 @@ export const AbilitiesPage = () => {
               }
             />
           }
+        />
+        <TablePagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          total={pg.total}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
         />
       </SectionCard>
 
@@ -239,7 +248,8 @@ export const AbilitiesPage = () => {
                         variant={a.enabled ? 'success' : 'outline'}
                         className="font-mono text-[11px]"
                       >
-                        {a.provider_code || '?'} / {a.channel_name || '?'} · P{a.priority} W{a.weight}
+                        {a.provider_code || '?'} / {a.channel_name || '?'} · P{a.priority} W
+                        {a.weight}
                       </Badge>
                     ))}
                 </div>
@@ -261,9 +271,7 @@ export const AbilitiesPage = () => {
         open={!!delTarget}
         title="删除 Ability"
         description={
-          delTarget
-            ? `删除后 model_code "${delTarget.model_code}" 走该 channel 的路由将失效。`
-            : ''
+          delTarget ? `删除后 model_code "${delTarget.model_code}" 走该 channel 的路由将失效。` : ''
         }
         variant="danger"
         confirmText="删除"

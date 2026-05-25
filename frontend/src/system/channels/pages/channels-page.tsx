@@ -3,10 +3,10 @@
  * 一个 channel = 一个 provider 的一条上游 key + 调度元数据；
  * 是 P17.A1.2 abilities 矩阵 + P17.A2 failover 的底层资源。
  */
+import { useState } from 'react';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Plug, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Pencil, Plug, Plus, Trash2 } from 'lucide-react';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -14,12 +14,14 @@ import {
   DataTable,
   type DataTableColumn,
   SectionCard,
+  TablePagination,
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { StatusBadge, type StatusTone } from '@/core/components/ui/status-badge';
 import { Switch } from '@/core/components/ui/switch';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
 import { formatDurationMs, formatRelative } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
@@ -61,6 +63,7 @@ export const ChannelsPage = () => {
     queryKey: ['providers'],
     queryFn: () => providerApi.list(),
   });
+  const pg = useClientPagination(listQ.data ?? []);
 
   const closeForm = () => {
     setFormOpen(false);
@@ -130,9 +133,7 @@ export const ChannelsPage = () => {
       key: 'provider',
       header: 'Provider',
       width: 140,
-      render: c => (
-        <Badge variant="primary">{c.provider_code || `#${c.provider_id}`}</Badge>
-      ),
+      render: c => <Badge variant="primary">{c.provider_code || `#${c.provider_id}`}</Badge>,
     },
     {
       key: 'status',
@@ -175,9 +176,7 @@ export const ChannelsPage = () => {
             ) : null}
           </div>
           <div className="text-[10.5px] text-stone-400">
-            {c.last_success_at
-              ? `上次成功 ${formatRelative(c.last_success_at)}`
-              : '从未调用'}
+            {c.last_success_at ? `上次成功 ${formatRelative(c.last_success_at)}` : '从未调用'}
           </div>
         </div>
       ),
@@ -214,7 +213,7 @@ export const ChannelsPage = () => {
           <button
             type="button"
             title="编辑"
-            className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
+            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11.5px] whitespace-nowrap text-stone-600 hover:bg-stone-200 hover:text-stone-900"
             onClick={() => {
               setEditTarget(c);
               setFormOpen(true);
@@ -255,7 +254,7 @@ export const ChannelsPage = () => {
         />
         <DataTable
           columns={columns}
-          rows={listQ.data || []}
+          rows={pg.rows}
           rowKey="id"
           loading={listQ.isLoading}
           leftBar={c => STATUS_LABEL[c.status].bar}
@@ -278,6 +277,13 @@ export const ChannelsPage = () => {
               }
             />
           }
+        />
+        <TablePagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          total={pg.total}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
         />
       </SectionCard>
 

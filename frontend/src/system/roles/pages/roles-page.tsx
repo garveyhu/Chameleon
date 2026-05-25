@@ -1,10 +1,9 @@
 /** 角色管理页 */
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Shield, ShieldCheck, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { toast } from '@/core/lib/toast';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -12,6 +11,7 @@ import {
   DataTable,
   type DataTableColumn,
   SectionCard,
+  TablePagination,
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
@@ -35,6 +35,8 @@ import {
   SheetTitle,
 } from '@/core/components/ui/sheet';
 import { Textarea } from '@/core/components/ui/textarea';
+import { useClientPagination } from '@/core/hooks/use-client-pagination';
+import { toast } from '@/core/lib/toast';
 import { permissionApi, roleApi } from '@/system/roles/services/role';
 import type { RoleItem } from '@/system/roles/types/role';
 
@@ -46,6 +48,7 @@ export const RolesPage = () => {
   const [delRole, setDelRole] = useState<RoleItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['roles'], queryFn: roleApi.list });
+  const pg = useClientPagination(listQ.data ?? []);
 
   const createMut = useMutation({
     mutationFn: roleApi.create,
@@ -155,7 +158,7 @@ export const RolesPage = () => {
         />
         <DataTable
           columns={columns}
-          rows={listQ.data || []}
+          rows={pg.rows}
           rowKey="id"
           loading={listQ.isLoading}
           leftBar={r => (r.is_system ? 'bg-sky-400' : 'bg-stone-300')}
@@ -170,6 +173,13 @@ export const RolesPage = () => {
               }
             />
           }
+        />
+        <TablePagination
+          page={pg.page}
+          pageSize={pg.pageSize}
+          total={pg.total}
+          onPageChange={pg.setPage}
+          onPageSizeChange={pg.setPageSize}
         />
       </SectionCard>
 
@@ -254,13 +264,7 @@ const CreateRoleModal = ({
   );
 };
 
-const PermissionsSheet = ({
-  role,
-  onClose,
-}: {
-  role: RoleItem | null;
-  onClose: () => void;
-}) => {
+const PermissionsSheet = ({ role, onClose }: { role: RoleItem | null; onClose: () => void }) => {
   const qc = useQueryClient();
   const allPermsQ = useQuery({ queryKey: ['permissions'], queryFn: () => permissionApi.list() });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -291,7 +295,10 @@ const PermissionsSheet = ({
     });
   };
 
-  const grouped: Record<string, { code: string; resource: string; action: string; description: string | null }[]> = {};
+  const grouped: Record<
+    string,
+    { code: string; resource: string; action: string; description: string | null }[]
+  > = {};
   for (const p of allPermsQ.data || []) {
     if (!grouped[p.resource]) grouped[p.resource] = [];
     grouped[p.resource].push(p);
@@ -314,7 +321,7 @@ const PermissionsSheet = ({
         <SheetBody>
           {Object.entries(grouped).map(([resource, perms]) => (
             <div key={resource} className="mb-5">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-500">
+              <div className="mb-2 text-xs font-semibold tracking-wide text-stone-500 uppercase">
                 {resource}
               </div>
               <div className="grid grid-cols-2 gap-2">
