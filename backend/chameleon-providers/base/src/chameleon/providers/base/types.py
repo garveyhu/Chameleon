@@ -168,7 +168,8 @@ class InvokeContext(BaseModel):
     agent_def: AgentDef
     input: str | list[Message]
     history: list[Message] = Field(default_factory=list)
-    session_id: str
+    # None = 无真实会话（如编辑器对话调试）；运行日志「会话」列显 —
+    session_id: str | None = None
     provider_conv_id: str | None = None
     context_vars: dict[str, Any] = Field(default_factory=dict)
     options: dict[str, Any] = Field(default_factory=dict)

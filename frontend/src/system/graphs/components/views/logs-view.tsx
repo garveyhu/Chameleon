@@ -123,7 +123,7 @@ export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
     },
     {
       key: 'request_id',
-      header: 'request_id',
+      header: '请求 ID',
       render: r => (
         <span className="truncate font-mono text-[10.5px] text-stone-400">{r.request_id}</span>
       ),
@@ -147,14 +147,17 @@ export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
   return (
     <div className="h-full overflow-y-auto">
       <div className="px-10 py-8">
-        <header className="mb-4 flex items-center gap-2">
-          <ScrollText className="h-4 w-4 text-stone-500" />
-          <h1 className="text-[16px] font-semibold text-stone-900">运行日志</h1>
-          <span className="text-[12px] text-stone-400">共 {q.data?.total ?? 0} 次执行</span>
-        </header>
-
-        {/* 筛选：状态下拉 + 会话搜索（带搜索按钮）+ 时间范围（waveflow 范式） */}
+        {/* 标题 + 筛选同一行（waveflow 范式）：状态 / 会话搜索（带按钮）/ 时间范围 */}
         <TableToolbar
+          title={
+            <span className="flex items-center gap-2">
+              <ScrollText className="h-4 w-4 text-stone-500" />
+              <span className="text-[15px] font-semibold text-stone-900">运行日志</span>
+              <span className="text-[12px] font-normal text-stone-400">
+                共 {q.data?.total ?? 0} 次
+              </span>
+            </span>
+          }
           search={{
             value: sessionInput,
             onChange: setSessionInput,

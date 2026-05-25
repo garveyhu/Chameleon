@@ -330,10 +330,10 @@ const Bubble = ({
               m.streaming && !m.content && 'text-stone-400',
             )}
           >
-            {m.streaming ? (
-              <span className="whitespace-pre-wrap">{m.content || '思考中…'}</span>
-            ) : m.content ? (
+            {m.content ? (
               <Markdown content={m.content} className="text-[12.5px]" />
+            ) : m.streaming ? (
+              <span>思考中…</span>
             ) : null}
           </div>
         )}

@@ -470,7 +470,7 @@ async def chat_stream(
         input=req.message,
         history=history,
         context_vars={"conversation_vars": req.conversation_vars},
-        session_id=f"graph-debug-{row.id}",
+        session_id=None,  # 调试不是真实会话；运行日志「会话」列显 — 不与 request_id 重复
         app_id="__graph_debug__",
         request_id=f"graphdebug-{row.id}-{datetime.now(timezone.utc).timestamp():.0f}",
         stream=True,
