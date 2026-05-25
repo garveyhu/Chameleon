@@ -61,7 +61,6 @@ import { NodePalette } from '@/system/graphs/components/node-palette';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
 import { RunDialog } from '@/system/graphs/components/run-dialog';
-import { RunsPanel } from '@/system/graphs/components/runs-panel';
 import { ApiDocView } from '@/system/graphs/components/views/api-doc-view';
 import { LogsView } from '@/system/graphs/components/views/logs-view';
 import { MonitorView } from '@/system/graphs/components/views/monitor-view';
@@ -132,8 +131,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const rfInstance = useReactFlow();
 
   const [dirty, setDirty] = useState(false);
-  const [runsOpen, setRunsOpen] = useState(false);
-  // 日志页受控展开的 run（从历史 RUNS 面板跳转过来）
+  // 日志页受控展开的 run（点击日志列表行展开详情）
   const [logRunId, setLogRunId] = useState<EntityId | null>(null);
   const [runOpen, setRunOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -603,7 +601,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                     className="!bg-warm-2"
                     position="bottom-right"
                     style={{
-                      right: runsOpen || selectedSpec ? 340 : 12,
+                      right: selectedSpec ? 340 : 12,
                       bottom: 12,
                     }}
                   />
@@ -653,8 +651,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setRunsOpen(o => !o)}
-                    title="历史运行记录"
+                    onClick={() => setTab('logs')}
+                    title="查看运行日志"
                   >
                     <History className="h-3 w-3" />
                     {runsQ.data ? ` ${runsQ.data.length}` : ''}
@@ -720,35 +718,22 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                   </DropdownMenu>
                 </div>
 
-                {/* 浮层编辑栏 —— 选中节点 / 历史 runs 时悬浮于画布右侧（Dify 套路） */}
-                {(runsOpen || selectedSpec) && (
+                {/* 浮层编辑栏 —— 选中节点时悬浮于画布右侧（Dify 套路） */}
+                {selectedSpec && (
                   <div className="bg-warm-2/95 absolute top-16 right-3 bottom-3 z-10 w-80 overflow-hidden rounded-xl border border-stone-200/70 shadow-xl backdrop-blur">
-                    {runsOpen ? (
-                      <RunsPanel
-                        runs={runsQ.data ?? []}
-                        loading={runsQ.isLoading}
-                        onClose={() => setRunsOpen(false)}
-                        onOpenRun={id => {
-                          setRunsOpen(false);
-                          setLogRunId(id);
-                          setTab('logs');
-                        }}
-                      />
-                    ) : (
-                      <NodeInspector
-                        node={selectedSpec}
-                        runView={selectedRunView}
-                        peerNodes={nodes
-                          .filter(n => n.id !== selectedId)
-                          .map(n => ({
-                            id: n.id,
-                            label: n.data.label,
-                            type: n.data.nodeType,
-                          }))}
-                        onChange={updateSelectedSpec}
-                        onDelete={deleteSelected}
-                      />
-                    )}
+                    <NodeInspector
+                      node={selectedSpec}
+                      runView={selectedRunView}
+                      peerNodes={nodes
+                        .filter(n => n.id !== selectedId)
+                        .map(n => ({
+                          id: n.id,
+                          label: n.data.label,
+                          type: n.data.nodeType,
+                        }))}
+                      onChange={updateSelectedSpec}
+                      onDelete={deleteSelected}
+                    />
                   </div>
                 )}
               </div>
