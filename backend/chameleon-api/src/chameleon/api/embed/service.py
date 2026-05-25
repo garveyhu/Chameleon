@@ -42,11 +42,13 @@ from chameleon.system.api_key.service import record_call
 
 
 def check_origin(allowed: list | None, origin: str | None) -> None:
-    """同源 / 服务端调用允许；其余 origin 必须在白名单中。"""
+    """同源 / 服务端调用允许；allowed 含 "*" 视为公开（任意 origin）；其余须在白名单。"""
     if origin is None:
         return
     if not allowed:
         raise PermissionDeniedError(message="该 embed 未配置 allowed_origins")
+    if "*" in allowed:
+        return
     if origin not in allowed:
         raise PermissionDeniedError(message=f"origin 不在白名单: {origin}")
 
