@@ -37,6 +37,7 @@ const App = () => (
       </Suspense>
       <Toaster
         position="top-right"
+        offset={{ top: 64, right: 16 }}
         closeButton
         toastOptions={{
           classNames: {

@@ -227,7 +227,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onSuccess: () => {
       setDirty(false);
       onSaved();
+      toast.success('已保存');
     },
+    onError: e => toast.error(`保存失败：${(e as Error).message}`),
   });
 
   const save = useCallback(async () => {
@@ -469,19 +471,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onError: e => toast.error(`发布为智能体失败：${(e as Error).message}`),
   });
 
-  const runsQ = useQuery({
-    queryKey: ['graph-runs', graph.id],
-    queryFn: () => graphApi.listRuns(graph.id, { page: 1, page_size: 50 }).then(r => r.items),
-  });
-
-  // run dialog 关闭后刷新 runs 列表（持久化执行可能新增）
-  useEffect(() => {
-    if (!runOpen && runner.persisted && runner.phase !== 'running') {
-      runsQ.refetch();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runOpen]);
-
   const nodeMeta = useMemo(
     () =>
       nodes.map(n => ({
@@ -655,7 +644,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                     title="查看运行日志"
                   >
                     <History className="h-3 w-3" />
-                    {runsQ.data ? ` ${runsQ.data.length}` : ''}
                   </Button>
 
                   {/* 测试：对话型→对话调试，流程型→运行（一个就够） */}
