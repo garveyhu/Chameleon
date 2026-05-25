@@ -664,8 +664,8 @@ const AccessTab: React.FC<{ embedKey: string | null }> = ({ embedKey }) => {
     );
   }
   const origin = window.location.origin;
-  const script = `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer></script>`;
-  const iframe = `<iframe src="${origin}/embed/${embedKey}" style="width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)"></iframe>`;
+  const script = `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer>\n</script>`;
+  const iframe = `<iframe src="${origin}/embed/${embedKey}" style="width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)">\n</iframe>`;
   return (
     <div className="space-y-3">
       <SnippetCard title="JS Widget" hint="推荐：右下角浮动气泡" code={script} />
@@ -702,7 +702,7 @@ const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed break-all whitespace-pre-wrap text-stone-700">
+      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed font-medium break-all whitespace-pre-wrap text-stone-900">
         {code}
       </pre>
     </div>
