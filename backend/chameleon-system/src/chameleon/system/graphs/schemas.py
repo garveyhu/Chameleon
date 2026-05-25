@@ -101,6 +101,7 @@ class SuggestFollowupsRequest(BaseModel):
 class WebAppInfo(BaseModel):
     """工作流的 Web App / 嵌入信息（基于 embed_config）"""
 
+    id: int
     embed_key: str
     agent_key: str
     name: str

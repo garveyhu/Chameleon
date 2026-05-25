@@ -389,6 +389,7 @@ async def update_web_app(
 
 def _web_app_info(ec: EmbedConfig, agent_key: str) -> WebAppInfo:
     return WebAppInfo(
+        id=ec.id,
         embed_key=ec.embed_key,
         agent_key=agent_key,
         name=ec.name,

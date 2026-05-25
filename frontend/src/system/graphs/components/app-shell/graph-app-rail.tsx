@@ -28,11 +28,11 @@ import {
 
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
-import {
-  EmbedAppModal,
-  WebAppDialog,
-  type WebAppTab,
-} from '@/system/graphs/components/app-shell/web-app-dialogs';
+import type { EntityId } from '@/core/types/api';
+import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-modal';
+import { embedConfigApi } from '@/system/embed_configs/services/embed';
+import type { EmbedConfigItem, UpdateEmbedConfigRequest } from '@/system/embed_configs/types/embed';
+import { WebAppDialog, type WebAppTab } from '@/system/graphs/components/app-shell/web-app-dialogs';
 import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/graph';
@@ -72,8 +72,18 @@ export const GraphAppRail = ({
   const apiBase = `${window.location.origin}/v1`;
 
   const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
-  const [embedAppOpen, setEmbedAppOpen] = useState(false);
+  const [embedCfg, setEmbedCfg] = useState<EmbedConfigItem | null>(null);
   const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
+
+  const updateEmbedMut = useMutation({
+    mutationFn: (p: { id: EntityId; req: UpdateEmbedConfigRequest }) =>
+      embedConfigApi.update(p.id, p.req),
+    onSuccess: () => {
+      setEmbedCfg(null);
+      toast.success('已保存嵌入配置');
+    },
+    onError: e => toast.error(`保存失败：${(e as Error).message}`),
+  });
 
   // 确保 Web App（embed）存在，拿到 embed_key；用途由 after 决定
   const ensureMut = useMutation({
@@ -104,7 +114,12 @@ export const GraphAppRail = ({
   const openEmbedApp = async () => {
     const info = await ensureMut.mutateAsync();
     setWebApp(info);
-    setEmbedAppOpen(true);
+    try {
+      const cfg = await embedConfigApi.get(info.id);
+      setEmbedCfg(cfg);
+    } catch (e) {
+      toast.error(`加载嵌入配置失败：${(e as Error).message}`);
+    }
   };
 
   const copy = (text: string, label: string) => {
@@ -238,8 +253,15 @@ export const GraphAppRail = ({
           saving={saveMut.isPending}
         />
       )}
-      {embedAppOpen && webApp && (
-        <EmbedAppModal open onClose={() => setEmbedAppOpen(false)} embedKey={webApp.embed_key} />
+      {embedCfg && (
+        <EmbedFormModal
+          open
+          initial={embedCfg}
+          loading={updateEmbedMut.isPending}
+          onClose={() => setEmbedCfg(null)}
+          onSubmitCreate={() => {}}
+          onSubmitUpdate={(id, req) => updateEmbedMut.mutate({ id, req })}
+        />
       )}
     </>
   );

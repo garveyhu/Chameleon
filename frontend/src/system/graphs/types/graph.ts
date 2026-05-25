@@ -67,6 +67,7 @@ export interface GraphDetail extends GraphItem {
 
 /** Web App / 嵌入信息（基于 embed_config） */
 export interface WebAppInfo {
+  id: EntityId;
   embed_key: string;
   agent_key: string;
   name: string;
