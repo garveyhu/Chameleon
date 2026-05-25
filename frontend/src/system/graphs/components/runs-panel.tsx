@@ -2,9 +2,9 @@
  *
  * 点击一行跳到 /call-logs?app_id=system 用 trace tree drawer 看嵌套结构。
  */
+import { useNavigate } from 'react-router-dom';
 
 import { X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
@@ -20,12 +20,10 @@ interface Props {
 export const RunsPanel = ({ runs, loading, onClose }: Props) => {
   const nav = useNavigate();
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col gap-1 overflow-y-auto border-l border-stone-200/70 bg-warm-2/40 p-3">
+    <aside className="bg-warm-2/40 flex h-full w-full flex-col gap-1 overflow-y-auto p-3">
       <header className="mb-1 flex items-center justify-between">
         <div>
-          <div className="text-[10.5px] uppercase tracking-wider text-stone-500">
-            历史 runs
-          </div>
+          <div className="text-[10.5px] tracking-wider text-stone-500 uppercase">历史 runs</div>
           <div className="text-[11px] text-stone-700">{runs.length} 条</div>
         </div>
         <button
@@ -69,16 +67,12 @@ export const RunsPanel = ({ runs, loading, onClose }: Props) => {
               >
                 {r.status}
               </Badge>
-              <span className="font-mono tnum text-[10.5px] text-stone-500">
+              <span className="tnum font-mono text-[10.5px] text-stone-500">
                 {r.duration_ms ?? '—'}ms · {r.node_count ?? '—'} 节点
               </span>
             </div>
-            <div className="mt-1 truncate font-mono text-[10px] text-stone-500">
-              {r.request_id}
-            </div>
-            <div className="text-[10px] text-stone-400">
-              {formatDateTime(r.created_at)}
-            </div>
+            <div className="mt-1 truncate font-mono text-[10px] text-stone-500">{r.request_id}</div>
+            <div className="text-[10px] text-stone-400">{formatDateTime(r.created_at)}</div>
           </button>
         ))
       )}

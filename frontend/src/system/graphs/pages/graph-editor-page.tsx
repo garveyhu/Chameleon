@@ -9,7 +9,10 @@
  * 调试运行（useGraphRunner）：跑前若 dirty 先自动存草稿；Test Run 走 SSE 实时把
  *   node 状态投到 canvas（边框变色）+ run dialog 逐节点列结果；Run 持久化写 call_logs。
  */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Background,
   BackgroundVariant,
@@ -22,48 +25,41 @@ import {
   useNodesState,
   useReactFlow,
 } from '@xyflow/react';
-import type {
-  Connection,
-  Edge,
-  EdgeChange,
-  Node as RFNode,
-  NodeChange,
-} from '@xyflow/react';
+import type { Connection, Edge, EdgeChange, NodeChange, Node as RFNode } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { Bot, ChevronDown, History, MessageSquare, Play, Rocket, Save } from 'lucide-react';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Bot,
-  ChevronLeft,
-  History,
-  MessageSquare,
-  Play,
-  Rocket,
-  Save,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-
+import { RequireAuth } from '@/core/components/common/permission-guard';
 import { Spinner } from '@/core/components/common/spinner';
 import { Button } from '@/core/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/core/components/ui/dropdown-menu';
+import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { toast } from '@/core/lib/toast';
 import { useWorkflowStore } from '@/core/stores/workflow';
+import { GraphAppRail } from '@/system/graphs/components/app-shell/graph-app-rail';
+import type { EditorTab } from '@/system/graphs/components/app-shell/graph-app-rail';
 import { ChatDebugDialog } from '@/system/graphs/components/chat-debug-dialog';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
-import { RunDialog } from '@/system/graphs/components/run-dialog';
-import { RunsPanel } from '@/system/graphs/components/runs-panel';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
+import { RunDialog } from '@/system/graphs/components/run-dialog';
+import { RunsPanel } from '@/system/graphs/components/runs-panel';
+import { ApiDocView } from '@/system/graphs/components/views/api-doc-view';
+import { LogsView } from '@/system/graphs/components/views/logs-view';
+import { MonitorView } from '@/system/graphs/components/views/monitor-view';
+import { useGraphHistory } from '@/system/graphs/hooks/use-graph-history';
 import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
+import { TYPE_META } from '@/system/graphs/lib/node-meta';
 import { defaultLabel, rfToSpec, specToRf } from '@/system/graphs/lib/rf-spec';
 import { graphApi } from '@/system/graphs/services/graph';
-import type {
-  GraphDetail,
-  GraphNodeType,
-  NodeSpec,
-} from '@/system/graphs/types/graph';
+import type { GraphDetail, GraphKind, GraphNodeType, NodeSpec } from '@/system/graphs/types/graph';
 
 const NODE_TYPES = {
   graphNode: GraphNode,
@@ -114,9 +110,8 @@ interface EditorBodyProps {
 }
 
 const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<GraphNodeData>>(
-    [],
-  );
+  const qc = useQueryClient();
+  const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<GraphNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const selectedId = useWorkflowStore(s => s.selectedNodeId);
   const setSelectedId = useWorkflowStore(s => s.selectNode);
@@ -129,6 +124,30 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const [runsOpen, setRunsOpen] = useState(false);
   const [runOpen, setRunOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  // 本地持有 kind（EditorBody 按 graph.id keyed，初值取一次）；切换时直存不刷详情，避免清空未存画布
+  const [kind, setKind] = useState<GraphKind>(graph.kind);
+  const isChat = kind === 'chatflow';
+  const [tab, setTab] = useState<EditorTab>('orchestrate');
+
+  // 撤销/重做历史（画布结构操作）；inspector 配置编辑按节点+时间窗口合并入历史
+  const markDirty = useCallback(() => setDirty(true), []);
+  const {
+    commit: histCommit,
+    undo: histUndo,
+    redo: histRedo,
+  } = useGraphHistory({
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    onApplied: markDirty,
+  });
+  const lastEditAtRef = useRef(0);
+  const lastEditNodeRef = useRef<string | null>(null);
+
+  // 点击 palette → 节点跟随光标、点画布落位（Dify click-to-place）
+  const [pendingType, setPendingType] = useState<GraphNodeType | null>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
 
   // 初始 mount：把后端 spec 投到 React Flow（程序化 setNodes 不触发 onNodesChange，不置脏）
   // EditorBody 按 graph.id keyed 重挂，dirty 初值即 false，无需在此重置。
@@ -149,6 +168,36 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   useEffect(() => {
     resetWorkflow();
   }, [graph.id, resetWorkflow]);
+
+  // Cmd/Ctrl+Z 撤销、Cmd/Ctrl+Shift+Z（或 Ctrl+Y）重做；仅编排页，输入框内不拦截（交原生文本撤销）
+  useEffect(() => {
+    if (tab !== 'orchestrate') return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setPendingType(null);
+        return;
+      }
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (k === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) histRedo();
+        else histUndo();
+      } else if (k === 'y') {
+        e.preventDefault();
+        histRedo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tab, histUndo, histRedo]);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -190,6 +239,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<RFNode<GraphNodeData>>[]) => {
+      // 删除走历史（拖拽移动在 onNodeDragStart 记，新增在 addNode 记）
+      if (changes.some(c => c.type === 'remove')) histCommit();
       onNodesChange(changes);
       if (
         changes.some(
@@ -203,21 +254,23 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         setDirty(true);
       }
     },
-    [onNodesChange],
+    [onNodesChange, histCommit],
   );
 
   const handleEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
+      if (changes.some(c => c.type === 'remove')) histCommit();
       onEdgesChange(changes);
       if (changes.some(c => c.type === 'remove' || c.type === 'add')) {
         setDirty(true);
       }
     },
-    [onEdgesChange],
+    [onEdgesChange, histCommit],
   );
 
   const onConnect = useCallback(
     (conn: Connection) => {
+      histCommit();
       setEdges(es =>
         addEdge(
           {
@@ -230,7 +283,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
       );
       setDirty(true);
     },
-    [setEdges],
+    [setEdges, histCommit],
   );
 
   const nextNodeId = () => {
@@ -240,9 +293,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const addNode = useCallback(
     (type: GraphNodeType, position?: { x: number; y: number }) => {
+      histCommit();
       const newId = nextNodeId();
-      const pos =
-        position ?? rfInstance.screenToFlowPosition({ x: 300, y: 200 });
+      const pos = position ?? rfInstance.screenToFlowPosition({ x: 300, y: 200 });
       const data: GraphNodeData = {
         label: defaultLabel(type, newId),
         nodeType: type,
@@ -257,15 +310,13 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
       setSelectedId(newId);
       setDirty(true);
     },
-    [rfInstance, setNodes, setSelectedId],
+    [rfInstance, setNodes, setSelectedId, histCommit],
   );
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
       e.preventDefault();
-      const type = e.dataTransfer.getData(
-        'application/x-graph-node-type',
-      ) as GraphNodeType;
+      const type = e.dataTransfer.getData('application/x-graph-node-type') as GraphNodeType;
       if (!type) return;
       const bounds = rfWrapperRef.current?.getBoundingClientRect();
       const point = rfInstance.screenToFlowPosition({
@@ -300,6 +351,13 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
   const updateSelectedSpec = useCallback(
     (next: NodeSpec) => {
+      // 配置编辑合并入历史：同一节点 700ms 内的连续编辑只记一次改前快照
+      const now = Date.now();
+      if (now - lastEditAtRef.current > 700 || lastEditNodeRef.current !== next.id) {
+        histCommit();
+      }
+      lastEditAtRef.current = now;
+      lastEditNodeRef.current = next.id;
       setNodes(ns =>
         ns.map(n => {
           if (n.id !== next.id) return n;
@@ -315,18 +373,27 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
       );
       setDirty(true);
     },
-    [setNodes],
+    [setNodes, histCommit],
   );
 
   const deleteSelected = useCallback(() => {
     if (!selectedId) return;
+    histCommit();
     setNodes(ns => ns.filter(n => n.id !== selectedId));
-    setEdges(es =>
-      es.filter(e => e.source !== selectedId && e.target !== selectedId),
-    );
+    setEdges(es => es.filter(e => e.source !== selectedId && e.target !== selectedId));
     setSelectedId(null);
     setDirty(true);
-  }, [selectedId, setEdges, setNodes, setSelectedId]);
+  }, [selectedId, setEdges, setNodes, setSelectedId, histCommit]);
+
+  const kindMut = useMutation({
+    mutationFn: (next: GraphKind) => graphApi.update(graph.id, { kind: next }),
+    onSuccess: (_d, next) => {
+      setKind(next);
+      qc.invalidateQueries({ queryKey: ['graphs'] });
+      toast.success(next === 'chatflow' ? '已切到对话型' : '已切到流程型');
+    },
+    onError: e => toast.error(`切换类型失败：${(e as Error).message}`),
+  });
 
   const publishMut = useMutation({
     mutationFn: () => graphApi.publish(graph.id),
@@ -378,8 +445,8 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   const startChatCfg = useMemo(() => {
     const start = nodes.find(n => n.data.nodeType === 'start');
     const d =
-      (start?.data as { _spec?: { data?: Record<string, unknown> } } | undefined)
-        ?._spec?.data ?? {};
+      (start?.data as { _spec?: { data?: Record<string, unknown> } } | undefined)?._spec?.data ??
+      {};
     return {
       opener: d.opener as string | undefined,
       suggested: d.suggested_questions as string[] | undefined,
@@ -406,186 +473,246 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   // ── render ───────────────────────────────────────────────
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="flex items-center justify-between border-b border-stone-200/70 bg-white px-3 py-2">
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onReturn}>
-            <ChevronLeft className="mr-0.5 h-3.5 w-3.5" />
-            返回
-          </Button>
-          <div className="text-[13px] font-medium text-stone-900">
-            {graph.name}
-          </div>
-          <span className="font-mono text-[11px] text-stone-500">
-            ({graph.graph_key})
-          </span>
-          {graph.published_version && graph.published_version > 0 ? (
-            <span
-              className="ml-2 inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] text-emerald-700"
-              title={
-                graph.published_at
-                  ? `最近发布: ${new Date(graph.published_at).toLocaleString()}`
-                  : ''
-              }
-            >
-              <Rocket className="h-3 w-3" /> 已发布 v{graph.published_version}
-            </span>
-          ) : (
-            <span className="ml-2 inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] text-amber-700">
-              草稿
-            </span>
-          )}
-          {dirty && (
-            <span
-              className="inline-flex items-center gap-1 text-[10.5px] text-amber-600"
-              title="有未保存改动"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              未保存
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {runner.phase === 'success' && (
-            <span className="text-[11px] text-emerald-600">
-              ✓ {runner.durationMs ?? 0}ms
-            </span>
-          )}
-          {runner.phase === 'failed' && (
-            <span className="text-[11px] text-rose-600">✗ 执行失败</span>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setRunsOpen(o => !o)}
-            title="历史 runs"
-          >
-            <History className="h-3 w-3" />
-            {runsQ.data ? ` ${runsQ.data.length}` : ''}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRunOpen(true)}
-            title="给输入、跑一次、看每节点输出"
-          >
-            <Play className="mr-1 h-3 w-3" />
-            运行
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setChatOpen(true)}
-            title="把当前 draft 当可对话 agent 多轮试聊（不必先发布）"
-          >
-            <MessageSquare className="mr-1 h-3 w-3" />
-            对话调试
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-          >
-            <Save className="mr-1 h-3 w-3" />
-            保存
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onPublish}
-            disabled={publishMut.isPending}
-            title="freeze 当前 draft 为新 published 版本"
-          >
-            <Rocket className="mr-1 h-3 w-3" />
-            发布
-          </Button>
-          <Button
-            size="sm"
-            onClick={onPublishAgent}
-            disabled={publishAgentMut.isPending}
-            title="发布并暴露成可对话智能体，走统一 agent 端点"
-          >
-            <Bot className="mr-1 h-3 w-3" />
-            发布为智能体
-          </Button>
-        </div>
-      </header>
+    <RequireAuth>
+      <div className="flex h-screen bg-[var(--color-warm)]">
+        <GraphAppRail
+          graph={graph}
+          kind={kind}
+          onKindChange={k => kindMut.mutate(k)}
+          tab={tab}
+          onTab={setTab}
+          onOpenChat={() => setChatOpen(true)}
+          onReturn={onReturn}
+          dirty={dirty}
+          saving={saveMut.isPending}
+        />
 
-      <div className="flex min-h-0 flex-1">
-        <NodePalette onAdd={addNode} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          {tab === 'orchestrate' && (
+            <div className="flex min-h-0 flex-1">
+              <NodePalette onAdd={t => setPendingType(t)} />
 
-        <div
-          ref={rfWrapperRef}
-          className="relative min-w-0 flex-1"
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-        >
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={handleNodesChange}
-            onEdgesChange={handleEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={(_e, n) => setSelectedId(n.id)}
-            onPaneClick={() => setSelectedId(null)}
-            nodeTypes={NODE_TYPES}
-            fitView
-            proOptions={{ hideAttribution: true }}
-            defaultEdgeOptions={{ type: 'smoothstep' }}
-          >
-            <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="!bg-warm-2" />
-          </ReactFlow>
+              <div
+                ref={rfWrapperRef}
+                className={cn('relative min-w-0 flex-1', pendingType && 'cursor-copy')}
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onMouseMove={e => {
+                  if (pendingType && ghostRef.current) {
+                    ghostRef.current.style.transform = `translate(${e.clientX + 10}px, ${e.clientY + 10}px)`;
+                  }
+                }}
+              >
+                <ReactFlow
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={handleNodesChange}
+                  onEdgesChange={handleEdgesChange}
+                  onConnect={onConnect}
+                  onNodeDragStart={() => histCommit()}
+                  onNodeClick={(_e, n) => setSelectedId(n.id)}
+                  onPaneClick={e => {
+                    if (pendingType) {
+                      const pos = rfInstance.screenToFlowPosition({
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                      addNode(pendingType, pos);
+                      setPendingType(null);
+                    } else {
+                      setSelectedId(null);
+                    }
+                  }}
+                  nodeTypes={NODE_TYPES}
+                  fitView
+                  proOptions={{ hideAttribution: true }}
+                  defaultEdgeOptions={{ type: 'smoothstep' }}
+                >
+                  <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+                  <Controls showInteractive={false} />
+                  <MiniMap
+                    pannable
+                    zoomable
+                    className="!bg-warm-2"
+                    position="bottom-right"
+                    style={{
+                      right: runsOpen || selectedSpec ? 340 : 12,
+                      bottom: 12,
+                    }}
+                  />
+                </ReactFlow>
+
+                {/* 左上角运行事件状态（Dify 套路） */}
+                {runner.phase !== 'idle' && (
+                  <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-lg border border-stone-200/70 bg-white/90 px-2.5 py-1 text-[11.5px] shadow-md backdrop-blur">
+                    {runner.phase === 'running' && (
+                      <>
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500" />
+                        <span className="text-blue-600">运行中…</span>
+                      </>
+                    )}
+                    {runner.phase === 'success' && (
+                      <span className="text-emerald-600">
+                        ✓ 运行成功 · {runner.durationMs ?? 0}ms
+                      </span>
+                    )}
+                    {runner.phase === 'failed' && <span className="text-rose-600">✗ 运行失败</span>}
+                  </div>
+                )}
+
+                {/* 跟随光标的节点幽灵（点击 palette 后，点画布落位） */}
+                {pendingType && (
+                  <div ref={ghostRef} className="pointer-events-none fixed top-0 left-0 z-50">
+                    <div
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-md border-2 border-dashed bg-white/95 px-2.5 py-1.5 text-[11.5px] font-medium shadow-lg',
+                        (TYPE_META[pendingType] ?? TYPE_META.noop).color,
+                      )}
+                    >
+                      {(() => {
+                        const Icon = (TYPE_META[pendingType] ?? TYPE_META.noop).icon;
+                        return <Icon className="h-3.5 w-3.5" />;
+                      })()}
+                      {(TYPE_META[pendingType] ?? TYPE_META.noop).label}
+                      <span className="text-[10px] font-normal text-stone-400">
+                        点击画布放置 · Esc 取消
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 浮层工具条 —— 钉右上角；撤销/重做走 ⌘Z 快捷键不占位 */}
+                <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-stone-200/70 bg-white/85 px-2 py-1.5 shadow-md backdrop-blur">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRunsOpen(o => !o)}
+                    title="历史运行记录"
+                  >
+                    <History className="h-3 w-3" />
+                    {runsQ.data ? ` ${runsQ.data.length}` : ''}
+                  </Button>
+
+                  {/* 测试：对话型→对话调试，流程型→运行（一个就够） */}
+                  {isChat ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setChatOpen(true)}
+                      title="多轮对话试聊当前草稿（不必先发布）"
+                    >
+                      <MessageSquare className="mr-1 h-3 w-3" />
+                      对话调试
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setRunOpen(true)}
+                      title="给输入、跑一次、看每节点输出"
+                    >
+                      <Play className="mr-1 h-3 w-3" />
+                      运行
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => saveMut.mutate()}
+                    disabled={saveMut.isPending}
+                  >
+                    <Save className="mr-1 h-3 w-3" />
+                    保存
+                  </Button>
+
+                  {/* 发布：合并成一个下拉（发布版本 / 发布为智能体） */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        disabled={publishMut.isPending || publishAgentMut.isPending}
+                      >
+                        <Rocket className="mr-1 h-3 w-3" />
+                        发布
+                        <ChevronDown className="ml-0.5 h-3 w-3 opacity-70" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onSelect={onPublish} className="text-[12px]">
+                        <Rocket className="mr-2 h-3.5 w-3.5 text-stone-500" />
+                        发布版本
+                      </DropdownMenuItem>
+                      {isChat && (
+                        <DropdownMenuItem onSelect={onPublishAgent} className="text-[12px]">
+                          <Bot className="mr-2 h-3.5 w-3.5 text-stone-500" />
+                          发布为智能体
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                {/* 浮层编辑栏 —— 选中节点 / 历史 runs 时悬浮于画布右侧（Dify 套路） */}
+                {(runsOpen || selectedSpec) && (
+                  <div className="bg-warm-2/95 absolute top-16 right-3 bottom-3 z-10 w-80 overflow-hidden rounded-xl border border-stone-200/70 shadow-xl backdrop-blur">
+                    {runsOpen ? (
+                      <RunsPanel
+                        runs={runsQ.data ?? []}
+                        loading={runsQ.isLoading}
+                        onClose={() => setRunsOpen(false)}
+                      />
+                    ) : (
+                      <NodeInspector
+                        node={selectedSpec}
+                        runView={selectedRunView}
+                        peerNodes={nodes
+                          .filter(n => n.id !== selectedId)
+                          .map(n => ({
+                            id: n.id,
+                            label: n.data.label,
+                            type: n.data.nodeType,
+                          }))}
+                        onChange={updateSelectedSpec}
+                        onDelete={deleteSelected}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tab === 'api' && <ApiDocView graph={graph} />}
+          {tab === 'logs' && <LogsView graphId={graph.id} graphName={graph.name} />}
+          {tab === 'monitor' && <MonitorView graphId={graph.id} />}
         </div>
 
-        {runsOpen ? (
-          <RunsPanel
-            runs={runsQ.data ?? []}
-            loading={runsQ.isLoading}
-            onClose={() => setRunsOpen(false)}
+        {runOpen && (
+          <RunDialog
+            open={runOpen}
+            onOpenChange={setRunOpen}
+            graphId={String(graph.id)}
+            graphName={graph.name}
+            isDirty={dirty}
+            runner={runner}
+            nodeMeta={nodeMeta}
           />
-        ) : (
-          <NodeInspector
-            node={selectedSpec}
-            runView={selectedRunView}
-            peerNodes={nodes
-              .filter(n => n.id !== selectedId)
-              .map(n => ({
-                id: n.id,
-                label: n.data.label,
-                type: n.data.nodeType,
-              }))}
-            onChange={updateSelectedSpec}
-            onDelete={deleteSelected}
+        )}
+
+        {chatOpen && (
+          <ChatDebugDialog
+            open={chatOpen}
+            onOpenChange={setChatOpen}
+            graphId={String(graph.id)}
+            graphName={graph.name}
+            isDirty={dirty}
+            save={save}
+            opener={startChatCfg.opener}
+            suggestedQuestions={startChatCfg.suggested}
           />
         )}
       </div>
-
-      {runOpen && (
-        <RunDialog
-          open={runOpen}
-          onOpenChange={setRunOpen}
-          graphId={String(graph.id)}
-          graphName={graph.name}
-          isDirty={dirty}
-          runner={runner}
-          nodeMeta={nodeMeta}
-        />
-      )}
-
-      {chatOpen && (
-        <ChatDebugDialog
-          open={chatOpen}
-          onOpenChange={setChatOpen}
-          graphId={String(graph.id)}
-          graphName={graph.name}
-          isDirty={dirty}
-          save={save}
-          opener={startChatCfg.opener}
-          suggestedQuestions={startChatCfg.suggested}
-        />
-      )}
-    </div>
+    </RequireAuth>
   );
 };
