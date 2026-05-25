@@ -21,6 +21,7 @@ import {
 } from '@/core/components/ui/sheet';
 import { StatusBadge } from '@/core/components/ui/status-badge';
 import type { StatusTone } from '@/core/components/ui/status-badge';
+import { Tooltip } from '@/core/components/ui/tooltip';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import type { EntityId } from '@/core/types/api';
@@ -116,7 +117,11 @@ export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
       width: 140,
       render: r =>
         r.session_id ? (
-          <span className="truncate font-mono text-[10.5px] text-stone-500">{r.session_id}</span>
+          <Tooltip content={r.session_id}>
+            <span className="block truncate font-mono text-[10.5px] text-stone-500">
+              {r.session_id}
+            </span>
+          </Tooltip>
         ) : (
           <span className="text-[11px] text-stone-300">—</span>
         ),
@@ -125,7 +130,11 @@ export const LogsView = ({ graphId, openRunId, onOpenRun }: Props) => {
       key: 'request_id',
       header: '请求 ID',
       render: r => (
-        <span className="truncate font-mono text-[10.5px] text-stone-400">{r.request_id}</span>
+        <Tooltip content={r.request_id}>
+          <span className="block truncate font-mono text-[10.5px] text-stone-400">
+            {r.request_id}
+          </span>
+        </Tooltip>
       ),
     },
     {
