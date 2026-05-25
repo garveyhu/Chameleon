@@ -105,6 +105,7 @@ export const graphApi = {
       message: string;
       history: GraphChatTurn[];
       conversation_vars?: Record<string, unknown>;
+      session_id?: string;
     },
     opts: { signal?: AbortSignal; onChunk: (chunk: GraphChatChunk) => void },
   ): Promise<void> =>

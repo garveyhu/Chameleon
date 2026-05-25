@@ -72,6 +72,9 @@ export const ChatDebugDialog = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   // P5-2：跨轮会话变量（客户端携带；assign 节点经 done 回传后更新）
   const convVarsRef = useRef<Record<string, unknown>>({});
+  // 一次调试对话一个 session（多轮共用；清空时换新）—— 运行日志按此归类
+  const newSession = () => `sess_dbg_${Math.random().toString(36).slice(2, 12)}`;
+  const sessionRef = useRef<string>(newSession());
 
   // 卸载时中断在途流
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -115,7 +118,12 @@ export const ChatDebugDialog = ({
     try {
       await graphApi.chatStream(
         graphId,
-        { message: text, history, conversation_vars: convVarsRef.current },
+        {
+          message: text,
+          history,
+          conversation_vars: convVarsRef.current,
+          session_id: sessionRef.current,
+        },
         {
           signal: ctrl.signal,
           onChunk: chunk => {
@@ -271,6 +279,7 @@ export const ChatDebugDialog = ({
                 onClick={() => {
                   setMessages([]);
                   convVarsRef.current = {};
+                  sessionRef.current = newSession();
                 }}
                 disabled={busy || messages.length === 0}
                 title="清空对话"

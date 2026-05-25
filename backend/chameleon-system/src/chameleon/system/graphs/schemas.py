@@ -79,6 +79,8 @@ class GraphChatRequest(BaseModel):
     history: list[ChatTurn] = Field(default_factory=list)
     # P5-2：会话变量（客户端跨轮携带；assign 节点更新后由 done 事件回传）
     conversation_vars: dict[str, Any] = Field(default_factory=dict)
+    # 调试会话标识（前端一次对话一个 sess_*，多轮共用；运行日志按此归类）
+    session_id: str | None = Field(default=None, max_length=64)
 
 
 class GenerateGraphRequest(BaseModel):
