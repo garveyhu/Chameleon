@@ -1,10 +1,10 @@
 /** iframe 对话状态 hook —— session + 消息流 + 错误处理 */
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { embedIframeApi } from '@/system/embed_iframe/services/embed-iframe';
 import type {
   ChatMessage,
+  EmbedStreamChunk,
   IframePublicConfig,
 } from '@/system/embed_iframe/types/embed-iframe';
 
@@ -31,8 +31,12 @@ export function useEmbedChat(embedKey: string): UseEmbedChatResult {
 
   const session = useRef<SessionState | null>(null);
   const msgSeq = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const nextId = () => `m${++msgSeq.current}`;
+
+  // 卸载时中断在途流
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (session.current && Date.now() < session.current.expiresAt - 30_000) {
@@ -86,28 +90,51 @@ export function useEmbedChat(embedKey: string): UseEmbedChatResult {
       ]);
       setSending(true);
 
+      const patch = (fn: (m: ChatMessage) => ChatMessage) =>
+        setMessages(prev => prev.map(m => (m.id === pendingId ? fn(m) : m)));
+
+      const ctrl = new AbortController();
+      abortRef.current = ctrl;
+      let acc = '';
+      let errMsg: string | null = null;
+      const onChunk = (ch: EmbedStreamChunk) => {
+        if (typeof ch.delta === 'string' && ch.delta) {
+          acc += ch.delta;
+          patch(m => ({ ...m, content: acc, pending: false }));
+        } else if (ch.error) {
+          errMsg = ch.error.message || '调用失败';
+        } else if (ch.end && !acc && typeof ch.answer === 'string') {
+          acc = ch.answer;
+          patch(m => ({ ...m, content: acc, pending: false }));
+        }
+      };
+
       try {
         const token = await ensureSession();
-        let res;
         try {
-          res = await embedIframeApi.invoke(embedKey, token, trimmed);
+          await embedIframeApi.streamInvoke(embedKey, token, trimmed, {
+            signal: ctrl.signal,
+            onChunk,
+          });
         } catch (e) {
-          // session 失效 → 重签一次
+          // 尚无输出时多半是 session 失效 → 重签一次重试
+          if (acc) throw e;
           session.current = null;
           const fresh = await ensureSession();
-          res = await embedIframeApi.invoke(embedKey, fresh, trimmed);
-          void e;
+          await embedIframeApi.streamInvoke(embedKey, fresh, trimmed, {
+            signal: ctrl.signal,
+            onChunk,
+          });
         }
-        setMessages(prev =>
-          prev.map(m => (m.id === pendingId ? { ...m, content: res.answer, pending: false } : m)),
-        );
+        if (errMsg) {
+          patch(m => ({ ...m, content: errMsg as string, pending: false, error: true }));
+        } else {
+          patch(m => ({ ...m, pending: false }));
+        }
       } catch (e) {
+        if (ctrl.signal.aborted) return;
         const msg = e instanceof Error ? e.message : '调用失败，请稍后重试';
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === pendingId ? { ...m, content: msg, pending: false, error: true } : m,
-          ),
-        );
+        patch(m => ({ ...m, content: msg, pending: false, error: true }));
       } finally {
         setSending(false);
       }

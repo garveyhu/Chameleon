@@ -28,10 +28,7 @@ import {
 
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
-import {
-  EmbedModal,
-  WebAppSettingsModal,
-} from '@/system/graphs/components/app-shell/web-app-dialogs';
+import { WebAppDialog, type WebAppTab } from '@/system/graphs/components/app-shell/web-app-dialogs';
 import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/graph';
@@ -70,8 +67,7 @@ export const GraphAppRail = ({
   const published = (graph.published_version ?? 0) > 0;
   const apiBase = `${window.location.origin}/v1`;
 
-  const [embedOpen, setEmbedOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
   const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
 
   // 确保 Web App（embed）存在，拿到 embed_key；用途由 after 决定
@@ -84,7 +80,7 @@ export const GraphAppRail = ({
       graphApi.updateWebApp(graph.id, payload),
     onSuccess: info => {
       setWebApp(info);
-      setSettingsOpen(false);
+      setDialogTab(null);
       toast.success('已保存 Web App 设置');
     },
     onError: e => toast.error(`保存失败：${(e as Error).message}`),
@@ -95,15 +91,10 @@ export const GraphAppRail = ({
     setWebApp(info);
     window.open(`${window.location.origin}/embed/${info.embed_key}`, '_blank');
   };
-  const openEmbed = async () => {
+  const openDialog = async (tab: WebAppTab) => {
     const info = await ensureMut.mutateAsync();
     setWebApp(info);
-    setEmbedOpen(true);
-  };
-  const openSettings = async () => {
-    const info = await ensureMut.mutateAsync();
-    setWebApp(info);
-    setSettingsOpen(true);
+    setDialogTab(tab);
   };
 
   const copy = (text: string, label: string) => {
@@ -194,8 +185,8 @@ export const GraphAppRail = ({
             action={
               <button
                 type="button"
-                onClick={openSettings}
-                title="Web App 设置"
+                onClick={() => void openDialog('appearance')}
+                title="Web App 配置"
                 className="rounded p-0.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
               >
                 <Settings className="h-3.5 w-3.5" />
@@ -204,7 +195,7 @@ export const GraphAppRail = ({
           >
             <div className="flex gap-1.5">
               <RailAction label="对话页打开" icon={ExternalLink} onClick={openPublicChat} />
-              <RailAction label="嵌入接入" icon={Code2} onClick={openEmbed} />
+              <RailAction label="嵌入代码" icon={Code2} onClick={() => void openDialog('embed')} />
             </div>
           </Card>
 
@@ -227,17 +218,11 @@ export const GraphAppRail = ({
         </div>
       </aside>
 
-      {embedOpen && webApp && (
-        <EmbedModal
-          open={embedOpen}
-          onClose={() => setEmbedOpen(false)}
-          embedKey={webApp.embed_key}
-        />
-      )}
-      {settingsOpen && webApp && (
-        <WebAppSettingsModal
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+      {dialogTab && webApp && (
+        <WebAppDialog
+          open
+          initialTab={dialogTab}
+          onClose={() => setDialogTab(null)}
           info={webApp}
           onSave={p => saveMut.mutate(p)}
           saving={saveMut.isPending}

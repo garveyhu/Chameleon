@@ -1,8 +1,8 @@
 /** iframe 嵌入接口客户端（公开 API，不带 Authorization） */
-
+import { streamSSE } from '@/core/lib/sse';
 import type {
+  EmbedStreamChunk,
   IframeCreateSessionResp,
-  IframeInvokeResp,
   IframePublicConfig,
 } from '@/system/embed_iframe/types/embed-iframe';
 
@@ -37,13 +37,16 @@ export const embedIframeApi = {
   createSession: (embedKey: string): Promise<IframeCreateSessionResp> =>
     call(`/v1/embed/${embedKey}/session`, { method: 'POST' }),
 
-  invoke: (
+  /** SSE 流式调用：边收 delta 边渲染。公开端点，streamSSE 在无 token 时不发 Authorization */
+  streamInvoke: (
     embedKey: string,
     sessionToken: string,
     input: string,
-  ): Promise<IframeInvokeResp> =>
-    call(`/v1/embed/${embedKey}/invoke`, {
-      method: 'POST',
-      body: JSON.stringify({ session_token: sessionToken, input }),
+    opts: { signal?: AbortSignal; onChunk: (chunk: EmbedStreamChunk) => void },
+  ): Promise<void> =>
+    streamSSE<EmbedStreamChunk>(`/v1/embed/${embedKey}/invoke/stream`, {
+      body: { session_token: sessionToken, input },
+      signal: opts.signal,
+      onChunk: opts.onChunk,
     }),
 };

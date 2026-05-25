@@ -4,6 +4,8 @@ export interface IframeUiConfig {
   title?: string;
   subtitle?: string;
   primary_color?: string;
+  /** 头像 emoji（留空用默认机器人图标） */
+  icon_emoji?: string;
 }
 
 export interface IframeBehavior {
@@ -11,6 +13,8 @@ export interface IframeBehavior {
   placeholder?: string;
   /** 建议问题（点击直接发送）—— 工作流 start 节点带过来 */
   suggested_questions?: string[];
+  /** 在回答下方显示复制 / 朗读等操作（默认显示） */
+  show_feedback?: boolean;
 }
 
 export interface IframePublicConfig {
@@ -27,10 +31,15 @@ export interface IframeCreateSessionResp {
   expires_in: number;
 }
 
-export interface IframeInvokeResp {
-  answer: string;
-  session_id: string;
-  request_id: string | null;
+/** SSE 流式 chunk —— /v1/embed/{key}/invoke/stream 的 data 行（见后端 sse_events） */
+export interface EmbedStreamChunk {
+  meta?: { agent?: string; session_id?: string; request_id?: string };
+  delta?: string;
+  citation?: { source?: string; snippet?: string; score?: number | null };
+  end?: boolean;
+  usage?: unknown;
+  answer?: string;
+  error?: { type?: string; message?: string };
 }
 
 export interface ChatMessage {
