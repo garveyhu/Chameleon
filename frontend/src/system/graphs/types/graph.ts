@@ -65,6 +65,17 @@ export interface GraphDetail extends GraphItem {
   published_spec?: GraphSpec | null;
 }
 
+/** Web App / 嵌入信息（基于 embed_config） */
+export interface WebAppInfo {
+  embed_key: string;
+  agent_key: string;
+  name: string;
+  description: string | null;
+  ui_config: Record<string, unknown>;
+  behavior: Record<string, unknown>;
+  enabled: boolean;
+}
+
 export interface NodeRunItem {
   node_id: string;
   node_type: string;

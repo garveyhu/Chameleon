@@ -98,6 +98,28 @@ class SuggestFollowupsRequest(BaseModel):
     answer: str = Field(max_length=20000)
 
 
+class WebAppInfo(BaseModel):
+    """工作流的 Web App / 嵌入信息（基于 embed_config）"""
+
+    embed_key: str
+    agent_key: str
+    name: str
+    description: str | None = None
+    ui_config: dict[str, Any] = Field(default_factory=dict)
+    behavior: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class UpdateWebAppRequest(BaseModel):
+    """Web App 设置：写回 embed_config 的展示/行为配置"""
+
+    name: str | None = Field(default=None, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    ui_config: dict[str, Any] | None = None
+    behavior: dict[str, Any] | None = None
+    enabled: bool | None = None
+
+
 class NodeRunItem(BaseModel):
     """test-run 返的单节点执行摘要"""
 

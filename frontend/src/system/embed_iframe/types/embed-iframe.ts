@@ -9,6 +9,8 @@ export interface IframeUiConfig {
 export interface IframeBehavior {
   welcome_message?: string;
   placeholder?: string;
+  /** 建议问题（点击直接发送）—— 工作流 start 节点带过来 */
+  suggested_questions?: string[];
 }
 
 export interface IframePublicConfig {

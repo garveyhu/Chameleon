@@ -6,6 +6,7 @@ test-run 不落 graph_runs / graph_node_runs（仅 debug 用）；
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
@@ -21,7 +22,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
-from chameleon.core.models import Agent, Graph, GraphRun
+from chameleon.core.models import Agent, App, EmbedConfig, Graph, GraphRun
 from chameleon.system.graphs.schemas import (
     CreateGraphRequest,
     GraphChatRequest,
@@ -33,6 +34,8 @@ from chameleon.system.graphs.schemas import (
     TestRunRequest,
     TestRunResult,
     UpdateGraphRequest,
+    UpdateWebAppRequest,
+    WebAppInfo,
 )
 
 
@@ -216,6 +219,169 @@ async def publish_as_agent(
         agent.agent_key,
     )
     return {"agent_key": agent.agent_key, "agent_id": agent.id}
+
+
+def _gen_embed_key() -> str:
+    return f"emb_{secrets.token_hex(12)}"
+
+
+def _start_chat_cfg(spec: dict | None) -> tuple[str | None, list[str]]:
+    """从 graph spec 的 start 节点取开场白 / 建议问题（喂给公开聊天页）。"""
+    for n in (spec or {}).get("nodes") or []:
+        if n.get("type") == "start":
+            d = n.get("data") or {}
+            sugg = d.get("suggested_questions") or []
+            return d.get("opener") or None, [str(s) for s in sugg if s]
+    return None, []
+
+
+def _synced_behavior(
+    existing: dict | None, opener: str | None, suggested: list[str]
+) -> dict:
+    """把开场白 / 建议问题同步进 behavior，保留其他键（如 placeholder）。"""
+    b = dict(existing or {})
+    if opener:
+        b["welcome_message"] = opener
+    else:
+        b.pop("welcome_message", None)
+    b["suggested_questions"] = suggested
+    return b
+
+
+async def _find_graph_agent(session: AsyncSession, graph_id: int) -> Agent | None:
+    return (
+        await session.execute(
+            select(Agent).where(
+                Agent.source == "graph",
+                Agent.graph_id == graph_id,
+                Agent.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _find_embed(
+    session: AsyncSession, agent_id: int
+) -> EmbedConfig | None:
+    return (
+        (
+            await session.execute(
+                select(EmbedConfig)
+                .where(
+                    EmbedConfig.agent_id == agent_id,
+                    EmbedConfig.deleted_at.is_(None),
+                )
+                .order_by(EmbedConfig.id)
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+async def ensure_web_app(
+    session: AsyncSession, graph_id: int
+) -> WebAppInfo:
+    """确保工作流有一个可公开访问的 Web App（基于 embed_config）。
+
+    流程：未发布为智能体则先发布（建 agent + reload registry）→ 为其 agent
+    找/建一个 App + EmbedConfig → 返回 embed_key（公开聊天页 /embed/{key}）。
+    """
+    row = await _load(session, graph_id)
+    # commit 会让 ORM 对象过期，先把要用的字段取出来
+    g_key, g_name, g_desc = row.graph_key, row.name, row.description
+    g_ws = getattr(row, "workspace_id", None)
+    opener, suggested = _start_chat_cfg(row.spec)  # start 节点的开场白 / 建议问题
+
+    agent = await _find_graph_agent(session, graph_id)
+    if agent is None:
+        await publish_as_agent(session, graph_id)  # 建 agent + reload registry（内部 commit）
+        agent = await _find_graph_agent(session, graph_id)
+        if agent is None:
+            raise BusinessError(
+                ResultCode.InternalError, message="发布为智能体后仍未找到 agent"
+            )
+    agent_key, agent_id = agent.agent_key, agent.id
+
+    ec = await _find_embed(session, agent_id)
+    if ec is None:
+        app_key = f"graph-{g_key}"
+        app = (
+            await session.execute(
+                select(App).where(
+                    App.app_key == app_key, App.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if app is None:
+            app = App(app_key=app_key, name=g_name, workspace_id=g_ws)
+            session.add(app)
+            await session.flush()
+            await session.refresh(app)
+        ec = EmbedConfig(
+            embed_key=_gen_embed_key(),
+            name=g_name,
+            description=g_desc,
+            agent_id=agent_id,
+            app_id=app.id,
+            allowed_origins=["*"],  # 公开 Web App：任意 origin（embed_key 即访问凭据）
+            behavior=_synced_behavior(None, opener, suggested),
+            enabled=True,
+            workspace_id=g_ws,
+        )
+        session.add(ec)
+        await session.flush()
+        await session.refresh(ec)
+        info = _web_app_info(ec, agent_key)
+        await session.commit()
+        return info
+    # 已存在：把开场白 / 建议问题同步到 behavior；老数据自愈 allowed_origins
+    ec.behavior = _synced_behavior(ec.behavior, opener, suggested)
+    if not ec.allowed_origins:
+        ec.allowed_origins = ["*"]
+    await session.flush()
+    info = _web_app_info(ec, agent_key)
+    await session.commit()
+    return info
+
+
+async def update_web_app(
+    session: AsyncSession, graph_id: int, req: UpdateWebAppRequest
+) -> WebAppInfo:
+    """Web App 设置：写回 embed_config 的展示 / 行为配置。"""
+    await ensure_web_app(session, graph_id)  # 确保存在
+    agent = await _find_graph_agent(session, graph_id)
+    if agent is None:
+        raise BusinessError(ResultCode.Fail, message="尚未发布为智能体")
+    ec = await _find_embed(session, agent.id)
+    if ec is None:
+        raise BusinessError(ResultCode.Fail, message="Web App 配置不存在")
+    if req.name is not None:
+        ec.name = req.name
+    if req.description is not None:
+        ec.description = req.description
+    if req.ui_config is not None:
+        ec.ui_config = req.ui_config
+    if req.behavior is not None:
+        ec.behavior = req.behavior
+    if req.enabled is not None:
+        ec.enabled = req.enabled
+    await session.flush()
+    info = _web_app_info(ec, agent.agent_key)
+    await session.commit()
+    return info
+
+
+def _web_app_info(ec: EmbedConfig, agent_key: str) -> WebAppInfo:
+    return WebAppInfo(
+        embed_key=ec.embed_key,
+        agent_key=agent_key,
+        name=ec.name,
+        description=ec.description,
+        ui_config=ec.ui_config or {},
+        behavior=ec.behavior or {},
+        enabled=ec.enabled,
+    )
 
 
 async def test_run(

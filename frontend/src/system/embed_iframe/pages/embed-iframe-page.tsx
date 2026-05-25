@@ -3,12 +3,13 @@
  * 业务方 <iframe src=".../embed/{key}"> 嵌入到自家页面里使用。
  * 与 widget 共用后端 endpoints，但没有气泡按钮，永远展开。
  */
-
-import { Send } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
+import { Send } from 'lucide-react';
+
 import { MessageActions } from '@/core/components/chat';
+import { Markdown } from '@/core/components/chat/markdown';
 import { useEmbedChat } from '@/system/embed_iframe/hooks/use-embed-chat';
 import type { ChatMessage } from '@/system/embed_iframe/types/embed-iframe';
 
@@ -30,6 +31,8 @@ const EmbedIframeView = ({ embedKey }: { embedKey: string }) => {
   const title = ui.title || config?.name || 'Chameleon 助手';
   const subtitle = ui.subtitle || config?.description || '';
   const placeholder = config?.behavior?.placeholder || '输入消息……';
+  const suggestions = config?.behavior?.suggested_questions || [];
+  const askedYet = messages.some(m => m.role === 'user');
 
   // 自动滚到底
   useEffect(() => {
@@ -41,7 +44,7 @@ const EmbedIframeView = ({ embedKey }: { embedKey: string }) => {
   }, [messages]);
 
   // 顶层注入 primary color CSS 变量
-  const styleVars = useMemo(() => ({ '--primary': primary } as React.CSSProperties), [primary]);
+  const styleVars = useMemo(() => ({ '--primary': primary }) as React.CSSProperties, [primary]);
 
   if (loading) {
     return <FullCenter>加载中…</FullCenter>;
@@ -66,14 +69,27 @@ const EmbedIframeView = ({ embedKey }: { embedKey: string }) => {
         </div>
       </header>
 
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-2.5">
           {messages.map(m => (
             <MessageBubble key={m.id} msg={m} primary={primary} />
           ))}
+          {suggestions.length > 0 && !askedYet && (
+            <div className="mt-1 flex flex-wrap gap-2">
+              {suggestions.map(q => (
+                <button
+                  key={q}
+                  type="button"
+                  disabled={sending}
+                  onClick={() => void send(q)}
+                  className="rounded-full border bg-white px-3 py-1.5 text-[12.5px] transition hover:bg-stone-50 disabled:opacity-50"
+                  style={{ borderColor: primary, color: primary }}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -97,22 +113,14 @@ const EmbedIframeView = ({ embedKey }: { embedKey: string }) => {
   );
 };
 
-const MessageBubble = ({
-  msg,
-  primary,
-}: {
-  msg: ChatMessage;
-  primary: string;
-}) => {
+const MessageBubble = ({ msg, primary }: { msg: ChatMessage; primary: string }) => {
   const isUser = msg.role === 'user';
   // 公开 widget：仅 assistant 完整消息提供 copy / 朗读 / 分享（内置动作，无受控 handler）
   const showActions = !isUser && !msg.pending && !msg.error;
   return (
-    <div
-      className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
-    >
+    <div className={`group flex flex-col ${isUser ? 'items-end' : 'items-start'}`}>
       <div
-        className={`max-w-[85%] whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-[13.5px] leading-relaxed ${
+        className={`max-w-[85%] rounded-xl px-3 py-2 text-[13.5px] leading-relaxed break-words ${
           isUser
             ? 'rounded-br-sm text-white'
             : msg.error
@@ -121,7 +129,13 @@ const MessageBubble = ({
         }`}
         style={isUser ? { background: primary } : undefined}
       >
-        {msg.pending ? <TypingDots /> : msg.content}
+        {msg.pending ? (
+          <TypingDots />
+        ) : isUser || msg.error ? (
+          <span className="whitespace-pre-wrap">{msg.content}</span>
+        ) : (
+          <Markdown content={msg.content} />
+        )}
       </div>
       {showActions && (
         <div className="mt-1">

@@ -11,6 +11,7 @@ import type {
   GraphSpec,
   GraphStreamChunk,
   TestRunResult,
+  WebAppInfo,
 } from '@/system/graphs/types/graph';
 
 export interface GraphChatTurn {
@@ -39,8 +40,7 @@ export const graphApi = {
 
   get: (id: EntityId) => get<GraphDetail>(`/v1/admin/graphs/${id}`),
 
-  create: (payload: CreateGraphPayload) =>
-    post<GraphDetail>('/v1/admin/graphs', payload),
+  create: (payload: CreateGraphPayload) => post<GraphDetail>('/v1/admin/graphs', payload),
 
   /** A4：自然语言描述 → LLM 生成并创建工作流图 */
   generate: (payload: { description: string; graph_key: string; name: string }) =>
@@ -75,15 +75,26 @@ export const graphApi = {
     post<GraphRunDetail>(`/v1/admin/graphs/${id}/run`, { input }),
 
   /** P22.3：发布 draft → freeze published_spec；published_version += 1 */
-  publish: (id: EntityId) =>
-    post<GraphDetail>(`/v1/admin/graphs/${id}/publish`, {}),
+  publish: (id: EntityId) => post<GraphDetail>(`/v1/admin/graphs/${id}/publish`, {}),
 
   /** 发布并暴露成可对话 agent（source='graph'），走统一 agent 端点 */
   publishAsAgent: (id: EntityId) =>
-    post<{ agent_key: string; agent_id: EntityId }>(
-      `/v1/admin/graphs/${id}/publish-as-agent`,
-      {},
-    ),
+    post<{ agent_key: string; agent_id: EntityId }>(`/v1/admin/graphs/${id}/publish-as-agent`, {}),
+
+  /** 确保工作流有公开 Web App（embed），返回 embed_key（公开页 /embed/{key}） */
+  ensureWebApp: (id: EntityId) => post<WebAppInfo>(`/v1/admin/graphs/${id}/web-app`, {}),
+
+  /** Web App 设置：写回展示 / 行为配置 */
+  updateWebApp: (
+    id: EntityId,
+    payload: {
+      name?: string;
+      description?: string | null;
+      ui_config?: Record<string, unknown>;
+      behavior?: Record<string, unknown>;
+      enabled?: boolean;
+    },
+  ) => post<WebAppInfo>(`/v1/admin/graphs/${id}/web-app/update`, payload),
 
   /** 对话式调试当前 draft（把 graph 当可对话 agent 多轮跑，临时会话不落库） */
   chatStream: (
@@ -101,6 +112,5 @@ export const graphApi = {
       onChunk: opts.onChunk,
     }),
 
-  listRuns: (id: EntityId) =>
-    get<GraphRunItem[]>(`/v1/admin/graphs/${id}/runs`),
+  listRuns: (id: EntityId) => get<GraphRunItem[]>(`/v1/admin/graphs/${id}/runs`),
 };

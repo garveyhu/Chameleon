@@ -28,6 +28,8 @@ from chameleon.system.graphs.schemas import (
     TestRunRequest,
     TestRunResult,
     UpdateGraphRequest,
+    UpdateWebAppRequest,
+    WebAppInfo,
 )
 
 router = APIRouter(prefix="/v1/admin/graphs", tags=["admin:graphs"])
@@ -145,6 +147,27 @@ async def publish_as_agent(
     """把工作流发布并暴露成可对话 agent（source='graph'），走统一 agent 端点。"""
     result = await graph_service.publish_as_agent(session, graph_id)
     return Result.ok(result)
+
+
+@router.post("/{graph_id}/web-app", response_model=Result[WebAppInfo])
+async def ensure_web_app(
+    graph_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[WebAppInfo]:
+    """确保工作流有公开 Web App（embed），返回 embed_key（公开页 /embed/{key}）。"""
+    return Result.ok(await graph_service.ensure_web_app(session, graph_id))
+
+
+@router.post("/{graph_id}/web-app/update", response_model=Result[WebAppInfo])
+async def update_web_app(
+    graph_id: int,
+    req: UpdateWebAppRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("graphs:write")),
+) -> Result[WebAppInfo]:
+    """Web App 设置：写回展示 / 行为配置（名称 / 描述 / 主题色 / 占位符等）。"""
+    return Result.ok(await graph_service.update_web_app(session, graph_id, req))
 
 
 @router.post(
