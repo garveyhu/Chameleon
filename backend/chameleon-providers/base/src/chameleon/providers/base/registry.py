@@ -85,22 +85,25 @@ def build_provider_registry(
 # ── namespace 扫 chameleon.agents.* import 加载 BaseAgent 类 ─
 
 
-def _scan_local_agent_modules() -> dict[str, type]:
-    """扫 chameleon.agents.* 子包，import + 找 BaseAgent 子类
+def _scan_local_agent_modules() -> tuple[dict[str, type], dict[str, Any]]:
+    """扫 chameleon.agents.* 子包，找 BaseAgent 子类 + @agent 声明（agentkit）。
 
     Returns:
-        {agent_key: agent_class}（提供给 AGENTS config["module"]/["agent_class"] fallback）
+        (base_index, agentkit_index)
+        - base_index:     {agent_key: BaseAgent 子类}（老范式）
+        - agentkit_index: {agent_key: @agent 目标（函数 / 类）}（agentkit 新范式）
     """
     try:
         import chameleon.agents as pkg
     except ImportError:
         logger.warning("chameleon.agents namespace not found — no local agents")
-        return {}
+        return {}, {}
 
     from chameleon.core.base.agent_router import agent_router
     from chameleon.core.base.base_agent import BaseAgent
 
-    found: dict[str, type] = {}
+    base_index: dict[str, type] = {}
+    agentkit_index: dict[str, Any] = {}
     for mod_info in pkgutil.iter_modules(pkg.__path__, "chameleon.agents."):
         try:
             mod = importlib.import_module(mod_info.name)
@@ -108,20 +111,40 @@ def _scan_local_agent_modules() -> dict[str, type]:
             raise RegistryError(
                 message=f"failed to import agent package {mod_info.name}: {e}"
             ) from e
+        # ① BaseAgent 子类（老范式）
         agent_cls = _find_base_agent_class(mod, BaseAgent)
-        if agent_cls is None:
+        if agent_cls is not None:
+            meta = agent_cls.get_metadata()
+            if not meta.id:
+                raise RegistryError(
+                    message=f"{agent_cls.__name__}.get_metadata().id 不能为空"
+                )
+            base_index[meta.id] = agent_cls
+            try:
+                agent_router.register(agent_cls)
+            except Exception as e:
+                logger.warning("agent_router.register failed for {}: {}", meta.id, e)
+        # ② @agent 声明（agentkit 新范式，函数 / 类）
+        for tgt in _find_agentkit_targets(mod):
+            agentkit_index[tgt.__agent_manifest__.key] = tgt
+    return base_index, agentkit_index
+
+
+def _find_agentkit_targets(module: Any) -> list[Any]:
+    """找 module 里本包定义的 @agent 目标（带 __agent_manifest__）。"""
+    out: list[Any] = []
+    seen: set[int] = set()
+    for name in dir(module):
+        obj = getattr(module, name, None)
+        if getattr(obj, "__agent_manifest__", None) is None:
             continue
-        meta = agent_cls.get_metadata()
-        if not meta.id:
-            raise RegistryError(
-                message=f"{agent_cls.__name__}.get_metadata().id 不能为空"
-            )
-        found[meta.id] = agent_cls
-        try:
-            agent_router.register(agent_cls)
-        except Exception as e:
-            logger.warning("agent_router.register failed for {}: {}", meta.id, e)
-    return found
+        if not getattr(obj, "__module__", "").startswith(module.__name__):
+            continue
+        if id(obj) in seen:
+            continue
+        seen.add(id(obj))
+        out.append(obj)
+    return out
 
 
 def _find_base_agent_class(module: Any, base_cls: type) -> type | None:
@@ -144,13 +167,16 @@ async def build_agent_registry_from_db(
     providers: dict[str, Provider],
     *,
     local_class_index: dict[str, type] | None = None,
+    agentkit_index: dict[str, Any] | None = None,
 ) -> dict[str, AgentDef]:
     """从 DB agents 表 + namespace import 结果合并产 AGENTS dict
 
     Args:
         providers: 已经 build 好的 PROVIDERS dict（用于校验 agent.source 存在）
-        local_class_index: namespace 扫到的 {agent_key: class}；DB 里 source='local'
-                          但 class 不在索引里时 → 跳过并 warn（agent 安装包未装）
+        local_class_index: namespace 扫到的 BaseAgent {agent_key: class}
+        agentkit_index: namespace 扫到的 @agent {agent_key: 目标}；命中则注入
+                        定位标记 + model_bindings，运行时走 agentkit runner
+                        （source='local' 但两索引都没有 → 跳过并 warn）
 
     DB 里的 source 字段映射 provider name：
       'local' → providers["local"]
@@ -163,6 +189,8 @@ async def build_agent_registry_from_db(
 
     if local_class_index is None:
         local_class_index = {}
+    if agentkit_index is None:
+        agentkit_index = {}
 
     async with AsyncSessionLocal() as session:
         rows = (
@@ -205,10 +233,14 @@ async def build_agent_registry_from_db(
             )
             continue
 
-        # 本地 agent：class 必须能从 namespace 扫到
-        if provider_name == "local" and row.agent_key not in local_class_index:
+        # 本地 agent：BaseAgent 子类或 @agent 声明，至少命中一个索引
+        if (
+            provider_name == "local"
+            and row.agent_key not in local_class_index
+            and row.agent_key not in agentkit_index
+        ):
             logger.warning(
-                "本地 agent {} 在 DB 中 enabled，但 chameleon.agents.* 未发现对应 class — 跳过",
+                "本地 agent {} 在 DB 中 enabled，但 chameleon.agents.* 未发现对应 class / @agent — 跳过",
                 row.agent_key,
             )
             continue
@@ -224,6 +256,14 @@ async def build_agent_registry_from_db(
                 )
                 continue
             config = {"graph_id": row.graph_id, "spec": spec}
+        # agentkit @agent：注入定位标记 + 多槽模型绑定（运行时走 agentkit runner）
+        elif provider_name == "local" and row.agent_key in agentkit_index:
+            tgt = agentkit_index[row.agent_key]
+            config["__agentkit_module__"] = tgt.__module__
+            config["__agentkit_attr__"] = tgt.__name__
+            config["model_bindings"] = (
+                dict(row.model_bindings) if row.model_bindings else {}
+            )
 
         agents[row.agent_key] = AgentDef(
             key=row.agent_key,
@@ -275,12 +315,14 @@ async def init_registry() -> None:
     PROVIDERS.clear()
     PROVIDERS.update(build_provider_registry(disabled_provider_keys))
 
-    local_class_index = _scan_local_agent_modules()
+    local_class_index, agentkit_index = _scan_local_agent_modules()
 
     AGENTS.clear()
     AGENTS.update(
         await build_agent_registry_from_db(
-            PROVIDERS, local_class_index=local_class_index
+            PROVIDERS,
+            local_class_index=local_class_index,
+            agentkit_index=agentkit_index,
         )
     )
 
@@ -298,9 +340,11 @@ async def reload_agent_registry() -> None:
 
     幂等；不重 import namespace（重复 import 副作用小，但慢）。
     """
-    local_class_index = _scan_local_agent_modules()
+    local_class_index, agentkit_index = _scan_local_agent_modules()
     new_agents = await build_agent_registry_from_db(
-        PROVIDERS, local_class_index=local_class_index
+        PROVIDERS,
+        local_class_index=local_class_index,
+        agentkit_index=agentkit_index,
     )
     AGENTS.clear()
     AGENTS.update(new_agents)

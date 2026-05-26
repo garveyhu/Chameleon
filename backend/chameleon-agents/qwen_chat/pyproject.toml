@@ -1,17 +1,14 @@
 [project]
 name = "chameleon-agent-qwen-chat"
 version = "0.1.0"
-description = "Chameleon Qwen chat agent —— 通用聊天，直接走 model.json cases.llm"
+description = "Chameleon 通用聊天 agent —— agentkit @agent 范式样板"
 requires-python = ">=3.12"
 dependencies = [
-    "chameleon-core",
-    "chameleon-providers-base",
-    "langchain-core>=0.3",
+    "chameleon-agentkit",
 ]
 
 [tool.uv.sources]
-chameleon-core = { workspace = true }
-chameleon-providers-base = { workspace = true }
+chameleon-agentkit = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

@@ -102,7 +102,7 @@ class AgentRun:
 
     def llm(self, slot: str = "chat", *, model: str | None = None) -> Any:
         """低层：返回配置好的 LangChain chat model，可任意 LCEL 组合。"""
-        raise NotImplementedError("Phase 1")
+        return self._t.chat_model(slot=None if model else slot, model=model)
 
     async def complete(
         self,
@@ -115,9 +115,13 @@ class AgentRun:
         **kw: Any,
     ) -> str:
         """高层糖：一次性出文本，自动 generation span + usage。"""
-        raise NotImplementedError("Phase 1")
+        chat = self._t.chat_model(slot=None if model else slot, model=model)
+        msgs = self._build_messages(system, user, context)
+        async with self._t.span("llm.complete", type="generation"):
+            resp = await chat.ainvoke(msgs, **kw)
+        return _content_to_text(resp)
 
-    def stream(
+    async def stream(
         self,
         *,
         slot: str = "chat",
@@ -127,8 +131,36 @@ class AgentRun:
         context: Any = None,
         **kw: Any,
     ) -> AsyncIterator[str]:
-        """高层糖：流式出文本，自动 span + usage。"""
-        raise NotImplementedError("Phase 1")
+        """高层糖：流式出文本（逐增量 yield），自动 span + usage。"""
+        chat = self._t.chat_model(slot=None if model else slot, model=model)
+        msgs = self._build_messages(system, user, context)
+        async with self._t.span("llm.stream", type="generation"):
+            async for chunk in chat.astream(msgs, **kw):
+                text = _content_to_text(chunk)
+                if text:
+                    yield text
+
+    def _build_messages(
+        self, system: str | None, user: str, context: Any
+    ) -> list[tuple[str, str]]:
+        """组装 (role, content) 列表 —— system + history + 本轮 user（含可选 context）。
+
+        不依赖 langchain：LangChain chat model 的 ainvoke/astream 接受 (role, content) 元组。
+        """
+        msgs: list[tuple[str, str]] = []
+        if system:
+            msgs.append(("system", system))
+        for m in self.history:
+            role = getattr(m, "role", "user")
+            if role not in ("system", "user", "assistant"):
+                continue
+            msgs.append((role, m.text()))
+        user_text = user
+        if context:
+            ctx_text = context if isinstance(context, str) else _docs_to_text(context)
+            user_text = f"参考资料：\n{ctx_text}\n\n问题：{user}"
+        msgs.append(("user", user_text))
+        return msgs
 
     # —— 知识库 ——
 
@@ -145,3 +177,28 @@ class AgentRun:
     def emit(self, event: StreamEvent) -> None:
         """透传一个自定义 StreamEvent。"""
         self._t.emit(event)
+
+
+def _content_to_text(resp: Any) -> str:
+    """从 LangChain message / chunk 取纯文本（content 可能是 str 或 block 列表）。"""
+    content = getattr(resp, "content", resp)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for b in content:
+            if isinstance(b, str):
+                parts.append(b)
+            elif isinstance(b, dict) and isinstance(b.get("text"), str):
+                parts.append(b["text"])
+        return "".join(parts)
+    return str(content) if content is not None else ""
+
+
+def _docs_to_text(docs: Any) -> str:
+    """把 ctx.kb.search 的结果（list[Doc]）拼成参考资料文本。"""
+    out: list[str] = []
+    for d in docs or []:
+        text = getattr(d, "text", None)
+        out.append(text if isinstance(text, str) else str(d))
+    return "\n---\n".join(out)

@@ -1,14 +1,13 @@
-"""qwen_chat: 真实通用聊天 agent
+"""qwen_chat: 通用聊天 agent（agentkit @agent 范式样板）。
 
-调真实 Qwen（或 model.json 配置的任何 LLM），走 BaseAgent + build_runnable
-最简范式：一个 prompt | llm 链。
+只写业务逻辑，模型从 ctx 隐式拿（页面"关联模型"可切换）。
 
 调用方式：
     POST /v1/agents/qwen-chat/invoke
     Body: {"input": "你好", "stream": true}
 """
 
-from chameleon.agents.qwen_chat.agent import QwenChatAgent
+from chameleon.agents.qwen_chat.agent import handle
 
-__all__ = ["QwenChatAgent"]
-__version__ = "0.1.0"
+__all__ = ["handle"]
+__version__ = "0.2.0"

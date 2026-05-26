@@ -294,17 +294,11 @@ name = "chameleon-agent-qwen-chat"
 version = "0.1.0"
 source = { editable = "chameleon-agents/qwen_chat" }
 dependencies = [
-    { name = "chameleon-core" },
-    { name = "chameleon-providers-base" },
-    { name = "langchain-core" },
+    { name = "chameleon-agentkit" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "chameleon-core", editable = "chameleon-core" },
-    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
-    { name = "langchain-core", specifier = ">=0.3" },
-]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
 name = "chameleon-agentkit"
@@ -492,6 +486,7 @@ name = "chameleon-provider-local"
 version = "0.1.0"
 source = { editable = "chameleon-providers/local" }
 dependencies = [
+    { name = "chameleon-agentkit" },
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },
     { name = "langgraph" },
@@ -499,6 +494,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chameleon-agentkit", editable = "chameleon-agentkit" },
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "langgraph", specifier = ">=0.2" },

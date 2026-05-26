@@ -52,6 +52,9 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
         BigInteger, ForeignKey("graphs.id", ondelete="SET NULL"), nullable=True
     )
     config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # agentkit 多具名模型槽绑定：{槽名: 已配置模型 code}，如 {"chat": "qwen-plus"}。
+    # 仅 source='local' 的 @agent 智能体使用；web "关联模型" tab 写入，运行时 ctx.llm(slot) 读。
+    model_bindings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     default_model_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("models.id", ondelete="SET NULL"), nullable=True
     )

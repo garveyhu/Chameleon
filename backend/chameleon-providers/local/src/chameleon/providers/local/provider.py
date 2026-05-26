@@ -24,6 +24,7 @@ from loguru import logger
 from chameleon.core.api.exceptions import ProviderInternalError, RegistryError
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import InvokeContext, StreamEvent
+from chameleon.providers.local.agentkit_runner import is_agentkit_agent, run_agentkit
 
 
 class LocalProvider(Provider):
@@ -36,6 +37,22 @@ class LocalProvider(Provider):
 
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         cfg = ctx.agent_def.config
+
+        # agentkit @agent 智能体：走 ctx-based runner（registry build 注入定位标记）
+        if is_agentkit_agent(ctx):
+            try:
+                async for ev in run_agentkit(ctx):
+                    yield ev
+            except Exception as e:
+                if "Provider" in type(e).__name__:
+                    raise
+                if type(e).__name__.endswith("Error") and "Business" in type(e).__name__:
+                    raise
+                raise ProviderInternalError(
+                    message=f"agentkit agent {ctx.agent_def.key} 运行失败: {e}"
+                ) from e
+            return
+
         module_path = cfg.get("module")
         agent_cls_name = cfg.get("agent_class")
         if not module_path or not agent_cls_name:
