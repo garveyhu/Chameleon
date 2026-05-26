@@ -2,6 +2,9 @@
  *
  * Bundle 1（本提交）实现 概览 + 文档。其他 tab 留占位，由后续 C.2/C.3/C.4 填。
  */
+import type { ReactElement } from 'react';
+import { useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -14,9 +17,6 @@ import {
   Settings,
   ShieldCheck,
 } from 'lucide-react';
-import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 
 import { SectionCard } from '@/core/components/table';
 import { cn } from '@/core/lib/cn';
@@ -26,8 +26,8 @@ import { ConsistencyTab } from '@/system/kbs/components/consistency-tab';
 import { DocumentTable } from '@/system/kbs/components/document-table';
 import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone';
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
-import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
 import { HitTestPanel } from '@/system/kbs/components/hit-test-panel';
+import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
@@ -46,14 +46,17 @@ interface TabDef {
   icon: ReactElement;
 }
 
-const TABS: TabDef[] = [
-  { key: 'overview', label: '概览', icon: <BarChart3 className="h-3.5 w-3.5" /> },
-  { key: 'documents', label: '文档', icon: <FileText className="h-3.5 w-3.5" /> },
-  { key: 'collections', label: 'Collections', icon: <Layers className="h-3.5 w-3.5" /> },
-  { key: 'search', label: '检索测试', icon: <Search className="h-3.5 w-3.5" /> },
-  { key: 'eval', label: '评估', icon: <FlaskConical className="h-3.5 w-3.5" /> },
-  { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
-  { key: 'config', label: '配置', icon: <Settings className="h-3.5 w-3.5" /> },
+// Dify 式左导航分两组：核心（文档/召回测试/概览）+ 进阶（集合/评测/一致性/设置）
+const NAV_PRIMARY: TabDef[] = [
+  { key: 'documents', label: '文档', icon: <FileText className="h-4 w-4" /> },
+  { key: 'search', label: '召回测试', icon: <Search className="h-4 w-4" /> },
+  { key: 'overview', label: '概览', icon: <BarChart3 className="h-4 w-4" /> },
+];
+const NAV_ADVANCED: TabDef[] = [
+  { key: 'collections', label: '分组', icon: <Layers className="h-4 w-4" /> },
+  { key: 'eval', label: '评测', icon: <FlaskConical className="h-4 w-4" /> },
+  { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-4 w-4" /> },
+  { key: 'config', label: '设置', icon: <Settings className="h-4 w-4" /> },
 ];
 
 export const KbDetailPage = () => {
@@ -75,29 +78,39 @@ export const KbDetailPage = () => {
     );
   }
 
+  const navBtn = (t: TabDef) => (
+    <button
+      key={t.key}
+      type="button"
+      onClick={() => setTab(t.key)}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition',
+        tab === t.key
+          ? 'bg-blue-50 text-blue-700'
+          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+      )}
+    >
+      {t.icon}
+      {t.label}
+    </button>
+  );
+
   return (
     <div className="space-y-3">
       <Header kb={kbQ.data ?? null} loading={kbQ.isLoading} />
-      <SectionCard className="!p-0">
-        <nav className="flex items-center gap-1 border-b border-stone-200/70 bg-warm-2/40 px-3 py-2">
-          {TABS.map(t => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-medium transition',
-                tab === t.key
-                  ? 'bg-white text-stone-900 shadow-sm'
-                  : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800',
-              )}
-            >
-              {t.icon}
-              {t.label}
-            </button>
-          ))}
+      <div className="flex gap-4">
+        {/* 左导航（Dify 式） */}
+        <nav className="w-40 shrink-0 space-y-0.5">
+          {NAV_PRIMARY.map(navBtn)}
+          <div className="my-2 border-t border-stone-200/60" />
+          <div className="px-3 pb-1 text-[10.5px] tracking-wider text-stone-400 uppercase">
+            进阶
+          </div>
+          {NAV_ADVANCED.map(navBtn)}
         </nav>
-        <div className="p-4">
+
+        {/* 主内容 */}
+        <SectionCard className="min-w-0 flex-1">
           {tab === 'overview' && <OverviewTab kb={kbQ.data ?? null} />}
           {tab === 'documents' && <DocumentsTab kbId={kbId} />}
           {tab === 'collections' && <CollectionsTab kbId={kbId} />}
@@ -105,7 +118,7 @@ export const KbDetailPage = () => {
             (kbQ.data ? (
               <HitTestPanel kb={kbQ.data} />
             ) : (
-              <PlaceholderTab title="检索测试" hint="加载 KB 信息中…" />
+              <PlaceholderTab title="召回测试" hint="加载 KB 信息中…" />
             ))}
           {tab === 'eval' && <EvaluationListTab kbId={kbId} />}
           {tab === 'consistency' && <ConsistencyTab kbId={kbId} />}
@@ -113,10 +126,10 @@ export const KbDetailPage = () => {
             (kbQ.data ? (
               <KbConfigForm kb={kbQ.data} />
             ) : (
-              <PlaceholderTab title="KB 配置" hint="加载中…" />
+              <PlaceholderTab title="设置" hint="加载中…" />
             ))}
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
     </div>
   );
 };
@@ -140,9 +153,7 @@ const Header = ({ kb, loading }: HeaderProps) => (
     ) : kb ? (
       <div className="flex flex-1 items-baseline gap-2">
         <span className="text-[15px] font-medium text-stone-900">{kb.name}</span>
-        <span className="font-mono text-[11.5px] text-stone-500">
-          {kb.kb_key}
-        </span>
+        <span className="font-mono text-[11.5px] text-stone-500">{kb.kb_key}</span>
         <span className="ml-auto" />
         <Link
           to={`/kbs/${kb.id}/chunking-preview`}
@@ -182,15 +193,17 @@ const OverviewTab = ({ kb }: { kb: KbItem | null }) => {
             className="rounded-lg border border-stone-200/70 bg-stone-50/60 px-4 py-3"
           >
             <div className="text-[11px] text-stone-500">{s.label}</div>
-            <div className="mt-1 font-mono text-[20px] tnum text-stone-900">
-              {s.value}
-            </div>
+            <div className="tnum mt-1 font-mono text-[20px] text-stone-900">{s.value}</div>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-2 gap-3 text-[12.5px]">
         <KvCard label="kb_key" value={kb.kb_key} mono />
-        <KvCard label="embedding_model" value={`${kb.embedding_model} · d=${kb.embedding_dim}`} mono />
+        <KvCard
+          label="embedding_model"
+          value={`${kb.embedding_model} · d=${kb.embedding_dim}`}
+          mono
+        />
         <KvCard
           label="chunk_strategy"
           value={
@@ -208,23 +221,10 @@ const OverviewTab = ({ kb }: { kb: KbItem | null }) => {
   );
 };
 
-const KvCard = ({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) => (
+const KvCard = ({ label, value, mono }: { label: string; value: string; mono?: boolean }) => (
   <div className="rounded-md border border-stone-200/70 bg-white px-3 py-2">
     <div className="text-[11px] text-stone-500">{label}</div>
-    <div
-      className={cn(
-        'mt-0.5 text-[12.5px] text-stone-800',
-        mono && 'font-mono tnum',
-      )}
-    >
+    <div className={cn('mt-0.5 text-[12.5px] text-stone-800', mono && 'tnum font-mono')}>
       {value}
     </div>
   </div>
