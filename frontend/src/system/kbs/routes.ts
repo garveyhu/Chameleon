@@ -13,6 +13,13 @@ const module: ModuleRouteConfig = {
       },
     },
     {
+      path: '/kbs/create',
+      lazy: async () => {
+        const m = await import('@/system/kbs/pages/kb-create-page');
+        return { Component: m.KbCreatePage };
+      },
+    },
+    {
       path: '/kbs/:id',
       lazy: async () => {
         const m = await import('@/system/kbs/pages/kb-detail-page');
