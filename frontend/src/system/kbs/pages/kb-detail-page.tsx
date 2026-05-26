@@ -49,6 +49,22 @@ interface TabDef {
   icon: ReactElement;
 }
 
+const RECALL_MODE_LABEL: Record<string, string> = {
+  vector: '向量（语义）',
+  hybrid: '混合',
+  keyword: '关键词',
+};
+
+const CHUNK_MODE_LABEL: Record<string, string> = {
+  fixed: '固定字数',
+  paragraph: '按段落',
+  sentence: '按句子',
+  regex: '自定义正则',
+  token: '按 Token',
+  parent_child: '父子分层',
+  qa: 'QA 问答',
+};
+
 // Dify 式左导航分两组：核心（文档/召回测试/概览）+ 进阶（集合/评测/一致性/设置）
 const NAV_PRIMARY: TabDef[] = [
   { key: 'documents', label: '文档', icon: <FileText className="h-4 w-4" /> },
@@ -180,8 +196,8 @@ const OverviewTab = ({ kb }: { kb: KbItem | null }) => {
         ? [
             { label: '文档总数', value: kb.document_count },
             { label: '切块总数', value: kb.chunk_count },
-            { label: '默认 top_k', value: kb.default_top_k },
-            { label: '召回模式', value: kb.recall_mode },
+            { label: '默认召回数', value: kb.default_top_k },
+            { label: '召回模式', value: RECALL_MODE_LABEL[kb.recall_mode] ?? kb.recall_mode },
           ]
         : [],
     [kb],
@@ -203,24 +219,24 @@ const OverviewTab = ({ kb }: { kb: KbItem | null }) => {
         ))}
       </div>
       <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-        <KvCard label="kb_key" value={kb.kb_key} mono />
+        <KvCard label="知识库标识" value={kb.kb_key} mono />
         <KvCard
-          label="embedding_model"
-          value={`${kb.embedding_model} · d=${kb.embedding_dim}`}
+          label="向量模型"
+          value={`${kb.embedding_model} · 维度 ${kb.embedding_dim}`}
           mono
         />
         <KvCard
-          label="chunk_strategy"
+          label="分块策略"
           value={
             kb.chunk_strategy
-              ? `${kb.chunk_strategy.mode} · size=${kb.chunk_strategy.chunk_size ?? kb.chunk_size} · overlap=${kb.chunk_strategy.overlap ?? kb.chunk_overlap}`
-              : `legacy · size=${kb.chunk_size} · overlap=${kb.chunk_overlap}`
+              ? `${CHUNK_MODE_LABEL[kb.chunk_strategy.mode] ?? kb.chunk_strategy.mode} · 块大小 ${kb.chunk_strategy.chunk_size ?? kb.chunk_size} · 重叠 ${kb.chunk_strategy.overlap ?? kb.chunk_overlap}`
+              : `默认 · 块大小 ${kb.chunk_size} · 重叠 ${kb.chunk_overlap}`
           }
           mono
         />
-        <KvCard label="description" value={kb.description ?? '—'} />
-        <KvCard label="created_at" value={formatDateTime(kb.created_at)} mono />
-        <KvCard label="updated_at" value={formatDateTime(kb.updated_at)} mono />
+        <KvCard label="描述" value={kb.description ?? '—'} />
+        <KvCard label="创建时间" value={formatDateTime(kb.created_at)} mono />
+        <KvCard label="更新时间" value={formatDateTime(kb.updated_at)} mono />
       </div>
     </div>
   );

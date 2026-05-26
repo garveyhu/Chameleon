@@ -29,18 +29,21 @@ interface Props {
   kbId: EntityId;
 }
 
-const ISSUE_LABEL: Record<string, { label: string; cls: string }> = {
+const ISSUE_LABEL: Record<string, { label: string; cls: string; desc: string }> = {
   orphan_chunk: {
-    label: '孤儿 chunk',
+    label: '孤儿切块',
     cls: 'bg-rose-50 text-rose-700',
+    desc: '所属文档已被删除，但切块还残留在向量库里——会污染召回结果。',
   },
   dim_mismatch: {
     label: '维度不一致',
     cls: 'bg-amber-50 text-amber-700',
+    desc: '向量维度与知识库配置不符（多半是换过向量模型），无法参与相似度计算。',
   },
   zero_vector: {
     label: '零向量',
     cls: 'bg-orange-50 text-orange-700',
+    desc: '向量全是 0（嵌入时出错或文本为空），永远命不中、白占库。',
   },
 };
 
@@ -99,10 +102,13 @@ export const ConsistencyTab = ({ kbId }: Props) => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[12.5px] text-stone-600">
-          <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          检查 chunks 一致性（orphan / dim_mismatch / zero_vector）；
-          扫描只标 quarantined，<span className="font-medium text-stone-800">不物理删</span>。
+        <div className="flex items-start gap-2 text-[12.5px] text-stone-600">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+          <span>
+            体检向量库里「坏掉 / 用不了」的切块——孤儿切块、维度不一致、零向量，
+            它们会拖累召回质量却查不出来。扫描只<span className="font-medium text-stone-800">标记隔离</span>、
+            不删；确认后再「一键修复」物理删除。
+          </span>
         </div>
         <Button
           size="sm"
@@ -274,6 +280,7 @@ const ReportDetail = ({
         const meta = ISSUE_LABEL[type] ?? {
           label: type,
           cls: 'bg-stone-100 text-stone-700',
+          desc: '',
         };
         return (
           <div
@@ -283,7 +290,7 @@ const ReportDetail = ({
             <div className="flex items-center gap-2 text-[11.5px]">
               <span
                 className={cn(
-                  'rounded px-1.5 py-0.5 text-[10.5px] font-mono uppercase',
+                  'rounded px-1.5 py-0.5 text-[10.5px] font-medium',
                   meta.cls,
                 )}
               >
@@ -294,6 +301,11 @@ const ReportDetail = ({
               </span>
               <span className="text-[11px] text-stone-500">条</span>
             </div>
+            {meta.desc && (
+              <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
+                {meta.desc}
+              </div>
+            )}
             <div className="mt-1 font-mono text-[10.5px] text-stone-500">
               chunk ids:{' '}
               {list
