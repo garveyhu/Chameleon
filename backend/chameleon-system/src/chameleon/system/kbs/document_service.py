@@ -599,9 +599,10 @@ async def search_chunks(
     min_score: float = 0.0,
     doc_ids: list[int] | None = None,
     tags: list[str] | None = None,
+    metadata_filters: dict[str, str] | None = None,
     mode: str | None = None,
 ) -> list[dict]:
-    """三模式 chunk 检索；可按 doc_ids / tags 过滤。
+    """三模式 chunk 检索；可按 doc_ids / tags / metadata 过滤。
 
     薄委托 api.knowledge.hit_test.run_hit_test（单一检索路径：hybrid RRF /
     过滤 quarantined / multi-query / HyDE / reranker / score breakdown）。
@@ -620,6 +621,7 @@ async def search_chunks(
         mode=mode,
         doc_ids=doc_ids,
         tags=tags,
+        metadata_filters=metadata_filters,
     )
     return [r.to_dict() for r in results]
 

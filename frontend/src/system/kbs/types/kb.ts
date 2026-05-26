@@ -105,9 +105,22 @@ export interface SearchRequest {
   min_score?: number;
   doc_ids?: EntityId[];
   tags?: string[];
+  /** P5：按元数据字段值过滤（key→value，文本匹配 Document.meta，AND） */
+  metadata_filters?: Record<string, string>;
   mode?: RecallMode;
   /** B1：multi-query 扩展变体数（后端接入后生效） */
   multi_query_count?: number;
+}
+
+export type KbFieldType = 'string' | 'number' | 'select' | 'time';
+
+export interface KbMetadataField {
+  id: EntityId;
+  kb_id: EntityId;
+  key: string;
+  label: string;
+  field_type: KbFieldType;
+  options: string[] | null;
 }
 
 export interface SearchHitItem {

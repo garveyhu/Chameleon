@@ -161,6 +161,8 @@ class SearchRequest(BaseModel):
     min_score: float = Field(default=0.0, ge=0.0, le=1.0)
     doc_ids: list[int] | None = None
     tags: list[str] | None = None
+    #: 按元数据字段值过滤（key→value，文本匹配 Document.meta，AND）
+    metadata_filters: dict[str, str] | None = None
     mode: str | None = Field(default=None, pattern="^(vector|hybrid|keyword)$")
     # v1.1 hit-test playground 开关（默认走 KB 配置 / 关闭）
     include_images: bool | None = None
@@ -817,6 +819,7 @@ async def search_kb(
         mode=req.mode,
         doc_ids=req.doc_ids,
         tags=req.tags,
+        metadata_filters=req.metadata_filters,
         include_images=req.include_images,
         multi_query_count=req.multi_query,
         use_hyde=req.hyde,

@@ -3,11 +3,11 @@
  * 状态全在 core/stores/kb（query/topK/mode/multiQuery/tags/hits/selectedChunkId）。
  * score breakdown 依赖 Agent B 的 B6 API；未接入时仅显综合得分。
  */
-
-import { useMutation } from '@tanstack/react-query';
-import { FlaskConical, Search, SearchX } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { FlaskConical, Search, SearchX } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -21,11 +21,12 @@ import {
 import { Switch } from '@/core/components/ui/switch';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
+import { get } from '@/core/lib/request';
 import { toast } from '@/core/lib/toast';
 import { selectedHit, useKbStore } from '@/core/stores/kb';
 import { ScoreBreakdown } from '@/system/kbs/components/score-breakdown';
 import { documentApi } from '@/system/kbs/services/document';
-import type { KbItem, RecallMode, SearchHitItem } from '@/system/kbs/types/kb';
+import type { KbItem, KbMetadataField, RecallMode, SearchHitItem } from '@/system/kbs/types/kb';
 import { highlight } from '@/system/kbs/utils/highlight';
 
 interface Props {
@@ -50,13 +51,27 @@ export const HitTestPanel = ({ kb }: Props) => {
   const selectChunk = useKbStore(s => s.selectChunk);
   const reset = useKbStore(s => s.reset);
 
+  const [metaFilters, setMetaFilters] = useState<Record<string, string>>({});
+
+  const fieldsQ = useQuery({
+    queryKey: ['kb-metadata-fields', kb.id],
+    queryFn: () => get<KbMetadataField[]>(`/v1/admin/kbs/${kb.id}/metadata-fields`),
+  });
+  const fields = fieldsQ.data ?? [];
+
   useEffect(() => {
     reset({ topK: kb.default_top_k, mode: kb.recall_mode });
+    // 切换 KB 时清空本地过滤（合法的 reset-on-prop-change）
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMetaFilters({});
   }, [kb.id, kb.default_top_k, kb.recall_mode, reset]);
 
   const searchMut = useMutation({
-    mutationFn: () =>
-      documentApi.search(kb.id, {
+    mutationFn: () => {
+      const activeMeta = Object.fromEntries(
+        Object.entries(metaFilters).filter(([, v]) => v.trim()),
+      );
+      return documentApi.search(kb.id, {
         query: query.trim(),
         top_k: topK,
         mode,
@@ -67,7 +82,9 @@ export const HitTestPanel = ({ kb }: Props) => {
               .map(t => t.trim())
               .filter(Boolean)
           : undefined,
-      }),
+        metadata_filters: Object.keys(activeMeta).length ? activeMeta : undefined,
+      });
+    },
     onSuccess: rows => {
       setHits(rows);
       if (rows.length === 0) {
@@ -91,7 +108,7 @@ export const HitTestPanel = ({ kb }: Props) => {
         <Field
           label={
             <>
-              top_k = <span className="font-mono tnum">{topK}</span>
+              top_k = <span className="tnum font-mono">{topK}</span>
             </>
           }
         >
@@ -131,6 +148,49 @@ export const HitTestPanel = ({ kb }: Props) => {
             className="h-8 text-[12.5px]"
           />
         </Field>
+        {fields.length > 0 && (
+          <Field label="元数据过滤">
+            <div className="space-y-1.5">
+              {fields.map(f => (
+                <div key={f.id} className="flex items-center gap-2">
+                  <span className="w-16 shrink-0 truncate text-[11px] text-stone-500">
+                    {f.label}
+                  </span>
+                  {f.field_type === 'select' && f.options ? (
+                    <Select
+                      value={metaFilters[f.key] ?? '__any__'}
+                      onValueChange={v =>
+                        setMetaFilters(m => ({
+                          ...m,
+                          [f.key]: v === '__any__' ? '' : v,
+                        }))
+                      }
+                    >
+                      <SelectTrigger className="h-7 text-[11.5px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__any__">不限</SelectItem>
+                        {f.options.map(o => (
+                          <SelectItem key={o} value={o}>
+                            {o}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={metaFilters[f.key] ?? ''}
+                      onChange={e => setMetaFilters(m => ({ ...m, [f.key]: e.target.value }))}
+                      placeholder={`按 ${f.label} 过滤`}
+                      className="h-7 text-[11.5px]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </Field>
+        )}
         <Button
           className="w-full"
           onClick={() => searchMut.mutate()}
@@ -184,26 +244,14 @@ export const HitTestPanel = ({ kb }: Props) => {
   );
 };
 
-const Field = ({
-  label,
-  children,
-}: {
-  label: React.ReactNode;
-  children: React.ReactNode;
-}) => (
+const Field = ({ label, children }: { label: React.ReactNode; children: React.ReactNode }) => (
   <div>
     <label className="mb-1 block text-[12px] text-stone-600">{label}</label>
     {children}
   </div>
 );
 
-const Centered = ({
-  children,
-  icon,
-}: {
-  children: React.ReactNode;
-  icon?: boolean;
-}) => (
+const Centered = ({ children, icon }: { children: React.ReactNode; icon?: boolean }) => (
   <div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-2 text-stone-400">
     {icon && <SearchX className="h-8 w-8" strokeWidth={1.4} />}
     <div className="px-4 text-center text-[12.5px]">{children}</div>
@@ -237,9 +285,7 @@ const HitCard = ({
       <span className="ml-auto shrink-0 font-mono">seq {hit.seq}</span>
     </div>
     <ScoreBreakdown hit={hit} compact />
-    <div className="mt-1.5 line-clamp-2 text-[12px] leading-snug text-stone-700">
-      {hit.content}
-    </div>
+    <div className="mt-1.5 line-clamp-2 text-[12px] leading-snug text-stone-700">{hit.content}</div>
   </button>
 );
 
@@ -268,7 +314,7 @@ const SourceView = ({
       <ScoreBreakdown hit={hit} />
     </div>
     <div
-      className="flex-1 overflow-y-auto whitespace-pre-wrap p-3 text-[12.5px] leading-relaxed text-stone-800"
+      className="flex-1 overflow-y-auto p-3 text-[12.5px] leading-relaxed whitespace-pre-wrap text-stone-800"
       dangerouslySetInnerHTML={{ __html: highlight(hit.content, query) }}
     />
   </div>
@@ -295,8 +341,7 @@ function mockHits(): SearchHitItem[] {
       seq: 7,
       score: 0.78,
       document_title: '产品手册.pdf',
-      content:
-        '检索增强生成（RAG）先从知识库召回相关切块，再拼进 prompt 交给大模型生成答案。',
+      content: '检索增强生成（RAG）先从知识库召回相关切块，再拼进 prompt 交给大模型生成答案。',
       vector_score: 0.81,
       bm25_score: 0.44,
       rerank_score: 0.72,

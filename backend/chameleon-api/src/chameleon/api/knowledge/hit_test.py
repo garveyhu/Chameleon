@@ -69,6 +69,7 @@ async def run_hit_test(
     mode: str | None = None,
     doc_ids: list[int] | None = None,
     tags: list[str] | None = None,
+    metadata_filters: dict[str, str] | None = None,
     include_images: bool | None = None,
     multi_query_count: int = 0,
     use_hyde: bool = False,
@@ -84,9 +85,13 @@ async def run_hit_test(
         raise ValidationError(message=f"unsupported recall_mode: {resolved_mode}")
 
     candidate_doc_ids = await _resolve_doc_filter(
-        session, kb_id=kb.id, doc_ids=doc_ids, tags=tags
+        session,
+        kb_id=kb.id,
+        doc_ids=doc_ids,
+        tags=tags,
+        metadata_filters=metadata_filters,
     )
-    if (doc_ids or tags) and not candidate_doc_ids:
+    if (doc_ids or tags or metadata_filters) and not candidate_doc_ids:
         return []
 
     kb_meta = kb.meta or {}
@@ -149,9 +154,10 @@ async def _resolve_doc_filter(
     kb_id: int,
     doc_ids: list[int] | None,
     tags: list[str] | None,
+    metadata_filters: dict[str, str] | None = None,
 ) -> set[int] | None:
-    """返候选 doc_id 集；None 表示无过滤"""
-    if not tags and not doc_ids:
+    """返候选 doc_id 集；None 表示无过滤。tags / metadata 均收敛为 doc_id 集求交。"""
+    if not tags and not doc_ids and not metadata_filters:
         return None
     candidate: set[int] | None = None
     if tags:
@@ -161,6 +167,16 @@ async def _resolve_doc_filter(
         for t in tags:
             stmt = stmt.where(cast(Document.tags, JSONB).contains([t]))
         candidate = set((await session.execute(stmt)).scalars().all())
+    if metadata_filters:
+        # 按 Document.meta 的 key=value 过滤（meta->>key == value，文本比较，AND）
+        meta = cast(Document.meta, JSONB)
+        stmt = select(Document.id).where(
+            Document.kb_id == kb_id, Document.deleted_at.is_(None)
+        )
+        for k, v in metadata_filters.items():
+            stmt = stmt.where(meta[k].astext == v)
+        rows = set((await session.execute(stmt)).scalars().all())
+        candidate = rows if candidate is None else candidate & rows
     if doc_ids:
         candidate = set(doc_ids) if candidate is None else candidate & set(doc_ids)
     return candidate
