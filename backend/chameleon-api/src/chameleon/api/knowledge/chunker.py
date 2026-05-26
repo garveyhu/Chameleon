@@ -96,16 +96,16 @@ def split(text: str, strategy: dict[str, Any] | None) -> list[str]:
     if mode == "qa":
         # QA 实际在 ingest 时由 LLM 对每个基础块生成问答对；这里按段落返回
         # 「将被 QA 的基础块」供预览（预览不跑 LLM）
-        return _fold_overflow(_paragraph(text), chunk_size, overlap)
+        return _merge_and_split(_paragraph(text), chunk_size, overlap, "\n\n")
     if mode == "fixed":
         return _fixed(text, chunk_size, overlap)
     if mode == "paragraph":
-        return _fold_overflow(_paragraph(text), chunk_size, overlap)
+        return _merge_and_split(_paragraph(text), chunk_size, overlap, "\n\n")
     if mode == "sentence":
-        return _fold_overflow(_sentence(text), chunk_size, overlap)
+        return _merge_and_split(_sentence(text), chunk_size, overlap, "")
     if mode == "regex":
         sep = cfg.get("separator_regex") or r"\n\n+"
-        return _fold_overflow(_regex(text, sep), chunk_size, overlap)
+        return _merge_and_split(_regex(text, sep), chunk_size, overlap, "\n")
     raise ValueError(f"unsupported chunk mode: {mode!r}")
 
 
@@ -158,17 +158,41 @@ def _regex(text: str, separator: str) -> list[str]:
         raise ValueError(f"invalid separator_regex: {separator!r} ({e})") from e
 
 
-def _fold_overflow(
-    segments: list[str], chunk_size: int, overlap: int
+def _merge_and_split(
+    segments: list[str], chunk_size: int, overlap: int, joiner: str = "\n"
 ) -> list[str]:
-    """段落 / 句子结果里：单段超长 → 再 fixed 切；正常段直接保留。"""
-    out: list[str] = []
+    """结构化分段（段落 / 句子 / 正则）的合并 + 切分（对齐 Dify）：
+
+    1. 单段超 chunk_size → 先 _fixed 切碎（overlap 在此生效）；
+    2. 相邻小段贪心合并，拼接后 ≤ chunk_size 就并到同一块，直到放不下再换块。
+
+    这样 chunk_size 对所有结构化模式都生效：小段被合并到接近上限，
+    避免「一段一块」的碎片化（旧 _fold_overflow 只切不合并，小段全部原样输出，
+    chunk_size 形同虚设）。joiner 为合并相邻段时的连接符（段落 "\\n\\n"、句子 ""）。
+    """
+    if chunk_size <= 0:
+        return [s for s in segments if s.strip()]
+    # 1) 归一化：超长段先切碎，保证每个 piece ≤ chunk_size
+    pieces: list[str] = []
     for seg in segments:
         if len(seg) <= chunk_size:
-            out.append(seg)
+            pieces.append(seg)
         else:
-            out.extend(_fixed(seg, chunk_size, overlap))
-    return out
+            pieces.extend(_fixed(seg, chunk_size, overlap))
+    # 2) 贪心合并相邻 piece 到接近 chunk_size
+    out: list[str] = []
+    buf = ""
+    for p in pieces:
+        if not buf:
+            buf = p
+        elif len(buf) + len(joiner) + len(p) <= chunk_size:
+            buf = f"{buf}{joiner}{p}"
+        else:
+            out.append(buf)
+            buf = p
+    if buf:
+        out.append(buf)
+    return [c for c in out if c.strip()]
 
 
 def _parent_child(text: str, cfg: dict[str, Any]) -> list[tuple[str, list[str]]]:
@@ -176,9 +200,9 @@ def _parent_child(text: str, cfg: dict[str, Any]) -> list[tuple[str, list[str]]]
     parent_size = int(cfg.get("parent_size") or _DEFAULT_PARENT_SIZE)
     child_size = int(cfg.get("chunk_size") or _DEFAULT_CHILD_SIZE)
     overlap = int(cfg.get("overlap") or 0)
-    parents = _fold_overflow(_paragraph(text), parent_size, overlap)
+    parents = _merge_and_split(_paragraph(text), parent_size, overlap, "\n\n")
     out: list[tuple[str, list[str]]] = []
     for parent in parents:
-        children = _fold_overflow(_sentence(parent), child_size, overlap)
+        children = _merge_and_split(_sentence(parent), child_size, overlap, "")
         out.append((parent, children or [parent]))
     return out
