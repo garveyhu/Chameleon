@@ -46,6 +46,7 @@ class AgentItem(BaseModel):
     source: str
     provider_id: int | None = None
     local_class_path: str | None = None
+    graph_id: int | None = None
     config: dict | None = None
     default_model_id: int | None = None
     tags: list | None = None

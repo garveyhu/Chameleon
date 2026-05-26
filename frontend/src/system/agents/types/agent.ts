@@ -5,9 +5,10 @@ export interface AgentItem {
   agent_key: string;
   name: string;
   description: string | null;
-  source: 'local' | 'dify' | 'fastgpt' | 'coze' | string;
+  source: 'local' | 'dify' | 'fastgpt' | 'coze' | 'graph' | string;
   provider_id: EntityId | null;
   local_class_path: string | null;
+  graph_id: EntityId | null;
   config: Record<string, unknown> | null;
   default_model_id: EntityId | null;
   tags: string[] | null;
