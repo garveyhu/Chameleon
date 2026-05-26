@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Tag,
 } from 'lucide-react';
 
 import { SectionCard } from '@/core/components/table';
@@ -28,6 +29,7 @@ import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
 import { HitTestPanel } from '@/system/kbs/components/hit-test-panel';
 import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
+import { MetadataFieldsTab } from '@/system/kbs/components/metadata-fields-tab';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
 
@@ -35,6 +37,7 @@ type TabKey =
   | 'overview'
   | 'documents'
   | 'collections'
+  | 'metadata'
   | 'search'
   | 'eval'
   | 'consistency'
@@ -54,6 +57,7 @@ const NAV_PRIMARY: TabDef[] = [
 ];
 const NAV_ADVANCED: TabDef[] = [
   { key: 'collections', label: '分组', icon: <Layers className="h-4 w-4" /> },
+  { key: 'metadata', label: '元数据', icon: <Tag className="h-4 w-4" /> },
   { key: 'eval', label: '评测', icon: <FlaskConical className="h-4 w-4" /> },
   { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-4 w-4" /> },
   { key: 'config', label: '设置', icon: <Settings className="h-4 w-4" /> },
@@ -114,6 +118,7 @@ export const KbDetailPage = () => {
           {tab === 'overview' && <OverviewTab kb={kbQ.data ?? null} />}
           {tab === 'documents' && <DocumentsTab kbId={kbId} />}
           {tab === 'collections' && <CollectionsTab kbId={kbId} />}
+          {tab === 'metadata' && <MetadataFieldsTab kbId={kbId} />}
           {tab === 'search' &&
             (kbQ.data ? (
               <HitTestPanel kb={kbQ.data} />

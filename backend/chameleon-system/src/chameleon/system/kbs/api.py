@@ -1024,6 +1024,51 @@ async def delete_collection(
     return Result.ok(None)
 
 
+# ── KB-P5 元数据字段 admin ────────────────────────────────
+
+
+from chameleon.system.kbs import metadata_service as ms
+
+
+@router.get(
+    "/{kb_id}/metadata-fields",
+    response_model=Result[list[ms.MetadataFieldItem]],
+)
+async def list_metadata_fields(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[list[ms.MetadataFieldItem]]:
+    return Result.ok(await ms.list_fields(session, kb_id))
+
+
+@router.post(
+    "/{kb_id}/metadata-fields",
+    response_model=Result[ms.MetadataFieldItem],
+)
+async def create_metadata_field(
+    kb_id: int,
+    req: ms.CreateMetadataFieldRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ms.MetadataFieldItem]:
+    return Result.ok(await ms.create_field(session, kb_id, req))
+
+
+@router.post(
+    "/{kb_id}/metadata-fields/{field_id}/delete",
+    response_model=Result[None],
+)
+async def delete_metadata_field(
+    kb_id: int,
+    field_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[None]:
+    await ms.delete_field(session, kb_id, field_id)
+    return Result.ok(None)
+
+
 # ── P21.3 一致性扫描 + 修复 ───────────────────────────────
 
 
