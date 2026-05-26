@@ -8,6 +8,10 @@ dependencies = ["chameleon-agentkit"]
 [tool.uv.sources]
 chameleon-agentkit = { workspace = true }
 
+# 推荐的注册方式：声明 entry-point，命名空间内外都能被发现
+[project.entry-points."chameleon.agents"]
+example-echo = "chameleon.agents.example_echo"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
