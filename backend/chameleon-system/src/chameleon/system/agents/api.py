@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -501,3 +502,77 @@ async def update_agent_model_bindings(
     await session.commit()
     await reload_agent_registry()  # 让 AGENTS 重新注入新绑定
     return Result.ok(await _build_slots_response(session, agent))
+
+
+# ── 配置 Schema（agentkit @agent(config=[Opt]) → 运营可调参数表单） ──
+
+
+class ConfigOptionItem(BaseModel):
+    key: str
+    label: str
+    type: str = "string"  # string / number / boolean / select
+    choices: list[str] | None = None
+    default: Any = None
+    required: bool = False
+
+
+class AgentConfigSchema(BaseModel):
+    options: list[ConfigOptionItem]
+    values: dict[str, Any]  # 当前已存的值（agents.config["opts"]）
+
+
+class UpdateAgentConfigRequest(BaseModel):
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
+def _build_config_schema(agent: Agent) -> AgentConfigSchema:
+    from chameleon.agentkit import declared_agents
+
+    manifest = declared_agents().get(agent.agent_key)
+    options = [
+        ConfigOptionItem(
+            key=o.key,
+            label=o.label,
+            type=o.type,
+            choices=o.choices,
+            default=o.default,
+            required=o.required,
+        )
+        for o in (manifest.config if manifest else [])
+    ]
+    values = dict((agent.config or {}).get("opts") or {})
+    return AgentConfigSchema(options=options, values=values)
+
+
+@router.get(
+    "/{agent_id}/config-schema", response_model=Result[AgentConfigSchema]
+)
+async def get_agent_config_schema(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentConfigSchema]:
+    agent = await _get_or_404(session, agent_id)
+    return Result.ok(_build_config_schema(agent))
+
+
+@router.post(
+    "/{agent_id}/config/update", response_model=Result[AgentConfigSchema]
+)
+async def update_agent_config(
+    agent_id: int,
+    req: UpdateAgentConfigRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[AgentConfigSchema]:
+    from chameleon.agentkit import declared_agents
+
+    agent = await _get_or_404(session, agent_id)
+    manifest = declared_agents().get(agent.agent_key)
+    declared = {o.key for o in manifest.config} if manifest else set()
+
+    clean = {k: v for k, v in (req.values or {}).items() if k in declared}
+    agent.config = {**(agent.config or {}), "opts": clean}
+    await session.commit()
+    await reload_agent_registry()  # 让 ctx.config 重新加载
+    return Result.ok(_build_config_schema(agent))

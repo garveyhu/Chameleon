@@ -10,6 +10,7 @@ import { SectionCard } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { AgentConfigForm } from '@/system/agents/components/agent-config-form';
 import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
 import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
 import { agentApi } from '@/system/agents/services/agent';
@@ -119,38 +120,41 @@ const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean 
 const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
   if (!agent) return <div className="py-12 text-center text-sm text-stone-400">—</div>;
   return (
-    <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-      {agent.source === 'graph' && agent.graph_id != null && (
-        <div className="col-span-2 flex items-center justify-between gap-3 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2.5">
-          <div className="flex items-center gap-2 text-[12px] text-stone-600">
-            <Workflow className="h-4 w-4 shrink-0 text-blue-600" />
-            <span>
-              此智能体由<span className="font-medium text-stone-800">工作流编排</span>
-              驱动，知识库 / 模型在编排画布的节点里配置。
-            </span>
+    <>
+      <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+        {agent.source === 'graph' && agent.graph_id != null && (
+          <div className="col-span-2 flex items-center justify-between gap-3 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2.5">
+            <div className="flex items-center gap-2 text-[12px] text-stone-600">
+              <Workflow className="h-4 w-4 shrink-0 text-blue-600" />
+              <span>
+                此智能体由<span className="font-medium text-stone-800">工作流编排</span>
+                驱动，知识库 / 模型在编排画布的节点里配置。
+              </span>
+            </div>
+            <Link
+              to={`/graphs/${agent.graph_id}/edit`}
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
+            >
+              去工作流编排
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </div>
-          <Link
-            to={`/graphs/${agent.graph_id}/edit`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
-          >
-            去工作流编排
-            <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-      )}
-      <Kv label="agent_key" value={agent.agent_key} mono />
-      <Kv label="source" value={agent.source} />
-      <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
-      <Kv label="provider_id" value={String(agent.provider_id ?? '—')} mono />
-      <Kv label="local_class_path" value={agent.local_class_path ?? '—'} mono />
-      <Kv label="version" value={agent.version ?? '—'} mono />
-      <Kv label="default_model_id" value={String(agent.default_model_id ?? '—')} mono />
-      <Kv label="tags" value={(agent.tags ?? []).join(', ') || '—'} />
-      <Kv label="config" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
-      <Kv label="description" value={agent.description ?? '—'} full />
-      <Kv label="created_at" value={formatDateTime(agent.created_at)} mono />
-      <Kv label="updated_at" value={formatDateTime(agent.updated_at)} mono />
-    </div>
+        )}
+        <Kv label="agent_key" value={agent.agent_key} mono />
+        <Kv label="source" value={agent.source} />
+        <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
+        <Kv label="provider_id" value={String(agent.provider_id ?? '—')} mono />
+        <Kv label="local_class_path" value={agent.local_class_path ?? '—'} mono />
+        <Kv label="version" value={agent.version ?? '—'} mono />
+        <Kv label="default_model_id" value={String(agent.default_model_id ?? '—')} mono />
+        <Kv label="tags" value={(agent.tags ?? []).join(', ') || '—'} />
+        <Kv label="config" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
+        <Kv label="description" value={agent.description ?? '—'} full />
+        <Kv label="created_at" value={formatDateTime(agent.created_at)} mono />
+        <Kv label="updated_at" value={formatDateTime(agent.updated_at)} mono />
+      </div>
+      <AgentConfigForm agentId={agent.id} />
+    </>
   );
 };
 

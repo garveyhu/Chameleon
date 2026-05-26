@@ -55,3 +55,17 @@ export interface AgentModelSlots {
   slots: ModelSlotItem[];
   models: ConfiguredModelItem[];
 }
+
+export interface ConfigOptionItem {
+  key: string;
+  label: string;
+  type: 'string' | 'number' | 'boolean' | 'select' | string;
+  choices: string[] | null;
+  default: unknown;
+  required: boolean;
+}
+
+export interface AgentConfigSchema {
+  options: ConfigOptionItem[];
+  values: Record<string, unknown>;
+}

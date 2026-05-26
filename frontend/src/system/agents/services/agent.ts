@@ -1,6 +1,7 @@
 import { get, post } from '@/core/lib/request';
 import type { EntityId } from '@/core/types/api';
 import type {
+  AgentConfigSchema,
   AgentItem,
   AgentModelSlots,
   CreateAgentRequest,
@@ -37,4 +38,8 @@ export const agentApi = {
     post<AgentModelSlots>(`/v1/admin/agents/${id}/model-bindings/update`, {
       bindings,
     }),
+
+  configSchema: (id: EntityId) => get<AgentConfigSchema>(`/v1/admin/agents/${id}/config-schema`),
+  updateConfig: (id: EntityId, values: Record<string, unknown>) =>
+    post<AgentConfigSchema>(`/v1/admin/agents/${id}/config/update`, { values }),
 };

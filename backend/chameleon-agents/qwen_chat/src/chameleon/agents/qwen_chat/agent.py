@@ -12,10 +12,11 @@
 
 from __future__ import annotations
 
-from chameleon.agentkit import AgentRun, ModelSlot, agent
+from chameleon.agentkit import AgentRun, ModelSlot, Opt, agent
 
 SYSTEM_PROMPT = """你是 Chameleon 的通用聊天助手。
-要点：回答简洁、自然、有用；尽量用中文；适当使用 Markdown 格式。
+要点：回答自然、有用；尽量用中文；适当使用 Markdown 格式。
+语气风格：{tone}。
 若提供了参考资料，优先据此回答。"""
 
 
@@ -26,10 +27,23 @@ SYSTEM_PROMPT = """你是 Chameleon 的通用聊天助手。
     tags=["builtin", "chat", "qwen"],
     models=[ModelSlot("chat", "对话模型")],
     kb=True,
+    config=[
+        Opt(
+            "tone",
+            "语气风格",
+            type="select",
+            choices=["专业", "活泼", "简洁"],
+            default="专业",
+        ),
+    ],
 )
 async def handle(ctx: AgentRun):
+    tone = ctx.config.get("tone") or "专业"
     docs = await ctx.kb.search(ctx.query, top_k=3)  # 未关联 KB → 空，退化为纯聊天
     async for delta in ctx.stream(
-        slot="chat", system=SYSTEM_PROMPT, context=docs or None, user=ctx.query
+        slot="chat",
+        system=SYSTEM_PROMPT.format(tone=tone),
+        context=docs or None,
+        user=ctx.query,
     ):
         yield delta
