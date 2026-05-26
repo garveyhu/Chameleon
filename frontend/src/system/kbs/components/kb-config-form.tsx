@@ -1,8 +1,8 @@
 /** KB 配置表单 —— 分块策略 / 召回参数 / 一键重分块 */
+import { useState } from 'react';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Save } from 'lucide-react';
-import { useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -21,15 +21,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
+import { Switch } from '@/core/components/ui/switch';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
-import type {
-  KbChunkStrategy,
-  KbItem,
-  RecallMode,
-} from '@/system/kbs/types/kb';
+import type { KbChunkStrategy, KbItem, RecallMode } from '@/system/kbs/types/kb';
 
 interface Props {
   kb: KbItem;
@@ -49,12 +46,13 @@ const MODES: { value: KbChunkStrategy['mode']; label: string; desc: string }[] =
 
 export const KbConfigForm = ({ kb }: Props) => {
   const qc = useQueryClient();
-  const [strategy, setStrategy] = useState<KbChunkStrategy>(() =>
-    kb.chunk_strategy ?? {
-      mode: 'fixed',
-      chunk_size: kb.chunk_size,
-      overlap: kb.chunk_overlap,
-    },
+  const [strategy, setStrategy] = useState<KbChunkStrategy>(
+    () =>
+      kb.chunk_strategy ?? {
+        mode: 'fixed',
+        chunk_size: kb.chunk_size,
+        overlap: kb.chunk_overlap,
+      },
   );
   const [topK, setTopK] = useState(kb.default_top_k);
   const [recallMode, setRecallMode] = useState<RecallMode>(kb.recall_mode);
@@ -105,9 +103,7 @@ export const KbConfigForm = ({ kb }: Props) => {
               )}
             >
               <div className="font-medium">{m.label}</div>
-              <div className="mt-0.5 text-[10.5px] leading-snug text-stone-500">
-                {m.desc}
-              </div>
+              <div className="mt-0.5 text-[10.5px] leading-snug text-stone-500">{m.desc}</div>
             </button>
           ))}
         </div>
@@ -116,7 +112,10 @@ export const KbConfigForm = ({ kb }: Props) => {
       <section className="grid grid-cols-2 gap-4">
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">
-            chunk_size = <span className="font-mono tnum">{strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}</span>
+            chunk_size ={' '}
+            <span className="tnum font-mono">
+              {strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}
+            </span>
             <span className="ml-1 text-[10.5px] text-stone-400">
               {strategy.mode === 'token' ? 'token' : '字符'}
             </span>
@@ -127,15 +126,16 @@ export const KbConfigForm = ({ kb }: Props) => {
             max={strategy.mode === 'token' ? 2000 : 4000}
             step={strategy.mode === 'token' ? 32 : 100}
             value={strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}
-            onChange={e =>
-              setStrategy(s => ({ ...s, chunk_size: Number(e.target.value) }))
-            }
+            onChange={e => setStrategy(s => ({ ...s, chunk_size: Number(e.target.value) }))}
             className="w-full accent-amber-600"
           />
         </div>
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">
-            overlap = <span className="font-mono tnum">{strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}</span>
+            overlap ={' '}
+            <span className="tnum font-mono">
+              {strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}
+            </span>
             <span className="ml-1 text-[10.5px] text-stone-400">
               {strategy.mode === 'token' ? 'token' : '字符'}
             </span>
@@ -146,9 +146,7 @@ export const KbConfigForm = ({ kb }: Props) => {
             max={strategy.mode === 'token' ? 300 : 500}
             step={strategy.mode === 'token' ? 8 : 10}
             value={strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}
-            onChange={e =>
-              setStrategy(s => ({ ...s, overlap: Number(e.target.value) }))
-            }
+            onChange={e => setStrategy(s => ({ ...s, overlap: Number(e.target.value) }))}
             className="w-full accent-amber-600"
           />
         </div>
@@ -156,14 +154,10 @@ export const KbConfigForm = ({ kb }: Props) => {
 
       {strategy.mode === 'token' && (
         <section>
-          <label className="mb-1 block text-[12px] text-stone-600">
-            模型编码器 (model)
-          </label>
+          <label className="mb-1 block text-[12px] text-stone-600">模型编码器 (model)</label>
           <Input
             value={strategy.model ?? ''}
-            onChange={e =>
-              setStrategy(s => ({ ...s, model: e.target.value || undefined }))
-            }
+            onChange={e => setStrategy(s => ({ ...s, model: e.target.value || undefined }))}
             placeholder="留空使用 KB 的 embedding_model；可填 gpt-4o / qwen-plus 等"
             className="h-8 font-mono text-[12.5px]"
           />
@@ -175,24 +169,38 @@ export const KbConfigForm = ({ kb }: Props) => {
 
       {strategy.mode === 'regex' && (
         <section>
-          <label className="mb-1 block text-[12px] text-stone-600">
-            separator_regex
-          </label>
+          <label className="mb-1 block text-[12px] text-stone-600">separator_regex</label>
           <Input
             value={strategy.separator_regex ?? ''}
-            onChange={e =>
-              setStrategy(s => ({ ...s, separator_regex: e.target.value }))
-            }
+            onChange={e => setStrategy(s => ({ ...s, separator_regex: e.target.value }))}
             placeholder="\\n\\n+"
             className="h-8 font-mono text-[12.5px]"
           />
         </section>
       )}
 
+      <section>
+        <h3 className="mb-2 text-[13.5px] font-medium text-stone-900">文本清洗</h3>
+        <div className="space-y-2">
+          <CleanToggle
+            label="规范化空白"
+            desc="连续空格 / 制表符折叠为单空格，去行首尾空白，3+ 换行合并为段落分隔"
+            checked={!!strategy.clean?.whitespace}
+            onChange={v => setStrategy(s => ({ ...s, clean: { ...s.clean, whitespace: v } }))}
+          />
+          <CleanToggle
+            label="删除 URL 与邮箱"
+            desc="移除正文中的链接和电子邮件地址"
+            checked={!!strategy.clean?.urls_emails}
+            onChange={v => setStrategy(s => ({ ...s, clean: { ...s.clean, urls_emails: v } }))}
+          />
+        </div>
+      </section>
+
       <section className="grid grid-cols-2 gap-4">
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">
-            默认 top_k = <span className="font-mono tnum">{topK}</span>
+            默认 top_k = <span className="tnum font-mono">{topK}</span>
           </label>
           <input
             type="range"
@@ -205,10 +213,7 @@ export const KbConfigForm = ({ kb }: Props) => {
         </div>
         <div>
           <label className="mb-1 block text-[12px] text-stone-600">召回模式</label>
-          <Select
-            value={recallMode}
-            onValueChange={v => setRecallMode(v as RecallMode)}
-          >
+          <Select value={recallMode} onValueChange={v => setRecallMode(v as RecallMode)}>
             <SelectTrigger className="h-8 text-[12.5px]">
               <SelectValue />
             </SelectTrigger>
@@ -236,19 +241,14 @@ export const KbConfigForm = ({ kb }: Props) => {
         </Button>
       </div>
 
-      <Modal
-        open={confirmOpen}
-        onOpenChange={o => !o && setConfirmOpen(false)}
-      >
+      <Modal open={confirmOpen} onOpenChange={o => !o && setConfirmOpen(false)}>
         <ModalContent size="md">
           <ModalHeader>
             <ModalTitle>确认批量重分块</ModalTitle>
           </ModalHeader>
           <ModalBody>
-            <p className="text-[13px] text-stone-700">
-              本操作会：
-            </p>
-            <ol className="ml-5 mt-2 list-decimal space-y-1 text-[12.5px] text-stone-600">
+            <p className="text-[13px] text-stone-700">本操作会：</p>
+            <ol className="mt-2 ml-5 list-decimal space-y-1 text-[12.5px] text-stone-600">
               <li>保存当前配置（chunk_strategy / top_k / recall_mode）</li>
               <li>对 KB 内所有已就绪 / 失败的文档清旧 chunks 并重新排 ingest 队列</li>
               <li>处理期间检索质量可能下降；新 chunks 完成前不会显示</li>
@@ -273,3 +273,23 @@ export const KbConfigForm = ({ kb }: Props) => {
     </div>
   );
 };
+
+const CleanToggle = ({
+  label,
+  desc,
+  checked,
+  onChange,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) => (
+  <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-stone-200 bg-white px-3 py-2">
+    <span>
+      <span className="block text-[12px] text-stone-700">{label}</span>
+      <span className="mt-0.5 block text-[10.5px] leading-snug text-stone-500">{desc}</span>
+    </span>
+    <Switch checked={checked} onCheckedChange={onChange} className="mt-0.5 shrink-0" />
+  </label>
+);

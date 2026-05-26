@@ -9,6 +9,15 @@ export interface KbChunkStrategy {
   separator_regex?: string;
   /** token 模式：编码器锚定模型（缺省走 cl100k_base） */
   model?: string;
+  /** 切块前文本清洗（对齐 Dify） */
+  clean?: KbCleanRules;
+}
+
+export interface KbCleanRules {
+  /** 连续空格/制表符折叠、行首尾空白去除、3+ 换行 → 2 */
+  whitespace?: boolean;
+  /** 删除所有 URL 与邮箱 */
+  urls_emails?: boolean;
 }
 
 export interface KbItem {

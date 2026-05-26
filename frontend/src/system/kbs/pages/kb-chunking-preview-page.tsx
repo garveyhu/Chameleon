@@ -6,16 +6,17 @@
  *
  * 不写 DB —— 调 chunkingPreview() 拿结果即返。
  */
-
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, Sparkles, RotateCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { ChevronLeft, RotateCw, Sparkles } from 'lucide-react';
 
 import { Spinner } from '@/core/components/common/spinner';
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
+import { Switch } from '@/core/components/ui/switch';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { formatNumber } from '@/core/lib/format';
@@ -23,7 +24,6 @@ import { toast } from '@/core/lib/toast';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { ChunkingPreviewItem } from '@/system/kbs/services/kb';
 import type { KbChunkMode, KbChunkStrategy } from '@/system/kbs/types/kb';
-
 
 const DEFAULT_TEXT = `Chameleon 是一个多 provider AI Agent 聚合平台。
 
@@ -34,7 +34,6 @@ const DEFAULT_TEXT = `Chameleon 是一个多 provider AI Agent 聚合平台。
 工作流（GraphEngine）支持 LLM / KB / Tool / If-Else / End 五类节点；test-run 与持久化 Run 双轨；
 trace tree drawer 直接复用 P17.C1 的可视化。`;
 
-
 const MODES: { value: KbChunkMode; label: string }[] = [
   { value: 'fixed', label: '固定字数' },
   { value: 'paragraph', label: '按段落' },
@@ -42,7 +41,6 @@ const MODES: { value: KbChunkMode; label: string }[] = [
   { value: 'regex', label: '自定义正则' },
   { value: 'token', label: '按 Token' },
 ];
-
 
 export const KbChunkingPreviewPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -63,11 +61,10 @@ export const KbChunkingPreviewPage = () => {
   });
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null);
 
-  // 初次载入：用 KB 的 strategy（更直观）
+  // 初次载入：用 KB 的 strategy（更直观）——合法的服务端→本地态同步
   useEffect(() => {
-    if (kbQ.data?.chunk_strategy) {
-      setStrategy(kbQ.data.chunk_strategy);
-    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (kbQ.data?.chunk_strategy) setStrategy(kbQ.data.chunk_strategy);
   }, [kbQ.data]);
 
   const previewMut = useMutation({
@@ -98,29 +95,20 @@ export const KbChunkingPreviewPage = () => {
     <SectionCard className="!p-0">
       <header className="flex items-center justify-between border-b border-stone-200/70 px-3 py-2">
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => nav(`/kbs/${kbId}`)}
-          >
+          <Button variant="ghost" size="sm" onClick={() => nav(`/kbs/${kbId}`)}>
             <ChevronLeft className="mr-0.5 h-3.5 w-3.5" />
             返回
           </Button>
           <div>
-            <h2 className="text-[14px] font-medium text-stone-900">
-              切块策略预览
-            </h2>
-            <div className="text-[11px] text-stone-500">
-              KB「{kbQ.data.name}」· 不写库；调试用
-            </div>
+            <h2 className="text-[14px] font-medium text-stone-900">切块策略预览</h2>
+            <div className="text-[11px] text-stone-500">KB「{kbQ.data.name}」· 不写库；调试用</div>
           </div>
         </div>
         <div className="flex items-center gap-2 text-[11.5px] text-stone-500">
           {result && (
             <>
               <span>
-                <span className="font-medium text-stone-700">{result.count}</span>{' '}
-                chunks
+                <span className="font-medium text-stone-700">{result.count}</span> chunks
               </span>
               <span className="text-stone-300">·</span>
               <span>mode={result.mode}</span>
@@ -141,7 +129,7 @@ export const KbChunkingPreviewPage = () => {
       <div className="grid h-[calc(100vh-180px)] min-h-[480px] grid-cols-[1fr_1.2fr_320px]">
         {/* 左：原文 */}
         <div className="flex flex-col border-r border-stone-200/70">
-          <div className="border-b border-stone-200/70 bg-warm-2/40 px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-stone-500">
+          <div className="bg-warm-2/40 border-b border-stone-200/70 px-3 py-1.5 text-[10.5px] tracking-wider text-stone-500 uppercase">
             原文（{text.length} 字符）
           </div>
           <Textarea
@@ -153,15 +141,13 @@ export const KbChunkingPreviewPage = () => {
         </div>
 
         {/* 中：chunks 卡片 */}
-        <div className="flex flex-col border-r border-stone-200/70 bg-warm-2/20">
-          <div className="border-b border-stone-200/70 bg-warm-2/40 px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-stone-500">
+        <div className="bg-warm-2/20 flex flex-col border-r border-stone-200/70">
+          <div className="bg-warm-2/40 border-b border-stone-200/70 px-3 py-1.5 text-[10.5px] tracking-wider text-stone-500 uppercase">
             Chunks
           </div>
           <div className="flex-1 overflow-y-auto p-3">
             {previewMut.isPending && !result ? (
-              <div className="py-10 text-center text-[12px] text-stone-400">
-                生成中…
-              </div>
+              <div className="py-10 text-center text-[12px] text-stone-400">生成中…</div>
             ) : !result || result.count === 0 ? (
               <div className="py-10 text-center text-[12px] text-stone-400">
                 {text.trim() ? '无切块' : '请输入原文'}
@@ -182,8 +168,8 @@ export const KbChunkingPreviewPage = () => {
         </div>
 
         {/* 右：strategy */}
-        <div className="flex flex-col bg-warm-2/40">
-          <div className="border-b border-stone-200/70 bg-warm-2/40 px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-stone-500">
+        <div className="bg-warm-2/40 flex flex-col">
+          <div className="bg-warm-2/40 border-b border-stone-200/70 px-3 py-1.5 text-[10.5px] tracking-wider text-stone-500 uppercase">
             策略
           </div>
           <div className="space-y-3 overflow-y-auto p-3">
@@ -218,9 +204,7 @@ export const KbChunkingPreviewPage = () => {
                 max={strategy.mode === 'token' ? 2000 : 4000}
                 step={strategy.mode === 'token' ? 32 : 50}
                 value={strategy.chunk_size ?? (strategy.mode === 'token' ? 512 : 800)}
-                onChange={e =>
-                  setStrategy(s => ({ ...s, chunk_size: Number(e.target.value) }))
-                }
+                onChange={e => setStrategy(s => ({ ...s, chunk_size: Number(e.target.value) }))}
                 className="w-full accent-amber-600"
               />
             </Field>
@@ -236,9 +220,7 @@ export const KbChunkingPreviewPage = () => {
                 max={strategy.mode === 'token' ? 300 : 500}
                 step={strategy.mode === 'token' ? 8 : 10}
                 value={strategy.overlap ?? (strategy.mode === 'token' ? 50 : 100)}
-                onChange={e =>
-                  setStrategy(s => ({ ...s, overlap: Number(e.target.value) }))
-                }
+                onChange={e => setStrategy(s => ({ ...s, overlap: Number(e.target.value) }))}
                 className="w-full accent-amber-600"
               />
             </Field>
@@ -247,9 +229,7 @@ export const KbChunkingPreviewPage = () => {
               <Field label="separator_regex">
                 <Input
                   value={strategy.separator_regex ?? ''}
-                  onChange={e =>
-                    setStrategy(s => ({ ...s, separator_regex: e.target.value }))
-                  }
+                  onChange={e => setStrategy(s => ({ ...s, separator_regex: e.target.value }))}
                   placeholder="\\n\\n+"
                   className="h-7 font-mono text-[11.5px]"
                 />
@@ -260,14 +240,29 @@ export const KbChunkingPreviewPage = () => {
               <Field label="模型编码器 (model)">
                 <Input
                   value={strategy.model ?? ''}
-                  onChange={e =>
-                    setStrategy(s => ({ ...s, model: e.target.value || undefined }))
-                  }
+                  onChange={e => setStrategy(s => ({ ...s, model: e.target.value || undefined }))}
                   placeholder="留空走 cl100k_base"
                   className="h-7 font-mono text-[11.5px]"
                 />
               </Field>
             )}
+
+            <Field label="文本清洗">
+              <div className="space-y-1.5">
+                <CleanRow
+                  label="规范化空白"
+                  checked={!!strategy.clean?.whitespace}
+                  onChange={v => setStrategy(s => ({ ...s, clean: { ...s.clean, whitespace: v } }))}
+                />
+                <CleanRow
+                  label="删除 URL / 邮箱"
+                  checked={!!strategy.clean?.urls_emails}
+                  onChange={v =>
+                    setStrategy(s => ({ ...s, clean: { ...s.clean, urls_emails: v } }))
+                  }
+                />
+              </div>
+            </Field>
 
             <div className="border-t border-stone-200 pt-2 text-[10.5px] leading-snug text-stone-500">
               <Sparkles className="mr-1 inline h-3 w-3 text-amber-500" />
@@ -279,7 +274,6 @@ export const KbChunkingPreviewPage = () => {
     </SectionCard>
   );
 };
-
 
 const ChunkCard = ({
   chunk,
@@ -300,28 +294,36 @@ const ChunkCard = ({
         : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50',
     )}
   >
-    <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-500">
+    <div className="flex items-center justify-between text-[10px] tracking-wider text-stone-500 uppercase">
       <span className="font-mono">#{chunk.seq}</span>
-      <span className="font-mono tnum">
+      <span className="tnum font-mono">
         {formatNumber(chunk.char_count)} 字 · ~{formatNumber(chunk.token_count_approx)} tok
       </span>
     </div>
-    <div className="mt-1 whitespace-pre-wrap break-words text-[12px] text-stone-800">
+    <div className="mt-1 text-[12px] break-words whitespace-pre-wrap text-stone-800">
       {chunk.content}
     </div>
   </button>
 );
 
-
-const Field = ({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) => (
+const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
     <label className="mb-1 block text-[11.5px] text-stone-700">{label}</label>
     {children}
   </div>
+);
+
+const CleanRow = ({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) => (
+  <label className="flex cursor-pointer items-center justify-between rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-[11.5px] text-stone-600">
+    {label}
+    <Switch checked={checked} onCheckedChange={onChange} />
+  </label>
 );

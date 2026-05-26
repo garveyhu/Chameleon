@@ -33,11 +33,39 @@ _DEFAULT_OVERLAP = 100
 _DEFAULT_TOKEN_CHUNK_SIZE = 512
 _DEFAULT_TOKEN_OVERLAP = 50
 
+#: 文本清洗用正则（切块前预处理）
+_URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+
+
+def clean_text(text: str, rules: dict[str, Any] | None) -> str:
+    """切块前的文本清洗（对齐 Dify 两个开关）。
+
+    - urls_emails：删除所有 URL 与邮箱
+    - whitespace：连续空格/制表符 → 单空格；行首尾空白去除；3+ 连续换行 → 2
+      （保留段落边界，paragraph 模式仍可按双换行切）
+    """
+    if not rules:
+        return text
+    if rules.get("urls_emails"):
+        text = _URL_RE.sub("", text)
+        text = _EMAIL_RE.sub("", text)
+    if rules.get("whitespace"):
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r" *\n *", "\n", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = text.strip()
+    return text
+
 
 def split(text: str, strategy: dict[str, Any] | None) -> list[str]:
-    """按 strategy 切块；strategy=None / 缺字段时退化为 fixed 默认值。"""
+    """按 strategy 切块；strategy=None / 缺字段时退化为 fixed 默认值。
+
+    切块前先按 strategy["clean"] 做文本清洗（见 clean_text）。
+    """
     cfg = dict(strategy or {})
     mode = cfg.get("mode") or "fixed"
+    text = clean_text(text, cfg.get("clean"))
 
     if not text or not text.strip():
         return []
