@@ -166,7 +166,7 @@ class AgentRun:
 
     @property
     def kb(self) -> KbHandle:
-        raise NotImplementedError("Phase 2")
+        return _KbProxy(self._t)
 
     # —— 追踪（直接转发 transport，Phase 0 即可用其抽象契约）——
 
@@ -177,6 +177,25 @@ class AgentRun:
     def emit(self, event: StreamEvent) -> None:
         """透传一个自定义 StreamEvent。"""
         self._t.emit(event)
+
+
+class _KbProxy:
+    """`ctx.kb` 的实现：把 search 转发给 transport（结构上满足 KbHandle）。"""
+
+    def __init__(self, transport: RuntimeTransport) -> None:
+        self._t = transport
+
+    async def search(
+        self,
+        query: str,
+        *,
+        kbs: list[str] | None = None,
+        top_k: int | None = None,
+        min_score: float = 0.0,
+    ) -> list[Doc]:
+        return await self._t.kb_search(
+            query, kbs=kbs, top_k=top_k, min_score=min_score
+        )
 
 
 def _content_to_text(resp: Any) -> str:

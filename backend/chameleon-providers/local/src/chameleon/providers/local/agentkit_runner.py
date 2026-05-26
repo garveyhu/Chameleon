@@ -20,17 +20,28 @@ from typing import Any
 
 from chameleon.agentkit import AgentRun, RuntimeTransport
 from chameleon.agentkit._spec import Doc, ModelSlot
-from chameleon.core.components import llm, llm_by_name
+from chameleon.core.components import llm, llm_by_name, search_kb
+from chameleon.core.components.knowledge import list_linked_kb_metas
 from chameleon.core.observe.context import observe
-from chameleon.providers.base.types import InvokeContext, StreamEvent, StreamEventType
+from chameleon.providers.base.types import (
+    Citation,
+    InvokeContext,
+    StreamEvent,
+    StreamEventType,
+)
 
 
 class InProcessTransport(RuntimeTransport):
-    """站内进程内 transport：直连 LLMFactory / observe。"""
+    """站内进程内 transport：直连 LLMFactory / KB / observe。"""
 
     def __init__(
-        self, *, bindings: dict[str, str], slots: dict[str, ModelSlot]
+        self,
+        *,
+        agent_key: str,
+        bindings: dict[str, str],
+        slots: dict[str, ModelSlot],
     ) -> None:
+        self._agent_key = agent_key
         self._bindings = bindings or {}
         self._slots = slots or {}
         self._pending: list[StreamEvent] = []
@@ -61,7 +72,48 @@ class InProcessTransport(RuntimeTransport):
         top_k: int | None = None,
         min_score: float = 0.0,
     ) -> list[Doc]:
-        raise NotImplementedError("Phase 2：KB 门面")
+        # kbs 给定=代码点名；否则用该 agent web 关联的 KB（agent_kb_link）
+        if kbs:
+            kb_keys = list(kbs)
+        else:
+            metas = await list_linked_kb_metas(self._agent_key)
+            kb_keys = [m.kb_key for m in metas]
+        if not kb_keys:
+            return []
+
+        merged = []
+        async with observe(observation_type="retrieval", name="kb.search"):
+            for kb_key in kb_keys:
+                hits = await search_kb(
+                    kb_key, query, top_k=top_k, min_score=min_score
+                )
+                for h in hits:
+                    merged.append((kb_key, h))
+        merged.sort(key=lambda kh: getattr(kh[1], "score", 0.0), reverse=True)
+        merged = merged[: (top_k or 5)]
+
+        docs: list[Doc] = []
+        for kb_key, h in merged:
+            doc = Doc(
+                text=h.content,
+                score=h.score,
+                source=f"{kb_key}#doc{h.doc_id}#{h.seq}",
+                metadata={"kb_key": kb_key, "doc_id": h.doc_id, "seq": h.seq, **(h.meta or {})},
+            )
+            docs.append(doc)
+            # 自动 citation：作者无需手动 yield
+            self.emit(
+                StreamEvent(
+                    type=StreamEventType.citation,
+                    data=Citation(
+                        source=doc.source,
+                        score=h.score,
+                        snippet=h.content[:200],
+                        meta=doc.metadata,
+                    ).model_dump(),
+                )
+            )
+        return docs
 
     def span(self, name: str, *, type: str = "span") -> Any:
         return observe(observation_type=type, name=name)
@@ -98,7 +150,9 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     slots = {s.name: s for s in manifest.models}
 
     transport = InProcessTransport(
-        bindings=cfg.get("model_bindings") or {}, slots=slots
+        agent_key=ctx.agent_def.key,
+        bindings=cfg.get("model_bindings") or {},
+        slots=slots,
     )
     run = AgentRun(
         transport=transport,

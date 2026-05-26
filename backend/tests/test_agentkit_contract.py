@@ -66,10 +66,20 @@ def test_doc_shape():
     assert d.text == "hi" and d.score == 0.8 and d.metadata == {}
 
 
-def test_agentrun_shells_not_implemented():
-    """Phase 0：模型 / KB 入口尚未接实现，应明确 NotImplementedError。"""
+async def test_agentrun_kb_proxy_delegates():
+    """ctx.kb.search 转发给 transport（Phase 2）。"""
+
+    class FakeTransport:
+        def __init__(self):
+            self.calls = []
+
+        async def kb_search(self, query, *, kbs=None, top_k=None, min_score=0.0):
+            self.calls.append((query, kbs, top_k))
+            return [Doc(text="命中", score=0.9, source="kb:faq#1")]
+
+    t = FakeTransport()
     run = AgentRun(
-        transport=None,  # type: ignore[arg-type]
+        transport=t,  # type: ignore[arg-type]
         agent_key="ut",
         query="q",
         messages=[],
@@ -77,7 +87,6 @@ def test_agentrun_shells_not_implemented():
         session_id=None,
         config={},
     )
-    with pytest.raises(NotImplementedError):
-        run.llm()
-    with pytest.raises(NotImplementedError):
-        _ = run.kb
+    docs = await run.kb.search("hello", kbs=["faq"], top_k=2)
+    assert len(docs) == 1 and docs[0].text == "命中"
+    assert t.calls == [("hello", ["faq"], 2)]

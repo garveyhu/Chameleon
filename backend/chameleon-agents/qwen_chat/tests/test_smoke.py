@@ -5,3 +5,4 @@ def test_import() -> None:
     assert m.key == "qwen-chat"
     assert "qwen" in m.tags
     assert [s.name for s in m.models] == ["chat"]
+    assert m.kb is True
