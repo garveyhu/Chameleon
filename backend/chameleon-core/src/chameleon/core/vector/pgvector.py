@@ -49,6 +49,7 @@ class PgVectorStore(VectorStore):
                         embedding=c.embedding,
                         token_count=c.token_count,
                         meta=c.meta,
+                        parent_content=c.parent_content,
                     )
                     for c in chunks
                 )

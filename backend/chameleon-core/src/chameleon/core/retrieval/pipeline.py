@@ -77,11 +77,17 @@ def _row_to_hit(row, *, raw_score: float) -> Hit:
     meta = dict(row.meta or {})
     if row.source_url:
         meta["source_url"] = row.source_url
+    # parent-child：命中的是精准 child，但返回所属 parent 大块作上下文
+    content = row.content
+    if getattr(row, "parent_content", None):
+        meta["child_content"] = row.content
+        meta["is_parent_context"] = True
+        content = row.parent_content
     return Hit(
         chunk_id=row.id,
         doc_id=row.doc_id,
         seq=row.seq,
-        content=row.content,
+        content=content,
         score=raw_score,
         document_title=row.title,
         quarantined=bool(row.quarantined),
@@ -109,6 +115,7 @@ def _build_vector_recall(
                 Chunk.doc_id,
                 Chunk.seq,
                 Chunk.content,
+                Chunk.parent_content,
                 Chunk.kind,
                 Chunk.collection_id,
                 Chunk.quarantined,
@@ -158,6 +165,7 @@ def _build_keyword_recall(
                 Chunk.doc_id,
                 Chunk.seq,
                 Chunk.content,
+                Chunk.parent_content,
                 Chunk.kind,
                 Chunk.collection_id,
                 Chunk.quarantined,
@@ -282,7 +290,17 @@ async def _assemble_and_run(
         if h.chunk_id in kw_capture:
             meta["bm25_score"] = round(kw_capture[h.chunk_id], 6)
         h.meta = meta
-    return hits
+
+    # parent-child：同一 parent 的多个 child 命中 → 内容已是 parent 上下文，去重保最高分
+    deduped: list[Hit] = []
+    seen_parents: set[str] = set()
+    for h in hits:
+        if h.meta.get("is_parent_context"):
+            if h.content in seen_parents:
+                continue
+            seen_parents.add(h.content)
+        deduped.append(h)
+    return deduped
 
 
 async def retrieve(

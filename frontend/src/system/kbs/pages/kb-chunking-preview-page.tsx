@@ -40,6 +40,7 @@ const MODES: { value: KbChunkMode; label: string }[] = [
   { value: 'sentence', label: '按句子' },
   { value: 'regex', label: '自定义正则' },
   { value: 'token', label: '按 Token' },
+  { value: 'parent_child', label: '父子分层' },
 ];
 
 export const KbChunkingPreviewPage = () => {
@@ -244,6 +245,23 @@ export const KbChunkingPreviewPage = () => {
                   placeholder="留空走 cl100k_base"
                   className="h-7 font-mono text-[11.5px]"
                 />
+              </Field>
+            )}
+
+            {strategy.mode === 'parent_child' && (
+              <Field label={`parent 大块上限 = ${strategy.parent_size ?? 1024} 字符`}>
+                <input
+                  type="range"
+                  min={512}
+                  max={4000}
+                  step={128}
+                  value={strategy.parent_size ?? 1024}
+                  onChange={e => setStrategy(s => ({ ...s, parent_size: Number(e.target.value) }))}
+                  className="w-full accent-amber-600"
+                />
+                <div className="mt-1 text-[10.5px] leading-snug text-stone-500">
+                  预览显示 child 小块；chunk_size 即 child 大小。
+                </div>
               </Field>
             )}
 

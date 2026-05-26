@@ -136,6 +136,9 @@ class Chunk(Base, TimestampMixin):
     hit_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
+    # KB-P4-2：parent-child 分层。child 块精准召回，命中时返回此 parent 大块作上下文。
+    # NULL = 非分层块（按自身 content 返回）。
+    parent_content: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),

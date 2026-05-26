@@ -32,6 +32,8 @@ _DEFAULT_CHUNK_SIZE = 800
 _DEFAULT_OVERLAP = 100
 _DEFAULT_TOKEN_CHUNK_SIZE = 512
 _DEFAULT_TOKEN_OVERLAP = 50
+_DEFAULT_PARENT_SIZE = 1024
+_DEFAULT_CHILD_SIZE = 256
 
 #: 文本清洗用正则（切块前预处理）
 _URL_RE = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
@@ -82,6 +84,12 @@ def split(text: str, strategy: dict[str, Any] | None) -> list[str]:
             text, max_tokens=token_size, overlap_tokens=token_overlap, model=model
         )
 
+    if mode == "parent_child":
+        # 扁平返回 child 列表（预览 / 平铺调用方用）；分层结构见 split_parent_child
+        return [
+            child for _p, children in _parent_child(text, cfg) for child in children
+        ]
+
     chunk_size = int(cfg.get("chunk_size") or _DEFAULT_CHUNK_SIZE)
     overlap = int(cfg.get("overlap") or _DEFAULT_OVERLAP)
 
@@ -95,6 +103,21 @@ def split(text: str, strategy: dict[str, Any] | None) -> list[str]:
         sep = cfg.get("separator_regex") or r"\n\n+"
         return _fold_overflow(_regex(text, sep), chunk_size, overlap)
     raise ValueError(f"unsupported chunk mode: {mode!r}")
+
+
+def split_parent_child(
+    text: str, strategy: dict[str, Any] | None
+) -> list[tuple[str, list[str]]]:
+    """parent-child 分层切块：返回 [(parent 大块, [child 小块...])]。
+
+    parent 按段落折到 parent_size；每个 parent 再按句子折到 chunk_size（child）。
+    切块前按 strategy["clean"] 清洗。
+    """
+    cfg = dict(strategy or {})
+    text = clean_text(text, cfg.get("clean"))
+    if not text or not text.strip():
+        return []
+    return _parent_child(text, cfg)
 
 
 # ── 各模式 ─────────────────────────────────────────────────
@@ -141,4 +164,17 @@ def _fold_overflow(
             out.append(seg)
         else:
             out.extend(_fixed(seg, chunk_size, overlap))
+    return out
+
+
+def _parent_child(text: str, cfg: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """parent 按段落折到 parent_size；每个 parent 再按句子折到 chunk_size。"""
+    parent_size = int(cfg.get("parent_size") or _DEFAULT_PARENT_SIZE)
+    child_size = int(cfg.get("chunk_size") or _DEFAULT_CHILD_SIZE)
+    overlap = int(cfg.get("overlap") or 0)
+    parents = _fold_overflow(_paragraph(text), parent_size, overlap)
+    out: list[tuple[str, list[str]]] = []
+    for parent in parents:
+        children = _fold_overflow(_sentence(parent), child_size, overlap)
+        out.append((parent, children or [parent]))
     return out

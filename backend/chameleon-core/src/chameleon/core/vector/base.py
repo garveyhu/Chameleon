@@ -15,6 +15,8 @@ class ChunkPayload(BaseModel):
     seq: int = 0
     token_count: int | None = None
     meta: dict[str, Any] | None = None
+    #: parent-child 分层：child 所属 parent 大块全文（命中时作上下文返回）
+    parent_content: str | None = None
 
 
 class ChunkHit(BaseModel):

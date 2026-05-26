@@ -1,6 +1,6 @@
 import type { EntityId } from '@/core/types/api';
 
-export type KbChunkMode = 'fixed' | 'paragraph' | 'sentence' | 'regex' | 'token';
+export type KbChunkMode = 'fixed' | 'paragraph' | 'sentence' | 'regex' | 'token' | 'parent_child';
 
 export interface KbChunkStrategy {
   mode: KbChunkMode;
@@ -9,6 +9,8 @@ export interface KbChunkStrategy {
   separator_regex?: string;
   /** token 模式：编码器锚定模型（缺省走 cl100k_base） */
   model?: string;
+  /** parent_child 模式：parent 大块上限字符数（chunk_size 复用为 child 大小） */
+  parent_size?: number;
   /** 切块前文本清洗（对齐 Dify） */
   clean?: KbCleanRules;
 }

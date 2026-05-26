@@ -130,8 +130,17 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
     if not text or not text.strip():
         raise ValueError("document content is empty after parsing")
 
-    # 4. chunk（按 strategy 分发：fixed / paragraph / sentence / regex）
-    chunks_text = chunker.split(text, active_strategy)
+    # 4. chunk（按 strategy 分发：fixed / paragraph / sentence / regex / parent_child）
+    #    parent_child：只把 child 落库（精准召回），各 child 带所属 parent 大块作上下文
+    if active_strategy.get("mode") == "parent_child":
+        pairs = chunker.split_parent_child(text, active_strategy)
+        chunks_text = [c for _p, children in pairs for c in children]
+        parents_for_chunk: list[str | None] = [
+            parent for parent, children in pairs for _c in children
+        ]
+    else:
+        chunks_text = chunker.split(text, active_strategy)
+        parents_for_chunk = [None] * len(chunks_text)
     if not chunks_text:
         raise ValueError("chunker produced no chunks")
     logger.info(
@@ -168,8 +177,11 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
             seq=i,
             token_count=approx_tokens(ct),
             meta=None,
+            parent_content=parent,
         )
-        for i, (ct, vec) in enumerate(zip(chunks_text, vectors), start=1)
+        for i, (ct, vec, parent) in enumerate(
+            zip(chunks_text, vectors, parents_for_chunk), start=1
+        )
     ]
     await store.upsert(kb_id=kb_id, doc_id=document_id, chunks=payloads)
 

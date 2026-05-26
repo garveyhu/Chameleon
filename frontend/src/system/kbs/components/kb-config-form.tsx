@@ -42,6 +42,11 @@ const MODES: { value: KbChunkStrategy['mode']; label: string; desc: string }[] =
     label: '按 Token',
     desc: '模型感知 tiktoken 编码；chunk_size/overlap 单位为 token',
   },
+  {
+    value: 'parent_child',
+    label: '父子分层',
+    desc: 'child 小块精准召回，命中返回所属 parent 大块作上下文',
+  },
 ];
 
 export const KbConfigForm = ({ kb }: Props) => {
@@ -89,7 +94,7 @@ export const KbConfigForm = ({ kb }: Props) => {
     <div className="max-w-[640px] space-y-5">
       <section>
         <h3 className="mb-2 text-[13.5px] font-medium text-stone-900">分块策略</h3>
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {MODES.map(m => (
             <button
               key={m.value}
@@ -176,6 +181,27 @@ export const KbConfigForm = ({ kb }: Props) => {
             placeholder="\\n\\n+"
             className="h-8 font-mono text-[12.5px]"
           />
+        </section>
+      )}
+
+      {strategy.mode === 'parent_child' && (
+        <section>
+          <label className="mb-1 block text-[12px] text-stone-600">
+            parent 大块上限 = <span className="tnum font-mono">{strategy.parent_size ?? 1024}</span>
+            <span className="ml-1 text-[10.5px] text-stone-400">字符</span>
+          </label>
+          <input
+            type="range"
+            min={512}
+            max={4000}
+            step={128}
+            value={strategy.parent_size ?? 1024}
+            onChange={e => setStrategy(s => ({ ...s, parent_size: Number(e.target.value) }))}
+            className="w-full accent-amber-600"
+          />
+          <div className="mt-1 text-[10.5px] text-stone-500">
+            上方 chunk_size 即 child 小块大小（精准召回单位）；命中返回所属 parent 大块作上下文。
+          </div>
         </section>
       )}
 
