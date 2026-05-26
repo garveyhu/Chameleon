@@ -6,6 +6,16 @@ import type {
   KbItem,
 } from '@/system/kbs/types/kb';
 
+export interface CreateKbRequest {
+  kb_key: string;
+  name: string;
+  description?: string;
+  embedding_model?: string;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  chunk_strategy?: KbChunkStrategy;
+}
+
 export interface UpdateKbAdminRequest {
   name?: string;
   description?: string;
@@ -35,6 +45,7 @@ export interface ChunkingPreviewResult {
 export const kbApi = {
   list: (params?: { page?: number; page_size?: number }) =>
     get<PageResult<KbItem>>('/v1/admin/kbs', { params }),
+  create: (req: CreateKbRequest) => post<KbItem>('/v1/admin/kbs', req),
   get: (id: EntityId) => get<KbItem>(`/v1/admin/kbs/${id}`),
   update: (id: EntityId, req: UpdateKbAdminRequest) =>
     post<KbItem>(`/v1/admin/kbs/${id}/update`, req),

@@ -61,6 +61,16 @@ class ChunkItem(BaseModel):
     created_at: datetime
 
 
+class CreateKbAdminRequest(BaseModel):
+    kb_key: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    embedding_model: str | None = None  # 不传走全局 cases.embedding（v1 单维）
+    chunk_size: int = Field(default=800, ge=10, le=4000)
+    chunk_overlap: int = Field(default=100, ge=0, le=500)
+    chunk_strategy: dict | None = None
+
+
 class UpdateKbAdminRequest(BaseModel):
     name: str | None = None
     description: str | None = None
@@ -223,6 +233,39 @@ router = APIRouter(prefix="/v1/admin/kbs", tags=["admin:kbs"])
 
 
 # ── KB 列表 / 详情 / 修改 ─────────────────────────────────
+
+
+@router.post("", response_model=Result[KbAdminItem])
+async def create_kb(
+    req: CreateKbAdminRequest,
+    session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[KbAdminItem]:
+    kb = await document_service.create_kb(
+        session,
+        kb_key=req.kb_key,
+        name=req.name,
+        description=req.description,
+        embedding_model=req.embedding_model,
+        chunk_size=req.chunk_size,
+        chunk_overlap=req.chunk_overlap,
+        chunk_strategy=req.chunk_strategy,
+    )
+    await session.commit()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="knowledge_base.create",
+        resource_type="knowledge_base",
+        resource_id=kb.id,
+        after={"kb_key": kb.kb_key, "name": kb.name},
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(_kb_to_item(kb, 0, 0))
 
 
 @router.get("", response_model=Result[PageResult[KbAdminItem]])

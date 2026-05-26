@@ -28,6 +28,38 @@ from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.core.utils.snowflake import next_id
 from chameleon.core.vector import get_store
 
+# ── KB 创建（复用业务层 create_kb：kb_key 唯一 + embedding 维度校验） ──
+
+
+async def create_kb(
+    session: AsyncSession,
+    *,
+    kb_key: str,
+    name: str,
+    description: str | None = None,
+    embedding_model: str | None = None,
+    chunk_size: int = 800,
+    chunk_overlap: int = 100,
+    chunk_strategy: dict | None = None,
+) -> KnowledgeBase:
+    from chameleon.api.knowledge.schemas import CreateKbRequest
+    from chameleon.api.knowledge.service import create_kb as _biz_create_kb
+
+    item = await _biz_create_kb(
+        session,
+        CreateKbRequest(
+            kb_key=kb_key,
+            name=name,
+            description=description,
+            embedding_model=embedding_model,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            chunk_strategy=chunk_strategy,
+        ),
+    )
+    return await _get_kb(session, item.id)
+
+
 # ── 公共：KB 取 / 校验 ─────────────────────────────────────
 
 
