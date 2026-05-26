@@ -378,3 +378,126 @@ async def update_agent_linked_kbs(
     )
     await session.commit()
     return Result.ok([LinkedKbItem.model_validate(k) for k in kbs])
+
+
+# ── 多具名模型槽（agentkit @agent 声明 → 页面"关联模型"分槽绑定） ──
+
+
+class ModelSlotItem(BaseModel):
+    name: str
+    label: str
+    optional: bool = False
+    locked: bool = False
+    default: str | None = None
+    bound_code: str | None = None  # web 绑定的已配置模型 code（None=未绑=用默认）
+
+
+class ConfiguredModelItem(BaseModel):
+    code: str
+    label: str
+
+
+class AgentModelSlotsResponse(BaseModel):
+    slots: list[ModelSlotItem]
+    models: list[ConfiguredModelItem]  # 可选的已配置 chat 模型（下拉用）
+
+
+class UpdateModelBindingsRequest(BaseModel):
+    bindings: dict[str, str] = Field(default_factory=dict)  # {槽名: code}；空=解绑
+
+
+async def _build_slots_response(
+    session: AsyncSession, agent: Agent
+) -> AgentModelSlotsResponse:
+    from chameleon.agentkit import declared_agents
+    from chameleon.core.models.model_def import LLMModel
+
+    manifest = declared_agents().get(agent.agent_key)
+    bindings = agent.model_bindings or {}
+    slots = [
+        ModelSlotItem(
+            name=s.name,
+            label=s.label,
+            optional=s.optional,
+            locked=s.locked,
+            default=s.default,
+            bound_code=bindings.get(s.name),
+        )
+        for s in (manifest.models if manifest else [])
+    ]
+    rows = (
+        (
+            await session.execute(
+                select(LLMModel).where(
+                    LLMModel.kind == "chat",
+                    LLMModel.enabled.is_(True),
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    models = [ConfiguredModelItem(code=m.code, label=m.code) for m in rows]
+    return AgentModelSlotsResponse(slots=slots, models=models)
+
+
+@router.get(
+    "/{agent_id}/model-slots", response_model=Result[AgentModelSlotsResponse]
+)
+async def get_agent_model_slots(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentModelSlotsResponse]:
+    agent = await _get_or_404(session, agent_id)
+    return Result.ok(await _build_slots_response(session, agent))
+
+
+@router.post(
+    "/{agent_id}/model-bindings/update",
+    response_model=Result[AgentModelSlotsResponse],
+)
+async def update_agent_model_bindings(
+    agent_id: int,
+    req: UpdateModelBindingsRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[AgentModelSlotsResponse]:
+    from chameleon.agentkit import declared_agents
+    from chameleon.core.models.model_def import LLMModel
+
+    agent = await _get_or_404(session, agent_id)
+    manifest = declared_agents().get(agent.agent_key)
+    declared = {s.name for s in manifest.models} if manifest else set()
+    locked = {s.name for s in (manifest.models if manifest else []) if s.locked}
+    valid_codes = set(
+        (
+            await session.execute(
+                select(LLMModel.code).where(
+                    LLMModel.kind == "chat",
+                    LLMModel.enabled.is_(True),
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    clean: dict[str, str] = {}
+    for slot, code in (req.bindings or {}).items():
+        if slot not in declared:
+            raise ValidationError(message=f"未声明的模型槽: {slot}")
+        if slot in locked:
+            raise ValidationError(message=f"模型槽 {slot} 已锁定，不可在页面修改")
+        if not code:
+            continue  # 空 = 解绑（用默认）
+        if code not in valid_codes:
+            raise ValidationError(message=f"模型不存在或未启用: {code}")
+        clean[slot] = code
+
+    agent.model_bindings = clean
+    await session.commit()
+    await reload_agent_registry()  # 让 AGENTS 重新注入新绑定
+    return Result.ok(await _build_slots_response(session, agent))

@@ -2,6 +2,7 @@ import { get, post } from '@/core/lib/request';
 import type { EntityId } from '@/core/types/api';
 import type {
   AgentItem,
+  AgentModelSlots,
   CreateAgentRequest,
   LinkedKbItem,
 } from '@/system/agents/types/agent';
@@ -25,10 +26,15 @@ export const agentApi = {
   test: (id: EntityId, input: string) =>
     post<InvokeResult>(`/v1/admin/agents/${id}/test`, { input }),
 
-  linkedKbs: (id: EntityId) =>
-    get<LinkedKbItem[]>(`/v1/admin/agents/${id}/linked-kbs`),
+  linkedKbs: (id: EntityId) => get<LinkedKbItem[]>(`/v1/admin/agents/${id}/linked-kbs`),
   updateLinkedKbs: (id: EntityId, kbIds: EntityId[]) =>
     post<LinkedKbItem[]>(`/v1/admin/agents/${id}/linked-kbs/update`, {
       kb_ids: kbIds,
+    }),
+
+  modelSlots: (id: EntityId) => get<AgentModelSlots>(`/v1/admin/agents/${id}/model-slots`),
+  updateModelBindings: (id: EntityId, bindings: Record<string, string>) =>
+    post<AgentModelSlots>(`/v1/admin/agents/${id}/model-bindings/update`, {
+      bindings,
     }),
 };

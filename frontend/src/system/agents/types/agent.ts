@@ -36,3 +36,22 @@ export interface LinkedKbItem {
   embedding_model: string;
   embedding_dim: number;
 }
+
+export interface ModelSlotItem {
+  name: string;
+  label: string;
+  optional: boolean;
+  locked: boolean;
+  default: string | null;
+  bound_code: string | null;
+}
+
+export interface ConfiguredModelItem {
+  code: string;
+  label: string;
+}
+
+export interface AgentModelSlots {
+  slots: ModelSlotItem[];
+  models: ConfiguredModelItem[];
+}

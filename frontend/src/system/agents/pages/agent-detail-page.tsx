@@ -11,6 +11,7 @@ import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
+import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
 
@@ -77,7 +78,7 @@ export const AgentDetailPage = () => {
         <div className="p-4">
           {tab === 'info' && <InfoTab agent={agentQ.data ?? null} />}
           {tab === 'kbs' && <LinkedKbsForm agentId={agentId} />}
-          {tab === 'model' && <PlaceholderTab hint="后续接入默认 LLM 选择" />}
+          {tab === 'model' && <LinkedModelsForm agentId={agentId} />}
           {tab === 'stats' && <PlaceholderTab hint="待 call_logs 趋势接入" />}
         </div>
       </SectionCard>
