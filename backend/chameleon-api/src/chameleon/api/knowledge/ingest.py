@@ -144,7 +144,9 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
         qa_questions = [None] * len(chunks_text)
     elif chunk_mode == "qa":
         base_chunks = chunker.split(text, active_strategy)
-        chunks_text, qa_questions = await _generate_qa_chunks(base_chunks)
+        chunks_text, qa_questions = await _generate_qa_chunks(
+            base_chunks, model_code=active_strategy.get("qa_model") or None
+        )
         parents_for_chunk = [None] * len(chunks_text)
     else:
         chunks_text = chunker.split(text, active_strategy)
@@ -320,16 +322,19 @@ async def _fetch_and_parse(
 
 async def _generate_qa_chunks(
     base_chunks: list[str],
+    *,
+    model_code: str | None = None,
 ) -> tuple[list[str], list[str | None]]:
     """对每个基础块用 LLM 生成问答对；返回 (contents, qa_questions)。
 
+    model_code 指定生成模型（chunk_strategy.qa_model）；None 用系统默认 chat 模型。
     content = "Q: ..\nA: .."（问句一并 embed，查询语义命中问句）；
     LLM 全部失败 / 未配置时回退：基础块当普通块（保证 ingest 不空）。
     """
     contents: list[str] = []
     questions: list[str | None] = []
     for block in base_chunks:
-        for q, a in await _generate_qa(block):
+        for q, a in await _generate_qa(block, model_code=model_code):
             contents.append(f"Q: {q}\nA: {a}")
             questions.append(q)
     if not contents:
@@ -338,7 +343,9 @@ async def _generate_qa_chunks(
     return contents, questions
 
 
-async def _generate_qa(text: str) -> list[tuple[str, str]]:
+async def _generate_qa(
+    text: str, *, model_code: str | None = None
+) -> list[tuple[str, str]]:
     from langchain_core.messages import HumanMessage
 
     from chameleon.core.components.llms.factory import resolve_llm
@@ -350,7 +357,7 @@ async def _generate_qa(text: str) -> list[tuple[str, str]]:
         "不要任何额外文字或代码块标记。\n\n【文本】\n" + text
     )
     try:
-        client = await resolve_llm()
+        client = await resolve_llm(model_code)
         resp = await client.ainvoke([HumanMessage(content=prompt)])
         raw = resp.content if isinstance(resp.content, str) else str(resp.content)
         return _parse_qa(raw)

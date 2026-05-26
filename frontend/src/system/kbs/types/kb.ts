@@ -18,6 +18,8 @@ export interface KbChunkStrategy {
   model?: string;
   /** parent_child 模式：parent 大块上限字符数（chunk_size 复用为 child 大小） */
   parent_size?: number;
+  /** qa 模式：生成问答对所用 chat 模型 code（缺省走系统默认 chat 模型） */
+  qa_model?: string;
   /** 切块前文本清洗（对齐 Dify） */
   clean?: KbCleanRules;
 }

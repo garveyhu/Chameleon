@@ -1,7 +1,7 @@
 /** KB 配置表单 —— 分块策略 / 召回参数 / 一键重分块 */
 import { useState } from 'react';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw, Save } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
@@ -24,6 +24,7 @@ import {
 import { Switch } from '@/core/components/ui/switch';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
+import { modelApi } from '@/system/models/services/model';
 import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbChunkStrategy, KbItem, RecallMode } from '@/system/kbs/types/kb';
@@ -68,6 +69,14 @@ export const KbConfigForm = ({ kb }: Props) => {
   const [recallMode, setRecallMode] = useState<RecallMode>(kb.recall_mode);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
+  // QA 模式的生成模型下拉数据源：已启用的 chat 模型
+  const chatModelsQ = useQuery({
+    queryKey: ['chat-models'],
+    queryFn: () => modelApi.list({ kind: 'chat' }),
+    enabled: strategy.mode === 'qa',
+  });
+  const chatModels = (chatModelsQ.data ?? []).filter(m => m.enabled);
+
   const saveMut = useMutation({
     mutationFn: () =>
       kbApi.update(kb.id, {
@@ -96,7 +105,7 @@ export const KbConfigForm = ({ kb }: Props) => {
   };
 
   return (
-    <div className="max-w-[640px] space-y-5">
+    <div className="space-y-5">
       <section>
         <h3 className="mb-2 text-[13.5px] font-medium text-stone-900">分块策略</h3>
         <div className="grid grid-cols-3 gap-2">
@@ -211,10 +220,41 @@ export const KbConfigForm = ({ kb }: Props) => {
       )}
 
       {strategy.mode === 'qa' && (
-        <section className="rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-[11.5px] leading-relaxed text-stone-600">
-          QA 模式：ingest 时按上方基础分块（段落）切块，再用<b>默认 chat 模型</b>对每块 生成 2–4
-          个问答对，落库为「Q: …/A: …」并按问句语义召回。生成走 LLM、耗时随 文档增长；未配置 chat
-          模型时自动回退为普通分块。
+        <section className="space-y-2">
+          <div>
+            <label className="mb-1 block text-[12px] text-stone-600">生成模型</label>
+            <Select
+              value={strategy.qa_model ?? '__default__'}
+              onValueChange={v =>
+                setStrategy(s => ({
+                  ...s,
+                  qa_model: v === '__default__' ? undefined : v,
+                }))
+              }
+            >
+              <SelectTrigger className="h-8 text-[12.5px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__default__">默认（系统 chat 模型）</SelectItem>
+                {chatModels.map(m => (
+                  <SelectItem key={String(m.id)} value={m.code}>
+                    {m.code}
+                    {m.provider_code ? ` · ${m.provider_code}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {chatModels.length === 0 && !chatModelsQ.isLoading && (
+              <div className="mt-1 text-[10.5px] text-amber-700">
+                未发现已启用的 chat 模型，将回退为普通分块
+              </div>
+            )}
+          </div>
+          <div className="rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-[11.5px] leading-relaxed text-stone-600">
+            QA 模式：ingest 时按上方基础分块（段落）切块，再用上方所选 chat 模型对每块生成 2–4
+            个问答对，落库为「Q: …/A: …」并按问句语义召回。生成走 LLM、耗时随文档增长；选默认或所选模型不可用时回退普通分块。
+          </div>
         </section>
       )}
 
