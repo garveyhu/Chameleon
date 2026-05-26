@@ -297,9 +297,9 @@ export const KbConfigForm = ({ kb }: Props) => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vector">vector（语义）</SelectItem>
-              <SelectItem value="hybrid">hybrid（混合，Bundle 4 上线）</SelectItem>
-              <SelectItem value="keyword">keyword（关键词，Bundle 4 上线）</SelectItem>
+              <SelectItem value="vector">向量（语义检索）</SelectItem>
+              <SelectItem value="hybrid">混合（向量 + 关键词）</SelectItem>
+              <SelectItem value="keyword">关键词（BM25）</SelectItem>
             </SelectContent>
           </Select>
         </div>

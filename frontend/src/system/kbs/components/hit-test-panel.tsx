@@ -127,17 +127,14 @@ export const HitTestPanel = ({ kb }: Props) => {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="vector">vector（语义）</SelectItem>
-              <SelectItem value="hybrid">hybrid（混合）</SelectItem>
-              <SelectItem value="keyword">keyword（关键词）</SelectItem>
+              <SelectItem value="vector">向量（语义检索）</SelectItem>
+              <SelectItem value="hybrid">混合（向量 + 关键词）</SelectItem>
+              <SelectItem value="keyword">关键词（BM25）</SelectItem>
             </SelectContent>
           </Select>
         </Field>
         <label className="flex items-center justify-between gap-2 text-[12px] text-stone-600">
-          <span>
-            Multi-query 扩展
-            <span className="ml-1 text-[10.5px] text-amber-700">B1</span>
-          </span>
+          <span>多查询扩展</span>
           <Switch checked={multiQuery} onCheckedChange={setMultiQuery} />
         </label>
         <Field label="标签过滤（多个用逗号）">

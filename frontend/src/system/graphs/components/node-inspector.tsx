@@ -237,7 +237,7 @@ const DataForm = ({
   if (type === 'tool') {
     return (
       <>
-        <Field label="tool_key（P18.2 才可用）">
+        <Field label="工具标识 tool_key">
           <Input
             value={(data.tool_key as string) || ''}
             onChange={e => onPatch({ tool_key: e.target.value })}
@@ -246,7 +246,7 @@ const DataForm = ({
           />
         </Field>
         <div className="text-[10.5px] leading-snug text-stone-500">
-          P18.1：Tool 协议未上线，跑到该节点会 raise NotImplementedError。
+          工具协议尚未上线，跑到该节点会报未实现。
         </div>
       </>
     );

@@ -91,7 +91,7 @@ const ITEMS: PaletteItem[] = [
     type: 'tool',
     label: 'Tool',
     icon: Wrench,
-    desc: '调工具（P18.2）',
+    desc: '调用外部工具',
     color: 'text-orange-600',
     group: '检索 & 工具',
   },
