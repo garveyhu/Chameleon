@@ -284,8 +284,91 @@ async def build_agent_registry_from_db(
 # ── 启动钩子 ────────────────────────────────────────────
 
 
+async def sync_local_agents_to_db(
+    base_index: dict[str, type],
+    agentkit_index: dict[str, Any],
+) -> None:
+    """本地 agent 以**代码为准**，启动期对账 DB（仅 source='local'）：
+
+    - 代码声明但 DB 无 → 新建 enabled 行（@agent / BaseAgent 都覆盖）
+    - DB 有但代码已删 → 逻辑删除（deleted_at + 改名释放 agent_key + disable）
+
+    其他来源（graph / dify / fastgpt）不受影响。import 失败会在扫描阶段直接抛错、
+    不会走到这里，所以"代码不在索引"即真删除信号，可安全逻辑删。
+    """
+    from datetime import datetime, timezone
+
+    from chameleon.core.infra.db import AsyncSessionLocal
+    from chameleon.core.models import Agent
+
+    code_keys = set(base_index) | set(agentkit_index)
+
+    async with AsyncSessionLocal() as session:
+        rows = (
+            (
+                await session.execute(
+                    select(Agent).where(
+                        Agent.source == "local", Agent.deleted_at.is_(None)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        db_keys = {r.agent_key for r in rows}
+
+        removed = 0
+        for r in rows:
+            if r.agent_key not in code_keys:
+                r.deleted_at = datetime.now(timezone.utc)
+                r.enabled = False
+                r.agent_key = f"__deleted_{r.id}_{r.agent_key}"
+                removed += 1
+
+        created = 0
+        for key in code_keys - db_keys:
+            if key in agentkit_index:
+                tgt = agentkit_index[key]
+                m = tgt.__agent_manifest__
+                session.add(
+                    Agent(
+                        agent_key=key,
+                        name=m.name,
+                        description=m.description,
+                        source="local",
+                        local_class_path=f"{tgt.__module__}.{tgt.__name__}",
+                        config={},
+                        tags=list(m.tags) if m.tags else None,
+                        enabled=True,
+                    )
+                )
+            else:
+                cls = base_index[key]
+                meta = cls.get_metadata()
+                session.add(
+                    Agent(
+                        agent_key=key,
+                        name=meta.name,
+                        description=meta.description,
+                        source="local",
+                        local_class_path=f"{cls.__module__}.{cls.__name__}",
+                        config={"module": cls.__module__, "agent_class": cls.__name__},
+                        tags=list(meta.tags) if meta.tags else None,
+                        enabled=True,
+                        version=meta.version,
+                    )
+                )
+            created += 1
+
+        if removed or created:
+            await session.commit()
+            logger.info(
+                "local agent 对账 | 新建={} | 逻辑删除={}", created, removed
+            )
+
+
 async def init_registry() -> None:
-    """启动期入口（async）：build providers + 扫本地 import + DB 读 agents
+    """启动期入口（async）：build providers + 扫本地 import + 对账 + DB 读 agents
 
     P19.2：先 seed builtin plugin + 拉 disabled 集，对应 provider 不挂载
     """
@@ -316,6 +399,9 @@ async def init_registry() -> None:
     PROVIDERS.update(build_provider_registry(disabled_provider_keys))
 
     local_class_index, agentkit_index = _scan_local_agent_modules()
+
+    # 本地 agent 以代码为准：对账 DB（新增建行 / 删码逻辑删）
+    await sync_local_agents_to_db(local_class_index, agentkit_index)
 
     AGENTS.clear()
     AGENTS.update(

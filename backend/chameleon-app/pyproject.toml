@@ -14,10 +14,10 @@ dependencies = [
     "chameleon-system",
     # 内置 agent 通过 namespace 自动发现；这里仅显式依赖业务级 agent
     "chameleon-agent-qwen-chat",
-    # 示例 agent 也安装到 workspace（namespace 扫到，但不强制 app 依赖）
-    "chameleon-agent-example-echo-langgraph",
-    "chameleon-agent-example-echo-runnable",
-    "chameleon-agent-example-echo-native",
+    # 示例 agent 也安装到 workspace（namespace 扫到 + 启动对账自动注册）
+    "chameleon-agent-example-echo",
+    "chameleon-agent-example-rag-qa",
+    "chameleon-agent-example-triage",
     "fastapi>=0.115",
     "python-multipart>=0.0.9",        # /v1/admin/settings/import-json 用 File / Form
     "uvicorn[standard]>=0.30",
@@ -34,9 +34,9 @@ chameleon-provider-fastgpt = { workspace = true }
 chameleon-api = { workspace = true }
 chameleon-system = { workspace = true }
 chameleon-agent-qwen-chat = { workspace = true }
-chameleon-agent-example-echo-langgraph = { workspace = true }
-chameleon-agent-example-echo-runnable = { workspace = true }
-chameleon-agent-example-echo-native = { workspace = true }
+chameleon-agent-example-echo = { workspace = true }
+chameleon-agent-example-rag-qa = { workspace = true }
+chameleon-agent-example-triage = { workspace = true }
 
 [project.scripts]
 chameleon = "chameleon.app.cli:main"

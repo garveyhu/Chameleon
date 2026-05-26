@@ -8,9 +8,9 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "chameleon-agent-example-echo-langgraph",
-    "chameleon-agent-example-echo-native",
-    "chameleon-agent-example-echo-runnable",
+    "chameleon-agent-example-echo",
+    "chameleon-agent-example-rag-qa",
+    "chameleon-agent-example-triage",
     "chameleon-agent-qwen-chat",
     "chameleon-agentkit",
     "chameleon-api",
@@ -241,53 +241,37 @@ wheels = [
 ]
 
 [[package]]
-name = "chameleon-agent-example-echo-langgraph"
+name = "chameleon-agent-example-echo"
 version = "0.1.0"
-source = { editable = "chameleon-agents/examples/echo_langgraph" }
+source = { editable = "chameleon-agents/examples/echo" }
 dependencies = [
-    { name = "chameleon-core" },
-    { name = "chameleon-providers-base" },
-    { name = "langgraph" },
+    { name = "chameleon-agentkit" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "chameleon-core", editable = "chameleon-core" },
-    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
-    { name = "langgraph", specifier = ">=0.2" },
-]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
-name = "chameleon-agent-example-echo-native"
+name = "chameleon-agent-example-rag-qa"
 version = "0.1.0"
-source = { editable = "chameleon-agents/examples/echo_native" }
+source = { editable = "chameleon-agents/examples/rag_qa" }
 dependencies = [
-    { name = "chameleon-core" },
-    { name = "chameleon-providers-base" },
+    { name = "chameleon-agentkit" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "chameleon-core", editable = "chameleon-core" },
-    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
-]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
-name = "chameleon-agent-example-echo-runnable"
+name = "chameleon-agent-example-triage"
 version = "0.1.0"
-source = { editable = "chameleon-agents/examples/echo_runnable" }
+source = { editable = "chameleon-agents/examples/triage" }
 dependencies = [
-    { name = "chameleon-core" },
-    { name = "chameleon-providers-base" },
-    { name = "langchain-core" },
+    { name = "chameleon-agentkit" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "chameleon-core", editable = "chameleon-core" },
-    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
-    { name = "langchain-core", specifier = ">=0.3" },
-]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
 name = "chameleon-agent-qwen-chat"
@@ -345,9 +329,9 @@ name = "chameleon-app"
 version = "1.0.0"
 source = { editable = "chameleon-app" }
 dependencies = [
-    { name = "chameleon-agent-example-echo-langgraph" },
-    { name = "chameleon-agent-example-echo-native" },
-    { name = "chameleon-agent-example-echo-runnable" },
+    { name = "chameleon-agent-example-echo" },
+    { name = "chameleon-agent-example-rag-qa" },
+    { name = "chameleon-agent-example-triage" },
     { name = "chameleon-agent-qwen-chat" },
     { name = "chameleon-api" },
     { name = "chameleon-core" },
@@ -365,9 +349,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chameleon-agent-example-echo-langgraph", editable = "chameleon-agents/examples/echo_langgraph" },
-    { name = "chameleon-agent-example-echo-native", editable = "chameleon-agents/examples/echo_native" },
-    { name = "chameleon-agent-example-echo-runnable", editable = "chameleon-agents/examples/echo_runnable" },
+    { name = "chameleon-agent-example-echo", editable = "chameleon-agents/examples/echo" },
+    { name = "chameleon-agent-example-rag-qa", editable = "chameleon-agents/examples/rag_qa" },
+    { name = "chameleon-agent-example-triage", editable = "chameleon-agents/examples/triage" },
     { name = "chameleon-agent-qwen-chat", editable = "chameleon-agents/qwen_chat" },
     { name = "chameleon-api", editable = "chameleon-api" },
     { name = "chameleon-core", editable = "chameleon-core" },

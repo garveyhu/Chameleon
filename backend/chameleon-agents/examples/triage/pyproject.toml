@@ -1,0 +1,16 @@
+[project]
+name = "chameleon-agent-example-triage"
+version = "0.1.0"
+description = "示例：分诊问答 —— 多模型槽（小模型判类 + 对话模型作答）+ 运营配置"
+requires-python = ">=3.12"
+dependencies = ["chameleon-agentkit"]
+
+[tool.uv.sources]
+chameleon-agentkit = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chameleon"]
