@@ -35,7 +35,6 @@ from chameleon.system.datasets.schemas import (
     CompareItemCell,
     CompareRunsResult,
     CreateDatasetRequest,
-    DatasetItem as DatasetItemDTO,
     DatasetItemItem,
     DatasetRunDetail,
     DatasetRunItemRow,
@@ -48,7 +47,9 @@ from chameleon.system.datasets.schemas import (
     UpdateDatasetRequest,
     UpdateItemRequest,
 )
-
+from chameleon.system.datasets.schemas import (
+    DatasetItem as DatasetItemDTO,
+)
 
 _MAX_REDACTED_PREVIEW = 80  # 字符
 

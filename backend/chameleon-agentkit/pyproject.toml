@@ -1,7 +1,7 @@
 [project]
 name = "chameleon-agentkit"
 version = "0.1.0"
-description = "Chameleon 本地智能体作者 SDK —— @agent / AgentRun / ModelSlot / Opt（公共面）"
+description = "Chameleon 本地智能体作者 SDK —— @agent / AgentRun / ModelSlot / Opt"
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
