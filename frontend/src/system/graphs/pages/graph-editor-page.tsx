@@ -450,6 +450,27 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
     onError: e => toast.error(`切换类型失败：${(e as Error).message}`),
   });
 
+  // 切换 kind 守卫：流程型不使用 Answer 节点，图里若有则切换前确认
+  const handleKindChange = useCallback(
+    async (next: GraphKind) => {
+      if (next === kind) return;
+      if (next === 'workflow') {
+        const answerCount = nodes.filter(n => n.data.nodeType === 'answer').length;
+        if (answerCount > 0) {
+          const ok = await confirm({
+            title: '切换为流程型？',
+            description: `流程型的最终输出走 End 节点，不使用 Answer 节点。当前画布有 ${answerCount} 个 Answer 节点，切换后无法再新增同类节点，已有的也不会在运行时生效。建议先用 End 节点承接输出。仍要切换？`,
+            confirmText: '仍要切换',
+            danger: true,
+          });
+          if (!ok) return;
+        }
+      }
+      kindMut.mutate(next);
+    },
+    [kind, nodes, kindMut],
+  );
+
   const publishMut = useMutation({
     mutationFn: () => graphApi.publish(graph.id),
     onSuccess: detail => {
@@ -520,7 +541,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         <GraphAppRail
           graph={graph}
           kind={kind}
-          onKindChange={k => kindMut.mutate(k)}
+          onKindChange={handleKindChange}
           tab={tab}
           onTab={setTab}
           onReturn={onReturn}
@@ -531,7 +552,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
         <div className="flex min-w-0 flex-1 flex-col">
           {tab === 'orchestrate' && (
             <div className="flex min-h-0 flex-1">
-              <NodePalette onAdd={t => setPendingType(t)} />
+              <NodePalette kind={kind} onAdd={t => setPendingType(t)} />
 
               <div
                 ref={rfWrapperRef}

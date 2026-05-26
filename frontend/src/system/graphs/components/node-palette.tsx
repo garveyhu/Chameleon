@@ -25,7 +25,8 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/core/lib/cn';
-import type { GraphNodeType } from '@/system/graphs/types/graph';
+import { isNodeAllowedForKind } from '@/system/graphs/lib/node-meta';
+import type { GraphKind, GraphNodeType } from '@/system/graphs/types/graph';
 
 interface PaletteItem {
   type: GraphNodeType;
@@ -181,11 +182,13 @@ const ITEMS: PaletteItem[] = [
 const GROUP_ORDER = ['生成', '检索 & 工具', '逻辑', '变量 & 输出'];
 
 interface Props {
+  /** 当前图类型；流程型会过滤掉对话型独占节点（如 Answer） */
+  kind: GraphKind;
   /** 点击：开始放置（贴随光标，点画布落位）；组件不直接落位 */
   onAdd: (type: GraphNodeType) => void;
 }
 
-export const NodePalette = ({ onAdd }: Props) => {
+export const NodePalette = ({ kind, onAdd }: Props) => {
   const [collapsed, setCollapsed] = useState(false);
 
   const onDragStart = (e: React.DragEvent, type: GraphNodeType) => {
@@ -227,28 +230,30 @@ export const NodePalette = ({ onAdd }: Props) => {
               </div>
             )}
             <div className="space-y-1">
-              {ITEMS.filter(it => it.group === group).map(it => (
-                <button
-                  key={it.type}
-                  type="button"
-                  draggable
-                  onDragStart={e => onDragStart(e, it.type)}
-                  onClick={() => onAdd(it.type)}
-                  title={`点击贴随光标放置，或拖到画布 · ${it.desc}`}
-                  className={cn(
-                    'group flex w-full items-center gap-2 rounded-md border border-stone-200 bg-white text-left transition hover:border-stone-300 hover:bg-stone-50 active:cursor-grabbing',
-                    collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5',
-                  )}
-                >
-                  <it.icon className={cn('h-3.5 w-3.5 shrink-0', it.color)} />
-                  {!collapsed && (
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11.5px] font-medium text-stone-800">{it.label}</div>
-                      <div className="truncate text-[10px] text-stone-500">{it.desc}</div>
-                    </div>
-                  )}
-                </button>
-              ))}
+              {ITEMS.filter(it => it.group === group && isNodeAllowedForKind(it.type, kind)).map(
+                it => (
+                  <button
+                    key={it.type}
+                    type="button"
+                    draggable
+                    onDragStart={e => onDragStart(e, it.type)}
+                    onClick={() => onAdd(it.type)}
+                    title={`点击贴随光标放置，或拖到画布 · ${it.desc}`}
+                    className={cn(
+                      'group flex w-full items-center gap-2 rounded-md border border-stone-200 bg-white text-left transition hover:border-stone-300 hover:bg-stone-50 active:cursor-grabbing',
+                      collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5',
+                    )}
+                  >
+                    <it.icon className={cn('h-3.5 w-3.5 shrink-0', it.color)} />
+                    {!collapsed && (
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11.5px] font-medium text-stone-800">{it.label}</div>
+                        <div className="truncate text-[10px] text-stone-500">{it.desc}</div>
+                      </div>
+                    )}
+                  </button>
+                ),
+              )}
             </div>
           </div>
         ))}

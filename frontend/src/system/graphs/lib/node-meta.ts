@@ -25,7 +25,7 @@ import {
   Wrench,
 } from 'lucide-react';
 
-import type { GraphNodeType } from '@/system/graphs/types/graph';
+import type { GraphKind, GraphNodeType } from '@/system/graphs/types/graph';
 
 export interface NodeTypeMeta {
   icon: LucideIcon;
@@ -163,6 +163,16 @@ export const TYPE_META: Record<GraphNodeType, NodeTypeMeta> = {
     label: 'Noop',
   },
 };
+
+/** 对话型独占的节点类型 —— Answer（流式最终回答）。
+ * 流程型的最终输出走 End 节点，不使用 Answer。 */
+const CHATFLOW_ONLY_NODES: GraphNodeType[] = ['answer'];
+
+/** 该节点类型是否适用于给定 kind —— palette 过滤 + 切换守卫共用。 */
+export function isNodeAllowedForKind(type: GraphNodeType, kind: GraphKind): boolean {
+  if (kind === 'workflow' && CHATFLOW_ONLY_NODES.includes(type)) return false;
+  return true;
+}
 
 /** 各节点类型的输出字段（变量选择器 + 输出变量区共用） */
 export const NODE_OUTPUT_FIELDS: Partial<Record<GraphNodeType, string[]>> = {

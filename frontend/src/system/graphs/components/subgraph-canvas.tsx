@@ -180,7 +180,8 @@ const Inner = ({ spec, onChange }: Props) => {
 
   return (
     <div className="flex h-full min-h-0">
-      <NodePalette onAdd={addNode} />
+      {/* 子图为流程式内管线，不含对话 Answer 节点 */}
+      <NodePalette kind="workflow" onAdd={addNode} />
       <div
         ref={wrapRef}
         className="relative min-w-0 flex-1"
