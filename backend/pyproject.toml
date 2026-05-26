@@ -15,6 +15,7 @@
 members = [
     "chameleon-core",
     "chameleon-providers/*",
+    "chameleon-agentkit",
     "chameleon-agents/*",
     "chameleon-agents/examples/*",
     "chameleon-api",
