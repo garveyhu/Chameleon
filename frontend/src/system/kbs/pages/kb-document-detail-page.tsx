@@ -2,13 +2,13 @@
  *
  * chunk 数大时启用 react-virtual 渲染窗口；小于阈值时走原生 grid。
  */
+import type { ReactElement } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowLeft, FileText, Globe, RotateCcw, ScrollText } from 'lucide-react';
-import type { ReactElement } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
@@ -64,12 +64,8 @@ export const KbDocumentDetailPage = () => {
       {doc && <DocumentInfoCard doc={doc} chunkCount={chunksQ.data?.total ?? 0} />}
       <SectionCard>
         <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="text-[14px] font-medium text-stone-900">
-            切块卡片墙
-          </h3>
-          <span className="text-[11.5px] text-stone-500">
-            共 {chunksQ.data?.total ?? 0} 块
-          </span>
+          <h3 className="text-[14px] font-medium text-stone-900">切块卡片墙</h3>
+          <span className="text-[11.5px] text-stone-500">共 {chunksQ.data?.total ?? 0} 块</span>
         </div>
         {chunksQ.isLoading ? (
           <div className="py-10 text-center text-sm text-stone-400">加载中…</div>
@@ -78,22 +74,16 @@ export const KbDocumentDetailPage = () => {
             尚无切块；上传完成后会自动出现
           </div>
         ) : chunks.length > VIRTUAL_THRESHOLD ? (
-          <ChunkVirtualWall chunks={chunks} />
+          <ChunkVirtualWall chunks={chunks} kbId={kbId} docId={docIdNum} />
         ) : (
-          <ChunkGrid chunks={chunks} />
+          <ChunkGrid chunks={chunks} kbId={kbId} docId={docIdNum} />
         )}
       </SectionCard>
     </div>
   );
 };
 
-const Breadcrumb = ({
-  kbId,
-  doc,
-}: {
-  kbId: string | number;
-  doc: DocumentItem | null;
-}) => (
+const Breadcrumb = ({ kbId, doc }: { kbId: string | number; doc: DocumentItem | null }) => (
   <div className="flex items-center gap-2 text-[12.5px] text-stone-500">
     <Link
       to="/kbs"
@@ -106,24 +96,18 @@ const Breadcrumb = ({
       KB {kbId}
     </Link>
     <span className="text-stone-300">/</span>
-    <span className="text-stone-700">
-      {doc ? doc.title : '文档…'}
-    </span>
+    <span className="text-stone-700">{doc ? doc.title : '文档…'}</span>
   </div>
 );
 
-const DocumentInfoCard = ({
-  doc,
-  chunkCount,
-}: {
-  doc: DocumentItem;
-  chunkCount: number;
-}) => {
+const DocumentInfoCard = ({ doc, chunkCount }: { doc: DocumentItem; chunkCount: number }) => {
   const qc = useQueryClient();
   const [tags, setTags] = useState<string[]>(doc.tags);
   const [meta, setMeta] = useState<Record<string, unknown>>(doc.meta ?? {});
-  // 文档刷新时同步内部状态
+  // 文档刷新时同步内部状态（合法的服务端→本地态同步）
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setTags(doc.tags), [doc.tags]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMeta(doc.meta ?? {}), [doc.meta]);
 
   const dirty = useMemo(
@@ -134,8 +118,7 @@ const DocumentInfoCard = ({
   );
 
   const saveMut = useMutation({
-    mutationFn: () =>
-      documentApi.update(doc.kb_id, doc.id, { tags, meta }),
+    mutationFn: () => documentApi.update(doc.kb_id, doc.id, { tags, meta }),
     onSuccess: () => {
       toast.success('文档信息已保存');
       qc.invalidateQueries({ queryKey: ['kb-doc', doc.kb_id, doc.id] });
@@ -156,23 +139,17 @@ const DocumentInfoCard = ({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-stone-500">
-              {SOURCE_ICON[doc.source_type]}
-            </span>
-            <h2 className="truncate text-[16px] font-medium text-stone-900">
-              {doc.title}
-            </h2>
+            <span className="text-stone-500">{SOURCE_ICON[doc.source_type]}</span>
+            <h2 className="truncate text-[16px] font-medium text-stone-900">{doc.title}</h2>
             <StatusBadge status={doc.status} />
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-stone-500">
             <span>类型: {doc.mime_type ?? '—'}</span>
             <span>来源: {doc.source_type}</span>
-            {doc.size_bytes != null && (
-              <span>大小: {(doc.size_bytes / 1024).toFixed(1)} KB</span>
-            )}
+            {doc.size_bytes != null && <span>大小: {(doc.size_bytes / 1024).toFixed(1)} KB</span>}
             <span>
               统计:{' '}
-              <span className="font-mono tnum">
+              <span className="tnum font-mono">
                 {chunkCount} chunks · {doc.token_count} tokens
               </span>
             </span>
@@ -204,11 +181,7 @@ const DocumentInfoCard = ({
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             重新分块
           </Button>
-          <Button
-            size="sm"
-            onClick={() => saveMut.mutate()}
-            disabled={!dirty || saveMut.isPending}
-          >
+          <Button size="sm" onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}>
             保存修改
           </Button>
         </div>
@@ -237,19 +210,21 @@ const StatusBadge = ({ status }: { status: DocumentItem['status'] }) => {
   );
 };
 
-const ChunkGrid = ({ chunks }: { chunks: import('@/system/kbs/types/kb').ChunkItem[] }) => (
+type ChunkListProps = {
+  chunks: import('@/system/kbs/types/kb').ChunkItem[];
+  kbId: import('@/core/types/api').EntityId;
+  docId: import('@/core/types/api').EntityId;
+};
+
+const ChunkGrid = ({ chunks, kbId, docId }: ChunkListProps) => (
   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
     {chunks.map(c => (
-      <ChunkCard key={c.id} chunk={c} />
+      <ChunkCard key={c.id} chunk={c} kbId={kbId} docId={docId} />
     ))}
   </div>
 );
 
-const ChunkVirtualWall = ({
-  chunks,
-}: {
-  chunks: import('@/system/kbs/types/kb').ChunkItem[];
-}) => {
+const ChunkVirtualWall = ({ chunks, kbId, docId }: ChunkListProps) => {
   const parentRef = useRef<HTMLDivElement>(null);
   const rowItems = useMemo(() => {
     const rows: (typeof chunks)[] = [];
@@ -286,7 +261,7 @@ const ChunkVirtualWall = ({
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {rowItems[v.index].map(c => (
-                <ChunkCard key={c.id} chunk={c} />
+                <ChunkCard key={c.id} chunk={c} kbId={kbId} docId={docId} />
               ))}
             </div>
           </div>

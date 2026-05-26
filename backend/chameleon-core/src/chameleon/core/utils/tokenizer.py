@@ -42,6 +42,15 @@ def count_tokens(text: str, *, model: str | None = None) -> int:
     return len(_encoder(model).encode(text))
 
 
+def approx_tokens(text: str) -> int:
+    """免 tiktoken 的粗估 token 数：英文 ≈ 4 字符/token，中文 ≈ 1.5，取折中 1/3。
+
+    ingest 落库 / 段落编辑等高频路径用这个估算口径（避免每块 encode 的开销），
+    务必让所有"写 token_count"的路径走同一函数，否则同一文本会出现不同计数。
+    """
+    return max(1, len(text) // 3) if text else 0
+
+
 def encode(text: str, *, model: str | None = None) -> list[int]:
     return _encoder(model).encode(text or "")
 

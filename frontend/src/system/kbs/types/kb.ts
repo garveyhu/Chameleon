@@ -1,11 +1,6 @@
 import type { EntityId } from '@/core/types/api';
 
-export type KbChunkMode =
-  | 'fixed'
-  | 'paragraph'
-  | 'sentence'
-  | 'regex'
-  | 'token';
+export type KbChunkMode = 'fixed' | 'paragraph' | 'sentence' | 'regex' | 'token';
 
 export interface KbChunkStrategy {
   mode: KbChunkMode;
@@ -41,14 +36,13 @@ export interface ChunkItem {
   content: string;
   token_count: number | null;
   meta: Record<string, unknown> | null;
+  enabled: boolean;
+  keywords: string[] | null;
+  hit_count: number;
   created_at: string;
 }
 
-export type DocumentStatus =
-  | 'pending'
-  | 'processing'
-  | 'ready'
-  | 'failed';
+export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
 export interface DocumentItem {
   id: EntityId;

@@ -58,7 +58,16 @@ class ChunkItem(BaseModel):
     content: str
     token_count: int | None = None
     meta: dict | None = None
+    enabled: bool = True
+    keywords: list | None = None
+    hit_count: int = 0
     created_at: datetime
+
+
+class UpdateChunkRequest(BaseModel):
+    content: str | None = Field(default=None, max_length=20000)
+    keywords: list[str] | None = None
+    enabled: bool | None = None
 
 
 class CreateKbAdminRequest(BaseModel):
@@ -657,6 +666,49 @@ async def list_document_chunks(
             page_size=paged.page_size,
         )
     )
+
+
+@router.post(
+    "/{kb_id}/documents/{doc_id}/chunks/{chunk_id}/update",
+    response_model=Result[ChunkItem],
+)
+async def update_chunk(
+    kb_id: int,
+    doc_id: int,
+    chunk_id: int,
+    req: UpdateChunkRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ChunkItem]:
+    chunk = await document_service.update_chunk(
+        session,
+        kb_id=kb_id,
+        doc_id=doc_id,
+        chunk_id=chunk_id,
+        content=req.content,
+        keywords=req.keywords,
+        enabled=req.enabled,
+    )
+    await session.commit()
+    return Result.ok(ChunkItem.model_validate(chunk))
+
+
+@router.post(
+    "/{kb_id}/documents/{doc_id}/chunks/{chunk_id}/delete",
+    response_model=Result[None],
+)
+async def delete_chunk(
+    kb_id: int,
+    doc_id: int,
+    chunk_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[None]:
+    await document_service.delete_chunk(
+        session, kb_id=kb_id, doc_id=doc_id, chunk_id=chunk_id
+    )
+    await session.commit()
+    return Result.ok(None)
 
 
 # ── KB search playground ──────────────────────────────────

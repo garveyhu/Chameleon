@@ -24,6 +24,7 @@ from chameleon.core.config import inventory
 from chameleon.core.embedding import ImageEmbedder, get_embedding_client
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import Chunk, Document, KnowledgeBase
+from chameleon.core.utils.tokenizer import approx_tokens
 from chameleon.core.vector import ChunkPayload, get_store
 
 # 模块级 semaphore，按 kb_ingest_concurrency() lazy init
@@ -165,7 +166,7 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
             content=ct,
             embedding=vec,
             seq=i,
-            token_count=_approx_tokens(ct),
+            token_count=approx_tokens(ct),
             meta=None,
         )
         for i, (ct, vec) in enumerate(zip(chunks_text, vectors), start=1)
@@ -244,7 +245,7 @@ async def _ingest_image(
                 seq=1,
                 content=result.caption,
                 embedding=result.vector,
-                token_count=_approx_tokens(result.caption),
+                token_count=approx_tokens(result.caption),
                 kind="image",
                 source_url=stable_ref,
                 meta={"caption_source": result.source},
@@ -257,7 +258,7 @@ async def _ingest_image(
         d.status_message = None
         d.kind = "image"
         d.chunk_count = 1
-        d.token_count = _approx_tokens(result.caption)
+        d.token_count = approx_tokens(result.caption)
         d.updated_at = datetime.now(timezone.utc)
         await task_service.mark_success(
             session, task_id, result={"chunks": 1, "kind": "image"}
@@ -293,11 +294,6 @@ async def _fetch_and_parse(
             content_bytes, name=name, mime_type=mime_type or "application/octet-stream"
         )
     raise ValueError(f"unsupported source_type: {source_type}")
-
-
-def _approx_tokens(text: str) -> int:
-    """粗估 token：英文 ≈ 4 字符/token，中文 ≈ 1.5 字符/token；取折中"""
-    return max(1, len(text) // 3)
 
 
 async def _set_doc_status(

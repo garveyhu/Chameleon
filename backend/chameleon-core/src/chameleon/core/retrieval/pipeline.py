@@ -118,7 +118,11 @@ def _build_vector_recall(
                 distance,
             )
             .join(Document, Chunk.doc_id == Document.id)
-            .where(Chunk.kb_id == params.kb_id, Document.deleted_at.is_(None))
+            .where(
+                Chunk.kb_id == params.kb_id,
+                Document.deleted_at.is_(None),
+                Chunk.enabled.is_(True),
+            )
             .order_by(distance.asc())
             .limit(n)
         )
@@ -165,6 +169,7 @@ def _build_keyword_recall(
             .where(
                 Chunk.kb_id == params.kb_id,
                 Document.deleted_at.is_(None),
+                Chunk.enabled.is_(True),
                 tsv_col.op("@@")(ts_query),
             )
             .order_by(rank.desc())

@@ -491,6 +491,68 @@ async def list_document_chunks(
     )
 
 
+# ── 段落级管理（KB-P3：编辑 / 删除 / 启停） ──────────────────
+
+
+async def _get_chunk(
+    session: AsyncSession, *, kb_id: int, doc_id: int, chunk_id: int
+) -> Chunk:
+    chunk = (
+        await session.execute(
+            select(Chunk).where(
+                Chunk.id == chunk_id,
+                Chunk.doc_id == doc_id,
+                Chunk.kb_id == kb_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if chunk is None:
+        raise ValidationError(message=f"切块不存在: {chunk_id}")
+    return chunk
+
+
+async def update_chunk(
+    session: AsyncSession,
+    *,
+    kb_id: int,
+    doc_id: int,
+    chunk_id: int,
+    content: str | None = None,
+    keywords: list | None = None,
+    enabled: bool | None = None,
+) -> Chunk:
+    """编辑切块：改内容则重嵌向量；可改关键词 / 启停。"""
+    chunk = await _get_chunk(session, kb_id=kb_id, doc_id=doc_id, chunk_id=chunk_id)
+    if content is not None and content.strip() and content != chunk.content:
+        from chameleon.core.embedding import get_embedding_client
+        from chameleon.core.utils.tokenizer import approx_tokens
+
+        kb = await _get_kb(session, kb_id)
+        embedder = get_embedding_client(kb.embedding_model)
+        vecs = await embedder.embed([content])
+        if vecs:
+            chunk.embedding = vecs[0]
+        chunk.content = content
+        chunk.token_count = approx_tokens(content)  # 与 ingest 同一口径
+    if keywords is not None:
+        chunk.keywords = keywords
+    if enabled is not None:
+        chunk.enabled = enabled
+    await session.flush()
+    await session.refresh(chunk)
+    return chunk
+
+
+async def delete_chunk(
+    session: AsyncSession, *, kb_id: int, doc_id: int, chunk_id: int
+) -> None:
+    chunk = await _get_chunk(session, kb_id=kb_id, doc_id=doc_id, chunk_id=chunk_id)
+    await session.delete(chunk)
+    doc = await get_document(session, kb_id=kb_id, doc_id=doc_id)
+    doc.chunk_count = max(0, (doc.chunk_count or 0) - 1)
+    await session.flush()
+
+
 # ── search（admin playground） ────────────────────────────
 
 

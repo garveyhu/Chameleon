@@ -94,7 +94,7 @@ class PgVectorStore(VectorStore):
                 Chunk.meta,
                 distance,
             )
-            .where(Chunk.kb_id == kb_id)
+            .where(Chunk.kb_id == kb_id, Chunk.enabled.is_(True))
             .order_by(distance.asc())
             .limit(top_k)
         )

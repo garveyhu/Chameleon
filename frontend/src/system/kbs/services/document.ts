@@ -34,10 +34,7 @@ export const documentApi = {
   upload: (kbId: EntityId, files: File[]) => {
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
-    return postForm<IngestQueued[]>(
-      `/v1/admin/kbs/${kbId}/documents/upload`,
-      fd,
-    );
+    return postForm<IngestQueued[]>(`/v1/admin/kbs/${kbId}/documents/upload`, fd);
   },
 
   fromUrl: (kbId: EntityId, url: string, name?: string) =>
@@ -50,20 +47,21 @@ export const documentApi = {
     }),
 
   delete: (kbId: EntityId, docId: EntityId) =>
-    post<DocumentItem>(
-      `/v1/admin/kbs/${kbId}/documents/${docId}/delete`,
-      {},
-    ),
+    post<DocumentItem>(`/v1/admin/kbs/${kbId}/documents/${docId}/delete`, {}),
 
-  listChunks: (
+  listChunks: (kbId: EntityId, docId: EntityId, params?: { page?: number; page_size?: number }) =>
+    get<PageResult<ChunkItem>>(`/v1/admin/kbs/${kbId}/documents/${docId}/chunks`, { params }),
+
+  /** 段落编辑（改内容重嵌 / 关键词 / 启停） */
+  updateChunk: (
     kbId: EntityId,
     docId: EntityId,
-    params?: { page?: number; page_size?: number },
-  ) =>
-    get<PageResult<ChunkItem>>(
-      `/v1/admin/kbs/${kbId}/documents/${docId}/chunks`,
-      { params },
-    ),
+    chunkId: EntityId,
+    req: { content?: string; keywords?: string[]; enabled?: boolean },
+  ) => post<ChunkItem>(`/v1/admin/kbs/${kbId}/documents/${docId}/chunks/${chunkId}/update`, req),
+
+  deleteChunk: (kbId: EntityId, docId: EntityId, chunkId: EntityId) =>
+    post<null>(`/v1/admin/kbs/${kbId}/documents/${docId}/chunks/${chunkId}/delete`, {}),
 
   search: (kbId: EntityId, req: SearchRequest) =>
     post<SearchHitItem[]>(`/v1/admin/kbs/${kbId}/search`, req),
@@ -76,18 +74,10 @@ export const documentApi = {
       meta?: Record<string, unknown>;
       chunk_strategy?: KbChunkStrategy;
     },
-  ) =>
-    post<DocumentItem>(
-      `/v1/admin/kbs/${kbId}/documents/${docId}/update`,
-      req,
-    ),
+  ) => post<DocumentItem>(`/v1/admin/kbs/${kbId}/documents/${docId}/update`, req),
 
   reindex: (kbId: EntityId, docId: EntityId) =>
-    post<IngestQueued>(
-      `/v1/admin/kbs/${kbId}/documents/${docId}/reindex`,
-      {},
-    ),
+    post<IngestQueued>(`/v1/admin/kbs/${kbId}/documents/${docId}/reindex`, {}),
 
-  reindexAll: (kbId: EntityId) =>
-    post<IngestQueued[]>(`/v1/admin/kbs/${kbId}/reindex-all`, {}),
+  reindexAll: (kbId: EntityId) => post<IngestQueued[]>(`/v1/admin/kbs/${kbId}/reindex-all`, {}),
 };

@@ -123,6 +123,15 @@ class Chunk(Base, TimestampMixin):
     )
     # P22.4：原始资源 URL（image 上传后填 MinIO URL；text chunk 通常为空）
     source_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # KB-P3：段落级管理（用户启停 / 关键词 / 命中数）
+    # enabled=False 的 chunk 不参与检索（与 quarantined 区分：这是用户显式停用，不会被物理删）
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    keywords: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    hit_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),
