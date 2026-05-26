@@ -41,6 +41,7 @@ const MODES: { value: KbChunkMode; label: string }[] = [
   { value: 'regex', label: '自定义正则' },
   { value: 'token', label: '按 Token' },
   { value: 'parent_child', label: '父子分层' },
+  { value: 'qa', label: 'QA 问答' },
 ];
 
 export const KbChunkingPreviewPage = () => {
@@ -263,6 +264,13 @@ export const KbChunkingPreviewPage = () => {
                   预览显示 child 小块；chunk_size 即 child 大小。
                 </div>
               </Field>
+            )}
+
+            {strategy.mode === 'qa' && (
+              <div className="rounded-md border border-amber-200 bg-amber-50/50 px-2.5 py-2 text-[10.5px] leading-snug text-stone-600">
+                QA 在 ingest 时由 LLM 对每个基础块生成问答对；预览仅展示「将被 QA 的基础块」（不跑
+                LLM）。
+              </div>
             )}
 
             <Field label="文本清洗">

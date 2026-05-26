@@ -93,6 +93,10 @@ def split(text: str, strategy: dict[str, Any] | None) -> list[str]:
     chunk_size = int(cfg.get("chunk_size") or _DEFAULT_CHUNK_SIZE)
     overlap = int(cfg.get("overlap") or _DEFAULT_OVERLAP)
 
+    if mode == "qa":
+        # QA 实际在 ingest 时由 LLM 对每个基础块生成问答对；这里按段落返回
+        # 「将被 QA 的基础块」供预览（预览不跑 LLM）
+        return _fold_overflow(_paragraph(text), chunk_size, overlap)
     if mode == "fixed":
         return _fixed(text, chunk_size, overlap)
     if mode == "paragraph":

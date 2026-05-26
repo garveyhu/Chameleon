@@ -1,6 +1,13 @@
 import type { EntityId } from '@/core/types/api';
 
-export type KbChunkMode = 'fixed' | 'paragraph' | 'sentence' | 'regex' | 'token' | 'parent_child';
+export type KbChunkMode =
+  | 'fixed'
+  | 'paragraph'
+  | 'sentence'
+  | 'regex'
+  | 'token'
+  | 'parent_child'
+  | 'qa';
 
 export interface KbChunkStrategy {
   mode: KbChunkMode;

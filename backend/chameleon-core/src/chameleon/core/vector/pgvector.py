@@ -50,6 +50,7 @@ class PgVectorStore(VectorStore):
                         token_count=c.token_count,
                         meta=c.meta,
                         parent_content=c.parent_content,
+                        qa_question=c.qa_question,
                     )
                     for c in chunks
                 )

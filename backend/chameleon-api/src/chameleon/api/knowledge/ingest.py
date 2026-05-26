@@ -130,17 +130,26 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
     if not text or not text.strip():
         raise ValueError("document content is empty after parsing")
 
-    # 4. chunk（按 strategy 分发：fixed / paragraph / sentence / regex / parent_child）
+    # 4. chunk（按 strategy 分发：fixed/paragraph/sentence/regex/parent_child/qa）
     #    parent_child：只把 child 落库（精准召回），各 child 带所属 parent 大块作上下文
-    if active_strategy.get("mode") == "parent_child":
+    #    qa：对每个基础块用 LLM 生成问答对，content="Q..\nA.."，qa_question=问句
+    chunk_mode = active_strategy.get("mode")
+    qa_questions: list[str | None]
+    if chunk_mode == "parent_child":
         pairs = chunker.split_parent_child(text, active_strategy)
         chunks_text = [c for _p, children in pairs for c in children]
         parents_for_chunk: list[str | None] = [
             parent for parent, children in pairs for _c in children
         ]
+        qa_questions = [None] * len(chunks_text)
+    elif chunk_mode == "qa":
+        base_chunks = chunker.split(text, active_strategy)
+        chunks_text, qa_questions = await _generate_qa_chunks(base_chunks)
+        parents_for_chunk = [None] * len(chunks_text)
     else:
         chunks_text = chunker.split(text, active_strategy)
         parents_for_chunk = [None] * len(chunks_text)
+        qa_questions = [None] * len(chunks_text)
     if not chunks_text:
         raise ValueError("chunker produced no chunks")
     logger.info(
@@ -178,9 +187,10 @@ async def _execute(*, task_id: int, document_id: int, kb_id: int) -> None:
             token_count=approx_tokens(ct),
             meta=None,
             parent_content=parent,
+            qa_question=qa,
         )
-        for i, (ct, vec, parent) in enumerate(
-            zip(chunks_text, vectors, parents_for_chunk), start=1
+        for i, (ct, vec, parent, qa) in enumerate(
+            zip(chunks_text, vectors, parents_for_chunk, qa_questions), start=1
         )
     ]
     await store.upsert(kb_id=kb_id, doc_id=document_id, chunks=payloads)
@@ -306,6 +316,75 @@ async def _fetch_and_parse(
             content_bytes, name=name, mime_type=mime_type or "application/octet-stream"
         )
     raise ValueError(f"unsupported source_type: {source_type}")
+
+
+async def _generate_qa_chunks(
+    base_chunks: list[str],
+) -> tuple[list[str], list[str | None]]:
+    """对每个基础块用 LLM 生成问答对；返回 (contents, qa_questions)。
+
+    content = "Q: ..\nA: .."（问句一并 embed，查询语义命中问句）；
+    LLM 全部失败 / 未配置时回退：基础块当普通块（保证 ingest 不空）。
+    """
+    contents: list[str] = []
+    questions: list[str | None] = []
+    for block in base_chunks:
+        for q, a in await _generate_qa(block):
+            contents.append(f"Q: {q}\nA: {a}")
+            questions.append(q)
+    if not contents:
+        logger.warning("QA 生成无结果 | 回退基础块（共 {}）", len(base_chunks))
+        return list(base_chunks), [None] * len(base_chunks)
+    return contents, questions
+
+
+async def _generate_qa(text: str) -> list[tuple[str, str]]:
+    from langchain_core.messages import HumanMessage
+
+    from chameleon.core.components.llms.factory import resolve_llm
+
+    prompt = (
+        "你是知识库问答对生成器。根据【文本】生成 2-4 个高质量问答对，"
+        "问题覆盖关键信息，答案简洁准确且仅依据文本。"
+        '严格只返回 JSON 数组，每项形如 {"q":"问题","a":"答案"}，'
+        "不要任何额外文字或代码块标记。\n\n【文本】\n" + text
+    )
+    try:
+        client = await resolve_llm()
+        resp = await client.ainvoke([HumanMessage(content=prompt)])
+        raw = resp.content if isinstance(resp.content, str) else str(resp.content)
+        return _parse_qa(raw)
+    except Exception:
+        logger.exception("QA 生成失败 | 跳过该块")
+        return []
+
+
+def _parse_qa(raw: str) -> list[tuple[str, str]]:
+    """从 LLM 输出解析 [{q,a}]；容错代码块包裹 / 前后多余文本。"""
+    import json
+    import re as _re
+
+    candidates = [raw.strip()]
+    m = _re.search(r"\[.*\]", raw, _re.DOTALL)
+    if m:
+        candidates.append(m.group(0))
+    for c in candidates:
+        try:
+            data = json.loads(c)
+        except Exception:
+            continue
+        if not isinstance(data, list):
+            continue
+        out: list[tuple[str, str]] = []
+        for d in data:
+            if not isinstance(d, dict):
+                continue
+            q = str(d.get("q") or d.get("question") or "").strip()
+            a = str(d.get("a") or d.get("answer") or "").strip()
+            if q and a:
+                out.append((q, a))
+        return out
+    return []
 
 
 async def _set_doc_status(

@@ -17,6 +17,8 @@ class ChunkPayload(BaseModel):
     meta: dict[str, Any] | None = None
     #: parent-child 分层：child 所属 parent 大块全文（命中时作上下文返回）
     parent_content: str | None = None
+    #: QA 分块：本块对应的问句（展示用；content 含 Q+A 一并 embed）
+    qa_question: str | None = None
 
 
 class ChunkHit(BaseModel):

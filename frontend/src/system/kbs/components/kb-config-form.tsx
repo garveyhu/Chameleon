@@ -47,6 +47,11 @@ const MODES: { value: KbChunkStrategy['mode']; label: string; desc: string }[] =
     label: '父子分层',
     desc: 'child 小块精准召回，命中返回所属 parent 大块作上下文',
   },
+  {
+    value: 'qa',
+    label: 'QA 问答',
+    desc: 'ingest 时 LLM 对每段生成问答对，按问句召回（需已配置 chat 模型）',
+  },
 ];
 
 export const KbConfigForm = ({ kb }: Props) => {
@@ -202,6 +207,14 @@ export const KbConfigForm = ({ kb }: Props) => {
           <div className="mt-1 text-[10.5px] text-stone-500">
             上方 chunk_size 即 child 小块大小（精准召回单位）；命中返回所属 parent 大块作上下文。
           </div>
+        </section>
+      )}
+
+      {strategy.mode === 'qa' && (
+        <section className="rounded-md border border-amber-200 bg-amber-50/50 px-3 py-2 text-[11.5px] leading-relaxed text-stone-600">
+          QA 模式：ingest 时按上方基础分块（段落）切块，再用<b>默认 chat 模型</b>对每块 生成 2–4
+          个问答对，落库为「Q: …/A: …」并按问句语义召回。生成走 LLM、耗时随 文档增长；未配置 chat
+          模型时自动回退为普通分块。
         </section>
       )}
 
