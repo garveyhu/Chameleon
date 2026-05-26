@@ -18,7 +18,10 @@ from chameleon.core.api.exceptions import (
 )
 
 DEFAULT_TIMEOUT = 60.0
-_BATCH_SIZE_MAX = 64  # 单次请求最多 64 条文本（OpenAI 上限 2048，但低也无碍）
+# DashScope/Qwen embedding 单批硬上限 25（超出报 400 InvalidParameter）；OpenAI 可更大，
+# 但 25 通用安全。大文档按此分批多发几次请求即可。需要更高吞吐的纯 OpenAI 部署可在
+# model.json 用 batch_size 覆盖。
+_DEFAULT_BATCH_SIZE = 25
 
 
 class OpenAICompatEmbedding:
@@ -32,14 +35,14 @@ class OpenAICompatEmbedding:
         model: str,
         dim: int,
         timeout: float = DEFAULT_TIMEOUT,
-        batch_size: int = _BATCH_SIZE_MAX,
+        batch_size: int = _DEFAULT_BATCH_SIZE,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.dim = dim
         self.timeout = timeout
-        self.batch_size = min(batch_size, _BATCH_SIZE_MAX)
+        self.batch_size = max(1, batch_size)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:

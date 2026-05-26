@@ -50,11 +50,13 @@ def get_embedding_client(model: str | None = None) -> EmbeddingClient:
         )
 
     base_url, api_key = inventory.llm_provider_credential(provider)
+    batch_size = cfg.get("batch_size")
     client = OpenAICompatEmbedding(
         base_url=base_url,
         api_key=api_key,
         model=name,
         dim=int(dim),
+        **({"batch_size": int(batch_size)} if batch_size else {}),
     )
     _CACHE[name] = client
     return client
