@@ -73,6 +73,10 @@ class Document(Base, TimestampMixin, SoftDeleteMixin):
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     token_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # 文档级启停：enabled=false 时整篇文档的 chunk 不参与检索（与 chunk.enabled 叠加）
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
     tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     # null = 用 KB 的 chunk_strategy；非 null 覆盖
     chunk_strategy: Mapped[dict | None] = mapped_column(JSON, nullable=True)

@@ -11,7 +11,7 @@ import mimetypes
 from datetime import datetime, timezone
 
 from loguru import logger
-from sqlalchemy import cast, func, select
+from sqlalchemy import cast, func, select, update
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -312,6 +312,14 @@ async def create_upload_documents_bulk(
 # ── 列表 / 详情 / 删除 / 状态 ────────────────────────────
 
 
+#: 列表可排序列白名单（前端传 sort_by → ORM 列）
+_DOC_SORT_COLUMNS = {
+    "created_at": Document.created_at,
+    "token_count": Document.token_count,
+    "chunk_count": Document.chunk_count,
+}
+
+
 async def list_documents(
     session: AsyncSession,
     *,
@@ -319,6 +327,8 @@ async def list_documents(
     page: PageParams,
     status: str | None = None,
     tag: str | None = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
 ) -> tuple[KnowledgeBase, PageResult[Document]]:
     kb = await _get_kb(session, kb_id)
     stmt = select(Document).where(
@@ -332,10 +342,12 @@ async def list_documents(
     total = (
         await session.execute(select(func.count()).select_from(stmt.subquery()))
     ).scalar_one()
+    sort_col = _DOC_SORT_COLUMNS.get(sort_by, Document.created_at)
+    sort_expr = sort_col.asc() if order == "asc" else sort_col.desc()
     rows = (
         (
             await session.execute(
-                stmt.order_by(Document.created_at.desc())
+                stmt.order_by(sort_expr, Document.id.desc())
                 .offset(page.offset)
                 .limit(page.limit)
             )
@@ -374,8 +386,9 @@ async def update_document(
     tags: list[str] | None = None,
     meta: dict | None = None,
     chunk_strategy: dict | None = None,
+    enabled: bool | None = None,
 ) -> Document:
-    """更新 document tag / metadata / chunk_strategy；不重新分块。"""
+    """更新 document tag / metadata / chunk_strategy / 启停；不重新分块。"""
     row = await get_document(session, kb_id=kb_id, doc_id=doc_id)
     if tags is not None:
         row.tags = list(tags)
@@ -383,9 +396,30 @@ async def update_document(
         row.meta = {**(row.meta or {}), **meta}
     if chunk_strategy is not None:
         row.chunk_strategy = chunk_strategy
+    if enabled is not None:
+        row.enabled = enabled
     await session.flush()
     await session.refresh(row)
     return row
+
+
+async def set_documents_enabled(
+    session: AsyncSession, *, kb_id: int, doc_ids: list[int], enabled: bool
+) -> int:
+    """批量启停文档；返回受影响行数。"""
+    if not doc_ids:
+        return 0
+    result = await session.execute(
+        update(Document)
+        .where(
+            Document.kb_id == kb_id,
+            Document.id.in_(doc_ids),
+            Document.deleted_at.is_(None),
+        )
+        .values(enabled=enabled)
+    )
+    await session.flush()
+    return int(result.rowcount or 0)
 
 
 async def reindex_document(

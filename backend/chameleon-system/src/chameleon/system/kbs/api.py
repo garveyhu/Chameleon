@@ -104,6 +104,7 @@ class DocumentAdminItem(BaseModel):
     status_message: str | None = None
     chunk_count: int = 0
     token_count: int = 0
+    enabled: bool = True
     tags: list = Field(default_factory=list)
     chunk_strategy: dict | None = None
     meta: dict | None = None
@@ -140,6 +141,18 @@ class UpdateDocumentRequest(BaseModel):
     tags: list[str] | None = None
     meta: dict | None = None
     chunk_strategy: dict | None = None
+    enabled: bool | None = None
+
+
+class BatchDocumentsRequest(BaseModel):
+    action: str = Field(pattern="^(enable|disable|delete|reindex)$")
+    doc_ids: list[int] = Field(min_length=1)
+
+
+class BatchDocumentsResult(BaseModel):
+    action: str
+    affected: int
+    queued: list[IngestQueued] = Field(default_factory=list)
 
 
 class SearchRequest(BaseModel):
@@ -435,6 +448,10 @@ async def list_documents(
     page_size: int = Query(20, ge=1, le=200),
     status: str | None = Query(None),
     tag: str | None = Query(None),
+    sort_by: str = Query(
+        "created_at", pattern="^(created_at|token_count|chunk_count)$"
+    ),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("kbs:read")),
 ) -> Result[PageResult[DocumentAdminItem]]:
@@ -444,6 +461,8 @@ async def list_documents(
         page=PageParams(page=page, page_size=page_size),
         status=status,
         tag=tag,
+        sort_by=sort_by,
+        order=order,
     )
     return Result.ok(
         PageResult(
@@ -567,6 +586,7 @@ async def update_document(
         tags=req.tags,
         meta=req.meta,
         chunk_strategy=req.chunk_strategy,
+        enabled=req.enabled,
     )
     return Result.ok(DocumentAdminItem.model_validate(row))
 
@@ -635,6 +655,68 @@ async def delete_document(
         request_id=audit.request_id,
     )
     return Result.ok(DocumentAdminItem.model_validate(row))
+
+
+@router.post(
+    "/{kb_id}/documents/batch", response_model=Result[BatchDocumentsResult]
+)
+async def batch_documents(
+    kb_id: int,
+    req: BatchDocumentsRequest,
+    session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[BatchDocumentsResult]:
+    """批量启停 / 删除 / 重建文档。reindex 在 commit 后异步排队。"""
+    if req.action in ("enable", "disable"):
+        affected = await document_service.set_documents_enabled(
+            session,
+            kb_id=kb_id,
+            doc_ids=req.doc_ids,
+            enabled=req.action == "enable",
+        )
+        return Result.ok(
+            BatchDocumentsResult(action=req.action, affected=affected)
+        )
+
+    if req.action == "delete":
+        for doc_id in req.doc_ids:
+            await document_service.delete_document(
+                session, kb_id=kb_id, doc_id=doc_id
+            )
+        await write_audit_log(
+            session,
+            actor_user_id=audit.actor_user_id,
+            actor_username=audit.actor_username,
+            action="kb_document.batch_delete",
+            resource_type="kb_document",
+            resource_id=kb_id,
+            after={"kb_id": kb_id, "doc_ids": req.doc_ids},
+            ip=audit.ip,
+            user_agent=audit.user_agent,
+            request_id=audit.request_id,
+        )
+        return Result.ok(
+            BatchDocumentsResult(action="delete", affected=len(req.doc_ids))
+        )
+
+    # reindex：先 commit 再异步排队（与单文档 reindex 一致）
+    queued: list[IngestQueued] = []
+    for doc_id in req.doc_ids:
+        doc_id_out, task_id = await document_service.reindex_document(
+            session, kb_id=kb_id, doc_id=doc_id
+        )
+        queued.append(IngestQueued(document_id=doc_id_out, task_id=task_id))
+    await session.commit()
+    for q in queued:
+        document_service.spawn_ingest(
+            task_id=q.task_id, document_id=q.document_id, kb_id=kb_id
+        )
+    return Result.ok(
+        BatchDocumentsResult(
+            action="reindex", affected=len(queued), queued=queued
+        )
+    )
 
 
 # ── Document chunks（卡片墙用） ───────────────────────────

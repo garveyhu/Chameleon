@@ -11,6 +11,14 @@ import type {
   SearchRequest,
 } from '@/system/kbs/types/kb';
 
+export type BatchAction = 'enable' | 'disable' | 'delete' | 'reindex';
+
+export interface BatchResult {
+  action: BatchAction;
+  affected: number;
+  queued: IngestQueued[];
+}
+
 export const documentApi = {
   list: (
     kbId: EntityId,
@@ -19,6 +27,8 @@ export const documentApi = {
       page_size?: number;
       status?: DocumentStatus;
       tag?: string;
+      sort_by?: 'created_at' | 'token_count' | 'chunk_count';
+      order?: 'asc' | 'desc';
     },
   ) =>
     get<PageResult<DocumentItem>>(`/v1/admin/kbs/${kbId}/documents`, {
@@ -73,8 +83,16 @@ export const documentApi = {
       tags?: string[];
       meta?: Record<string, unknown>;
       chunk_strategy?: KbChunkStrategy;
+      enabled?: boolean;
     },
   ) => post<DocumentItem>(`/v1/admin/kbs/${kbId}/documents/${docId}/update`, req),
+
+  /** 批量启停 / 删除 / 重建 */
+  batch: (kbId: EntityId, action: BatchAction, docIds: EntityId[]) =>
+    post<BatchResult>(`/v1/admin/kbs/${kbId}/documents/batch`, {
+      action,
+      doc_ids: docIds,
+    }),
 
   reindex: (kbId: EntityId, docId: EntityId) =>
     post<IngestQueued>(`/v1/admin/kbs/${kbId}/documents/${docId}/reindex`, {}),

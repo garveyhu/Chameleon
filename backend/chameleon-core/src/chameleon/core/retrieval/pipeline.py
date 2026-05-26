@@ -121,6 +121,7 @@ def _build_vector_recall(
             .where(
                 Chunk.kb_id == params.kb_id,
                 Document.deleted_at.is_(None),
+                Document.enabled.is_(True),
                 Chunk.enabled.is_(True),
             )
             .order_by(distance.asc())
@@ -169,6 +170,7 @@ def _build_keyword_recall(
             .where(
                 Chunk.kb_id == params.kb_id,
                 Document.deleted_at.is_(None),
+                Document.enabled.is_(True),
                 Chunk.enabled.is_(True),
                 tsv_col.op("@@")(ts_query),
             )

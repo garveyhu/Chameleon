@@ -56,6 +56,7 @@ export interface DocumentItem {
   status_message: string | null;
   chunk_count: number;
   token_count: number;
+  enabled: boolean;
   tags: string[];
   chunk_strategy: KbChunkStrategy | null;
   meta: Record<string, unknown> | null;
