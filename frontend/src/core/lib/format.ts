@@ -22,6 +22,28 @@ export function formatRelative(s: string | Date | null | undefined): string {
   return dayjs(s).fromNow();
 }
 
+/** 阅读感优化的相对时间：用于卡片等"更新于 X 前"的弱时间场景。
+ *  比 dayjs.fromNow 的"几秒前/几分钟"更克制、口语：
+ *  刚刚 / X 分钟前 / X 小时前 / 昨天 / X 天前 / X 个月前 / X 年前。 */
+export function formatRelativeReadable(s: string | Date | null | undefined): string {
+  if (!s) return '—';
+  const then = dayjs(s);
+  if (!then.isValid()) return '—';
+  const now = dayjs();
+  const sec = now.diff(then, 'second');
+  if (sec < 60) return '刚刚'; // 含未来时间 / 时钟漂移的负值兜底
+  const min = now.diff(then, 'minute');
+  if (min < 60) return `${min} 分钟前`;
+  const hour = now.diff(then, 'hour');
+  if (hour < 24) return `${hour} 小时前`;
+  const day = now.diff(then, 'day');
+  if (day === 1) return '昨天';
+  if (day < 30) return `${day} 天前`;
+  const month = now.diff(then, 'month');
+  if (month < 12) return `${month || 1} 个月前`;
+  return `${now.diff(then, 'year')} 年前`;
+}
+
 export function formatNumber(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—';
   return new Intl.NumberFormat('en-US').format(n);

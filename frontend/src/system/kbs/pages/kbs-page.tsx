@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Clock,
   Database,
   FileText,
   ImagePlus,
@@ -33,6 +34,7 @@ import {
 } from '@/core/components/ui/modal';
 import { Textarea } from '@/core/components/ui/textarea';
 import { confirm } from '@/core/lib/confirm';
+import { formatRelativeReadable } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
@@ -176,7 +178,10 @@ export const KbsPage = () => {
                 <Layers className="h-3 w-3" />
                 {k.chunk_count} 切块
               </span>
-              <span className="ml-auto truncate font-mono">{k.embedding_model}</span>
+              <span className="ml-auto inline-flex items-center gap-1 truncate">
+                <Clock className="h-3 w-3" />
+                更新于 {formatRelativeReadable(k.updated_at)}
+              </span>
             </div>
           </div>
         ))}
