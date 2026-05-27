@@ -97,6 +97,7 @@ async def invoke(
     *,
     current_app: CurrentApp,
     request_id: str,
+    channel: str = "api",
 ) -> InvokeResponse:
     _assert_agent_scope(current_app, agent_key)
     start_ts = time.monotonic()
@@ -203,6 +204,7 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
+            channel=channel,
         )
         raise
     except Exception:
@@ -219,6 +221,7 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
+            channel=channel,
         )
         raise
 
@@ -265,6 +268,7 @@ async def invoke(
         spans=rec.dump(),
         request_payload=request_payload,
         response_payload=response_payload,
+        channel=channel,
     )
 
     return InvokeResponse(
@@ -357,6 +361,7 @@ async def stream_invoke(
     *,
     current_app: CurrentApp,
     request_id: str,
+    channel: str = "api",
 ) -> AsyncIterator[StreamEvent]:
     """流式编排：边流边落库
 
@@ -464,6 +469,7 @@ async def stream_invoke(
             current_app=current_app,
             agent_key=agent_key,
             request_id=request_id,
+            channel=channel,
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec,
             request_payload=request_payload,
@@ -562,6 +568,7 @@ async def _stream_finalize(
     current_app: CurrentApp,
     agent_key: str,
     request_id: str,
+    channel: str = "api",
     duration_ms: int,
     spans: SpanRecorder,
     request_payload: dict,
@@ -611,6 +618,7 @@ async def _stream_finalize(
                 agent_key=agent_key,
                 session_id=conv_session_id,
                 stream=True,
+                channel=channel,
                 success=not failed,
                 code=fail_code if failed else ResultCode.Success.value,
                 error_message=fail_msg,

@@ -163,6 +163,8 @@ async def record_call(
     model_code: str | None = None,
     # P23.C1 计费多维：user 落库（API-key 调用 user_id 可能为 NULL）
     user_id: int | None = None,
+    # 会话账本：调用来源渠道（api/openai/embed/playground/internal）
+    channel: str | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -200,6 +202,7 @@ async def record_call(
         session_id=session_id,
         user_id=user_id,
         model_code=model_code,
+        channel=channel,
         stream=stream,
         success=success,
         code=code,

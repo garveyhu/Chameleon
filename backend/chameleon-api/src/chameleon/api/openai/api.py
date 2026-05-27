@@ -62,7 +62,7 @@ async def chat_completions(
 
         async def gen() -> AsyncIterator[str]:
             async for ev in service.stream_invoke(
-                req.model, ir, current_app=app, request_id=request_id
+                req.model, ir, current_app=app, request_id=request_id, channel="openai"
             ):
                 if ev.type.value == "delta":
                     text = ev.data.get("text", "")
@@ -82,7 +82,7 @@ async def chat_completions(
         )
 
     resp = await service.invoke(
-        session, req.model, ir, current_app=app, request_id=request_id
+        session, req.model, ir, current_app=app, request_id=request_id, channel="openai"
     )
     usage = resp.usage
     completion = {

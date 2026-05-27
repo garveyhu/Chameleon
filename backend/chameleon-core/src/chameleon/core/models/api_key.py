@@ -101,6 +101,9 @@ class CallLog(Base):
     )
     # model_code：实际命中的模型编码，cost dashboard 按模型聚合
     model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # channel：调用来源渠道（api/openai/embed/playground/internal），入口处盖章；
+    # 会话账本按渠道筛选/溯源。NULL = 未标注（如图内部子观测）。
+    channel: Mapped[str | None] = mapped_column(String(16), nullable=True)
     stream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     code: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -143,4 +146,5 @@ class CallLog(Base):
         # P23.C1 计费多维聚合（C8 cost dashboard group by dim 在时间窗内）
         Index("ix_call_logs_user_created", "user_id", "created_at"),
         Index("ix_call_logs_model_created", "model_code", "created_at"),
+        Index("ix_call_logs_channel_created", "channel", "created_at"),
     )

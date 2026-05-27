@@ -146,6 +146,7 @@ async def _write_log(
             app_id=app_key,
             agent_key=agent_key,
             session_id=session_id,
+            channel="embed",
             stream=stream,
             success=success,
             code=code,
