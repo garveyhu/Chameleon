@@ -31,7 +31,7 @@ from chameleon.core.infra.jwt import (
     JwtInvalidToken,
     decode_token_with_blacklist,
 )
-from chameleon.core.models import ApiKey, App
+from chameleon.core.models import ApiKey
 
 _ALPHABET = string.ascii_letters + string.digits
 _KEY_BODY_LEN = 40
@@ -46,8 +46,6 @@ class CurrentApp:
     app_id: str
     name: str
     scopes: list[str]
-    # P19.3 PR #39：app → workspace 归属，配额检查 / 业务过滤都靠这个
-    workspace_id: int | None = None
     # 作用域（按领域）：app = 通吃；agent/kb = 仅 scope_ref 指向的目标。
     scope_type: str = "app"
     scope_ref: str | None = None
@@ -127,21 +125,12 @@ async def current_app(
     row.last_used_at = datetime.now(timezone.utc)
     # 不显式 commit，由 get_session 上下文管理
 
-    # P19.3：解析 app_id（slug）→ workspace_id（业务路径配额 / 过滤靠这个）
-    # ApiKey.app_id 存的是 App.app_key（slug），不是 App.id
-    ws_id = (
-        await session.execute(
-            select(App.workspace_id).where(App.app_key == row.app_id)
-        )
-    ).scalar_one_or_none()
-
     logger.debug("auth ok | app_id={} | scopes={}", row.app_id, row.scopes)
     return CurrentApp(
         id=row.id,
         app_id=row.app_id,
         name=row.name,
         scopes=list(row.scopes or []),
-        workspace_id=ws_id,
         scope_type=row.scope_type,
         scope_ref=row.scope_ref,
     )
@@ -154,7 +143,7 @@ async def current_app_or_admin(
     """业务 api_key OR admin JWT 双轨鉴权。
 
     admin UI（管理后台 / Playground / 对话查询）走 JWT；外部业务方走 api_key。
-    JWT 解码成功 → 返合成 CurrentApp（scopes=["admin"]，workspace_id=None 全量视角）；
+    JWT 解码成功 → 返合成 CurrentApp（scopes=["admin"]）；
     否则交给 api_key 解析路径。
     """
     if not authorization or not authorization.startswith("Bearer "):
@@ -169,7 +158,6 @@ async def current_app_or_admin(
                 app_id="admin",
                 name=payload.get("username") or "admin",
                 scopes=["admin"],
-                workspace_id=None,
             )
     except (JwtInvalidToken, Exception):
         pass

@@ -44,13 +44,6 @@ from chameleon.core.models.user import (
     User,
     UserRole,
 )
-from chameleon.core.models.workspace import (
-    Membership,
-    Team,
-    Workspace,
-    WorkspaceGroup,
-    WorkspaceQuota,
-)
 
 __all__ = [
     # 鉴权域
@@ -104,12 +97,6 @@ __all__ = [
     # 插件
     "PluginInstance",
     "PluginRegistryEntry",
-    # 多租户
-    "Workspace",
-    "WorkspaceGroup",
-    "Team",
-    "Membership",
-    "WorkspaceQuota",
     # 杂项
     "AuditLog",
     "Setting",

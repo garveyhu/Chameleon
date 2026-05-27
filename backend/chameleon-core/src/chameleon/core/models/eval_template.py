@@ -21,10 +21,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, TimestampMixin, snowflake_pk
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class EvalTemplate(Base, TimestampMixin, WorkspaceScopedMixin):
+class EvalTemplate(Base, TimestampMixin):
     """评判模板（多 metric 加权 + 阈值）"""
 
     __tablename__ = "eval_templates"
@@ -44,8 +43,8 @@ class EvalTemplate(Base, TimestampMixin, WorkspaceScopedMixin):
     )
 
     __table_args__ = (
-        # 同 workspace 内 (name, version) 唯一；不同 version 共存以支持 freeze
+        # (name, version) 唯一；不同 version 共存以支持 freeze
         UniqueConstraint(
-            "workspace_id", "name", "version", name="uq_eval_templates_ws_name_ver"
+            "name", "version", name="uq_eval_templates_name_ver"
         ),
     )

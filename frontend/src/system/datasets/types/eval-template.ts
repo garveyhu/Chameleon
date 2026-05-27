@@ -15,7 +15,6 @@ export interface EvalTemplateItem {
   metrics: MetricSpec[];
   judge_provider: string | null;
   version: number;
-  workspace_id: EntityId | null;
   created_at: string;
   updated_at: string;
 }

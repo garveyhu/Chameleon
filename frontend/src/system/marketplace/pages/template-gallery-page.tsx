@@ -199,7 +199,7 @@ const TemplateCard = ({ template, onInstall, installing }: CardProps) => {
           title={
             !template.verified
               ? '此模板未审核；安装前请确认 spec'
-              : '克隆模板到当前 workspace'
+              : '克隆模板'
           }
         >
           <Download className="mr-1 h-3 w-3" />

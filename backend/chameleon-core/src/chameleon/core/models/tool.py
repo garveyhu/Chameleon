@@ -18,10 +18,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, TimestampMixin, snowflake_pk
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class ToolInstance(Base, TimestampMixin, WorkspaceScopedMixin):
+class ToolInstance(Base, TimestampMixin):
     """admin 配的 tool 运行时实例（一个 tool_key 一条记录）"""
 
     __tablename__ = "tool_instances"

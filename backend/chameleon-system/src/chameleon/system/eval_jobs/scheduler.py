@@ -53,35 +53,6 @@ async def start() -> None:
             _register(row.id, row.cron_expr)
     logger.info("eval_jobs scheduler reloaded {} jobs", len(rows))
 
-    # P19.3 PR #39：注册每日凌晨配额跨期 reset
-    _register_quota_reset()
-
-
-def _register_quota_reset() -> None:
-    assert _scheduler is not None
-    _scheduler.add_job(
-        _quota_reset_callback,
-        trigger=CronTrigger.from_crontab("5 0 * * *"),  # 每天 00:05 UTC
-        id="workspace-quota-reset",
-        replace_existing=True,
-        misfire_grace_time=3600,
-        coalesce=True,
-        max_instances=1,
-    )
-
-
-async def _quota_reset_callback() -> None:
-    """cron 回调：扫所有 workspace_quotas，跨日 reset request_used_today、
-    跨月 reset token_used_current_month"""
-    from chameleon.system.workspaces import quota_service
-
-    async with AsyncSessionLocal() as session:
-        try:
-            affected = await quota_service.reset_all_periods(session)
-            logger.info("workspace_quota reset done | affected={}", affected)
-        except Exception:
-            logger.exception("workspace_quota reset failed")
-
 
 async def shutdown() -> None:
     global _scheduler

@@ -171,12 +171,10 @@ async def record_call(
     context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
     """
     # P22.1：按当时生效价目算 cost（model_code 缺失 / 价目缺失则保持 NULL）
-    # P23.C5：cost_usd 存原始模型成本（不含倍率）；group_ratio 单独存（红线）
     cost_usd = None
-    group_ratio = None
     if model_code and (prompt_tokens or completion_tokens):
         try:
-            from chameleon.system.pricing import calc_cost, group_ratio_for_app
+            from chameleon.system.pricing import calc_cost
 
             cost_usd = await calc_cost(
                 session,
@@ -184,8 +182,6 @@ async def record_call(
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
             )
-            if app_id:
-                group_ratio = await group_ratio_for_app(session, app_id)
         except Exception:
             # cost 计算失败不阻塞 call_log 写入
             logger.exception(
@@ -210,7 +206,6 @@ async def record_call(
         completion_tokens=completion_tokens,
         total_tokens=total_tokens,
         cost_usd=cost_usd,
-        group_ratio=group_ratio,
         spans=spans,
         request_payload=request_payload,
         response_payload=response_payload,
@@ -220,28 +215,3 @@ async def record_call(
     )
     session.add(log)
     await session.flush()
-
-    # P19.3 PR #39：trace 根 + 有 app_id 时累加 workspace 配额
-    # parent_id IS NULL = 顶层调用（trace root），子 span 不重复算请求数
-    if parent_id is None and app_id:
-        try:
-            from chameleon.system.workspaces.quota_service import (
-                increment_usage,
-                settle_request,
-                workspace_id_for_app,
-            )
-
-            ws_id = await workspace_id_for_app(session, app_id)
-            # 实际用量原子落 SQL（committed 真相）
-            await increment_usage(
-                session, ws_id, total_tokens=total_tokens, requests=1
-            )
-            # C4 post-consume：释放本次请求的预扣（差额自然返还）
-            await settle_request(session, ws_id, request_id=request_id)
-        except Exception:
-            # 计数失败绝不污染主请求路径；call_log 已写入
-            logger.exception(
-                "quota increment failed | app={} | request_id={}",
-                app_id,
-                request_id,
-            )

@@ -43,12 +43,6 @@ class AuditLog(Base):
     ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # P22.1：审计 11 维（9 → 11）
-    workspace_id: Mapped[int | None] = mapped_column(
-        BigInteger,
-        ForeignKey("workspaces.id", ondelete="SET NULL"),
-        nullable=True,
-    )
     session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -58,5 +52,4 @@ class AuditLog(Base):
         Index("ix_audit_logs_actor", "actor_user_id"),
         Index("ix_audit_logs_resource", "resource_type", "resource_id"),
         Index("ix_audit_logs_created", "created_at"),
-        Index("ix_audit_logs_workspace", "workspace_id"),
     )

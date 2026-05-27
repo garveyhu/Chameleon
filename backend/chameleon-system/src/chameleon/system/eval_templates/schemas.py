@@ -28,7 +28,6 @@ class EvalTemplateItem(BaseModel):
     metrics: list[dict]
     judge_provider: str | None = None
     version: int
-    workspace_id: int | None = None
     created_at: datetime
     updated_at: datetime
 

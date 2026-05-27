@@ -19,7 +19,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity,
   Bot,
-  Boxes,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -57,7 +56,6 @@ import {
 import { setLanguage } from '@/core/i18n';
 import { cn } from '@/core/lib/cn';
 import { useAuthStore } from '@/core/stores/auth-store';
-import { WorkspaceSwitcher } from '@/system/workspaces/components/workspace-switcher';
 
 interface NavLeaf {
   to: string;
@@ -248,13 +246,6 @@ const SYSTEM_GROUP: NavGroup = {
       perm: 'apps:read',
     },
     {
-      to: '/workspaces',
-      icon: Boxes,
-      i18nKey: 'menu.workspaces',
-      fallbackTitle: 'Workspaces',
-      perm: 'workspaces:read',
-    },
-    {
       to: '/users',
       icon: Users2,
       i18nKey: 'menu.users',
@@ -367,9 +358,6 @@ export const Sidebar = ({ collapsed, onToggle }: SidebarProps) => {
           <PanelLeftClose className="h-3.5 w-3.5" />
         </button>
       </div>
-
-      {/* P19.3：workspace 切换器 */}
-      <WorkspaceSwitcher />
 
       {/* nav */}
       <nav className="flex-1 space-y-0.5 overflow-auto px-3 pt-1 pb-2 text-[14px]">

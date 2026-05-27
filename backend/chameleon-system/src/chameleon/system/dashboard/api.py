@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
-from chameleon.core.models import App, CallLog
+from chameleon.core.models import CallLog
 from chameleon.system.auth.dependencies import require_permission
 
 
@@ -295,7 +295,7 @@ class CostTotalsResult(BaseModel):
 class CostDimensionRow(BaseModel):
     label: str
     cost_usd: float  # 原始模型成本之和
-    # C8：计费成本 = Σ(cost_usd × group_ratio)（含分组倍率）
+    # 计费成本 = Σ(cost_usd)（与原始成本一致）
     effective_cost_usd: float
     calls: int
 
@@ -363,10 +363,9 @@ async def cost_totals(
 async def cost_by_dimension(
     dimension: str = Query(
         default="agent_key",
-        pattern=("^(agent_key|app_id|session_id|user_id|model_code|workspace_id)$"),
+        pattern=("^(agent_key|app_id|session_id|user_id|model_code)$"),
         description=(
-            "按哪一维聚合：agent_key / app_id / session_id / user_id / "
-            "model_code / workspace_id"
+            "按哪一维聚合：agent_key / app_id / session_id / user_id / model_code"
         ),
     ),
     from_ts: datetime | None = Query(default=None),
@@ -376,13 +375,11 @@ async def cost_by_dimension(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[list[CostDimensionRow]]:
-    """按维度聚合 cost top-N（C8：含 user/model/workspace 多维）
+    """按维度聚合 cost top-N（含 user/model 多维）
 
-    cost_usd = Σ 原始模型成本；effective_cost_usd = Σ(cost_usd × group_ratio)，
-    后者是实际计费额（分组倍率在 C5 写入时存死，这里直接乘）。
+    cost_usd = effective_cost_usd = Σ 原始模型成本。
     """
     rf, rt = _resolve_range(from_ts, to_ts, hours)
-    # workspace 维要 join apps 取 workspace_id；其余直接是 call_logs 列
     simple_cols = {
         "agent_key": CallLog.agent_key,
         "app_id": CallLog.app_id,
@@ -391,9 +388,7 @@ async def cost_by_dimension(
         "model_code": CallLog.model_code,
     }
     cost_sum = func.coalesce(func.sum(CallLog.cost_usd), 0).label("cost")
-    effective_sum = func.coalesce(
-        func.sum(CallLog.cost_usd * func.coalesce(CallLog.group_ratio, 1)), 0
-    ).label("effective")
+    effective_sum = func.coalesce(func.sum(CallLog.cost_usd), 0).label("effective")
     cnt = func.count(CallLog.id).label("cnt")
     where_clause = (
         CallLog.created_at >= rf,
@@ -401,21 +396,12 @@ async def cost_by_dimension(
         CallLog.parent_id.is_(None),
     )
 
-    if dimension == "workspace_id":
-        label_col = App.workspace_id
-        stmt = (
-            select(label_col.label("label"), cost_sum, effective_sum, cnt)
-            .join(App, CallLog.app_id == App.app_key)
-            .where(*where_clause)
-            .group_by(label_col)
-        )
-    else:
-        label_col = simple_cols[dimension]
-        stmt = (
-            select(label_col.label("label"), cost_sum, effective_sum, cnt)
-            .where(*where_clause)
-            .group_by(label_col)
-        )
+    label_col = simple_cols[dimension]
+    stmt = (
+        select(label_col.label("label"), cost_sum, effective_sum, cnt)
+        .where(*where_clause)
+        .group_by(label_col)
+    )
 
     rows = (
         await session.execute(

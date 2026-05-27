@@ -13,7 +13,6 @@
     "trace": "Trace",
     "audit_logs": "Audit Logs",
     "settings": "Settings",
-    "workspaces": "Workspaces",
     "group": {
       "overview": "Overview",
       "access": "Access Control",

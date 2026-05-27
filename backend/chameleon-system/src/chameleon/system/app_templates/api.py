@@ -83,25 +83,16 @@ async def verify_template(
     )
 
 
-class InstallRequest(BaseModel):
-    target_workspace_id: int | None = None
-
-
 @router.post(
     "/{template_id}/install", response_model=Result[InstallTemplateResult]
 )
 async def install_template(
     template_id: int,
-    req: InstallRequest,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("plugins:write")),
 ) -> Result[InstallTemplateResult]:
     return Result.ok(
-        await t_service.install_template(
-            session,
-            template_id,
-            target_workspace_id=req.target_workspace_id,
-        )
+        await t_service.install_template(session, template_id)
     )
 
 

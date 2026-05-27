@@ -1,10 +1,10 @@
 """AppTemplate ORM —— P22.5 PR #83
 
-业务：可一键克隆到 workspace 的模板（assistant / agent / workflow / rag）。
+业务：可一键克隆的模板（assistant / agent / workflow / rag）。
 
 红线（plan §2 P22）：
 - ⛔ 用户自传 template 默认 verified=False；不进默认推荐列表
-- ⛔ install 时按 verified + workspace scope 校验
+- ⛔ install 时按 verified 校验
 """
 
 from __future__ import annotations
@@ -22,10 +22,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, TimestampMixin, snowflake_pk
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class AppTemplate(Base, TimestampMixin, WorkspaceScopedMixin):
+class AppTemplate(Base, TimestampMixin):
     """应用市场模板"""
 
     __tablename__ = "app_templates"

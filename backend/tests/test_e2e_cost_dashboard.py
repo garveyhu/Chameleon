@@ -17,7 +17,6 @@ from chameleon.core.models import (
     Role,
     User,
     UserRole,
-    Workspace,
 )
 from chameleon.core.utils.passwords import hash_password
 from chameleon.core.utils.snowflake import next_id
@@ -104,16 +103,12 @@ async def seeded_calls_with_cost():
 
 @pytest_asyncio.fixture
 async def seeded_multidim_calls():
-    """C8：造 workspace + user + app，几条带 user/model/group_ratio
-    的 call_log，验证多维度聚合 + effective cost"""
+    """造 user + app，几条带 user/model 的 call_log，验证多维度聚合"""
     suffix = secrets.token_hex(3)
-    wid = next_id()
     app_key = f"md-app-{suffix}"
     model_code = f"md-model-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(Workspace(id=wid, workspace_key=f"md-ws-{suffix}", name="md ws"))
-        await s.flush()
-        s.add(App(app_key=app_key, name="md app", workspace_id=wid))
+        s.add(App(app_key=app_key, name="md app"))
         u = User(
             username=f"md-user-{suffix}",
             password_hash=hash_password("Pwd123!xx"),
@@ -124,7 +119,7 @@ async def seeded_multidim_calls():
         await s.flush()
         uid = u.id
         now = datetime.now(timezone.utc)
-        # 3 条：cost 0.01 / 0.02 / 0.03，group_ratio=2.0 → effective 2×
+        # 3 条：cost 0.01 / 0.02 / 0.03
         for i, cost in enumerate([0.01, 0.02, 0.03]):
             s.add(
                 CallLog(
@@ -138,7 +133,6 @@ async def seeded_multidim_calls():
                     code=200,
                     duration_ms=100,
                     cost_usd=cost,
-                    group_ratio=2.0,
                     parent_id=None,
                     observation_type="trace",
                     created_at=now - timedelta(minutes=i),
@@ -147,7 +141,6 @@ async def seeded_multidim_calls():
         await s.commit()
     yield {
         "app_key": app_key,
-        "workspace_id": wid,
         "user_id": uid,
         "model_code": model_code,
     }
@@ -155,7 +148,6 @@ async def seeded_multidim_calls():
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
         await s.execute(delete(App).where(App.app_key == app_key))
         await s.execute(delete(User).where(User.id == uid))
-        await s.execute(delete(Workspace).where(Workspace.id == wid))
         await s.commit()
 
 
@@ -166,7 +158,7 @@ def _hdr(t: str) -> dict[str, str]:
 async def _by_dim(
     client: AsyncClient, token: str, dimension: str, *, limit: int = 50
 ) -> list[dict]:
-    # limit=50：top-N 是全局聚合，并行/同套件其它用例也会造 workspace 等共享维度的
+    # limit=50：top-N 是全局聚合，并行/同套件其它用例也会造共享维度的
     # 数据，用最大 limit 降低被挤出 top-N 的偶发失败
     r = await client.get(
         f"/v1/admin/dashboard/cost/by-dimension?dimension={dimension}"
@@ -255,7 +247,7 @@ async def test_cost_by_invalid_dimension_rejected(
     assert r.status_code in (400, 422)
 
 
-# ── C8 新增 4 维 + effective cost ─────────────────────
+# ── 多维聚合（user / model） ──────────────────────────
 
 
 async def test_cost_by_user_dimension(
@@ -266,8 +258,8 @@ async def test_cost_by_user_dimension(
         r for r in data if r["label"] == str(seeded_multidim_calls["user_id"])
     )
     assert abs(row["cost_usd"] - 0.06) < 1e-6  # 0.01+0.02+0.03
-    # group_ratio=2.0 → effective = 2 × 0.06 = 0.12
-    assert abs(row["effective_cost_usd"] - 0.12) < 1e-6
+    # effective_cost = 原始 cost（不再乘倍率）
+    assert abs(row["effective_cost_usd"] - 0.06) < 1e-6
     assert row["calls"] == 3
 
 
@@ -277,19 +269,6 @@ async def test_cost_by_model_dimension(
     data = await _by_dim(client, admin_token, "model_code")
     labels = [r["label"] for r in data]
     assert seeded_multidim_calls["model_code"] in labels
-
-
-async def test_cost_by_workspace_dimension(
-    client: AsyncClient, admin_token: str, seeded_multidim_calls: dict
-):
-    data = await _by_dim(client, admin_token, "workspace_id")
-    row = next(
-        r
-        for r in data
-        if r["label"] == str(seeded_multidim_calls["workspace_id"])
-    )
-    assert abs(row["cost_usd"] - 0.06) < 1e-6
-    assert abs(row["effective_cost_usd"] - 0.12) < 1e-6
 
 
 # ── /cost/timeseries ─────────────────────────────────

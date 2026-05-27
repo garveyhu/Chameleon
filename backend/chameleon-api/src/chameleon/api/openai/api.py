@@ -2,7 +2,7 @@
 
 把 OpenAI chat.completions 请求适配到内部 agent invoke（model = agent_key），
 让任意 OpenAI 客户端/SDK 直接调用本平台的智能体（含 graph 编排出来的）。
-鉴权同 /v1/agents：api_key → App → workspace。复用 service.invoke / stream_invoke。
+鉴权同 /v1/agents：api_key → App。复用 service.invoke / stream_invoke。
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from chameleon.api.agent.schemas import InvokeRequest, MessageInput
 from chameleon.api.openai.schemas import OAChatRequest
 from chameleon.core.infra.auth import CurrentApp, current_app
 from chameleon.core.infra.db import get_session
-from chameleon.core.observe import estimate_text_tokens
 
 router = APIRouter(prefix="/v1", tags=["openai-compat"])
 
@@ -53,17 +52,7 @@ async def chat_completions(
     app: CurrentApp = Depends(current_app),
 ):
     """OpenAI 兼容入口：model = agent_key。stream=true → SSE chunk + [DONE]。"""
-    from chameleon.system.workspaces.quota_service import (
-        assert_within_request_quota,
-        pre_consume_request,
-    )
-
-    await assert_within_request_quota(session, app.workspace_id)
     request_id = getattr(request.state, "request_id", "req_unknown")
-    estimated = estimate_text_tokens(" ".join(m.content for m in req.messages))
-    await pre_consume_request(
-        session, app.workspace_id, estimated_tokens=estimated, request_id=request_id
-    )
 
     ir = _to_invoke_request(req)
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"

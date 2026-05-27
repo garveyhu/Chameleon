@@ -25,11 +25,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, SoftDeleteMixin, TimestampMixin
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 from chameleon.core.utils.snowflake import next_id
 
 
-class App(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
+class App(Base, TimestampMixin, SoftDeleteMixin):
     """业务方应用
 
     一个 app 关联 N 个 api_keys（同应用多 key：生产 / 测试 / 临时）。

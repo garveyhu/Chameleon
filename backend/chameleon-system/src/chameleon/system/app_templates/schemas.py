@@ -22,7 +22,6 @@ class AppTemplateItem(BaseModel):
     verified: bool
     downloads: int
     created_by_user_id: int | None = None
-    workspace_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -39,7 +38,6 @@ class InstallTemplateResult(BaseModel):
     template_id: int
     template_name: str
     category: str
-    target_workspace_id: int | None
     installed_at: datetime
     # category 相关的产物 id（如 graph_id）；本 PR 占位返 None，留具体 dispatch
     artifact_id: int | None = None

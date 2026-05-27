@@ -327,7 +327,7 @@ function mockHits(): SearchHitItem[] {
       score: 0.92,
       document_title: '产品手册.pdf',
       content:
-        '变色龙平台支持多源模型统一聚合，通过统一网关路由到不同的上游 provider，并按 workspace 计费。',
+        '变色龙平台支持多源模型统一聚合，直连不同的上游 provider 调用。',
       vector_score: 0.88,
       bm25_score: 0.61,
       rerank_score: 0.95,

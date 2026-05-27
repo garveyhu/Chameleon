@@ -2,7 +2,7 @@
 
 红线（plan §2 P21）：
 - ⛔ template 改动 → version += 1；老 EvalJob 引用 freeze 版本不变
-- ⛔ 同 (workspace, name) 不同 version 共存（unique key 含 version）
+- ⛔ 同 name 不同 version 共存（unique key 含 version）
 """
 
 from __future__ import annotations
@@ -21,24 +21,20 @@ from chameleon.system.eval_templates.schemas import (
 
 
 async def list_templates(
-    session: AsyncSession, workspace_id: int | None = None
+    session: AsyncSession,
 ) -> list[EvalTemplateItem]:
     """列所有模板（同 name 只返最新 version；老 version 隐式留给 freeze 引用）"""
-    stmt = select(EvalTemplate)
-    if workspace_id is not None:
-        stmt = stmt.where(EvalTemplate.workspace_id == workspace_id)
-    stmt = stmt.order_by(
+    stmt = select(EvalTemplate).order_by(
         EvalTemplate.name.asc(), EvalTemplate.version.desc()
     )
     rows = (await session.execute(stmt)).scalars().all()
 
-    seen: set[tuple[int | None, str]] = set()
+    seen: set[str] = set()
     latest: list[EvalTemplate] = []
     for r in rows:
-        key = (r.workspace_id, r.name)
-        if key in seen:
+        if r.name in seen:
             continue
-        seen.add(key)
+        seen.add(r.name)
         latest.append(r)
     return [EvalTemplateItem.model_validate(r) for r in latest]
 
@@ -51,7 +47,7 @@ async def get_template(
 
 
 async def get_template_by_version(
-    session: AsyncSession, name: str, version: int, workspace_id: int | None
+    session: AsyncSession, name: str, version: int
 ) -> EvalTemplateItem:
     """精确取某 version（freeze 引用用）"""
     row = (
@@ -59,7 +55,6 @@ async def get_template_by_version(
             select(EvalTemplate).where(
                 EvalTemplate.name == name,
                 EvalTemplate.version == version,
-                EvalTemplate.workspace_id == workspace_id,
             )
         )
     ).scalar_one_or_none()
@@ -74,14 +69,12 @@ async def get_template_by_version(
 async def create_template(
     session: AsyncSession,
     req: CreateEvalTemplateRequest,
-    workspace_id: int | None = None,
 ) -> EvalTemplateItem:
-    """同 (workspace, name) 已存在 → 拒绝（要新 version 走 update）"""
+    """同 name 已存在 → 拒绝（要新 version 走 update）"""
     existing = (
         await session.execute(
             select(EvalTemplate).where(
                 EvalTemplate.name == req.name,
-                EvalTemplate.workspace_id == workspace_id,
             )
         )
     ).scalar_one_or_none()
@@ -97,7 +90,6 @@ async def create_template(
         metrics=[m.model_dump() for m in req.metrics],
         judge_provider=req.judge_provider,
         version=1,
-        workspace_id=workspace_id,
     )
     session.add(row)
     await session.flush()
@@ -140,7 +132,6 @@ async def update_template(
         metrics=new_metrics,
         judge_provider=new_judge,
         version=old.version + 1,
-        workspace_id=old.workspace_id,
     )
     session.add(row)
     await session.flush()

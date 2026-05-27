@@ -26,13 +26,12 @@ const PRESETS: { label: string; hours: number }[] = [
   { label: '30d', hours: 24 * 30 },
 ];
 
-const DIMENSIONS: { key: CostDimension; label: string; c8?: boolean }[] = [
+const DIMENSIONS: { key: CostDimension; label: string }[] = [
   { key: 'agent_key', label: 'Agent' },
   { key: 'app_id', label: 'App' },
   { key: 'session_id', label: 'Session' },
-  { key: 'user_id', label: 'User', c8: true },
-  { key: 'model_code', label: 'Model', c8: true },
-  { key: 'workspace_id', label: 'Workspace', c8: true },
+  { key: 'user_id', label: 'User' },
+  { key: 'model_code', label: 'Model' },
 ];
 
 export const CostDashboardPage = () => {
@@ -47,7 +46,6 @@ export const CostDashboardPage = () => {
     queryKey: ['dashboard', 'cost', 'by-dim', dimension, hours],
     queryFn: () =>
       dashboardApi.costByDimension({ dimension, hours, limit: 10 }),
-    // user/model/workspace 维度在 C8 接入前会失败，避免重试刷屏
     retry: false,
   });
   const seriesQ = useQuery({
@@ -152,8 +150,6 @@ export const CostDashboardPage = () => {
         <DimensionTable
           rows={dimQ.data ?? []}
           loading={dimQ.isLoading}
-          error={dimQ.isError}
-          dimension={dimension}
         />
       </SectionCard>
     </div>
@@ -229,27 +225,15 @@ const CostLineChart = ({
 const DimensionTable = ({
   rows,
   loading,
-  error,
-  dimension,
 }: {
   rows: CostDimensionRow[];
   loading: boolean;
-  error?: boolean;
-  dimension: CostDimension;
 }) => {
   const max = Math.max(...rows.map(r => r.cost_usd), 0.001);
-  const needsC8 = DIMENSIONS.find(d => d.key === dimension)?.c8;
   if (loading) {
     return (
       <div className="py-6 text-center text-[11.5px] text-stone-400">
         加载中…
-      </div>
-    );
-  }
-  if ((error || rows.length === 0) && needsC8) {
-    return (
-      <div className="py-6 text-center text-[11.5px] text-stone-400">
-        该维度依赖后端 cost_by_dimension 多维聚合（Agent C C8）；接入后自动展示
       </div>
     );
   }

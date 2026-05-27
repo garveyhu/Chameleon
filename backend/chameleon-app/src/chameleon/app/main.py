@@ -69,7 +69,6 @@ from chameleon.system.seed import run_seed_if_empty
 from chameleon.system.settings import settings_router
 from chameleon.system.tools import tools_router
 from chameleon.system.users import users_router
-from chameleon.system.workspaces import workspaces_router
 
 REQUEST_ID_HEADER = "X-Request-Id"
 
@@ -184,7 +183,6 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(plugins_router)
     app.include_router(marketplace_router)
     app.include_router(app_templates_router)
-    app.include_router(workspaces_router)
     app.include_router(search_router)
     app.include_router(schemas_router)
     app.include_router(scores_router)

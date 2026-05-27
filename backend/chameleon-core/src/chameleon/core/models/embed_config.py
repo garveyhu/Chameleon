@@ -17,11 +17,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, SoftDeleteMixin, TimestampMixin
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 from chameleon.core.utils.snowflake import next_id
 
 
-class EmbedConfig(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin):
+class EmbedConfig(Base, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "embed_configs"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=next_id)

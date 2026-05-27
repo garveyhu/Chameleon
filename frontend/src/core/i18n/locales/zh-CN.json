@@ -13,7 +13,6 @@
     "trace": "Trace",
     "audit_logs": "审计日志",
     "settings": "系统配置",
-    "workspaces": "Workspaces",
     "group": {
       "overview": "概览",
       "access": "访问控制",

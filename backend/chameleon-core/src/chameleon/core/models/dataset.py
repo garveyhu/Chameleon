@@ -28,10 +28,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, TimestampMixin, snowflake_pk
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class Dataset(Base, TimestampMixin, WorkspaceScopedMixin):
+class Dataset(Base, TimestampMixin):
     """一组样本（按主题 / 场景）"""
 
     __tablename__ = "datasets"

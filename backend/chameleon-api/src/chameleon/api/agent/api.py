@@ -20,18 +20,8 @@ from chameleon.api.agent.stream import sse_iter
 from chameleon.core.api.response import Result
 from chameleon.core.infra.auth import CurrentApp, current_app
 from chameleon.core.infra.db import get_session
-from chameleon.core.observe import estimate_text_tokens
 
 router = APIRouter(prefix="/v1/agents", tags=["agents"])
-
-
-def _invoke_input_text(input_value: object) -> str:
-    """从 invoke 入参提取用于 token 预估的文本（str 或 message 列表）"""
-    if isinstance(input_value, str):
-        return input_value
-    if isinstance(input_value, list):
-        return " ".join(str(getattr(m, "content", "") or "") for m in input_value)
-    return ""
 
 
 @router.get("", response_model=Result[list[AgentItem]])
@@ -61,24 +51,7 @@ async def invoke_agent(
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ):
-    # P19.3 PR #39：业务 invoke 前检查 workspace 配额（超额 → 429）
-    from chameleon.system.workspaces.quota_service import (
-        assert_within_request_quota,
-        pre_consume_request,
-    )
-
-    await assert_within_request_quota(session, app.workspace_id)
-
     request_id = getattr(request.state, "request_id", "req_unknown")
-
-    # P23.C3/C4：按预估 token 预扣额度（并发防超发；record_call 末尾结算）
-    estimated = estimate_text_tokens(_invoke_input_text(req.input))
-    await pre_consume_request(
-        session,
-        app.workspace_id,
-        estimated_tokens=estimated,
-        request_id=request_id,
-    )
 
     if req.stream:
         # 流式：自管 session（service.stream_invoke 内部），返 SSE StreamingResponse

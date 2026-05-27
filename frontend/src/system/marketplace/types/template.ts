@@ -12,7 +12,6 @@ export interface AppTemplateItem {
   verified: boolean;
   downloads: number;
   created_by_user_id: EntityId | null;
-  workspace_id: EntityId | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,7 +28,6 @@ export interface InstallTemplateResult {
   template_id: EntityId;
   template_name: string;
   category: string;
-  target_workspace_id: EntityId | null;
   installed_at: string;
   artifact_id: EntityId | null;
 }

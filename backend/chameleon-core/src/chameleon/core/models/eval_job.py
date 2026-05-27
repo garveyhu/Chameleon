@@ -27,10 +27,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from chameleon.core.models.base import Base, TimestampMixin, snowflake_pk
-from chameleon.core.models.workspace import WorkspaceScopedMixin
 
 
-class EvalJob(Base, TimestampMixin, WorkspaceScopedMixin):
+class EvalJob(Base, TimestampMixin):
     """周期触发的 Eval 任务定义"""
 
     __tablename__ = "eval_jobs"

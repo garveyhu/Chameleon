@@ -2,7 +2,7 @@
 
 红线（plan §2 P22）：
 - ⛔ 用户自传 template 默认 verified=False；list 默认仅返 verified
-- ⛔ install 时按 verified + workspace 校验；downloads 计数 +1
+- ⛔ install 时按 verified 校验；downloads 计数 +1
 """
 
 from __future__ import annotations
@@ -105,10 +105,8 @@ async def verify_template(
 async def install_template(
     session: AsyncSession,
     template_id: int,
-    *,
-    target_workspace_id: int | None,
 ) -> InstallTemplateResult:
-    """安装 = 克隆 spec 到当前 workspace（具体产物由 category dispatch；
+    """安装 = 克隆 spec（具体产物由 category dispatch；
     本 PR 仅写记录 + downloads++；后续 PR 接 graph/agent/kb 创建链路）
     """
     row = await _load(session, template_id)
@@ -118,18 +116,16 @@ async def install_template(
     await session.commit()
 
     logger.info(
-        "app_template installed | tmpl={} | name={} | cat={} | ws={} | dl={}",
+        "app_template installed | tmpl={} | name={} | cat={} | dl={}",
         row.id,
         row.name,
         row.category,
-        target_workspace_id,
         row.downloads,
     )
     return InstallTemplateResult(
         template_id=row.id,
         template_name=row.name,
         category=row.category,
-        target_workspace_id=target_workspace_id,
         installed_at=datetime.now(timezone.utc),
         artifact_id=None,
     )

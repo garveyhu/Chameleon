@@ -216,7 +216,6 @@ async def publish_as_agent(
             source="graph",
             graph_id=row.id,
             enabled=True,
-            workspace_id=getattr(row, "workspace_id", None),
         )
         session.add(agent)
 
@@ -306,7 +305,6 @@ async def ensure_web_app(
     row = await _load(session, graph_id)
     # commit 会让 ORM 对象过期，先把要用的字段取出来
     g_key, g_name, g_desc = row.graph_key, row.name, row.description
-    g_ws = getattr(row, "workspace_id", None)
     opener, suggested = _start_chat_cfg(row.spec)  # start 节点的开场白 / 建议问题
 
     agent = await _find_graph_agent(session, graph_id)
@@ -330,7 +328,7 @@ async def ensure_web_app(
             )
         ).scalar_one_or_none()
         if app is None:
-            app = App(app_key=app_key, name=g_name, workspace_id=g_ws)
+            app = App(app_key=app_key, name=g_name)
             session.add(app)
             await session.flush()
             await session.refresh(app)
@@ -343,7 +341,6 @@ async def ensure_web_app(
             allowed_origins=["*"],  # 公开 Web App：任意 origin（embed_key 即访问凭据）
             behavior=_synced_behavior(None, opener, suggested),
             enabled=True,
-            workspace_id=g_ws,
         )
         session.add(ec)
         await session.flush()

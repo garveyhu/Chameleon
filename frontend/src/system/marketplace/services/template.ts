@@ -21,11 +21,8 @@ export const appTemplateApi = {
     post<AppTemplateItem>(`/v1/admin/app-templates/${id}/verify`, {
       verified,
     }),
-  install: (id: EntityId, target_workspace_id?: EntityId) =>
-    post<InstallTemplateResult>(
-      `/v1/admin/app-templates/${id}/install`,
-      { target_workspace_id: target_workspace_id ?? null },
-    ),
+  install: (id: EntityId) =>
+    post<InstallTemplateResult>(`/v1/admin/app-templates/${id}/install`),
   delete: (id: EntityId) =>
     post<void>(`/v1/admin/app-templates/${id}/delete`),
 };
