@@ -58,8 +58,6 @@ export const HitTestPanel = ({ kb }: Props) => {
     queryFn: () => get<KbMetadataField[]>(`/v1/admin/kbs/${kb.id}/metadata-fields`),
   });
   const fields = fieldsQ.data ?? [];
-  // 本次结果集内最高综合分，用于把相关度归一成「相对最相关」的直观档位
-  const maxScore = Math.max(0, ...hits.map(h => h.score));
 
   useEffect(() => {
     reset({ topK: kb.default_top_k, mode: kb.recall_mode });
@@ -224,7 +222,6 @@ export const HitTestPanel = ({ kb }: Props) => {
               key={String(h.chunk_id)}
               hit={h}
               rank={idx + 1}
-              maxScore={maxScore}
               active={String(h.chunk_id) === String(selectedChunkId)}
               onClick={() => selectChunk(h.chunk_id)}
             />
@@ -235,7 +232,7 @@ export const HitTestPanel = ({ kb }: Props) => {
       {/* ③ 选中原文 + 分项得分 */}
       <div className="rounded-lg border border-stone-200/70 bg-white">
         {current ? (
-          <SourceView hit={current} kbId={kb.id} query={query} maxScore={maxScore} />
+          <SourceView hit={current} kbId={kb.id} query={query} />
         ) : (
           <Centered icon>选中左侧 chunk 查看原文与分项得分</Centered>
         )}
@@ -261,13 +258,11 @@ const Centered = ({ children, icon }: { children: React.ReactNode; icon?: boolea
 const HitCard = ({
   hit,
   rank,
-  maxScore,
   active,
   onClick,
 }: {
   hit: SearchHitItem;
   rank: number;
-  maxScore: number;
   active: boolean;
   onClick: () => void;
 }) => (
@@ -286,7 +281,7 @@ const HitCard = ({
       <span className="truncate">{hit.document_title}</span>
       <span className="ml-auto shrink-0 font-mono">seq {hit.seq}</span>
     </div>
-    <ScoreBreakdown hit={hit} maxScore={maxScore} compact />
+    <ScoreBreakdown hit={hit} compact />
     <div className="mt-1.5 line-clamp-2 text-[12px] leading-snug text-stone-700">{hit.content}</div>
   </button>
 );
@@ -295,12 +290,10 @@ const SourceView = ({
   hit,
   kbId,
   query,
-  maxScore,
 }: {
   hit: SearchHitItem;
   kbId: KbItem['id'];
   query: string;
-  maxScore: number;
 }) => (
   <div className="flex h-full flex-col">
     <div className="border-b border-stone-200/70 p-3">
@@ -315,7 +308,7 @@ const SourceView = ({
           seq {hit.seq}
         </span>
       </div>
-      <ScoreBreakdown hit={hit} maxScore={maxScore} />
+      <ScoreBreakdown hit={hit} />
     </div>
     <div
       className="flex-1 overflow-y-auto p-3 text-[12.5px] leading-relaxed whitespace-pre-wrap text-stone-800"
