@@ -4,7 +4,7 @@
  */
 import type { ReactElement } from 'react';
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -82,7 +82,14 @@ const NAV_ADVANCED: TabDef[] = [
 export const KbDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const kbId = id ?? '';
-  const [tab, setTab] = useState<TabKey>('documents');
+  // tab 入 URL（?tab=）——离开再返回（navigate(-1)）能精确恢复所在 tab，而非重置到默认
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get('tab') as TabKey) || 'documents';
+  const setTab = (t: TabKey) => {
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', t);
+    setSearchParams(next, { replace: true });
+  };
   const [serviceApiOpen, setServiceApiOpen] = useState(false);
 
   const kbQ = useQuery({
@@ -196,12 +203,6 @@ const Header = ({ kb, loading, onServiceApi }: HeaderProps) => (
         >
           <KeyRound className="h-3.5 w-3.5" /> 服务 API
         </button>
-        <Link
-          to={`/kbs/${kb.id}/chunking-preview`}
-          className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-amber-300 hover:bg-amber-50/40 hover:text-amber-700"
-        >
-          ✂︎ 切块预览
-        </Link>
       </div>
     ) : (
       <span className="text-[12.5px] text-stone-400">未找到</span>

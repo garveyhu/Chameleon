@@ -97,7 +97,7 @@ export const KbChunkingPreviewPage = () => {
     <SectionCard className="!p-0">
       <header className="flex items-center justify-between border-b border-stone-200/70 px-3 py-2">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={() => nav(`/kbs/${kbId}`)}>
+          <Button variant="ghost" size="sm" onClick={() => nav(-1)}>
             <ChevronLeft className="mr-0.5 h-3.5 w-3.5" />
             返回
           </Button>

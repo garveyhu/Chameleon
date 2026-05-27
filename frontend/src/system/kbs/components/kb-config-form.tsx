@@ -1,8 +1,9 @@
 /** KB 配置表单 —— 分块策略 / 召回参数 / 一键重分块 */
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCcw, Save } from 'lucide-react';
+import { RotateCcw, Save, Scissors } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -107,7 +108,15 @@ export const KbConfigForm = ({ kb }: Props) => {
   return (
     <div className="space-y-5">
       <section>
-        <h3 className="mb-2 text-[13.5px] font-medium text-stone-900">分块策略</h3>
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-[13.5px] font-medium text-stone-900">分块策略</h3>
+          <Link
+            to={`/kbs/${kb.id}/chunking-preview`}
+            className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-amber-300 hover:bg-amber-50/40 hover:text-amber-700"
+          >
+            <Scissors className="h-3.5 w-3.5" /> 切块预览
+          </Link>
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {MODES.map(m => (
             <button
