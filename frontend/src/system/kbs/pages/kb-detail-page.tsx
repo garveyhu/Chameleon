@@ -12,7 +12,6 @@ import {
   BarChart3,
   FileText,
   FlaskConical,
-  Layers,
   Search,
   Settings,
   ShieldCheck,
@@ -72,7 +71,6 @@ const NAV_PRIMARY: TabDef[] = [
   { key: 'overview', label: '概览', icon: <BarChart3 className="h-4 w-4" /> },
 ];
 const NAV_ADVANCED: TabDef[] = [
-  { key: 'collections', label: '分组', icon: <Layers className="h-4 w-4" /> },
   { key: 'metadata', label: '元数据', icon: <Tag className="h-4 w-4" /> },
   { key: 'eval', label: '评测', icon: <FlaskConical className="h-4 w-4" /> },
   { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-4 w-4" /> },
