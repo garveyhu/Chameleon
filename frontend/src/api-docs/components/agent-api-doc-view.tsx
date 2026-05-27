@@ -35,10 +35,10 @@ export const AgentApiDocView = ({ graph }: Props) => {
           <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
             Authorization
           </code>{' '}
-          头携带（右上角「管理密钥」生成本智能体专属 Key）。
+          头携带。密钥为本智能体的 <strong>agent-</strong> 作用域密钥（右上角「管理密钥」生成）。
         </>
       ),
-      code: 'Authorization: Bearer {API_KEY}',
+      code: 'Authorization: Bearer agent-xxxxxxxxxxxxxxxx',
     },
     {
       id: 'detail',

@@ -102,7 +102,7 @@ export const KbApiDocPage = () => {
   ];
 
   return (
-    <div className="h-[calc(100vh-3.5rem)]">
+    <div className="-mx-3 -my-3 h-screen md:-mx-6 md:-my-4">
       <ApiDocTemplate
         title="知识库 API"
         endpoint={base}
