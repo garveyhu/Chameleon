@@ -91,6 +91,14 @@ class DocumentItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UpdateDocumentRequest(BaseModel):
+    """改文档元数据（不重分块）：标题 / tags / meta"""
+
+    title: str | None = None
+    tags: list[str] | None = None
+    meta: dict[str, Any] | None = None
+
+
 # ── Search ──────────────────────────────────────────────
 
 

@@ -23,17 +23,18 @@ from chameleon.api.knowledge.schemas import (
     KbItem,
     SearchHitItem,
     SearchRequest,
+    UpdateDocumentRequest,
     UpdateKbRequest,
 )
-from chameleon.core.config import inventory
 from chameleon.core.api.exceptions import (
     DocumentNotFoundError,
     KnowledgeBaseNotFoundError,
     ValidationError,
 )
-from chameleon.core.components.knowledge import search_kb
-from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.core.api.response import PageParams, PageResult
+from chameleon.core.components.knowledge import search_kb
+from chameleon.core.config import inventory
+from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.core.vector import get_store
 
 # ── KB CRUD ─────────────────────────────────────────────
@@ -260,6 +261,53 @@ async def delete_document(
     await session.flush()
     await session.refresh(row)
     logger.info("document soft-deleted | doc={} | chunks_deleted={}", doc_id, deleted_n)
+    return DocumentItem.model_validate(row)
+
+
+async def get_document(
+    session: AsyncSession, kb_key: str, doc_id: int
+) -> DocumentItem:
+    """取单篇文档详情。"""
+    kb = await _get_kb_by_key(session, kb_key)
+    row = (
+        await session.execute(
+            select(Document).where(
+                Document.id == doc_id,
+                Document.kb_id == kb.id,
+                Document.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise DocumentNotFoundError(message=f"文档不存在: {doc_id}")
+    return DocumentItem.model_validate(row)
+
+
+async def update_document(
+    session: AsyncSession, kb_key: str, doc_id: int, req: UpdateDocumentRequest
+) -> DocumentItem:
+    """改文档 title / tags / meta（不重分块）。"""
+    kb = await _get_kb_by_key(session, kb_key)
+    row = (
+        await session.execute(
+            select(Document).where(
+                Document.id == doc_id,
+                Document.kb_id == kb.id,
+                Document.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise DocumentNotFoundError(message=f"文档不存在: {doc_id}")
+    if req.title is not None:
+        row.title = req.title
+    if req.tags is not None:
+        row.tags = req.tags
+    if req.meta is not None:
+        row.meta = req.meta
+    row.updated_at = datetime.now(timezone.utc)
+    await session.flush()
+    await session.refresh(row)
     return DocumentItem.model_validate(row)
 
 
