@@ -19,6 +19,8 @@ import {
   Layers,
   type LucideIcon,
   MessageSquare,
+  PanelLeftClose,
+  PanelLeftOpen,
   Rocket,
   ScrollText,
   Server,
@@ -72,6 +74,7 @@ export const GraphAppRail = ({
   const published = (graph.published_version ?? 0) > 0;
   const apiBase = `${window.location.origin}/v1`;
 
+  const [collapsed, setCollapsed] = useState(false);
   const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
   const [embedCfg, setEmbedCfg] = useState<EmbedConfigItem | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
@@ -128,19 +131,92 @@ export const GraphAppRail = ({
     void navigator.clipboard.writeText(text).then(() => toast.success(`${label}已复制`));
   };
 
-  return (
-    <>
-      <aside className="bg-warm-2/50 flex h-screen w-64 shrink-0 flex-col border-r border-stone-200/70">
-        {/* 应用头 */}
-        <div className="border-b border-stone-200/70 p-3">
+  if (collapsed) {
+    return (
+      <>
+        <aside className="bg-warm-2/50 flex h-screen w-12 shrink-0 flex-col items-center gap-1 border-r border-stone-200/70 py-2 transition-[width]">
           <button
             type="button"
             onClick={onReturn}
-            className="mb-2 inline-flex items-center gap-1 text-[11.5px] text-stone-500 transition hover:text-stone-800"
+            title="返回工作流"
+            className="rounded-md p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            返回工作流
+            <ChevronLeft className="h-4 w-4" />
           </button>
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="展开应用栏"
+            className="rounded-md p-2 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+          <div className="my-1 h-px w-6 bg-stone-200/70" />
+          {NAV.map(n => (
+            <button
+              key={n.key}
+              type="button"
+              onClick={() => onTab(n.key)}
+              title={n.label}
+              className={cn(
+                'rounded-md p-2 transition',
+                tab === n.key
+                  ? 'bg-stone-900 text-white'
+                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900',
+              )}
+            >
+              <n.icon className="h-4 w-4" />
+            </button>
+          ))}
+        </aside>
+        {dialogTab && webApp && (
+          <WebAppDialog
+            open
+            initialTab={dialogTab}
+            onClose={() => setDialogTab(null)}
+            info={webApp}
+            onSave={p => saveMut.mutate(p)}
+            saving={saveMut.isPending}
+          />
+        )}
+        {embedCfg && (
+          <EmbedFormModal
+            open
+            initial={embedCfg}
+            loading={updateEmbedMut.isPending}
+            onClose={() => setEmbedCfg(null)}
+            onSubmitCreate={() => {}}
+            onSubmitUpdate={(id, req) => updateEmbedMut.mutate({ id, req })}
+          />
+        )}
+        <AgentKeysModal graphId={graph.id} open={keysOpen} onClose={() => setKeysOpen(false)} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <aside className="bg-warm-2/50 flex h-screen w-64 shrink-0 flex-col border-r border-stone-200/70 transition-[width]">
+        {/* 应用头 */}
+        <div className="border-b border-stone-200/70 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={onReturn}
+              className="inline-flex items-center gap-1 text-[11.5px] text-stone-500 transition hover:text-stone-800"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              返回工作流
+            </button>
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              title="收起应用栏"
+              className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          </div>
           <div className="flex items-start gap-2.5">
             <span
               className={cn(

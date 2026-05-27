@@ -189,7 +189,7 @@ interface Props {
 }
 
 export const NodePalette = ({ kind, onAdd }: Props) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const onDragStart = (e: React.DragEvent, type: GraphNodeType) => {
     e.dataTransfer.setData('application/x-graph-node-type', type);
