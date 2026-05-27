@@ -161,3 +161,42 @@ def chunk_by_sentence(
         chunks.append(" ".join(cur))
 
     return [c for c in chunks if c.strip()]
+
+
+# ── 中文分词（关键词召回 BM25 用） ─────────────────────────
+#: PG 'simple' ts 配置不切中文（整段中文 = 一个 token），中文 BM25 形同虚设。
+#: 用 jieba 预切词后用空格连接，再交给 to_tsvector('simple', ...) 即得到词级 lexeme。
+#: content 落库前切词存 content_search；查询同样切词后构 to_tsquery。
+
+_KEYWORD_TERM_RE = re.compile(r"[\w一-鿿]+")
+
+
+def segment_for_index(text: str) -> str:
+    """jieba 切词后空格连接，供 to_tsvector('simple', ...) 生成词级 tsvector。
+
+    保留英文 / 数字 token（jieba 对非中文按原样切），中文按词切。空串 → 空串。
+    """
+    if not text or not text.strip():
+        return ""
+    import jieba
+
+    return " ".join(t for t in jieba.cut(text) if t.strip())
+
+
+def keyword_query_terms(text: str) -> list[str]:
+    """把查询切成关键词词项（供 to_tsquery 以 OR 连接）。
+
+    只保留字母数字 / CJK 词项（剔除标点 / 纯空白），避免 to_tsquery 语法报错。
+    """
+    if not text or not text.strip():
+        return []
+    import jieba
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for tok in jieba.cut(text):
+        tok = tok.strip()
+        if tok and tok not in seen and _KEYWORD_TERM_RE.fullmatch(tok):
+            seen.add(tok)
+            out.append(tok)
+    return out

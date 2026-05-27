@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import Chunk
+from chameleon.core.utils import tokenizer
 from chameleon.core.vector.base import ChunkHit, ChunkPayload, VectorStore
 
 
@@ -46,6 +47,11 @@ class PgVectorStore(VectorStore):
                         doc_id=doc_id,
                         seq=c.seq,
                         content=c.content,
+                        # 中文关键词召回：落库即存 jieba 切词版（含 qa_question 一并切，
+                        # 让问句关键词也进 BM25 索引）
+                        content_search=tokenizer.segment_for_index(
+                            f"{c.content} {c.qa_question or ''}"
+                        ),
                         embedding=c.embedding,
                         token_count=c.token_count,
                         meta=c.meta,

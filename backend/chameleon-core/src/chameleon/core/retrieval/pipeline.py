@@ -40,6 +40,7 @@ from chameleon.core.retrieval.expander import (
 )
 from chameleon.core.retrieval.hybrid import Hit, HybridConfig, HybridPipeline
 from chameleon.core.retrieval.rerankers import build_reranker
+from chameleon.core.utils import tokenizer
 
 
 @dataclass
@@ -156,7 +157,12 @@ def _build_keyword_recall(
     capture: _ScoreMap,
 ) -> Callable[[str, int], Awaitable[list[Hit]]]:
     async def recall(query: str, n: int) -> list[Hit]:
-        ts_query = func.plainto_tsquery("simple", query)
+        # jieba 切词 → OR 连接（中文按词召回；content_tsv 也是切词版）。
+        # 无有效词项（纯标点 / 空）直接空召回，避免 to_tsquery 语法错误。
+        terms = tokenizer.keyword_query_terms(query)
+        if not terms:
+            return []
+        ts_query = func.to_tsquery("simple", " | ".join(terms))
         tsv_col = literal_column("content_tsv")
         rank = func.ts_rank(tsv_col, ts_query).label("rank")
         stmt = (

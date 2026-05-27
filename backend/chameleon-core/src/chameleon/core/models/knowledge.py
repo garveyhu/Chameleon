@@ -141,6 +141,10 @@ class Chunk(Base, TimestampMixin):
     # KB-P4-2：parent-child 分层。child 块精准召回，命中时返回此 parent 大块作上下文。
     # NULL = 非分层块（按自身 content 返回）。
     parent_content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 中文关键词召回：jieba 切词后的 content（空格连接），content_tsv 优先按它生成
+    # （PG 'simple' 不切中文 → 直接对 content 建 tsvector 中文 BM25 无效）。
+    # NULL（老块未回填）时 content_tsv 回退用原始 content。
+    content_search: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_chunks_kb", "kb_id"),
