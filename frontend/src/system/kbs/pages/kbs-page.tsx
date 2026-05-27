@@ -20,7 +20,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/core/components/ui/dropdown-menu';
 import { Input } from '@/core/components/ui/input';
@@ -129,20 +128,23 @@ export const KbsPage = () => {
                     <MoreVertical className="h-4 w-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={6}
+                  className="w-32 rounded-xl border-stone-200/70 p-1 shadow-lg"
+                >
                   <DropdownMenuItem
                     onSelect={() => setEditing(k)}
-                    className="text-[12.5px]"
+                    className="gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-stone-700"
                   >
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    <Pencil className="h-3.5 w-3.5 text-stone-400" />
                     编辑
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={() => askDelete(k)}
-                    className="text-[12.5px] text-rose-600 focus:bg-rose-50 focus:text-rose-700"
+                    className="gap-2 rounded-lg px-2.5 py-1.5 text-[12.5px] text-rose-600 focus:bg-rose-50 focus:text-rose-700"
                   >
-                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    <Trash2 className="h-3.5 w-3.5" />
                     删除
                   </DropdownMenuItem>
                 </DropdownMenuContent>
