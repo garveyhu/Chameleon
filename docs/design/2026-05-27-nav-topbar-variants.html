@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chameleon · 顶部域导航 · 现代化变体</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ════════════════════════════════════════════════════════════
+   范式④「顶部域切换」现代化变体
+   A 双层顶栏 · 暖深 app-shell · 横向子标签（去掉左栏 / Vercel 风）
+   B 悬浮玻璃顶栏 + 圆角浮岛画布（Arc / Raycast 风）
+   C 域色彩动态主题 · 实心胶囊（切域整页换色）
+   复用真实 token：#fffefb 纸 / #f4f3ee 轨 / #fafaf7 底 / #1c1917 墨 / 主蓝 #3b82f6
+   ════════════════════════════════════════════════════════════ */
+:root {
+  --base: #fafaf7; --rail: #f4f3ee; --paper: #fffefb;
+  --ink: #1c1917; --ink-2: #57534e; --ink-3: #a8a29e;
+  --line: rgba(120,113,108,0.16); --line-2: rgba(120,113,108,0.28);
+  --accent: #3b82f6; --accent-600: #2563eb; --accent-soft: #eff6ff;
+  --bar: #1c1917; --bar-ink: #e7e5e4; --bar-mut: #a8a29e; --bar-hover: rgba(255,255,255,0.08);
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 12px rgb(0 0 0 / 3%);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 5%), 0 2px 8px rgb(0 0 0 / 3%);
+  --shadow-pop: 0 10px 30px rgb(0 0 0 / 9%), 0 2px 8px rgb(0 0 0 / 4%);
+  --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-xl: 24px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Plus Jakarta Sans','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  background: #e7e5e0; color: var(--ink); -webkit-font-smoothing: antialiased; overflow: hidden;
+}
+.mono { font-family:'JetBrains Mono',monospace; font-variant-numeric: tabular-nums; }
+[data-lucide] { width: 18px; height: 18px; stroke-width: 2; }
+
+/* ── 演示控制条 ── */
+.demobar { height: 54px; display: flex; align-items: center; gap: 18px; padding: 0 18px;
+  background: #1c1917; color: #e7e5e4; position: relative; z-index: 100; }
+.demobar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; }
+.demobar .brand .dot { width: 22px; height: 22px; border-radius: 7px;
+  background: linear-gradient(135deg,#3b82f6,#22c55e); display: grid; place-items: center; }
+.demobar .brand .dot svg { width: 13px; height: 13px; color: #fff; }
+.demobar .tag { font-size: 11px; color: #a8a29e; }
+.switcher { display: flex; gap: 4px; background: rgba(255,255,255,0.05); padding: 4px; border-radius: 12px; }
+.switcher button { border: 0; background: transparent; color: #a8a29e; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 8px; transition: all .18s;
+  display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+.switcher button .n { font-size: 10px; opacity: .55; }
+.switcher button:hover { color: #e7e5e4; background: rgba(255,255,255,0.06); }
+.switcher button.on { background: #fafaf7; color: #1c1917; }
+.demobar .hint { margin-left: auto; font-size: 11.5px; color: #78716c; max-width: 380px; line-height: 1.4; }
+
+.stage { height: calc(100vh - 54px); position: relative; }
+.scene { position: absolute; inset: 0; display: none; }
+.scene.active { display: flex; flex-direction: column; }
+
+/* ── 公共内容件 ── */
+.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.page-head h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-head .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+.btn-primary { background: var(--accent); color: #fff; border: 0; border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-weight: 600; font-size: 13px; padding: 9px 15px; display: inline-flex;
+  align-items: center; gap: 7px; transition: filter .18s; }
+.btn-primary:hover { filter: brightness(1.06); }
+.btn-ghost { background: var(--paper); color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 9px;
+  cursor: pointer; font-family: inherit; font-weight: 600; font-size: 13px; padding: 8px 14px;
+  display: inline-flex; align-items: center; gap: 7px; transition: all .18s; }
+.btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px,1fr)); gap: 14px; }
+.wcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px;
+  box-shadow: var(--shadow-soft); cursor: pointer; transition: all .2s; }
+.wcard:hover { box-shadow: var(--shadow-pop); border-color: var(--line-2); transform: translateY(-2px); }
+.wcard .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent); margin-bottom: 12px; transition: all .2s; }
+.wcard .ic svg { width: 19px; height: 19px; }
+.wcard h3 { font-size: 14.5px; font-weight: 600; }
+.wcard p { font-size: 12px; color: var(--ink-3); margin-top: 4px; line-height: 1.5; }
+.wcard .meta { display: flex; gap: 10px; margin-top: 13px; font-size: 11px; color: var(--ink-3); align-items: center; }
+.wcard .meta b { color: var(--ink-2); font-weight: 600; }
+.pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+.note-strip { font-size: 11.5px; margin-bottom: 18px; padding: 9px 13px; background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent); border-radius: 9px;
+  display: flex; align-items: center; gap: 8px; color: var(--accent-600); }
+.note-strip svg { width: 15px; height: 15px; }
+
+/* ════════════════════════════════════════════════════════════
+   A 双层顶栏 · 暖深 app-shell · 横向子标签
+   ════════════════════════════════════════════════════════════ */
+.a-t1 { height: 52px; flex-shrink: 0; background: var(--bar); color: var(--bar-ink);
+  display: flex; align-items: center; gap: 14px; padding: 0 18px; }
+.a-t1 .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; }
+.a-t1 .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg,#3b82f6,#22c55e); display: grid; place-items: center; }
+.a-t1 .brand .dot svg { width: 15px; height: 15px; color: #fff; }
+.a-t1 .slash { color: #57534e; }
+.a-t1 .domain-pick { display: flex; align-items: center; gap: 7px; background: var(--bar-hover); border-radius: 9px;
+  padding: 6px 11px; cursor: pointer; font-size: 13px; font-weight: 600; }
+.a-t1 .domain-pick svg { width: 14px; height: 14px; color: var(--bar-mut); }
+.a-t1 .cmd { margin: 0 auto; display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+  padding: 8px 14px; color: var(--bar-mut); font-size: 12.5px; width: 360px; }
+.a-t1 .cmd .kbd { margin-left: auto; font-size: 11px; background: rgba(255,255,255,0.1); padding: 2px 7px; border-radius: 6px; }
+.a-t1 .r { display: flex; align-items: center; gap: 12px; }
+.a-t1 .ibtn { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--bar-mut); cursor: pointer; transition: all .16s; }
+.a-t1 .ibtn:hover { background: var(--bar-hover); color: var(--bar-ink); }
+.a-t1 .av { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg,#f59e0b,#ef4444); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+/* tier2 横向子标签 */
+.a-t2 { height: 46px; flex-shrink: 0; background: var(--paper); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 2px; padding: 0 18px; overflow-x: auto; }
+.a-tab { position: relative; display: flex; align-items: center; gap: 7px; padding: 0 13px; height: 100%;
+  font-size: 13px; font-weight: 500; color: var(--ink-2); cursor: pointer; white-space: nowrap; transition: color .16s; }
+.a-tab svg { width: 16px; height: 16px; color: var(--ink-3); transition: color .16s; }
+.a-tab:hover { color: var(--ink); }
+.a-tab.on { color: var(--accent-600); font-weight: 600; }
+.a-tab.on svg { color: var(--accent); }
+.a-tab.on::after { content:''; position:absolute; left:11px; right:11px; bottom:0; height:2px; border-radius:2px 2px 0 0; background: var(--accent); }
+.a-tab .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+.a-sep { width: 1px; height: 18px; background: var(--line-2); margin: 0 8px; }
+.a-body { flex: 1; overflow: auto; background: var(--base); }
+.a-wrap { max-width: 1160px; margin: 0 auto; padding: 28px 40px; }
+
+/* ════════════════════════════════════════════════════════════
+   B 悬浮玻璃顶栏 + 圆角浮岛画布
+   ════════════════════════════════════════════════════════════ */
+#mB {
+  background:
+    radial-gradient(700px 420px at 8% -4%, rgba(59,130,246,0.12), transparent 60%),
+    radial-gradient(720px 520px at 102% 104%, rgba(34,197,94,0.11), transparent 55%),
+    radial-gradient(600px 400px at 70% 120%, rgba(139,92,246,0.08), transparent 60%),
+    #efece5;
+  padding: 70px 16px 16px;
+}
+.b-bar { position: absolute; top: 14px; left: 16px; right: 16px; height: 50px; z-index: 20;
+  background: rgba(255,254,251,0.72); backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid rgba(255,255,255,0.7); border-radius: 16px; box-shadow: var(--shadow-pop);
+  display: flex; align-items: center; gap: 16px; padding: 0 14px 0 16px; }
+.b-bar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 14.5px; }
+.b-bar .brand .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg,#3b82f6,#22c55e); display: grid; place-items: center; }
+.b-bar .brand .dot svg { width: 15px; height: 15px; color: #fff; }
+.b-seg { margin: 0 auto; display: flex; gap: 3px; background: rgba(120,113,108,0.10); padding: 4px; border-radius: 12px; }
+.b-seg button { border: 0; background: transparent; cursor: pointer; font-family: inherit; font-size: 13px;
+  font-weight: 600; color: var(--ink-2); padding: 7px 16px; border-radius: 9px; display: flex; align-items: center; gap: 7px; transition: all .16s; }
+.b-seg button svg { width: 16px; height: 16px; }
+.b-seg button:hover { color: var(--ink); }
+.b-seg button.on { background: var(--paper); color: var(--ink); box-shadow: var(--shadow-soft); }
+.b-bar .r { display: flex; align-items: center; gap: 10px; }
+.b-bar .cmd { display: flex; align-items: center; gap: 9px; cursor: pointer; background: rgba(120,113,108,0.08);
+  border-radius: 10px; padding: 8px 13px; color: var(--ink-3); font-size: 12.5px; width: 200px; }
+.b-bar .cmd .kbd { margin-left: auto; font-size: 11px; background: rgba(120,113,108,0.12); padding: 2px 7px; border-radius: 6px; }
+.b-bar .av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#f59e0b,#ef4444); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+/* 浮岛 */
+.b-island { flex: 1; min-height: 0; background: var(--paper); border: 1px solid rgba(255,255,255,0.8);
+  border-radius: var(--r-xl); box-shadow: 0 24px 60px rgba(28,25,23,0.10), 0 4px 12px rgba(28,25,23,0.05);
+  display: flex; overflow: hidden; }
+.b-nav { width: 204px; flex-shrink: 0; padding: 18px 14px; border-right: 1px solid var(--line); }
+.b-nav .gl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 12px 10px 6px; }
+.b-ni { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; color: var(--ink-2); font-weight: 500; transition: all .15s; }
+.b-ni svg { width: 16px; height: 16px; color: var(--ink-3); }
+.b-ni:hover { background: var(--rail); color: var(--ink); }
+.b-ni.on { background: var(--accent-soft); color: var(--accent-600); font-weight: 600; }
+.b-ni.on svg { color: var(--accent); }
+.b-ni .badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+.b-content { flex: 1; overflow: auto; padding: 28px 34px; }
+
+/* ════════════════════════════════════════════════════════════
+   C 域色彩动态主题 · 实心胶囊
+   ════════════════════════════════════════════════════════════ */
+#mC { --dyn: #3b82f6; --dyn-soft: #eff6ff; --dyn-600: #2563eb; transition: none; }
+.c-top { height: 60px; flex-shrink: 0; background: var(--paper); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 22px; padding: 0 22px; }
+.c-top .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; font-size: 15px; }
+.c-top .brand .dot { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(135deg,var(--dyn),color-mix(in srgb,var(--dyn) 50%,#fff)); display: grid; place-items: center; transition: background .35s; }
+.c-top .brand .dot svg { width: 16px; height: 16px; color: #fff; }
+.c-domains { display: flex; gap: 6px; }
+.c-dom { border: 0; background: transparent; cursor: pointer; font-family: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--ink-2); padding: 9px 17px; border-radius: 11px; display: flex; align-items: center; gap: 8px; transition: all .2s; }
+.c-dom svg { width: 17px; height: 17px; transition: color .2s; }
+.c-dom:hover { background: var(--rail); }
+.c-dom.on { color: #fff; box-shadow: 0 4px 14px -3px var(--dom-c); }
+.c-dom.on svg { color: #fff; }
+.c-top .r { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.c-top .cmd { display: flex; align-items: center; gap: 8px; cursor: pointer; background: var(--base);
+  border: 1px solid var(--line-2); border-radius: 9px; padding: 7px 12px; color: var(--ink-3); font-size: 12.5px; width: 200px; }
+.c-top .cmd .kbd { margin-left: auto; font-size: 11px; background: var(--rail); padding: 2px 7px; border-radius: 6px; }
+.c-top .av { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg,#f59e0b,#ef4444); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+.c-body { flex: 1; display: flex; overflow: hidden; }
+.c-sub { width: 212px; flex-shrink: 0; background: var(--base); border-right: 1px solid var(--line); padding: 18px 13px; overflow: auto; }
+.c-sl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 12px 9px 6px; }
+.c-si { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; color: var(--ink-2); font-weight: 500; transition: all .15s; }
+.c-si svg { width: 16px; height: 16px; color: var(--ink-3); }
+.c-si:hover { background: var(--paper); color: var(--ink); }
+.c-si.on { background: var(--dyn-soft); color: var(--dyn-600); font-weight: 600; }
+.c-si.on svg { color: var(--dyn); }
+.c-si .badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+.c-main { flex: 1; overflow: auto; padding: 28px 36px; background: var(--paper); }
+#mC .btn-primary { background: var(--dyn); }
+#mC .wcard .ic { background: var(--dyn-soft); color: var(--dyn); }
+#mC .page-head h1 .accent { color: var(--dyn); }
+.c-strip { height: 3px; background: linear-gradient(90deg, var(--dyn), transparent); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="demobar">
+  <div class="brand"><span class="dot"><i data-lucide="hexagon"></i></span> Chameleon</div>
+  <span class="tag">顶部域导航 · 现代化变体</span>
+  <div class="switcher">
+    <button data-scene="mA" class="on"><span class="n">A</span> 双层顶栏 · 横向标签</button>
+    <button data-scene="mB"><span class="n">B</span> 悬浮玻璃 · 圆角浮岛</button>
+    <button data-scene="mC"><span class="n">C</span> 域色彩动态主题</button>
+  </div>
+  <div class="hint" id="hint">A：暖深 app-shell 顶栏 + 横向子标签，彻底去掉左栏，最像 Vercel / Linear 那种现代 dashboard。</div>
+</div>
+
+<div class="stage">
+
+  <!-- ═══════ A 双层顶栏 ═══════ -->
+  <section id="mA" class="scene active">
+    <header class="a-t1">
+      <div class="brand"><span class="dot"><i data-lucide="hexagon"></i></span> Chameleon</div>
+      <span class="slash">/</span>
+      <div class="domain-pick">工作台 <i data-lucide="chevrons-up-down"></i></div>
+      <div class="cmd"><i data-lucide="search" style="width:15px;height:15px"></i> 搜索或跳转任意页… <span class="kbd">⌘K</span></div>
+      <div class="r">
+        <div class="ibtn"><i data-lucide="bell"></i></div>
+        <div class="av">A</div>
+      </div>
+    </header>
+    <nav class="a-t2">
+      <div class="a-tab on"><i data-lucide="boxes"></i> 应用</div>
+      <div class="a-tab"><i data-lucide="git-branch"></i> 工作流</div>
+      <div class="a-tab"><i data-lucide="message-square"></i> 对话 / Playground</div>
+      <div class="a-tab"><i data-lucide="cpu"></i> 嵌入式</div>
+      <div class="a-sep"></div>
+      <div class="a-tab"><i data-lucide="globe"></i> 模型与供应商</div>
+      <div class="a-tab"><i data-lucide="puzzle"></i> 插件</div>
+      <div class="a-tab"><i data-lucide="shopping-bag"></i> 插件市场</div>
+    </nav>
+    <main class="a-body">
+      <div class="a-wrap">
+        <div class="note-strip"><i data-lucide="info"></i> 现代手法：去掉左侧导航栏，二级导航横向铺在第二层；内容全宽。顶栏暖深做"应用外壳感"，内容浅暖纸。</div>
+        <div class="page-head">
+          <div style="flex:1"><h1>应用</h1><div class="sub">12 个应用 · 已发布 8</div></div>
+          <button class="btn-ghost"><i data-lucide="upload" style="width:15px;height:15px"></i> 导入 DSL</button>
+          <button class="btn-primary"><i data-lucide="plus" style="width:15px;height:15px"></i> 新建应用</button>
+        </div>
+        <div class="card-grid">
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>客服助手</h3><p>多轮对话 + 知识库检索</p><div class="meta"><span class="pill">API</span><span><b>4.2k</b> 调用</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="git-branch"></i></div><h3>文档摘要流</h3><p>批量解析 → 摘要工作流</p><div class="meta"><span class="pill">工作流</span><span><b>312</b> 运行</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>检索问答 Bot</h3><p>产品手册问答</p><div class="meta"><span class="pill">API</span><span><b>1.8k</b> 调用</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="cpu"></i></div><h3>官网嵌入组件</h3><p>落地页聊天气泡</p><div class="meta"><span class="pill">嵌入式</span><span><b>560</b> 会话</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>合同抽取助手</h3><p>条款抽取 → 结构化输出</p><div class="meta"><span class="pill">API</span><span><b>88</b> 调用</span></div></div>
+          <div class="wcard" style="display:grid;place-items:center;border-style:dashed;color:var(--ink-3)"><div style="text-align:center"><i data-lucide="plus" style="width:24px;height:24px"></i><div style="margin-top:7px;font-size:13px;font-weight:600">新建应用</div></div></div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- ═══════ B 悬浮玻璃 + 圆角浮岛 ═══════ -->
+  <section id="mB" class="scene">
+    <header class="b-bar">
+      <div class="brand"><span class="dot"><i data-lucide="hexagon"></i></span> Chameleon</div>
+      <div class="b-seg">
+        <button class="on"><i data-lucide="boxes"></i> 工作台</button>
+        <button><i data-lucide="database"></i> 知识库</button>
+        <button><i data-lucide="telescope"></i> 观测</button>
+        <button><i data-lucide="settings"></i> 设置</button>
+      </div>
+      <div class="r">
+        <div class="cmd"><i data-lucide="search" style="width:15px;height:15px"></i> 跳转… <span class="kbd">⌘K</span></div>
+        <div class="av">A</div>
+      </div>
+    </header>
+    <div class="b-island">
+      <aside class="b-nav">
+        <div class="gl">创建</div>
+        <div class="b-ni on"><i data-lucide="boxes"></i> 应用</div>
+        <div class="b-ni"><i data-lucide="git-branch"></i> 工作流</div>
+        <div class="b-ni"><i data-lucide="message-square"></i> 对话 / Playground</div>
+        <div class="b-ni"><i data-lucide="cpu"></i> 嵌入式</div>
+        <div class="gl">接入</div>
+        <div class="b-ni"><i data-lucide="globe"></i> 模型与供应商</div>
+        <div class="b-ni"><i data-lucide="puzzle"></i> 插件</div>
+        <div class="b-ni"><i data-lucide="shopping-bag"></i> 插件市场</div>
+      </aside>
+      <main class="b-content">
+        <div class="note-strip"><i data-lucide="info"></i> 现代手法：顶栏悬浮玻璃胶囊，内容收进一块大圆角"浮岛"卡片，背景透出暖色微光渐变。留白 + 材质 = Arc / Raycast 那种高级感。</div>
+        <div class="page-head">
+          <div style="flex:1"><h1>应用</h1><div class="sub">12 个应用 · 已发布 8</div></div>
+          <button class="btn-primary"><i data-lucide="plus" style="width:15px;height:15px"></i> 新建应用</button>
+        </div>
+        <div class="card-grid">
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>客服助手</h3><p>多轮对话 + 知识库检索</p><div class="meta"><span class="pill">API</span><span><b>4.2k</b> 调用</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="git-branch"></i></div><h3>文档摘要流</h3><p>批量解析 → 摘要工作流</p><div class="meta"><span class="pill">工作流</span><span><b>312</b> 运行</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>检索问答 Bot</h3><p>产品手册问答</p><div class="meta"><span class="pill">API</span><span><b>1.8k</b> 调用</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="cpu"></i></div><h3>官网嵌入组件</h3><p>落地页聊天气泡</p><div class="meta"><span class="pill">嵌入式</span><span><b>560</b> 会话</span></div></div>
+          <div class="wcard"><div class="ic"><i data-lucide="boxes"></i></div><h3>合同抽取助手</h3><p>条款抽取 → 结构化输出</p><div class="meta"><span class="pill">API</span><span><b>88</b> 调用</span></div></div>
+          <div class="wcard" style="display:grid;place-items:center;border-style:dashed;color:var(--ink-3)"><div style="text-align:center"><i data-lucide="plus" style="width:24px;height:24px"></i><div style="margin-top:7px;font-size:13px;font-weight:600">新建应用</div></div></div>
+        </div>
+      </main>
+    </div>
+  </section>
+
+  <!-- ═══════ C 域色彩动态主题 ═══════ -->
+  <section id="mC" class="scene">
+    <header class="c-top">
+      <div class="brand"><span class="dot"><i data-lucide="hexagon"></i></span> Chameleon</div>
+      <nav class="c-domains" id="cDomains">
+        <button class="c-dom on" data-dom="work"   style="--dom-c:#3b82f6"><i data-lucide="boxes"></i> 工作台</button>
+        <button class="c-dom"    data-dom="kb"     style="--dom-c:#10b981"><i data-lucide="database"></i> 知识库</button>
+        <button class="c-dom"    data-dom="observe" style="--dom-c:#8b5cf6"><i data-lucide="telescope"></i> 观测</button>
+        <button class="c-dom"    data-dom="system" style="--dom-c:#f59e0b"><i data-lucide="settings"></i> 设置</button>
+      </nav>
+      <div class="r">
+        <div class="cmd"><i data-lucide="search" style="width:15px;height:15px"></i> 跳转… <span class="kbd">⌘K</span></div>
+        <div class="av">A</div>
+      </div>
+    </header>
+    <div class="c-strip"></div>
+    <div class="c-body">
+      <aside class="c-sub" id="cSub"><!-- JS 渲染 --></aside>
+      <main class="c-main" id="cMain"><!-- JS 渲染 --></main>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  lucide.createIcons();
+  const hints = {
+    mA: 'A：暖深 app-shell 顶栏 + 横向子标签，彻底去掉左栏，最像 Vercel / Linear 那种现代 dashboard。',
+    mB: 'B：悬浮玻璃顶栏 + 圆角浮岛画布，背景透暖色微光。留白和材质堆出高级感，最"轻"。',
+    mC: 'C：每个域一套主色（工作台蓝 / 知识库绿 / 观测紫 / 设置琥珀），切域整页换色——点上面四个域试试，导航会"活"起来。'
+  };
+  document.querySelectorAll('.switcher button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.scene;
+      document.querySelectorAll('.switcher button').forEach(b => b.classList.toggle('on', b === btn));
+      document.querySelectorAll('.scene').forEach(s => s.classList.toggle('active', s.id === id));
+      document.getElementById('hint').textContent = hints[id];
+    });
+  });
+
+  /* A / B 内部高亮（演示） */
+  function wireHighlight(root, sel) {
+    document.querySelectorAll(root + ' ' + sel).forEach(el => {
+      el.addEventListener('click', () => {
+        document.querySelectorAll(root + ' ' + sel).forEach(x => x.classList.toggle('on', x === el));
+      });
+    });
+  }
+  wireHighlight('#mA', '.a-tab');
+  wireHighlight('#mB .b-seg', 'button');
+  wireHighlight('#mB .b-nav', '.b-ni');
+
+  /* ── C 域色彩动态主题 ── */
+  const C = {
+    work:    { c:'#3b82f6', soft:'#eff6ff', d600:'#2563eb', label:'工作台',
+      sub:[ {g:'创建'},{i:'boxes',t:'应用',on:1},{i:'git-branch',t:'工作流'},{i:'message-square',t:'对话 / Playground'},{i:'cpu',t:'嵌入式'},{g:'接入'},{i:'globe',t:'模型与供应商'},{i:'puzzle',t:'插件'} ],
+      head:'应用', headSub:'12 个应用 · 已发布 8', cta:'新建应用',
+      cards:[ ['boxes','客服助手','多轮对话 + 知识库检索','API','4.2k 调用'],['git-branch','文档摘要流','批量解析 → 摘要工作流','工作流','312 运行'],['boxes','检索问答 Bot','产品手册问答','API','1.8k 调用'],['cpu','官网嵌入组件','落地页聊天气泡','嵌入式','560 会话'] ] },
+    kb:      { c:'#10b981', soft:'#ecfdf5', d600:'#047857', label:'知识库',
+      sub:[ {g:'内容'},{i:'database',t:'全部知识库',on:1},{i:'file-text',t:'文档'},{i:'scissors',t:'分段'},{i:'search',t:'检索测试'},{g:'设置'},{i:'sliders-horizontal',t:'索引配置'} ],
+      head:'知识库', headSub:'8 个知识库 · 1,204 篇文档', cta:'新建知识库',
+      cards:[ ['database','产品手册','客服售前主知识源','312 文档','98k 分段'],['database','技术文档','API 与架构说明','156 文档','42k 分段'],['database','合同模板库','法务审阅抽取','89 文档','21k 分段'],['database','FAQ 沉淀','历史工单归纳','540 文档','120k 分段'] ] },
+    observe: { c:'#8b5cf6', soft:'#f5f3ff', d600:'#6d28d9', label:'观测',
+      sub:[ {g:'运行记录'},{i:'scroll-text',t:'会话 & 运行',on:1,b:'126'},{i:'activity',t:'Trace'},{i:'play-square',t:'Playground'},{g:'质量 & 成本'},{i:'dollar-sign',t:'成本统计'},{i:'database',t:'Datasets'},{i:'flask-conical',t:'评测任务',b:'2'},{g:'合规'},{i:'newspaper',t:'审计日志'} ],
+      head:'会话 & 运行', headSub:'最近 7 天 · 126 条记录', cta:'导出',
+      cards:[ ['scroll-text','客服助手 #a1f3','API · 3,204 tokens','成功','840ms'],['git-branch','文档摘要流 #88','工作流 · 12,400 tokens','成功','2.1s'],['cpu','嵌入组件会话','嵌入式 · 2,050 tokens','限流重试','920ms'],['boxes','检索问答 #c0','API · 4,880 tokens','成功','1.3s'] ] },
+    system:  { c:'#f59e0b', soft:'#fffbeb', d600:'#b45309', label:'设置',
+      sub:[ {g:'访问'},{i:'key-square',t:'Key 管理',on:1},{i:'users',t:'用户管理'},{i:'shield-check',t:'角色管理'},{g:'平台'},{i:'settings',t:'系统配置'},{i:'newspaper',t:'审计日志'} ],
+      head:'Key 管理', headSub:'4 个应用 Key · 2 个智能体 Key', cta:'新建 Key',
+      cards:[ ['key-square','生产环境 Key','应用级 · chm_••••8f2a','启用','4.2k 次/日'],['key-square','测试 Key','应用级 · chm_••••1c0d','启用','320 次/日'],['key-square','客服助手 Key','智能体级 · agent-••••','启用','1.8k 次/日'],['key-square','嵌入组件 Key','智能体级 · agent-••••','已停用','—'] ] },
+  };
+  const cSub = document.getElementById('cSub');
+  const cMain = document.getElementById('cMain');
+  const mC = document.getElementById('mC');
+  function renderC(key) {
+    const d = C[key];
+    mC.style.setProperty('--dyn', d.c);
+    mC.style.setProperty('--dyn-soft', d.soft);
+    mC.style.setProperty('--dyn-600', d.d600);
+    // subnav
+    cSub.innerHTML = d.sub.map(it => it.g
+      ? `<div class="c-sl">${it.g}</div>`
+      : `<div class="c-si${it.on?' on':''}"><i data-lucide="${it.i}"></i> ${it.t}${it.b?`<span class="badge">${it.b}</span>`:''}</div>`
+    ).join('');
+    // main
+    cMain.innerHTML = `
+      <div class="note-strip"><i data-lucide="palette"></i> 当前域：<b style="margin:0 2px">${d.label}</b> — 主色、子导航高亮、按钮、图标底色全部随域切换。这就是"导航活起来"。</div>
+      <div class="page-head">
+        <div style="flex:1"><h1><span class="accent">●</span> ${d.head}</h1><div class="sub">${d.headSub}</div></div>
+        <button class="btn-primary"><i data-lucide="plus" style="width:15px;height:15px"></i> ${d.cta}</button>
+      </div>
+      <div class="card-grid">
+        ${d.cards.map(c => `<div class="wcard"><div class="ic"><i data-lucide="${c[0]}"></i></div><h3>${c[1]}</h3><p>${c[2]}</p><div class="meta"><span class="pill">${c[3]}</span><span class="mono">${c[4]}</span></div></div>`).join('')}
+      </div>`;
+    lucide.createIcons();
+  }
+  document.querySelectorAll('#cDomains .c-dom').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#cDomains .c-dom').forEach(b => {
+        const on = b === btn;
+        b.classList.toggle('on', on);
+        b.style.background = on ? b.dataset.domColor || getComputedStyle(b).getPropertyValue('--dom-c') : '';
+      });
+      btn.style.background = btn.style.getPropertyValue('--dom-c') || '';
+      renderC(btn.dataset.dom);
+    });
+  });
+  // 初始化实心胶囊背景色
+  document.querySelectorAll('#cDomains .c-dom').forEach(b => {
+    if (b.classList.contains('on')) b.style.background = getComputedStyle(b).getPropertyValue('--dom-c').trim();
+  });
+  renderC('work');
+</script>
+</body>
+</html>

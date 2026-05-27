@@ -1,34 +1,46 @@
-/** Agent 详情页 —— tabs：基础信息 / 关联 KB / 关联模型 / 调用统计 */
+/** 应用详情页 —— 统一「应用详情」tab：概览 / 关联 KB / 关联模型 / 会话 / API / 监测
+ *
+ * 按 source 显隐：关联 KB / 关联模型仅 source='local'（代码应用）；其余 tab 全应用通用。
+ * graph 来源的应用走全屏图编辑器，此页仅作详情聚合（KB / 模型在编排画布配置，故隐藏两 tab）。
+ */
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, BarChart3, BookOpen, Cpu, Info, Workflow } from 'lucide-react';
+import { Activity, ArrowLeft, ArrowRight, BookOpen, Cpu, Info, KeyRound, MessagesSquare, Workflow } from 'lucide-react';
 
+import { OrchestrationBadge } from '@/core/components/common/orchestration-badge';
 import { SectionCard } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { AgentApiTab } from '@/system/agents/components/agent-api-tab';
 import { AgentConfigForm } from '@/system/agents/components/agent-config-form';
+import { AgentOverviewTab } from '@/system/agents/components/agent-overview-tab';
+import { AgentSessionsTab } from '@/system/agents/components/agent-sessions-tab';
 import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
 import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
 
-type TabKey = 'info' | 'kbs' | 'model' | 'stats';
+type TabKey = 'info' | 'kbs' | 'model' | 'sessions' | 'api' | 'monitor';
 
 interface TabDef {
   key: TabKey;
   label: string;
   icon: ReactElement;
+  /** 仅代码应用（source='local'）展示 */
+  localOnly?: boolean;
 }
 
 const TABS: TabDef[] = [
-  { key: 'info', label: '基础信息', icon: <Info className="h-3.5 w-3.5" /> },
-  { key: 'kbs', label: '关联 KB', icon: <BookOpen className="h-3.5 w-3.5" /> },
-  { key: 'model', label: '关联模型', icon: <Cpu className="h-3.5 w-3.5" /> },
-  { key: 'stats', label: '调用统计', icon: <BarChart3 className="h-3.5 w-3.5" /> },
+  { key: 'info', label: '概览', icon: <Info className="h-3.5 w-3.5" /> },
+  { key: 'kbs', label: '关联 KB', icon: <BookOpen className="h-3.5 w-3.5" />, localOnly: true },
+  { key: 'model', label: '关联模型', icon: <Cpu className="h-3.5 w-3.5" />, localOnly: true },
+  { key: 'sessions', label: '会话', icon: <MessagesSquare className="h-3.5 w-3.5" /> },
+  { key: 'api', label: 'API', icon: <KeyRound className="h-3.5 w-3.5" /> },
+  { key: 'monitor', label: '监测', icon: <Activity className="h-3.5 w-3.5" /> },
 ];
 
 export const AgentDetailPage = () => {
@@ -42,21 +54,22 @@ export const AgentDetailPage = () => {
     enabled: !!agentId,
   });
 
-  // graph 来源的智能体：KB / 模型在工作流编排里配置，详情页隐藏这两个冗余 tab
-  const isGraph = agentQ.data?.source === 'graph';
-  const visibleTabs = isGraph ? TABS.filter(t => t.key !== 'kbs' && t.key !== 'model') : TABS;
+  const agent = agentQ.data ?? null;
+  // 关联 KB / 模型仅代码应用有意义（外部应用在其平台配，图应用在编排画布配）
+  const isLocal = agent?.source === 'local';
+  const visibleTabs = TABS.filter(t => !t.localOnly || isLocal);
 
   if (!agentId) {
     return (
       <SectionCard>
-        <div className="p-6 text-sm text-stone-500">非法的 agent 编号</div>
+        <div className="p-6 text-sm text-stone-500">非法的应用编号</div>
       </SectionCard>
     );
   }
 
   return (
     <div className="space-y-3">
-      <Header agent={agentQ.data ?? null} loading={agentQ.isLoading} />
+      <Header agent={agent} loading={agentQ.isLoading} />
       <SectionCard className="!p-0">
         <nav className="bg-warm-2/40 flex items-center gap-1 border-b border-stone-200/70 px-3 py-2">
           {visibleTabs.map(t => (
@@ -77,10 +90,12 @@ export const AgentDetailPage = () => {
           ))}
         </nav>
         <div className="p-4">
-          {tab === 'info' && <InfoTab agent={agentQ.data ?? null} />}
-          {tab === 'kbs' && <LinkedKbsForm agentId={agentId} />}
-          {tab === 'model' && <LinkedModelsForm agentId={agentId} />}
-          {tab === 'stats' && <PlaceholderTab hint="待 call_logs 趋势接入" />}
+          {tab === 'info' && <InfoTab agent={agent} />}
+          {tab === 'kbs' && isLocal && <LinkedKbsForm agentId={agentId} />}
+          {tab === 'model' && isLocal && <LinkedModelsForm agentId={agentId} />}
+          {tab === 'sessions' && agent && <AgentSessionsTab agentKey={agent.agent_key} />}
+          {tab === 'api' && agent && <AgentApiTab agentId={agentId} agentKey={agent.agent_key} />}
+          {tab === 'monitor' && <AgentOverviewTab agentId={agentId} />}
         </div>
       </SectionCard>
     </div>
@@ -93,7 +108,7 @@ const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean 
       to="/agents"
       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
     >
-      <ArrowLeft className="h-3.5 w-3.5" /> 智能体
+      <ArrowLeft className="h-3.5 w-3.5" /> 应用
     </Link>
     <span className="text-stone-300">/</span>
     {loading ? (
@@ -102,9 +117,7 @@ const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean 
       <div className="flex items-baseline gap-2">
         <span className="text-[15px] font-medium text-stone-900">{agent.name}</span>
         <span className="font-mono text-[11.5px] text-stone-500">{agent.agent_key}</span>
-        <Badge variant="outline" className="text-[10.5px]">
-          {agent.source}
-        </Badge>
+        <OrchestrationBadge source={agent.source} graphKind={agent.graph_kind} />
         {!agent.enabled && (
           <Badge variant="outline" className="bg-stone-100 text-[10.5px] text-stone-500">
             已停用
@@ -176,11 +189,5 @@ const Kv = ({
     <div className={cn('mt-0.5 text-[12.5px] break-all text-stone-800', mono && 'tnum font-mono')}>
       {value}
     </div>
-  </div>
-);
-
-const PlaceholderTab = ({ hint }: { hint: string }) => (
-  <div className="flex h-[200px] flex-col items-center justify-center gap-2 text-stone-400">
-    <div className="text-[12.5px]">{hint}</div>
   </div>
 );

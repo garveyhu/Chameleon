@@ -1,9 +1,11 @@
 import { get, post } from '@/core/lib/request';
 import type { EntityId } from '@/core/types/api';
 import type {
+  AgentApiKey,
   AgentConfigSchema,
   AgentItem,
   AgentModelSlots,
+  AgentOverview,
   CreateAgentRequest,
   LinkedKbItem,
 } from '@/system/agents/types/agent';
@@ -42,4 +44,17 @@ export const agentApi = {
   configSchema: (id: EntityId) => get<AgentConfigSchema>(`/v1/admin/agents/${id}/config-schema`),
   updateConfig: (id: EntityId, values: Record<string, unknown>) =>
     post<AgentConfigSchema>(`/v1/admin/agents/${id}/config/update`, { values }),
+
+  /** 应用级密钥：列未吊销 */
+  listApiKeys: (id: EntityId) => get<AgentApiKey[]>(`/v1/admin/agents/${id}/api-keys`),
+  /** 应用级密钥：新建（明文仅此响应可见） */
+  createApiKey: (id: EntityId, name: string) =>
+    post<AgentApiKey>(`/v1/admin/agents/${id}/api-keys`, { name }),
+  /** 应用级密钥：吊销 */
+  revokeApiKey: (id: EntityId, keyId: EntityId) =>
+    post<AgentApiKey>(`/v1/admin/agents/${id}/api-keys/${keyId}/revoke`),
+
+  /** 调用概览（监测）：按时间窗聚合 */
+  overview: (id: EntityId, hours: number) =>
+    get<AgentOverview>(`/v1/admin/agents/${id}/overview`, { params: { hours } }),
 };

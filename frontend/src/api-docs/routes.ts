@@ -17,6 +17,13 @@ const module: ModuleRouteConfig = {
         return { Component: m.KbApiDocPage };
       },
     },
+    {
+      path: '/api-docs/agent/:agentKey',
+      lazy: async () => {
+        const m = await import('@/api-docs/pages/agent-api-doc-page');
+        return { Component: m.AgentApiDocPage };
+      },
+    },
   ],
 };
 

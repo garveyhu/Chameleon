@@ -11,12 +11,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -26,9 +26,15 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent, Graph
+from chameleon.core.models import Agent, ApiKey, CallLog, Graph
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service
+from chameleon.system.api_key import service as api_key_service
+from chameleon.system.api_key.schemas import (
+    ApiKeyCreated,
+    ApiKeyItem,
+    CreateApiKeyRequest,
+)
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
@@ -574,3 +580,149 @@ async def update_agent_config(
     await session.commit()
     await reload_agent_registry()  # 让 ctx.config 重新加载
     return Result.ok(_build_config_schema(agent))
+
+
+# ── 应用级 API 密钥（scope_type='app'，scope_ref = agent_key） ──
+#
+# 与编辑器里的「智能体密钥」同一作用域模型（graphs 域按 graph_id 入口），
+# 这里按 agent_id 入口，供应用详情页「API」tab 用（本地 / 外部 / 图应用通用）。
+
+
+class CreateAgentKeyRequest(BaseModel):
+    name: str = Field(default="", max_length=128)
+
+
+@router.get("/{agent_id}/api-keys", response_model=Result[list[ApiKeyItem]])
+async def list_agent_api_keys(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[list[ApiKeyItem]]:
+    agent = await _get_or_404(session, agent_id)
+    rows = (
+        (
+            await session.execute(
+                select(ApiKey)
+                .where(
+                    ApiKey.scope_type == "app",
+                    ApiKey.scope_ref == agent.agent_key,
+                    ApiKey.revoked_at.is_(None),
+                )
+                .order_by(ApiKey.created_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return Result.ok([ApiKeyItem.model_validate(r) for r in rows])
+
+
+@router.post("/{agent_id}/api-keys", response_model=Result[ApiKeyCreated])
+async def create_agent_api_key(
+    agent_id: int,
+    req: CreateAgentKeyRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[ApiKeyCreated]:
+    agent = await _get_or_404(session, agent_id)
+    create_req = CreateApiKeyRequest(
+        app_id=f"agent-{agent.agent_key}",
+        name=req.name or f"{agent.name} 密钥",
+        scope_type="app",
+        scope_ref=agent.agent_key,
+    )
+    created = await api_key_service.create_api_key(session, create_req)
+    await session.commit()
+    return Result.ok(created)
+
+
+@router.post(
+    "/{agent_id}/api-keys/{key_id}/revoke", response_model=Result[ApiKeyItem]
+)
+async def revoke_agent_api_key(
+    agent_id: int,
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[ApiKeyItem]:
+    agent = await _get_or_404(session, agent_id)
+    row = (
+        await session.execute(select(ApiKey).where(ApiKey.id == key_id))
+    ).scalar_one_or_none()
+    if row is None or row.scope_type != "app" or row.scope_ref != agent.agent_key:
+        raise BusinessError(ResultCode.Fail, message="密钥不存在或不属于该应用")
+    item = await api_key_service.revoke_api_key(session, key_id)
+    await session.commit()
+    return Result.ok(item)
+
+
+# ── 调用概览（监测 tab）：按 agent_key 聚合 call_logs ──
+
+
+class AgentOverviewItem(BaseModel):
+    """单应用调用概览（按时间窗聚合 call_logs trace 根）"""
+
+    window_hours: int
+    total_calls: int
+    success_rate: float  # 0~1
+    total_tokens: int
+    total_cost_usd: float
+    avg_duration_ms: float
+    prev_total_calls: int  # 上一同长度周期，算 delta
+
+
+@router.get("/{agent_id}/overview", response_model=Result[AgentOverviewItem])
+async def get_agent_overview(
+    agent_id: int,
+    hours: int = Query(default=24, ge=1, le=24 * 90),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentOverviewItem]:
+    """该应用近 N 小时的调用次数 / 成功率 / tokens / 成本 / 平均时延。
+
+    仅统计 trace 根（parent_id IS NULL），避免子 observation 重复计数。
+    """
+    agent = await _get_or_404(session, agent_id)
+    now = datetime.now(timezone.utc)
+    rf = now - timedelta(hours=hours)
+    prev_from = rf - timedelta(hours=hours)
+
+    base_where = (
+        CallLog.agent_key == agent.agent_key,
+        CallLog.parent_id.is_(None),
+    )
+    row = (
+        await session.execute(
+            select(
+                func.count(CallLog.id).label("total"),
+                func.count(CallLog.id)
+                .filter(CallLog.success.is_(True))
+                .label("succ"),
+                func.coalesce(func.sum(CallLog.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(CallLog.cost_usd), 0).label("cost"),
+                func.coalesce(func.avg(CallLog.duration_ms), 0.0).label("avg_dur"),
+            ).where(*base_where, CallLog.created_at >= rf, CallLog.created_at <= now)
+        )
+    ).one()
+    prev_total = (
+        await session.execute(
+            select(func.count(CallLog.id)).where(
+                *base_where,
+                CallLog.created_at >= prev_from,
+                CallLog.created_at < rf,
+            )
+        )
+    ).scalar_one()
+
+    total = int(row.total or 0)
+    return Result.ok(
+        AgentOverviewItem(
+            window_hours=hours,
+            total_calls=total,
+            success_rate=(int(row.succ or 0) / total) if total else 1.0,
+            total_tokens=int(row.tokens or 0),
+            total_cost_usd=float(row.cost or 0),
+            avg_duration_ms=float(row.avg_dur or 0),
+            prev_total_calls=int(prev_total or 0),
+        )
+    )

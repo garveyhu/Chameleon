@@ -71,3 +71,29 @@ export interface AgentConfigSchema {
   options: ConfigOptionItem[];
   values: Record<string, unknown>;
 }
+
+/** 应用级 API 密钥（scope_type='app'，scope_ref = agent_key） */
+export interface AgentApiKey {
+  id: EntityId;
+  name: string;
+  key_prefix: string;
+  /** 明文 key（留存，可重复复制；老数据为 null，只能看前缀） */
+  plain_key: string | null;
+  scope_type: string;
+  scope_ref: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+/** 单应用调用概览（监测 tab） */
+export interface AgentOverview {
+  window_hours: number;
+  total_calls: number;
+  /** 0~1 */
+  success_rate: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  avg_duration_ms: number;
+  prev_total_calls: number;
+}

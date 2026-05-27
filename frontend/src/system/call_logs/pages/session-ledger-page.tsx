@@ -8,7 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import { MessagesSquare, ScrollText } from 'lucide-react';
 
@@ -69,11 +69,13 @@ const isConversational = (l: CallLogItem): boolean =>
 export const SessionLedgerPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [range, setRange] = useState('7d');
-  const [agentKey, setAgentKey] = useState('all');
+  // 从应用详情「会话」tab 跳入时携带 agent_key，预选对应应用
+  const [agentKey, setAgentKey] = useState(() => searchParams.get('agent_key') ?? 'all');
   const [kind, setKind] = useState('all');
   const [channel, setChannel] = useState('all');
   const [success, setSuccess] = useState('all');
