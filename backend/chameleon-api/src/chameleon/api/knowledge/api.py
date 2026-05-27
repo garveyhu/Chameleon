@@ -184,7 +184,8 @@ async def delete_document(
 async def search(
     kb_key: str,
     req: SearchRequest,
+    session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[list[SearchHitItem]]:
     assert_scope(app, "kb", kb_key)
-    return Result.ok(await service.search(kb_key, req))
+    return Result.ok(await service.search(session, kb_key, req))

@@ -314,13 +314,30 @@ async def update_document(
 # ── Search ──────────────────────────────────────────────
 
 
-async def search(kb_key: str, req: SearchRequest) -> list[SearchHitItem]:
+async def search(
+    session: AsyncSession, kb_key: str, req: SearchRequest
+) -> list[SearchHitItem]:
     hits = await search_kb(
         kb_key,
         req.query,
         top_k=req.top_k,
         min_score=req.min_score,
     )
+    if not hits:
+        return []
+    # 命中项的 meta 取自 chunk（写入时恒为 None），doc 级元数据在 Document 行上，
+    # 这里按 doc_id 批量回查，合并 title/tags/自由键值后挂到每个命中项
+    doc_ids = {h.doc_id for h in hits}
+    rows = (
+        await session.execute(
+            select(
+                Document.id, Document.title, Document.tags, Document.meta
+            ).where(Document.id.in_(doc_ids))
+        )
+    ).all()
+    doc_meta = {
+        r.id: {"doc_title": r.title, "tags": r.tags, **(r.meta or {})} for r in rows
+    }
     return [
         SearchHitItem(
             id=h.id,
@@ -328,7 +345,7 @@ async def search(kb_key: str, req: SearchRequest) -> list[SearchHitItem]:
             seq=h.seq,
             content=h.content,
             score=h.score,
-            meta=h.meta,
+            meta=doc_meta.get(h.doc_id, h.meta),
         )
         for h in hits
     ]
