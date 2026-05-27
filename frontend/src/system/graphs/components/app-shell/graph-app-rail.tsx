@@ -11,6 +11,8 @@ import { useMutation } from '@tanstack/react-query';
 import {
   Activity,
   ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Code2,
   Copy,
   ExternalLink,
@@ -19,8 +21,6 @@ import {
   Layers,
   type LucideIcon,
   MessageSquare,
-  PanelLeftClose,
-  PanelLeftOpen,
   Rocket,
   ScrollText,
   Server,
@@ -134,7 +134,15 @@ export const GraphAppRail = ({
   if (collapsed) {
     return (
       <>
-        <aside className="bg-warm-2/50 flex h-screen w-12 shrink-0 flex-col items-center gap-1 border-r border-stone-200/70 py-2 transition-[width]">
+        <aside className="bg-warm-2/50 flex h-screen w-12 shrink-0 flex-col items-center gap-1 border-r border-stone-200/70 px-2 py-3 transition-[width]">
+          <button
+            type="button"
+            onClick={() => setCollapsed(false)}
+            title="展开应用栏"
+            className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+          >
+            <ChevronsRight className="h-4 w-4" />
+          </button>
           <button
             type="button"
             onClick={onReturn}
@@ -142,14 +150,6 @@ export const GraphAppRail = ({
             className="rounded-md p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
           >
             <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setCollapsed(false)}
-            title="展开应用栏"
-            className="rounded-md p-2 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
-          >
-            <PanelLeftOpen className="h-4 w-4" />
           </button>
           <div className="my-1 h-px w-6 bg-stone-200/70" />
           {NAV.map(n => (
@@ -214,7 +214,7 @@ export const GraphAppRail = ({
               title="收起应用栏"
               className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
             >
-              <PanelLeftClose className="h-4 w-4" />
+              <ChevronsLeft className="h-4 w-4" />
             </button>
           </div>
           <div className="flex items-start gap-2.5">

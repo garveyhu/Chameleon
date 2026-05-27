@@ -4,6 +4,8 @@ import { useState } from 'react';
 import {
   Bot,
   Braces,
+  ChevronsLeft,
+  ChevronsRight,
   CircleDashed,
   Code2,
   Combine,
@@ -13,8 +15,6 @@ import {
   GitBranch,
   Globe,
   type LucideIcon,
-  PanelLeftClose,
-  PanelLeftOpen,
   Repeat,
   Shuffle,
   Split,
@@ -203,7 +203,7 @@ export const NodePalette = ({ kind, onAdd }: Props) => {
         collapsed ? 'w-12' : 'w-44',
       )}
     >
-      <div className="flex items-center justify-between px-3 py-2.5">
+      <div className="flex items-center justify-between px-3 py-3">
         {!collapsed && (
           <span className="text-[10.5px] tracking-wider text-stone-500 uppercase">节点</span>
         )}
@@ -214,9 +214,9 @@ export const NodePalette = ({ kind, onAdd }: Props) => {
           className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
         >
           {collapsed ? (
-            <PanelLeftOpen className="h-4 w-4" />
+            <ChevronsRight className="h-4 w-4" />
           ) : (
-            <PanelLeftClose className="h-4 w-4" />
+            <ChevronsLeft className="h-4 w-4" />
           )}
         </button>
       </div>
