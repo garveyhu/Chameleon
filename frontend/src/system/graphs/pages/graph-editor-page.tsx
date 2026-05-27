@@ -60,8 +60,8 @@ import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
+import { AgentApiDocView } from '@/api-docs/components/agent-api-doc-view';
 import { RunDialog } from '@/system/graphs/components/run-dialog';
-import { ApiDocView } from '@/system/graphs/components/views/api-doc-view';
 import { LogsView } from '@/system/graphs/components/views/logs-view';
 import { MonitorView } from '@/system/graphs/components/views/monitor-view';
 import { useGraphHistory } from '@/system/graphs/hooks/use-graph-history';
@@ -749,7 +749,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
             </div>
           )}
 
-          {tab === 'api' && <ApiDocView graph={graph} />}
+          {tab === 'api' && <AgentApiDocView graph={graph} />}
           {tab === 'logs' && (
             <LogsView
               graphId={graph.id}
