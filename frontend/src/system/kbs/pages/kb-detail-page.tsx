@@ -192,14 +192,13 @@ const Header = ({ kb, loading, onServiceApi }: HeaderProps) => (
     {loading ? (
       <span className="text-[12.5px] text-stone-400">加载中…</span>
     ) : kb ? (
-      <div className="flex flex-1 items-baseline gap-2">
+      <div className="flex flex-1 items-center gap-2">
         <span className="text-[15px] font-medium text-stone-900">{kb.name}</span>
         <span className="font-mono text-[11.5px] text-stone-500">{kb.kb_key}</span>
-        <span className="ml-auto" />
         <button
           type="button"
           onClick={onServiceApi}
-          className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/40 hover:text-emerald-700"
+          className="ml-auto inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/40 hover:text-emerald-700"
         >
           <KeyRound className="h-3.5 w-3.5" /> 服务 API
         </button>

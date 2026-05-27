@@ -207,9 +207,9 @@ export const DocumentTable = ({ kbId }: Props) => {
     {
       key: 'mime_size',
       header: '类型 / 大小',
-      width: 130,
+      width: 175,
       render: d => (
-        <span className="text-[11.5px] text-stone-500">
+        <span className="text-[11.5px] whitespace-nowrap text-stone-500">
           {d.mime_type?.split(';')[0] || '-'}
           <span className="ml-1 font-mono text-stone-400">{formatBytes(d.size_bytes)}</span>
         </span>
@@ -244,10 +244,10 @@ export const DocumentTable = ({ kbId }: Props) => {
     {
       key: 'created_at',
       header: '创建时间',
-      width: 150,
+      width: 185,
       sortable: true,
       render: d => (
-        <span className="tnum font-mono text-[11.5px] text-stone-500">
+        <span className="tnum font-mono text-[11.5px] whitespace-nowrap text-stone-500">
           {formatDateTime(d.created_at)}
         </span>
       ),
