@@ -1,7 +1,7 @@
 /** 新建评估 Modal —— 支持 jsonl 上传或表格录入 */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Upload, X } from 'lucide-react';
+import { ListChecks, Plus, Upload, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
@@ -22,6 +22,10 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import { toast } from '@/core/lib/toast';
+import {
+  EvaluationChunkPicker,
+  type ExpectedChunk,
+} from '@/system/kbs/components/evaluation-chunk-picker';
 import { evaluationApi } from '@/system/kbs/services/evaluation';
 import type {
   EvaluationQuery,
@@ -36,7 +40,7 @@ interface Props {
 
 interface QueryRow {
   query: string;
-  expectedRaw: string; // 逗号分隔
+  expected: ExpectedChunk[]; // 期望命中的片段（选择器选出，存 id + 内容快照）
 }
 
 export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
@@ -45,15 +49,14 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
   const [name, setName] = useState('');
   const [mode, setMode] = useState<RecallMode>('vector');
   const [topK, setTopK] = useState(5);
-  const [rows, setRows] = useState<QueryRow[]>([
-    { query: '', expectedRaw: '' },
-  ]);
+  const [rows, setRows] = useState<QueryRow[]>([{ query: '', expected: [] }]);
+  const [pickerRow, setPickerRow] = useState<number | null>(null);
 
   const reset = () => {
     setName('');
     setMode('vector');
     setTopK(5);
-    setRows([{ query: '', expectedRaw: '' }]);
+    setRows([{ query: '', expected: [] }]);
   };
 
   const handleJsonl = async (file: File) => {
@@ -69,7 +72,11 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
         if (obj.query) {
           parsed.push({
             query: obj.query,
-            expectedRaw: (obj.expected_chunk_ids ?? []).join(','),
+            expected: (obj.expected_chunk_ids ?? []).map(id => ({
+              chunk_id: id,
+              content: '',
+              document_title: '',
+            })),
           });
         }
       } catch {
@@ -90,10 +97,9 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
       .filter(r => r.query.trim())
       .map(r => ({
         query: r.query.trim(),
-        expected_chunk_ids: r.expectedRaw
-          .split(/[,\s]+/)
-          .map(s => Number(s.trim()))
-          .filter(n => Number.isFinite(n) && n > 0),
+        // 直接透传 chunk_id（雪花 ID 为字符串，后端 list[int] 会无损转）；
+        // 不能 Number()——雪花 > 2^53 会丢精度，导致期望命中永远对不上
+        expected_chunk_ids: r.expected.map(e => e.chunk_id).filter(Boolean),
       }));
   };
 
@@ -119,6 +125,7 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
     name.trim() && buildQueries().length > 0 && !startMut.isPending;
 
   return (
+    <>
     <Modal open={open} onOpenChange={o => !o && onClose()}>
       <ModalContent size="lg">
         <ModalHeader>
@@ -188,16 +195,16 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
           </div>
 
           <div className="rounded-md border border-stone-200">
-            <div className="grid grid-cols-[1fr_240px_36px] gap-2 border-b border-stone-200 bg-stone-50/60 px-3 py-1.5 text-[11px] text-stone-500">
-              <div>query</div>
-              <div>expected_chunk_ids（逗号分隔）</div>
+            <div className="grid grid-cols-[1fr_180px_36px] gap-2 border-b border-stone-200 bg-stone-50/60 px-3 py-1.5 text-[11px] text-stone-500">
+              <div>查询语句</div>
+              <div>期望命中片段</div>
               <div />
             </div>
             <div className="max-h-[320px] overflow-y-auto">
               {rows.map((r, idx) => (
                 <div
                   key={idx}
-                  className="grid grid-cols-[1fr_240px_36px] gap-2 border-b border-stone-100 px-3 py-1.5 last:border-b-0"
+                  className="grid grid-cols-[1fr_180px_36px] gap-2 border-b border-stone-100 px-3 py-1.5 last:border-b-0"
                 >
                   <Input
                     value={r.query}
@@ -209,16 +216,14 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
                     className="h-7 text-[12.5px]"
                     placeholder="如何重置密码？"
                   />
-                  <Input
-                    value={r.expectedRaw}
-                    onChange={e => {
-                      const next = [...rows];
-                      next[idx] = { ...next[idx], expectedRaw: e.target.value };
-                      setRows(next);
-                    }}
-                    className="h-7 font-mono text-[12px]"
-                    placeholder="1,2,3"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setPickerRow(idx)}
+                    className="flex h-7 items-center justify-center gap-1.5 rounded-md border border-stone-200 bg-white text-[11.5px] text-stone-600 transition hover:border-amber-300 hover:text-amber-700"
+                  >
+                    <ListChecks className="h-3.5 w-3.5" />
+                    {r.expected.length > 0 ? `已选 ${r.expected.length} 条` : '选择片段'}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setRows(rows.filter((_, i) => i !== idx))}
@@ -234,10 +239,10 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setRows([...rows, { query: '', expectedRaw: '' }])}
+                onClick={() => setRows([...rows, { query: '', expected: [] }])}
               >
                 <Plus className="mr-1 h-3 w-3" />
-                添加 query
+                添加查询
               </Button>
             </div>
           </div>
@@ -257,5 +262,23 @@ export const EvaluationRunner = ({ open, onClose, kbId }: Props) => {
         </ModalFooter>
       </ModalContent>
     </Modal>
+
+    <EvaluationChunkPicker
+      open={pickerRow !== null}
+      kbId={kbId}
+      defaultQuery={pickerRow !== null ? (rows[pickerRow]?.query ?? '') : ''}
+      initial={pickerRow !== null ? (rows[pickerRow]?.expected ?? []) : []}
+      onConfirm={selected => {
+        setRows(prev => {
+          if (pickerRow === null) return prev;
+          const next = [...prev];
+          next[pickerRow] = { ...next[pickerRow], expected: selected };
+          return next;
+        });
+        setPickerRow(null);
+      }}
+      onClose={() => setPickerRow(null)}
+    />
+    </>
   );
 };
