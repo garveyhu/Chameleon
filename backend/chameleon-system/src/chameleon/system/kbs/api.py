@@ -762,6 +762,7 @@ async def list_document_chunks(
     doc_id: int,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    q: str | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("kbs:read")),
 ) -> Result[PageResult[ChunkItem]]:
@@ -770,6 +771,7 @@ async def list_document_chunks(
         kb_id=kb_id,
         doc_id=doc_id,
         page=PageParams(page=page, page_size=page_size),
+        q=q,
     )
     return Result.ok(
         PageResult(

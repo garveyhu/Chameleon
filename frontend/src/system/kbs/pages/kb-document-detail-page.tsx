@@ -1,22 +1,19 @@
-/** 文档详情页：信息卡 + chunk 卡片墙（grid）
- *
- * chunk 数大时启用 react-virtual 渲染窗口；小于阈值时走原生 grid。
- */
+/** 文档详情页：信息卡（标签 / 元数据字段填值）+ chunk 卡片墙（搜索 + 分页） */
 import type { ReactElement } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowLeft, FileText, Globe, RotateCcw, ScrollText } from 'lucide-react';
+import { ArrowLeft, FileText, Globe, RotateCcw, ScrollText, Search, X } from 'lucide-react';
 
-import { SectionCard } from '@/core/components/table';
+import { SectionCard, TablePagination } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
+import { Input } from '@/core/components/ui/input';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { ChunkCard } from '@/system/kbs/components/chunk-card';
-import { MetadataEditor } from '@/system/kbs/components/metadata-editor';
+import { DocMetaFields } from '@/system/kbs/components/doc-meta-fields';
 import { TagEditor } from '@/system/kbs/components/tag-editor';
 import { documentApi } from '@/system/kbs/services/document';
 import type { DocumentItem } from '@/system/kbs/types/kb';
@@ -27,13 +24,16 @@ const SOURCE_ICON: Record<DocumentItem['source_type'], ReactElement> = {
   text: <ScrollText className="h-3.5 w-3.5" strokeWidth={1.6} />,
 };
 
-const VIRTUAL_THRESHOLD = 60; // chunk 数超过这个值启用窗口虚拟化
-
 export const KbDocumentDetailPage = () => {
   const { id, docId } = useParams<{ id: string; docId: string }>();
   const kbId = id ?? '';
   const docIdNum = docId ?? '';
   const valid = !!kbId && !!docIdNum;
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+  const [searchInput, setSearchInput] = useState('');
+  const [q, setQ] = useState('');
 
   const docQ = useQuery({
     queryKey: ['kb-doc', kbId, docIdNum],
@@ -42,10 +42,20 @@ export const KbDocumentDetailPage = () => {
   });
 
   const chunksQ = useQuery({
-    queryKey: ['kb-doc-chunks', kbId, docIdNum],
-    queryFn: () => documentApi.listChunks(kbId, docIdNum, { page: 1, page_size: 200 }),
+    queryKey: ['kb-doc-chunks', kbId, docIdNum, page, pageSize, q],
+    queryFn: () =>
+      documentApi.listChunks(kbId, docIdNum, {
+        page,
+        page_size: pageSize,
+        q: q || undefined,
+      }),
     enabled: valid,
   });
+
+  const applySearch = (next: string) => {
+    setQ(next.trim());
+    setPage(1);
+  };
 
   if (!valid) {
     return (
@@ -57,26 +67,67 @@ export const KbDocumentDetailPage = () => {
 
   const doc = docQ.data ?? null;
   const chunks = chunksQ.data?.items ?? [];
+  const total = chunksQ.data?.total ?? 0;
 
   return (
     <div className="space-y-3">
       <Breadcrumb kbId={kbId} doc={doc} />
-      {doc && <DocumentInfoCard doc={doc} chunkCount={chunksQ.data?.total ?? 0} />}
+      {doc && <DocumentInfoCard doc={doc} />}
       <SectionCard>
-        <div className="mb-3 flex items-baseline justify-between">
-          <h3 className="text-[14px] font-medium text-stone-900">切块卡片墙</h3>
-          <span className="text-[11.5px] text-stone-500">共 {chunksQ.data?.total ?? 0} 块</span>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="shrink-0 text-[14px] font-medium text-stone-900">切块卡片墙</h3>
+          <div className="relative max-w-[280px] flex-1">
+            <Search className="absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+            <Input
+              value={searchInput}
+              onChange={e => setSearchInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && applySearch(searchInput)}
+              placeholder="搜索切块内容…"
+              className="h-8 pr-7 pl-8 text-[12.5px]"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchInput('');
+                  applySearch('');
+                }}
+                className="absolute top-1/2 right-2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <span className="shrink-0 text-[11.5px] text-stone-500">
+            {q ? `命中 ${total} 块` : `共 ${total} 块`}
+          </span>
         </div>
         {chunksQ.isLoading ? (
           <div className="py-10 text-center text-sm text-stone-400">加载中…</div>
         ) : chunks.length === 0 ? (
           <div className="py-12 text-center text-sm text-stone-400">
-            尚无切块；上传完成后会自动出现
+            {q ? `没有匹配「${q}」的切块` : '尚无切块；上传完成后会自动出现'}
           </div>
-        ) : chunks.length > VIRTUAL_THRESHOLD ? (
-          <ChunkVirtualWall chunks={chunks} kbId={kbId} docId={docIdNum} />
         ) : (
-          <ChunkGrid chunks={chunks} kbId={kbId} docId={docIdNum} />
+          <>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {chunks.map(c => (
+                <ChunkCard key={String(c.id)} chunk={c} kbId={kbId} docId={docIdNum} />
+              ))}
+            </div>
+            <div className="mt-3">
+              <TablePagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={s => {
+                  setPageSize(s);
+                  setPage(1);
+                }}
+              />
+            </div>
+          </>
         )}
       </SectionCard>
     </div>
@@ -100,7 +151,7 @@ const Breadcrumb = ({ kbId, doc }: { kbId: string | number; doc: DocumentItem | 
   </div>
 );
 
-const DocumentInfoCard = ({ doc, chunkCount }: { doc: DocumentItem; chunkCount: number }) => {
+const DocumentInfoCard = ({ doc }: { doc: DocumentItem }) => {
   const qc = useQueryClient();
   const [tags, setTags] = useState<string[]>(doc.tags);
   const [meta, setMeta] = useState<Record<string, unknown>>(doc.meta ?? {});
@@ -150,7 +201,7 @@ const DocumentInfoCard = ({ doc, chunkCount }: { doc: DocumentItem; chunkCount: 
             <span>
               统计:{' '}
               <span className="tnum font-mono">
-                {chunkCount} chunks · {doc.token_count} tokens
+                {doc.chunk_count} chunks · {doc.token_count} tokens
               </span>
             </span>
             <span>创建: {formatDateTime(doc.created_at)}</span>
@@ -167,7 +218,7 @@ const DocumentInfoCard = ({ doc, chunkCount }: { doc: DocumentItem; chunkCount: 
             </div>
             <div>
               <div className="mb-1 text-[11.5px] text-stone-600">元数据</div>
-              <MetadataEditor value={meta} onChange={setMeta} />
+              <DocMetaFields kbId={doc.kb_id} value={meta} onChange={setMeta} />
             </div>
           </div>
         </div>
@@ -207,66 +258,5 @@ const StatusBadge = ({ status }: { status: DocumentItem['status'] }) => {
     >
       {b.label}
     </span>
-  );
-};
-
-type ChunkListProps = {
-  chunks: import('@/system/kbs/types/kb').ChunkItem[];
-  kbId: import('@/core/types/api').EntityId;
-  docId: import('@/core/types/api').EntityId;
-};
-
-const ChunkGrid = ({ chunks, kbId, docId }: ChunkListProps) => (
-  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-    {chunks.map(c => (
-      <ChunkCard key={c.id} chunk={c} kbId={kbId} docId={docId} />
-    ))}
-  </div>
-);
-
-const ChunkVirtualWall = ({ chunks, kbId, docId }: ChunkListProps) => {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const rowItems = useMemo(() => {
-    const rows: (typeof chunks)[] = [];
-    for (let i = 0; i < chunks.length; i += 3) rows.push(chunks.slice(i, i + 3));
-    return rows;
-  }, [chunks]);
-
-  const virt = useVirtualizer({
-    count: rowItems.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 220,
-    overscan: 4,
-  });
-
-  return (
-    <div
-      ref={parentRef}
-      className="max-h-[70vh] overflow-y-auto rounded-md border border-stone-200/70"
-    >
-      <div style={{ height: virt.getTotalSize(), position: 'relative', width: '100%' }}>
-        {virt.getVirtualItems().map(v => (
-          <div
-            key={v.key}
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              transform: `translateY(${v.start}px)`,
-            }}
-            className="px-3 py-2"
-            ref={virt.measureElement}
-            data-index={v.index}
-          >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {rowItems[v.index].map(c => (
-                <ChunkCard key={c.id} chunk={c} kbId={kbId} docId={docId} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 };

@@ -553,10 +553,13 @@ async def list_document_chunks(
     kb_id: int,
     doc_id: int,
     page: PageParams,
+    q: str | None = None,
 ) -> tuple[Document, PageResult[Chunk]]:
-    """分页查询某 doc 的 chunks（按 seq 升序）"""
+    """分页查询某 doc 的 chunks（按 seq 升序）；q 非空时按内容子串过滤"""
     doc = await get_document(session, kb_id=kb_id, doc_id=doc_id)
     stmt = select(Chunk).where(Chunk.doc_id == doc.id)
+    if q and q.strip():
+        stmt = stmt.where(Chunk.content.ilike(f"%{q.strip()}%"))
     total = (
         await session.execute(select(func.count()).select_from(stmt.subquery()))
     ).scalar_one()

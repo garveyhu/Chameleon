@@ -59,8 +59,11 @@ export const documentApi = {
   delete: (kbId: EntityId, docId: EntityId) =>
     post<DocumentItem>(`/v1/admin/kbs/${kbId}/documents/${docId}/delete`, {}),
 
-  listChunks: (kbId: EntityId, docId: EntityId, params?: { page?: number; page_size?: number }) =>
-    get<PageResult<ChunkItem>>(`/v1/admin/kbs/${kbId}/documents/${docId}/chunks`, { params }),
+  listChunks: (
+    kbId: EntityId,
+    docId: EntityId,
+    params?: { page?: number; page_size?: number; q?: string },
+  ) => get<PageResult<ChunkItem>>(`/v1/admin/kbs/${kbId}/documents/${docId}/chunks`, { params }),
 
   /** 段落编辑（改内容重嵌 / 关键词 / 启停） */
   updateChunk: (
