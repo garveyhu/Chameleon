@@ -1,15 +1,26 @@
 /** 知识库列表 —— Dify 式卡片网格 + 创建入口卡 */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Database, FileText, Layers, MoreVertical, Pencil, Plus } from 'lucide-react';
+import {
+  Database,
+  FileText,
+  ImagePlus,
+  Layers,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/core/components/ui/dropdown-menu';
 import { Input } from '@/core/components/ui/input';
@@ -22,6 +33,7 @@ import {
   ModalTitle,
 } from '@/core/components/ui/modal';
 import { Textarea } from '@/core/components/ui/textarea';
+import { confirm } from '@/core/lib/confirm';
 import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
@@ -43,6 +55,25 @@ export const KbsPage = () => {
       queryFn: () => documentApi.list(k.id, { page: 1, page_size: 20 }),
     });
     navigate(`/kbs/${k.id}`);
+  };
+
+  const deleteMut = useMutation({
+    mutationFn: (id: KbItem['id']) => kbApi.delete(id),
+    onSuccess: () => {
+      toast.success('知识库已删除');
+      qc.invalidateQueries({ queryKey: ['kbs'] });
+    },
+    onError: (e: unknown) => toast.error((e as { message?: string })?.message || '删除失败'),
+  });
+
+  const askDelete = async (k: KbItem) => {
+    const ok = await confirm({
+      title: `删除知识库「${k.name}」？`,
+      description: `将永久删除该库的全部数据：${k.document_count} 篇文档、${k.chunk_count} 个切块（含向量）、元数据字段、评测与一致性记录。此操作不可恢复。`,
+      confirmText: '永久删除',
+      danger: true,
+    });
+    if (ok) deleteMut.mutate(k.id);
   };
 
   return (
@@ -106,13 +137,25 @@ export const KbsPage = () => {
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     编辑
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => askDelete(k)}
+                    className="text-[12.5px] text-rose-600 focus:bg-rose-50 focus:text-rose-700"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" />
+                    删除
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
 
             <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <Database className="h-5 w-5" strokeWidth={1.75} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-emerald-50 text-emerald-600">
+                {k.icon ? (
+                  <img src={k.icon} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Database className="h-5 w-5" strokeWidth={1.75} />
+                )}
               </div>
               <div className="min-w-0 flex-1 pr-7">
                 <div className="truncate text-[13.5px] font-medium text-stone-900">{k.name}</div>
@@ -149,10 +192,39 @@ export const KbsPage = () => {
   );
 };
 
+/** 图片文件 → 居中裁剪缩放到 128px 方图的 PNG data URL（保证图标小、不撑大数据行） */
+async function fileToIconDataUrl(file: File): Promise<string> {
+  const raw = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error('read failed'));
+    r.readAsDataURL(file);
+  });
+  const img = new Image();
+  await new Promise<void>((res, rej) => {
+    img.onload = () => res();
+    img.onerror = () => rej(new Error('decode failed'));
+    img.src = raw;
+  });
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return raw;
+  const scale = Math.max(size / img.width, size / img.height);
+  const w = img.width * scale;
+  const h = img.height * scale;
+  ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+  return canvas.toDataURL('image/png');
+}
+
 const EditKbModal = ({ kb, onClose }: { kb: KbItem | null; onClose: () => void }) => {
   const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [icon, setIcon] = useState<string>('');
 
   // kb 变化时同步初值（合法的 reset-on-prop-change）
   const [lastId, setLastId] = useState<KbItem['id'] | null>(null);
@@ -160,12 +232,34 @@ const EditKbModal = ({ kb, onClose }: { kb: KbItem | null; onClose: () => void }
     setLastId(kb.id);
     setName(kb.name);
     setDescription(kb.description ?? '');
+    setIcon(kb.icon ?? '');
   }
+
+  const pickFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('图片过大，请选 4MB 以内');
+      return;
+    }
+    try {
+      setIcon(await fileToIconDataUrl(file));
+    } catch {
+      toast.error('图片读取失败');
+    }
+  };
 
   const saveMut = useMutation({
     mutationFn: () => {
       if (!kb) throw new Error('no kb');
-      return kbApi.update(kb.id, { name: name.trim(), description: description.trim() });
+      // icon 传空串 = 清除（后端 update_kb 支持）
+      return kbApi.update(kb.id, {
+        name: name.trim(),
+        description: description.trim(),
+        icon: icon === (kb.icon ?? '') ? undefined : icon,
+      });
     },
     onSuccess: () => {
       toast.success('已保存');
@@ -182,6 +276,51 @@ const EditKbModal = ({ kb, onClose }: { kb: KbItem | null; onClose: () => void }
           <ModalTitle>编辑知识库</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-3">
+          <div>
+            <label className="mb-1 block text-[12px] text-stone-600">图标</label>
+            <div className="flex items-center gap-3">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-emerald-50 text-emerald-600">
+                {icon ? (
+                  <img src={icon} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Database className="h-6 w-6" strokeWidth={1.6} />
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                  上传图片
+                </Button>
+                {icon && (
+                  <button
+                    type="button"
+                    onClick={() => setIcon('')}
+                    className="inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600"
+                  >
+                    <X className="h-3 w-3" />
+                    移除，用默认图标
+                  </button>
+                )}
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) pickFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+            <p className="mt-1 text-[10.5px] text-stone-400">自动裁剪缩放为 128×128 小图</p>
+          </div>
           <div>
             <label className="mb-1 block text-[12px] text-stone-600">名称</label>
             <Input

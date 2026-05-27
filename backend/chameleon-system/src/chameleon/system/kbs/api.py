@@ -36,6 +36,7 @@ class KbAdminItem(BaseModel):
     kb_key: str
     name: str
     description: str | None = None
+    icon: str | None = None
     embedding_model: str
     embedding_dim: int
     chunk_size: int
@@ -83,6 +84,8 @@ class CreateKbAdminRequest(BaseModel):
 class UpdateKbAdminRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    # 自定义图标：base64 data URL（≈ 上限 2MB 字符，约 1.4MB 图）；传空串清除
+    icon: str | None = Field(default=None, max_length=2_000_000)
     chunk_strategy: dict | None = None
     default_top_k: int | None = Field(default=None, ge=1, le=50)
     recall_mode: str | None = Field(
@@ -239,6 +242,7 @@ def _kb_to_item(kb, doc_count: int, chunk_count: int) -> KbAdminItem:
         kb_key=kb.kb_key,
         name=kb.name,
         description=kb.description,
+        icon=kb.icon,
         embedding_model=kb.embedding_model,
         embedding_dim=kb.embedding_dim,
         chunk_size=kb.chunk_size,
@@ -335,6 +339,7 @@ async def update_kb(
         kb_id=kb_id,
         name=req.name,
         description=req.description,
+        icon=req.icon,
         chunk_strategy=req.chunk_strategy,
         default_top_k=req.default_top_k,
         recall_mode=req.recall_mode,
@@ -353,6 +358,30 @@ async def update_kb(
     )
     _, dc, cc = await document_service.get_kb_with_stats(session, kb.id)
     return Result.ok(_kb_to_item(kb, dc, cc))
+
+
+@router.post("/{kb_id}/delete", response_model=Result[None])
+async def delete_kb(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    audit: AuditContext = Depends(get_audit_context),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[None]:
+    """彻底删除 KB 及其所有关联数据（文档/切块/向量/评测/一致性/分组/元数据）。"""
+    await document_service.delete_kb(session, kb_id=kb_id)
+    await session.commit()
+    await write_audit_log(
+        session,
+        actor_user_id=audit.actor_user_id,
+        actor_username=audit.actor_username,
+        action="knowledge_base.delete",
+        resource_type="knowledge_base",
+        resource_id=kb_id,
+        ip=audit.ip,
+        user_agent=audit.user_agent,
+        request_id=audit.request_id,
+    )
+    return Result.ok(None)
 
 
 # ── P18.4 chunking 实时预览（不落库） ─────────────────────

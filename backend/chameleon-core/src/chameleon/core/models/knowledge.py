@@ -32,6 +32,8 @@ class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin, WorkspaceScopedMixin)
     kb_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 自定义图标：base64 data URL（小图；缺省走前端默认图标）
+    icon: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[str] = mapped_column(String(64), nullable=False)
     embedding_dim: Mapped[int] = mapped_column(
         Integer, nullable=False, default=_EMBED_DIM

@@ -142,6 +142,7 @@ async def update_kb(
     kb_id: int,
     name: str | None = None,
     description: str | None = None,
+    icon: str | None = None,
     chunk_strategy: dict | None = None,
     default_top_k: int | None = None,
     recall_mode: str | None = None,
@@ -159,6 +160,8 @@ async def update_kb(
         kb.name = name
     if description is not None:
         kb.description = description
+    if icon is not None:
+        kb.icon = icon or None  # 传空串 = 清除图标
     if chunk_strategy is not None:
         kb.chunk_strategy = chunk_strategy
     if default_top_k is not None:
@@ -168,6 +171,52 @@ async def update_kb(
     await session.flush()
     await session.refresh(kb)
     return kb
+
+
+async def delete_kb(session: AsyncSession, *, kb_id: int) -> None:
+    """彻底删除 KB 及其所有关联数据。
+
+    硬删 knowledge_bases 行 → DB 级联（各关联表 kb_id FK 均 ondelete=CASCADE）
+    清掉 documents / chunks（向量）/ kb_metadata_fields / retrieval_evaluation /
+    kb_consistency_reports / kb_collections / agent_kb_link。
+    DB 级联管不到的 MinIO 上传对象在此显式删除（best-effort）。
+    """
+    kb = (
+        await session.execute(
+            select(KnowledgeBase).where(
+                KnowledgeBase.id == kb_id, KnowledgeBase.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one_or_none()
+    if kb is None:
+        raise BusinessError(
+            ResultCode.KnowledgeBaseNotFound, message=f"kb 不存在: {kb_id}"
+        )
+
+    # 删 MinIO 上传对象（含已软删文档，按 source_uri 收集）
+    upload_uris = (
+        (
+            await session.execute(
+                select(Document.source_uri).where(
+                    Document.kb_id == kb_id,
+                    Document.source_type == "upload",
+                    Document.source_uri.is_not(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for uri in upload_uris:
+        try:
+            storage.delete_upload(uri)
+        except Exception:  # noqa: BLE001
+            logger.exception("delete object failed: {}", uri)
+
+    # 硬删 KB 行 → DB 级联清所有关联表
+    await session.delete(kb)
+    await session.flush()
+    logger.info("kb deleted | kb={} | objects={}", kb_id, len(upload_uris))
 
 
 async def list_kb_chunks(

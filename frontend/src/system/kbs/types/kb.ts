@@ -36,6 +36,8 @@ export interface KbItem {
   kb_key: string;
   name: string;
   description: string | null;
+  /** 自定义图标：base64 data URL；为空走默认图标 */
+  icon: string | null;
   embedding_model: string;
   embedding_dim: number;
   chunk_size: number;

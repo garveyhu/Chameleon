@@ -19,6 +19,8 @@ export interface CreateKbRequest {
 export interface UpdateKbAdminRequest {
   name?: string;
   description?: string;
+  /** 自定义图标：base64 data URL；传空串清除 */
+  icon?: string;
   chunk_strategy?: KbChunkStrategy;
   default_top_k?: number;
   recall_mode?: 'vector' | 'hybrid' | 'keyword';
@@ -49,6 +51,7 @@ export const kbApi = {
   get: (id: EntityId) => get<KbItem>(`/v1/admin/kbs/${id}`),
   update: (id: EntityId, req: UpdateKbAdminRequest) =>
     post<KbItem>(`/v1/admin/kbs/${id}/update`, req),
+  delete: (id: EntityId) => post<null>(`/v1/admin/kbs/${id}/delete`, {}),
   listChunks: (id: EntityId, params?: { page?: number; page_size?: number }) =>
     get<PageResult<ChunkItem>>(`/v1/admin/kbs/${id}/chunks`, { params }),
   /** P18.4 实时预览（不写库） */
