@@ -133,18 +133,13 @@ async def _resolve_routing_target(
 
 
 def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
-    """智能体级密钥只能调用其绑定的 agent；应用级密钥（agent_key=None）放行。
+    """智能体级密钥只能调用其绑定的 agent；app 作用域密钥放行。
 
     invoke / stream_invoke 共用入口，覆盖 /agents/{key}/invoke 与 /chat/completions。
     """
-    if current_app.agent_key is not None and current_app.agent_key != agent_key:
-        raise BusinessError(
-            ResultCode.AgentNotInScope,
-            message=(
-                f"该密钥仅对智能体 {current_app.agent_key} 有效，"
-                f"无权调用 {agent_key}"
-            ),
-        )
+    from chameleon.core.infra.auth import assert_scope
+
+    assert_scope(current_app, "agent", agent_key)
 
 
 async def invoke(

@@ -44,9 +44,13 @@ class ApiKey(Base, TimestampMixin):
     # 明文留存：支持生成后重复进来复制（产品取舍——便利优先于"仅一次回显"）。
     # 注意：DB 因此持有可用密钥，泄露即等同泄密；老数据为 None（只能看前缀）。
     plain_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # 智能体级作用域：None = 应用级（对所有端点 / 所有 agent 有效，老语义）；
-    # 非空 = 仅对该 agent_key 的 /agents/{key}/invoke 与 /chat/completions 有效。
-    agent_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 作用域（按领域）：app = 通吃所有服务（老语义，对应应用级密钥）；
+    # agent = 仅某工作流/智能体；kb = 仅某知识库。scope_ref 为域内目标：
+    # agent → agent_key；kb → kb_key；app → NULL。前缀按域区分（chm_/agent-/kbs-）。
+    scope_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="app", server_default="app"
+    )
+    scope_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
@@ -68,7 +72,7 @@ class ApiKey(Base, TimestampMixin):
         Index("ix_api_keys_app", "app_id"),
         Index("ix_api_keys_revoked", "revoked_at"),
         Index("ix_api_keys_created_by", "created_by_user_id"),
-        Index("ix_api_keys_agent", "agent_key"),
+        Index("ix_api_keys_scope", "scope_type", "scope_ref"),
     )
 
 

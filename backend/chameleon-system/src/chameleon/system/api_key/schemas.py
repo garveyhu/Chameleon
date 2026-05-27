@@ -16,8 +16,10 @@ class CreateApiKeyRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128, description="可读名称")
     scopes: list[str] = Field(default_factory=list, description='["admin"] 或 []')
     description: str | None = None
-    agent_key: str | None = Field(
-        None, description="智能体级作用域；None = 应用级（对所有 agent 有效）"
+    # 作用域域：app（通吃）/ agent（某智能体）/ kb（某知识库）
+    scope_type: str = Field(default="app", pattern="^(app|agent|kb)$")
+    scope_ref: str | None = Field(
+        None, description="域内目标：agent→agent_key、kb→kb_key、app→空"
     )
 
 
@@ -30,7 +32,8 @@ class ApiKeyItem(BaseModel):
     plain_key: str | None = None
     scopes: list[str]
     description: str | None
-    agent_key: str | None = None
+    scope_type: str = "app"
+    scope_ref: str | None = None
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None

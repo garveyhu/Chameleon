@@ -650,7 +650,8 @@ async def create_agent_key(
     req = CreateApiKeyRequest(
         app_id=f"graph-{g.graph_key}",
         name=name or f"{g.name} 密钥",
-        agent_key=agent.agent_key,
+        scope_type="agent",
+        scope_ref=agent.agent_key,
     )
     return await api_key_service.create_api_key(session, req)
 
@@ -663,7 +664,8 @@ async def list_agent_keys(session: AsyncSession, graph_id: int) -> list[ApiKeyIt
             await session.execute(
                 select(ApiKey)
                 .where(
-                    ApiKey.agent_key == agent.agent_key,
+                    ApiKey.scope_type == "agent",
+                    ApiKey.scope_ref == agent.agent_key,
                     ApiKey.revoked_at.is_(None),
                 )
                 .order_by(ApiKey.created_at.desc())

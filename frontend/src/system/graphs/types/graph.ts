@@ -84,7 +84,9 @@ export interface AgentApiKey {
   key_prefix: string;
   /** 明文 key（留存，支持重复复制；老数据为 null 只能看前缀） */
   plain_key: string | null;
-  agent_key: string | null;
+  /** 作用域域 + 目标（agent 域 → scope_ref = agent_key） */
+  scope_type: string;
+  scope_ref: string | null;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;

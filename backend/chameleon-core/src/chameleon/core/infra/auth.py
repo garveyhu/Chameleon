@@ -48,23 +48,48 @@ class CurrentApp:
     scopes: list[str]
     # P19.3 PR #39：app → workspace 归属，配额检查 / 业务过滤都靠这个
     workspace_id: int | None = None
-    # 智能体级密钥的作用域：None = 应用级（所有 agent）；非空 = 仅该 agent_key
-    agent_key: str | None = None
+    # 作用域（按领域）：app = 通吃；agent/kb = 仅 scope_ref 指向的目标。
+    scope_type: str = "app"
+    scope_ref: str | None = None
 
 
 # ── key 生成与校验 ────────────────────────────────────────
 
 
-def generate_api_key() -> tuple[str, str, str]:
+def generate_api_key(prefix: str = "chm_") -> tuple[str, str, str]:
     """生成 (plaintext, hash, key_prefix)
 
-    plaintext 仅一次回显，不存库；存 hash + prefix。
+    prefix 按作用域区分：app→chm_、agent→agent-、kb→kbs-。
+    plaintext 落库（明文留存策略），同时存 hash + key_prefix（前 12 字符回显）。
     """
     body = "".join(secrets.choice(_ALPHABET) for _ in range(_KEY_BODY_LEN))
-    plaintext = f"chm_{body}"
+    plaintext = f"{prefix}{body}"
     digest = hash_api_key(plaintext)
-    prefix = plaintext[:_PREFIX_LEN]
-    return plaintext, digest, prefix
+    key_prefix = plaintext[:_PREFIX_LEN]
+    return plaintext, digest, key_prefix
+
+
+#: 作用域域 → 密钥明文前缀
+SCOPE_PREFIX: dict[str, str] = {
+    "app": "chm_",
+    "agent": "agent-",
+    "kb": "kbs-",
+}
+
+
+def assert_scope(app: "CurrentApp", domain: str, ref: str) -> None:
+    """断言当前密钥可访问 domain 域下 ref 目标。
+
+    app 作用域通吃；否则要求 scope_type==domain 且 scope_ref==ref，
+    不匹配抛 AgentNotInScope。admin JWT（scope_type=app）放行。
+    """
+    if app.scope_type == "app":
+        return
+    if app.scope_type != domain or app.scope_ref != ref:
+        raise PermissionDeniedError(
+            ResultCode.AgentNotInScope,
+            message=f"该密钥作用域为 {app.scope_type}:{app.scope_ref}，无权访问 {domain}:{ref}",
+        )
 
 
 def hash_api_key(plaintext: str) -> str:
@@ -117,7 +142,8 @@ async def current_app(
         name=row.name,
         scopes=list(row.scopes or []),
         workspace_id=ws_id,
-        agent_key=row.agent_key,
+        scope_type=row.scope_type,
+        scope_ref=row.scope_ref,
     )
 
 

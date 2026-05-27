@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.infra.auth import generate_api_key
+from chameleon.core.infra.auth import SCOPE_PREFIX, generate_api_key
 from chameleon.core.models import ApiKey, App, CallLog
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
@@ -45,7 +45,9 @@ async def create_api_key(
         session.add(App(app_key=req.app_id, name=req.app_id))
         await session.flush()
 
-    plaintext, key_hash, key_prefix = generate_api_key()
+    # 前缀按作用域域区分（app→chm_ / agent→agent- / kb→kbs-）
+    prefix = SCOPE_PREFIX.get(req.scope_type, "chm_")
+    plaintext, key_hash, key_prefix = generate_api_key(prefix)
     row = ApiKey(
         app_id=req.app_id,
         name=req.name,
@@ -54,7 +56,8 @@ async def create_api_key(
         plain_key=plaintext,  # 留存明文，支持后续重复复制
         scopes=req.scopes,
         description=req.description,
-        agent_key=req.agent_key,
+        scope_type=req.scope_type,
+        scope_ref=req.scope_ref,
         created_by_user_id=created_by_user_id,
     )
     session.add(row)
@@ -62,25 +65,13 @@ async def create_api_key(
     await session.refresh(row)
 
     logger.info(
-        "api_key created | app_id={} | agent_key={} | scopes={} | by={}",
+        "api_key created | app_id={} | scope={}:{} | by={}",
         row.app_id,
-        row.agent_key,
-        row.scopes,
+        row.scope_type,
+        row.scope_ref,
         created_by_user_id,
     )
-    return ApiKeyCreated(
-        id=row.id,
-        app_id=row.app_id,
-        name=row.name,
-        key_prefix=row.key_prefix,
-        scopes=row.scopes,
-        description=row.description,
-        agent_key=row.agent_key,
-        created_at=row.created_at,
-        last_used_at=row.last_used_at,
-        revoked_at=row.revoked_at,
-        plain_key=plaintext,
-    )
+    return ApiKeyCreated.model_validate(row).model_copy(update={"plain_key": plaintext})
 
 
 async def list_api_keys(
