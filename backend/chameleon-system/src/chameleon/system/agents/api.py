@@ -26,7 +26,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent
+from chameleon.core.models import Agent, Graph
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service
 from chameleon.system.audit_logs import write_audit_log
@@ -47,6 +47,9 @@ class AgentItem(BaseModel):
     provider_id: int | None = None
     local_class_path: str | None = None
     graph_id: int | None = None
+    # 关联工作流形态：chatflow / workflow（仅 source='graph' 有值）。
+    # 供前端「应用目录」推导编排方式（对话编排 / 流程编排）。
+    graph_kind: str | None = None
     config: dict | None = None
     default_model_id: int | None = None
     tags: list | None = None
@@ -110,6 +113,24 @@ async def _get_or_404(session: AsyncSession, agent_id: int) -> Agent:
     return a
 
 
+def _to_item(agent: Agent, graph_kind: str | None = None) -> AgentItem:
+    """Agent ORM → AgentItem，附带关联工作流形态（source='graph' 时）。"""
+    item = AgentItem.model_validate(agent)
+    item.graph_kind = graph_kind
+    return item
+
+
+async def _graph_kind_of(session: AsyncSession, agent: Agent) -> str | None:
+    """取 source='graph' 智能体所关联工作流的 kind；其他来源返回 None。"""
+    if agent.source != "graph" or agent.graph_id is None:
+        return None
+    return (
+        await session.execute(
+            select(Graph.kind).where(Graph.id == agent.graph_id)
+        )
+    ).scalar_one_or_none()
+
+
 # ── 路由 ──────────────────────────────────────────────────
 
 
@@ -124,7 +145,8 @@ async def list_agents(
     _: object = Depends(require_permission("agents:read")),
 ) -> Result[list[AgentItem]]:
     stmt = (
-        select(Agent)
+        select(Agent, Graph.kind)
+        .outerjoin(Graph, Agent.graph_id == Graph.id)
         .where(Agent.deleted_at.is_(None))
         .order_by(Agent.source, Agent.agent_key)
     )
@@ -132,8 +154,8 @@ async def list_agents(
         stmt = stmt.where(Agent.source == source)
     if enabled is not None:
         stmt = stmt.where(Agent.enabled.is_(enabled))
-    rows = (await session.execute(stmt)).scalars().all()
-    return Result.ok([AgentItem.model_validate(a) for a in rows])
+    rows = (await session.execute(stmt)).all()
+    return Result.ok([_to_item(a, graph_kind) for a, graph_kind in rows])
 
 
 @router.get("/{agent_id}", response_model=Result[AgentItem])
@@ -142,7 +164,8 @@ async def get_agent(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("agents:read")),
 ) -> Result[AgentItem]:
-    return Result.ok(AgentItem.model_validate(await _get_or_404(session, agent_id)))
+    agent = await _get_or_404(session, agent_id)
+    return Result.ok(_to_item(agent, await _graph_kind_of(session, agent)))
 
 
 @router.post("", response_model=Result[AgentItem])

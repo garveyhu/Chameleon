@@ -18,7 +18,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
   Activity,
-  Bot,
+  Boxes,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -42,7 +42,6 @@ import {
   Sparkles,
   Telescope,
   Users2,
-  Workflow,
 } from 'lucide-react';
 
 import {
@@ -85,26 +84,19 @@ const TOP_ITEMS: NavLeaf[] = [
   },
 ];
 
-// ── 1. AI 能力（编排 + 知识 = 造能力）────────────────────
+// ── 1. 应用与知识（编排 + 知识 = 造能力）──────────────────
 const AI_GROUP: NavGroup = {
   to: '/agents',
-  icon: Bot,
+  icon: Boxes,
   i18nKey: 'menu.group.ai',
-  fallbackTitle: 'AI 能力',
+  fallbackTitle: '应用与知识',
   children: [
     {
       to: '/agents',
-      icon: Bot,
+      icon: Boxes,
       i18nKey: 'menu.agents',
-      fallbackTitle: '智能体',
+      fallbackTitle: '应用',
       perm: 'agents:read',
-    },
-    {
-      to: '/graphs',
-      icon: Workflow,
-      i18nKey: 'menu.graphs',
-      fallbackTitle: '工作流',
-      perm: 'graphs:read',
     },
     { to: '/kbs', icon: Database, i18nKey: 'menu.kbs', fallbackTitle: '知识库', perm: 'kbs:read' },
     {

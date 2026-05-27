@@ -6,7 +6,7 @@
     "apps": "Key Management",
     "providers": "Providers",
     "models": "Models",
-    "agents": "Agents",
+    "agents": "Apps",
     "kbs": "Knowledge Bases",
     "embed_configs": "Embedded Agents",
     "call_logs": "Call Logs",
@@ -16,7 +16,7 @@
     "group": {
       "overview": "Overview",
       "access": "Access Control",
-      "ai": "AI Capabilities",
+      "ai": "Apps & Knowledge",
       "routing": "Models & Routing",
       "observability": "Observability",
       "extensions": "Extensions",
@@ -24,6 +24,9 @@
       "system": "System"
     },
     "sessions": "Sessions & Runs"
+  },
+  "agents": {
+    "create_app": "New App"
   },
   "topbar": {
     "logout": "Sign Out",
@@ -77,6 +80,7 @@
     "duration": "Duration",
     "tags": "Tags",
     "source": "Source",
+    "orchestration": "Orchestration",
     "dim": "Dim",
     "defaults": "Defaults",
     "stats": "Stats",
@@ -96,7 +100,7 @@
     "apps_title": "Key Management",
     "providers_title": "Providers",
     "models_title": "Models",
-    "agents_title": "Agents",
+    "agents_title": "Apps",
     "kbs_title": "Knowledge Bases",
     "embed_configs_title": "Embedded Agents",
     "call_logs_title": "Call Logs",
@@ -110,7 +114,7 @@
     "apps": "No API keys yet",
     "providers": "No providers yet",
     "models": "No models yet",
-    "agents": "No agents yet",
+    "agents": "No apps yet",
     "kbs": "No knowledge bases yet",
     "embed_configs": "No embedded configs yet",
     "call_logs": "No call logs",

@@ -6,7 +6,7 @@
     "apps": "Key 管理",
     "providers": "提供商",
     "models": "模型",
-    "agents": "智能体",
+    "agents": "应用",
     "kbs": "知识库",
     "embed_configs": "嵌入式智能体",
     "call_logs": "调用日志",
@@ -16,7 +16,7 @@
     "group": {
       "overview": "概览",
       "access": "访问控制",
-      "ai": "AI 能力",
+      "ai": "应用与知识",
       "routing": "模型与路由",
       "observability": "观测与评估",
       "extensions": "扩展生态",
@@ -24,6 +24,9 @@
       "system": "系统管理"
     },
     "sessions": "会话 & 运行"
+  },
+  "agents": {
+    "create_app": "新建应用"
   },
   "topbar": {
     "logout": "退出登录",
@@ -77,6 +80,7 @@
     "duration": "耗时",
     "tags": "标签",
     "source": "来源",
+    "orchestration": "编排方式",
     "dim": "维度",
     "defaults": "默认参数",
     "stats": "统计",
@@ -96,7 +100,7 @@
     "apps_title": "Key 管理",
     "providers_title": "提供商",
     "models_title": "模型管理",
-    "agents_title": "智能体",
+    "agents_title": "应用",
     "kbs_title": "知识库",
     "embed_configs_title": "嵌入式智能体",
     "call_logs_title": "调用日志",
@@ -110,7 +114,7 @@
     "apps": "还没有 API Key",
     "providers": "还没有提供商",
     "models": "还没有模型",
-    "agents": "还没有智能体",
+    "agents": "还没有应用",
     "kbs": "还没有知识库",
     "embed_configs": "还没有嵌入式配置",
     "call_logs": "暂无调用日志",
