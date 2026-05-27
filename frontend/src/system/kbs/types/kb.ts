@@ -116,6 +116,19 @@ export interface SearchRequest {
   multi_query_count?: number;
 }
 
+/** KB 作用域 API 密钥（kbs- 前缀，仅对该 KB 公开 API 有效） */
+export interface KbApiKey {
+  id: EntityId;
+  name: string;
+  key_prefix: string;
+  plain_key: string | null;
+  scope_type: string;
+  scope_ref: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
 export type KbFieldType = 'string' | 'number' | 'select' | 'time';
 
 export interface KbMetadataField {

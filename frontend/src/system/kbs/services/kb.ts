@@ -2,6 +2,7 @@ import { get, post } from '@/core/lib/request';
 import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   ChunkItem,
+  KbApiKey,
   KbChunkStrategy,
   KbItem,
 } from '@/system/kbs/types/kb';
@@ -52,6 +53,12 @@ export const kbApi = {
   update: (id: EntityId, req: UpdateKbAdminRequest) =>
     post<KbItem>(`/v1/admin/kbs/${id}/update`, req),
   delete: (id: EntityId) => post<null>(`/v1/admin/kbs/${id}/delete`, {}),
+  // KB 作用域 API 密钥（kbs- 前缀）
+  listKeys: (id: EntityId) => get<KbApiKey[]>(`/v1/admin/kbs/${id}/api-keys`),
+  createKey: (id: EntityId, name: string) =>
+    post<KbApiKey>(`/v1/admin/kbs/${id}/api-keys`, { name }),
+  revokeKey: (id: EntityId, keyId: EntityId) =>
+    post<KbApiKey>(`/v1/admin/kbs/${id}/api-keys/${keyId}/revoke`, {}),
   listChunks: (id: EntityId, params?: { page?: number; page_size?: number }) =>
     get<PageResult<ChunkItem>>(`/v1/admin/kbs/${id}/chunks`, { params }),
   /** P18.4 实时预览（不写库） */

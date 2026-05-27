@@ -12,6 +12,7 @@ import {
   BarChart3,
   FileText,
   FlaskConical,
+  KeyRound,
   Search,
   Settings,
   ShieldCheck,
@@ -28,6 +29,7 @@ import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
 import { HitTestPanel } from '@/system/kbs/components/hit-test-panel';
 import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
+import { KbServiceApiModal } from '@/system/kbs/components/kb-service-api-modal';
 import { MetadataFieldsTab } from '@/system/kbs/components/metadata-fields-tab';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
@@ -81,6 +83,7 @@ export const KbDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const kbId = id ?? '';
   const [tab, setTab] = useState<TabKey>('documents');
+  const [serviceApiOpen, setServiceApiOpen] = useState(false);
 
   const kbQ = useQuery({
     queryKey: ['kb', kbId],
@@ -115,7 +118,18 @@ export const KbDetailPage = () => {
 
   return (
     <div className="space-y-3">
-      <Header kb={kbQ.data ?? null} loading={kbQ.isLoading} />
+      <Header
+        kb={kbQ.data ?? null}
+        loading={kbQ.isLoading}
+        onServiceApi={() => setServiceApiOpen(true)}
+      />
+      {kbQ.data && (
+        <KbServiceApiModal
+          kb={kbQ.data}
+          open={serviceApiOpen}
+          onClose={() => setServiceApiOpen(false)}
+        />
+      )}
       <div className="flex gap-4">
         {/* 左导航（Dify 式） */}
         <nav className="w-40 shrink-0 space-y-0.5">
@@ -156,9 +170,10 @@ export const KbDetailPage = () => {
 interface HeaderProps {
   kb: KbItem | null;
   loading: boolean;
+  onServiceApi: () => void;
 }
 
-const Header = ({ kb, loading }: HeaderProps) => (
+const Header = ({ kb, loading, onServiceApi }: HeaderProps) => (
   <div className="flex items-center gap-3">
     <Link
       to="/kbs"
@@ -174,6 +189,13 @@ const Header = ({ kb, loading }: HeaderProps) => (
         <span className="text-[15px] font-medium text-stone-900">{kb.name}</span>
         <span className="font-mono text-[11.5px] text-stone-500">{kb.kb_key}</span>
         <span className="ml-auto" />
+        <button
+          type="button"
+          onClick={onServiceApi}
+          className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/40 hover:text-emerald-700"
+        >
+          <KeyRound className="h-3.5 w-3.5" /> 服务 API
+        </button>
         <Link
           to={`/kbs/${kb.id}/chunking-preview`}
           className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-amber-300 hover:bg-amber-50/40 hover:text-amber-700"

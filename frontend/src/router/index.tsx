@@ -13,10 +13,16 @@ import { createBrowserRouter, Navigate, type RouteObject } from 'react-router-do
 import { MainLayout } from '@/core/components/layout/main-layout';
 import type { ModuleRouteConfig, RouteConfig } from '@/core/types/router';
 
-const routeModules = import.meta.glob<Record<string, unknown>>(
-  '../system/**/routes.ts',
-  { eager: true },
-);
+const routeModules: Record<string, Record<string, unknown>> = {
+  // src/system/* 业务模块
+  ...import.meta.glob<Record<string, unknown>>('../system/**/routes.ts', {
+    eager: true,
+  }),
+  // src/api-docs 独立模块（将来可拆为独立文档站）
+  ...import.meta.glob<Record<string, unknown>>('../api-docs/**/routes.ts', {
+    eager: true,
+  }),
+};
 
 // 每个 routes.ts 可以 default 也可以 named export 多个 ModuleRouteConfig
 // （如 auth 同时挂 __root__ 登录页和 / 改密页）
