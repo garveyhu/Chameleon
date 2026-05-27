@@ -685,6 +685,6 @@ async def revoke_agent_key(
     row = (
         await session.execute(select(ApiKey).where(ApiKey.id == key_id))
     ).scalar_one_or_none()
-    if row is None or row.agent_key != agent.agent_key:
+    if row is None or row.scope_type != "agent" or row.scope_ref != agent.agent_key:
         raise BusinessError(ResultCode.Fail, message="密钥不存在或不属于该智能体")
     return await api_key_service.revoke_api_key(session, key_id)

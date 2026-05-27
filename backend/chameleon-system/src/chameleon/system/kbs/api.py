@@ -15,9 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.core.infra.db import get_session
+from chameleon.system.api_key.schemas import ApiKeyCreated, ApiKeyItem
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.kbs import (
+    api_key_service as kb_key_service,
+)
 from chameleon.system.kbs import (
     consistency as consistency_service,
 )
@@ -382,6 +386,46 @@ async def delete_kb(
         request_id=audit.request_id,
     )
     return Result.ok(None)
+
+
+# ── KB 作用域 API 密钥（kbs- 前缀，对外公开 API 用） ──────────
+
+
+class CreateKbKeyRequest(BaseModel):
+    name: str = Field(default="", max_length=128)
+
+
+@router.get("/{kb_id}/api-keys", response_model=Result[list[ApiKeyItem]])
+async def list_kb_keys(
+    kb_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:read")),
+) -> Result[list[ApiKeyItem]]:
+    return Result.ok(await kb_key_service.list_kb_keys(session, kb_id))
+
+
+@router.post("/{kb_id}/api-keys", response_model=Result[ApiKeyCreated])
+async def create_kb_key(
+    kb_id: int,
+    req: CreateKbKeyRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ApiKeyCreated]:
+    created = await kb_key_service.create_kb_key(session, kb_id, req.name)
+    await session.commit()
+    return Result.ok(created)
+
+
+@router.post("/{kb_id}/api-keys/{key_id}/revoke", response_model=Result[ApiKeyItem])
+async def revoke_kb_key(
+    kb_id: int,
+    key_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("kbs:write")),
+) -> Result[ApiKeyItem]:
+    item = await kb_key_service.revoke_kb_key(session, kb_id, key_id)
+    await session.commit()
+    return Result.ok(item)
 
 
 # ── P18.4 chunking 实时预览（不落库） ─────────────────────
