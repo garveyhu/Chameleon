@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.models import CallLog, Score
+from chameleon.core.models import Agent, ApiKey, CallLog, Graph, Score
 from chameleon.core.observe import aggregate_rollups
 from chameleon.providers.base import PROVIDERS
 from chameleon.system.admin.schemas import (
@@ -31,17 +31,47 @@ async def list_call_logs(
     *,
     app_id: str | None = None,
     agent_key: str | None = None,
+    channel: str | None = None,
+    model_code: str | None = None,
+    session_id: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     success: bool | None = None,
 ) -> PageResult[CallLogItem]:
-    # 只列 trace 根（parent_id IS NULL）；子 span（tool_rounds / branch_runs /
-    # 节点观测）是内部嵌套，在详情页的树 / 甘特里看，不作独立行刷屏。
-    stmt = select(CallLog).where(CallLog.parent_id.is_(None))
+    """会话 & 运行账本列表（只列 trace 根 parent_id IS NULL）。
+
+    join 推导每行的归属与编排方式，避免前端二次请求：
+      - api_keys：api_key_id → 展示名
+      - agents：agent_key → source（local / graph / dify / fastgpt / …）
+      - graphs：source='graph' 时 agents.graph_id → graphs.kind（chatflow / workflow）
+
+    子 span（tool_rounds / branch_runs / 节点观测）是内部嵌套，在详情页的
+    树 / 甘特里看，不作独立行刷屏。
+    """
+    # left join 推导列；agents 按 agent_key 关联，graphs 再按 agent.graph_id 关联
+    stmt = (
+        select(
+            CallLog,
+            ApiKey.name.label("api_key_name"),
+            Agent.source.label("source"),
+            Graph.kind.label("kind"),
+        )
+        .select_from(CallLog)
+        .outerjoin(ApiKey, ApiKey.id == CallLog.api_key_id)
+        .outerjoin(Agent, Agent.agent_key == CallLog.agent_key)
+        .outerjoin(Graph, Graph.id == Agent.graph_id)
+        .where(CallLog.parent_id.is_(None))
+    )
     if app_id is not None:
         stmt = stmt.where(CallLog.app_id == app_id)
     if agent_key is not None:
         stmt = stmt.where(CallLog.agent_key == agent_key)
+    if channel is not None:
+        stmt = stmt.where(CallLog.channel == channel)
+    if model_code is not None:
+        stmt = stmt.where(CallLog.model_code == model_code)
+    if session_id is not None:
+        stmt = stmt.where(CallLog.session_id == session_id)
     if since is not None:
         stmt = stmt.where(CallLog.created_at >= since)
     if until is not None:
@@ -54,19 +84,25 @@ async def list_call_logs(
     ).scalar_one()
 
     rows = (
-        (
-            await session.execute(
-                stmt.order_by(CallLog.created_at.desc())
-                .offset(page.offset)
-                .limit(page.limit)
-            )
+        await session.execute(
+            stmt.order_by(CallLog.created_at.desc())
+            .offset(page.offset)
+            .limit(page.limit)
         )
-        .scalars()
-        .all()
-    )
+    ).all()
+
+    items: list[CallLogItem] = []
+    for row in rows:
+        log: CallLog = row[0]
+        item = CallLogItem.model_validate(log)
+        item.api_key_name = row.api_key_name
+        item.source = row.source
+        # kind 仅对 source='graph' 有意义（编排工作流）；其余 source 置空
+        item.kind = row.kind if row.source == "graph" else None
+        items.append(item)
 
     return PageResult(
-        items=[CallLogItem.model_validate(r) for r in rows],
+        items=items,
         total=total,
         page=page.page,
         page_size=page.page_size,

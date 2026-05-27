@@ -22,7 +22,8 @@
       "extensions": "Extensions",
       "ops": "Ops",
       "system": "System"
-    }
+    },
+    "sessions": "Sessions & Runs"
   },
   "topbar": {
     "logout": "Sign Out",
@@ -100,7 +101,8 @@
     "embed_configs_title": "Embedded Agents",
     "call_logs_title": "Call Logs",
     "audit_logs_title": "Audit Logs",
-    "settings_title": "Settings"
+    "settings_title": "Settings",
+    "session_ledger_title": "Sessions & Runs"
   },
   "empty": {
     "users": "No users yet",
@@ -112,6 +114,7 @@
     "kbs": "No knowledge bases yet",
     "embed_configs": "No embedded configs yet",
     "call_logs": "No call logs",
-    "audit_logs": "No audit logs"
+    "audit_logs": "No audit logs",
+    "session_ledger": "No sessions or runs yet"
   }
 }

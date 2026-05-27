@@ -21,6 +21,18 @@ class CallLogItem(BaseModel):
     prompt_tokens: int | None
     completion_tokens: int | None
     total_tokens: int | None
+    # 会话账本维度：渠道 / 模型 / 成本 / 归属
+    channel: str | None = None
+    model_code: str | None = None
+    cost_usd: float | None = None
+    api_key_id: int | None = None
+    # api_key 展示名（join api_keys 推导；无 key 调用为 None）
+    api_key_name: str | None = None
+    user_id: int | None = None
+    # 编排方式推导（join agents.source；source=graph 时 join graphs.kind）：
+    # source ∈ local / graph / dify / fastgpt / ...；kind ∈ chatflow / workflow / None
+    source: str | None = None
+    kind: str | None = None
     # P17.C1 嵌套 Observation
     parent_id: str | None = None
     observation_type: str = "generation"

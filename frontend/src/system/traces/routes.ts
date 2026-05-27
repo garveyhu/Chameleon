@@ -8,8 +8,8 @@ const module: ModuleRouteConfig = {
     {
       path: '/traces',
       lazy: async () => {
-        const m = await import('@/system/call_logs/pages/call-logs-page');
-        return { Component: m.CallLogsPage };
+        const m = await import('@/system/call_logs/pages/session-ledger-page');
+        return { Component: m.SessionLedgerPage };
       },
     },
     {

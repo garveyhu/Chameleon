@@ -11,12 +11,21 @@ export type ObservationType =
   | 'embedding'
   | 'guardrail';
 
+/** 编排方式来源（join agents.source 推导） */
+export type AgentSource = 'local' | 'graph' | 'dify' | 'fastgpt' | 'coze' | string;
+/** 工作流形态（source=graph 时 join graphs.kind） */
+export type GraphKind = 'chatflow' | 'workflow' | string;
+/** 调用渠道 */
+export type CallChannel = 'api' | 'openai' | 'embed' | 'playground' | 'internal' | string;
+
 export interface CallLogItem {
   id: EntityId;
   request_id: string;
   app_id: string;
   agent_key: string;
   api_key_id?: EntityId | null;
+  /** api_key 展示名（后端 join 推导；无 key 调用为 null） */
+  api_key_name?: string | null;
   session_id: string | null;
   stream: boolean;
   success: boolean;
@@ -27,6 +36,13 @@ export interface CallLogItem {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  /** 会话账本维度：渠道 / 模型 / 成本 / 归属 / 编排方式 */
+  channel?: CallChannel | null;
+  model_code?: string | null;
+  cost_usd?: number | null;
+  user_id?: EntityId | null;
+  source?: AgentSource | null;
+  kind?: GraphKind | null;
   /** P17.C1 嵌套 Observation 字段 */
   parent_id?: string | null;
   observation_type?: ObservationType;

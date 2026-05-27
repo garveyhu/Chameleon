@@ -26,6 +26,9 @@ export const callLogApi = {
     page_size?: number;
     app_id?: string;
     agent_key?: string;
+    channel?: string;
+    model_code?: string;
+    session_id?: string;
     success?: boolean;
     since?: string;
     until?: string;

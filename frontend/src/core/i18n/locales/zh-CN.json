@@ -22,7 +22,8 @@
       "extensions": "扩展生态",
       "ops": "运维",
       "system": "系统管理"
-    }
+    },
+    "sessions": "会话 & 运行"
   },
   "topbar": {
     "logout": "退出登录",
@@ -100,7 +101,8 @@
     "embed_configs_title": "嵌入式智能体",
     "call_logs_title": "调用日志",
     "audit_logs_title": "审计日志",
-    "settings_title": "系统配置"
+    "settings_title": "系统配置",
+    "session_ledger_title": "会话 & 运行"
   },
   "empty": {
     "users": "还没有用户",
@@ -112,6 +114,7 @@
     "kbs": "还没有知识库",
     "embed_configs": "还没有嵌入式配置",
     "call_logs": "暂无调用日志",
-    "audit_logs": "暂无审计日志"
+    "audit_logs": "暂无审计日志",
+    "session_ledger": "暂无会话与运行记录"
   }
 }
