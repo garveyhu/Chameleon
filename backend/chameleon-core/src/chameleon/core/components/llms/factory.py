@@ -7,6 +7,9 @@ v0.2 改造（DB-driven）：
 
 cache miss 不再 lazy load DB（避免业务路径上偷偷起异步 DB 调用）；
 admin 改完配置必须显式调失效；启动 / 重启总是 reload 全量。
+
+凭证来源：provider.api_key_encrypted / provider.base_url —— 直连上游
+（如把 oneapi 之类网关作为一个 provider 接入），不再经内部模型网关路由。
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Channel, LLMModel, Provider
+from chameleon.core.models import LLMModel, Provider
 from chameleon.core.utils.crypto import get_or_decrypt
 
 # 进程内 cache（启动期一次性 load）
@@ -39,19 +42,6 @@ def set_for_test(client: BaseLLM | None) -> None:
 
 
 # ── 启动期 async load ─────────────────────────────────────
-
-
-def _channel_key(ch: Channel) -> str | None:
-    """取 channel 的明文 key：优先单 key（api_key_encrypted），否则多 key 池首个。
-
-    cache 静态构建只取一个 key；按请求轮转 / failover 需走 core.routing
-    （resolve_channel + key_pool + invoke_with_failover），属后续重构。
-    """
-    if ch.api_key_encrypted:
-        return get_or_decrypt(ch.api_key_encrypted)
-    if ch.keys:
-        return get_or_decrypt(ch.keys[0])
-    return None
 
 
 async def reload_llm_cache(default_name: str | None = None) -> int:
@@ -79,37 +69,12 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
                 )
             )
         ).all()
-        # 凭证按设计走 channels（provider.api_key_encrypted 仅兼容兜底）。
-        # 每 provider 取优先级最高的 enabled channel；priority 同则取后建的。
-        channels = (
-            (
-                await session.execute(
-                    select(Channel)
-                    .where(
-                        Channel.status == "enabled",
-                        Channel.deleted_at.is_(None),
-                    )
-                    .order_by(Channel.priority.desc(), Channel.id.desc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-    channel_by_provider: dict[int, Channel] = {}
-    for ch in channels:
-        channel_by_provider.setdefault(ch.provider_id, ch)
 
     new_cache: dict[str, BaseLLM] = {}
     for model, provider in rows:
         try:
-            ch = channel_by_provider.get(provider.id)
-            ch_key = _channel_key(ch) if ch is not None else None
-            # 凭证优先级：channel key > provider key（兼容期兜底）
-            api_key = ch_key or get_or_decrypt(provider.api_key_encrypted) or ""
-            api_base = (
-                ch.base_url if ch is not None and ch.base_url else provider.base_url
-            ) or ""
+            api_key = get_or_decrypt(provider.api_key_encrypted) or ""
+            api_base = provider.base_url or ""
             defaults = model.defaults or {}
             instance = BaseLLM(
                 model=model.code,
@@ -192,75 +157,10 @@ async def resolve_llm(
     temperature: float = 0.7,
     max_tokens: int | None = None,
 ) -> BaseLLM:
-    """按 model_code 经 channel 路由（Ability 路由 + C7 多 key 轮转）构建 per-request
-    LLM 实例 —— 让 channels 的多 key 池 / 优先级真正作用于 LLM 调用（#30）。
+    """按 model_code 取 LLM 实例（直连 provider）。
 
-    session 可选：调用方已有 session 就传入复用；否则本函数开一个短 session 仅做
-    channel 解析（图节点 / retrieval 等无 session 的异步调用方用）。
-
-    无 Ability / 可用 channel / channel 没配 key / 路由出错时，回退静态 cache
-    （LLMFactory.create，即 #25 行为），保证不回归。failover（失败切下一 channel）
-    对流式 LLM 较复杂，暂留给后续；本函数只做"选 channel + 选 key + 建实例"。
+    历史上这里做过内部 channel 路由（已随模型网关移除）；现在直接走启动期
+    cache。`session` / `group_id` / `temperature` / `max_tokens` 仅为兼容旧
+    调用签名保留，不再生效（实例用模型自身 defaults）。
     """
-    if _OVERRIDE is not None:
-        return _OVERRIDE
-    target = model_code or _DEFAULT_NAME
-    if not target:
-        return LLMFactory.create(None)  # 触发统一的"未配置默认 LLM"错误
-    if session is not None:
-        return await _resolve_llm_via_channel(
-            session, target, group_id, temperature, max_tokens
-        )
-    async with AsyncSessionLocal() as s:
-        return await _resolve_llm_via_channel(
-            s, target, group_id, temperature, max_tokens
-        )
-
-
-async def _resolve_llm_via_channel(
-    session: AsyncSession,
-    target: str,
-    group_id: int | None,
-    temperature: float,
-    max_tokens: int | None,
-) -> BaseLLM:
-    try:
-        from chameleon.core.infra.redis import get_redis
-        from chameleon.core.routing import (
-            NoSatisfiedChannelError,
-            build_channel_override,
-            resolve_channel,
-        )
-
-        try:
-            channel = await resolve_channel(
-                session, model_code=target, group_id=group_id
-            )
-        except NoSatisfiedChannelError:
-            return LLMFactory.create(target)  # 无 Ability/channel → 回退 cache
-
-        ov = await build_channel_override(get_redis(), channel)
-        api_key = ov.get("api_key") or ""
-        if not api_key:
-            return LLMFactory.create(target)  # channel 没配 key → 回退
-        base_url = ov.get("base_url")
-        if not base_url:
-            prov = (
-                await session.execute(
-                    select(Provider).where(Provider.id == channel.provider_id)
-                )
-            ).scalar_one_or_none()
-            base_url = (prov.base_url if prov else None) or ""
-        logger.debug(
-            "resolve_llm via channel | model={} | channel_id={}", target, channel.id
-        )
-        return BaseLLM(
-            model=target,
-            api_key=api_key,
-            api_base=base_url,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-    except Exception:
-        logger.exception("resolve_llm channel routing failed, fallback to cache")
-        return LLMFactory.create(target)
+    return LLMFactory.create(model_code)

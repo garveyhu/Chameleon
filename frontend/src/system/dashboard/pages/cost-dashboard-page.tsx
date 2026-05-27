@@ -32,7 +32,6 @@ const DIMENSIONS: { key: CostDimension; label: string; c8?: boolean }[] = [
   { key: 'session_id', label: 'Session' },
   { key: 'user_id', label: 'User', c8: true },
   { key: 'model_code', label: 'Model', c8: true },
-  { key: 'channel_id', label: 'Channel', c8: true },
   { key: 'workspace_id', label: 'Workspace', c8: true },
 ];
 
@@ -48,7 +47,7 @@ export const CostDashboardPage = () => {
     queryKey: ['dashboard', 'cost', 'by-dim', dimension, hours],
     queryFn: () =>
       dashboardApi.costByDimension({ dimension, hours, limit: 10 }),
-    // user/model/channel/workspace 维度在 C8 接入前会失败，避免重试刷屏
+    // user/model/workspace 维度在 C8 接入前会失败，避免重试刷屏
     retry: false,
   });
   const seriesQ = useQuery({

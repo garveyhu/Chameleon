@@ -18,7 +18,6 @@ import time
 from collections.abc import AsyncIterator
 
 from loguru import logger
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.agent.schemas import (
@@ -34,17 +33,10 @@ from chameleon.core.api.exceptions import (
     ProviderError,
     ResultCode,
 )
-from chameleon.core.config.runtime_settings import get_bool
 from chameleon.core.infra.auth import CurrentApp
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.infra.redis import get_redis
-from chameleon.core.routing import (
-    build_channel_override,
-    invoke_with_failover,
-    quarantine_key,
-)
 from chameleon.core.utils.spans import SpanRecorder
-from chameleon.providers.base import AGENTS, PROVIDERS, ChannelOverride
+from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
     AgentDef,
     InvokeContext,
@@ -84,51 +76,6 @@ def get_agent(key: str) -> AgentItem:
     )
 
 
-# ── P17.A1.2 路由决策 helper ──────────────────────────────
-
-
-async def _resolve_routing_target(
-    session: AsyncSession,
-    *,
-    agent_key: str,
-    rec: SpanRecorder,
-) -> str | None:
-    """读 flag + agent.preferred_model_code。
-
-    返 model_code（非 None）= 应该走 failover 路由；None = 走老路径。
-
-    流式接口暂走老路径（failover 流式难，留 P18）。本 helper 只为非流式
-    invoke 决策。
-    """
-    with rec.span("routing_decision", meta={"agent": agent_key}) as span:
-        try:
-            enabled = await get_bool(session, "gateway.routing_enabled")
-        except Exception as e:  # noqa: BLE001
-            logger.debug("routing flag read failed | err={}", e)
-            span.meta["status"] = "flag_read_error"
-            return None
-        if not enabled:
-            span.meta["status"] = "flag_off"
-            return None
-
-        from chameleon.core.models import Agent
-
-        agent_row = (
-            await session.execute(
-                select(Agent).where(
-                    Agent.agent_key == agent_key, Agent.deleted_at.is_(None)
-                )
-            )
-        ).scalar_one_or_none()
-        if agent_row is None or not agent_row.preferred_model_code:
-            span.meta["status"] = "no_preferred_model"
-            return None
-
-        span.meta["status"] = "ready"
-        span.meta["model_code"] = agent_row.preferred_model_code
-        return agent_row.preferred_model_code
-
-
 # ── 非流式 invoke 主流程 ────────────────────────────────
 
 
@@ -166,11 +113,6 @@ async def invoke(
                 ResultCode.RegistryError,
                 message=f"provider 未注册: {agent_def.provider}",
             )
-
-    # ①.5 P17.A2 路由决策 —— 拿 model_code 后下面 ⑥ 步走 failover
-    routed_model_code = await _resolve_routing_target(
-        session, agent_key=agent_key, rec=rec
-    )
 
     # ② 会话处理
     with rec.span("conversation_setup"):
@@ -235,53 +177,14 @@ async def invoke(
         request_id=request_id,
     )
 
-    # ⑥ 调 provider（非流式聚合；routed_model_code 非 None 时走 failover wrapper）
+    # ⑥ 调 provider（非流式聚合）
     success = True
     code = ResultCode.Success.value
     err_msg: str | None = None
     request_payload = _build_request_payload(req, agent_def, current_input_text)
-    # P23.C1 计费多维：记下实际命中的 channel（failover 后），落 call_log
-    used_channel = None
     try:
         with rec.span("provider_invoke", meta={"provider": agent_def.provider}):
-            if routed_model_code:
-                redis = get_redis()
-
-                async def _do_invoke(channel):
-                    # C7：多 key 池轮转选 key（含 key_index 供失败隔离）
-                    ov = await build_channel_override(redis, channel)
-                    key_index = ov.pop("key_index", None)
-                    override = ChannelOverride(**ov)
-                    # InvokeContext frozen=False → 这里用 model_copy 更安全；
-                    # 但因为 ctx 还没传给下游，直接 mutate 是 OK 的
-                    ctx_with_override = ctx.model_copy(
-                        update={"channel_override": override}
-                    )
-                    try:
-                        return await provider.invoke(ctx_with_override)
-                    except Exception:
-                        # C7：本次 key 失败 → 隔离，轮转时跳过（best-effort）
-                        if key_index is not None:
-                            await quarantine_key(redis, channel.id, key_index)
-                        raise
-
-                result, used_channel = await invoke_with_failover(
-                    session,
-                    model_code=routed_model_code,
-                    invoke_fn=_do_invoke,
-                )
-                start_ms = rec.now_ms()
-                rec.add(
-                    "channel_chosen",
-                    start_ms=start_ms,
-                    end_ms=start_ms,
-                    meta={
-                        "channel_id": used_channel.id,
-                        "model_code": routed_model_code,
-                    },
-                )
-            else:
-                result = await provider.invoke(ctx)
+            result = await provider.invoke(ctx)
     except ProviderError as pe:
         success = False
         code = int(pe.code)
@@ -299,8 +202,6 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
-            model_code=routed_model_code or None,
-            channel_id=used_channel.id if used_channel else None,
         )
         raise
     except Exception:
@@ -317,8 +218,6 @@ async def invoke(
             duration_ms=int((time.monotonic() - start_ts) * 1000),
             spans=rec.dump(),
             request_payload=request_payload,
-            model_code=routed_model_code or None,
-            channel_id=used_channel.id if used_channel else None,
         )
         raise
 
@@ -365,8 +264,6 @@ async def invoke(
         spans=rec.dump(),
         request_payload=request_payload,
         response_payload=response_payload,
-        model_code=routed_model_code or None,
-        channel_id=used_channel.id if used_channel else None,
     )
 
     return InvokeResponse(
@@ -431,9 +328,7 @@ def _build_request_payload(
         "provider": agent_def.provider,
         "session_id": req.session_id,
         "input_preview": (
-            current_input_text[:2000]
-            if isinstance(current_input_text, str)
-            else None
+            current_input_text[:2000] if isinstance(current_input_text, str) else None
         ),
         "input_kind": "string" if isinstance(req.input, str) else "list",
         "context": req.context or None,

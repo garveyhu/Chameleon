@@ -32,12 +32,10 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquare,
-  Network,
   Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
   PlaySquare,
-  Plug,
   Puzzle,
   Settings,
   ShieldCheck,
@@ -140,7 +138,7 @@ const ROUTING_GROUP: NavGroup = {
   to: '/providers',
   icon: Globe,
   i18nKey: 'menu.group.routing',
-  fallbackTitle: '模型与路由',
+  fallbackTitle: '模型与供应商',
   children: [
     {
       to: '/providers',
@@ -148,20 +146,6 @@ const ROUTING_GROUP: NavGroup = {
       i18nKey: 'menu.providers',
       fallbackTitle: 'Providers',
       perm: 'providers:read',
-    },
-    {
-      to: '/channels',
-      icon: Plug,
-      i18nKey: 'menu.channels',
-      fallbackTitle: 'Channels',
-      perm: 'channels:read',
-    },
-    {
-      to: '/abilities',
-      icon: Network,
-      i18nKey: 'menu.abilities',
-      fallbackTitle: 'Abilities',
-      perm: 'abilities:read',
     },
     {
       to: '/models',

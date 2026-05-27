@@ -214,9 +214,7 @@ async def timeseries(
         select(
             bucket,
             func.count(CallLog.id).label("total"),
-            func.count(CallLog.id)
-            .filter(CallLog.success.is_(False))
-            .label("errors"),
+            func.count(CallLog.id).filter(CallLog.success.is_(False)).label("errors"),
         )
         .where(CallLog.created_at >= since, CallLog.created_at <= range_to)
         .group_by(bucket)
@@ -361,19 +359,14 @@ async def cost_totals(
     )
 
 
-@router.get(
-    "/cost/by-dimension", response_model=Result[list[CostDimensionRow]]
-)
+@router.get("/cost/by-dimension", response_model=Result[list[CostDimensionRow]])
 async def cost_by_dimension(
     dimension: str = Query(
         default="agent_key",
-        pattern=(
-            "^(agent_key|app_id|session_id|user_id|model_code|channel_id"
-            "|workspace_id)$"
-        ),
+        pattern=("^(agent_key|app_id|session_id|user_id|model_code|workspace_id)$"),
         description=(
             "按哪一维聚合：agent_key / app_id / session_id / user_id / "
-            "model_code / channel_id / workspace_id"
+            "model_code / workspace_id"
         ),
     ),
     from_ts: datetime | None = Query(default=None),
@@ -383,7 +376,7 @@ async def cost_by_dimension(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[list[CostDimensionRow]]:
-    """按维度聚合 cost top-N（C8：含 user/model/channel/workspace 多维）
+    """按维度聚合 cost top-N（C8：含 user/model/workspace 多维）
 
     cost_usd = Σ 原始模型成本；effective_cost_usd = Σ(cost_usd × group_ratio)，
     后者是实际计费额（分组倍率在 C5 写入时存死，这里直接乘）。
@@ -396,7 +389,6 @@ async def cost_by_dimension(
         "session_id": CallLog.session_id,
         "user_id": CallLog.user_id,
         "model_code": CallLog.model_code,
-        "channel_id": CallLog.channel_id,
     }
     cost_sum = func.coalesce(func.sum(CallLog.cost_usd), 0).label("cost")
     effective_sum = func.coalesce(
@@ -427,9 +419,7 @@ async def cost_by_dimension(
 
     rows = (
         await session.execute(
-            stmt.order_by(func.sum(CallLog.cost_usd).desc().nullslast()).limit(
-                limit
-            )
+            stmt.order_by(func.sum(CallLog.cost_usd).desc().nullslast()).limit(limit)
         )
     ).all()
     return Result.ok(
@@ -445,9 +435,7 @@ async def cost_by_dimension(
     )
 
 
-@router.get(
-    "/cost/timeseries", response_model=Result[list[CostTimeseriesPoint]]
-)
+@router.get("/cost/timeseries", response_model=Result[list[CostTimeseriesPoint]])
 async def cost_timeseries(
     from_ts: datetime | None = Query(default=None),
     to_ts: datetime | None = Query(default=None),
@@ -475,8 +463,5 @@ async def cost_timeseries(
         )
     ).all()
     return Result.ok(
-        [
-            CostTimeseriesPoint(ts=r.ts, cost_usd=float(r.cost or 0))
-            for r in rows
-        ]
+        [CostTimeseriesPoint(ts=r.ts, cost_usd=float(r.cost or 0)) for r in rows]
     )

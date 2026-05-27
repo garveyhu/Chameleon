@@ -3,7 +3,7 @@
 为业务层一行调用读 settings 表（scope='global'）—— DB 没行时用 schema default。
 
 例：
-    enabled = await get_bool(session, "gateway.routing_enabled")
+    days = await get_int(session, "call_log.retention_days")
 """
 
 from __future__ import annotations

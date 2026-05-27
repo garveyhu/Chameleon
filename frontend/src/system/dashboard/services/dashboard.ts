@@ -11,14 +11,13 @@ export interface RangeParams {
   to_ts?: string;
 }
 
-// P22.1 Cost dashboard；user_id/model_code/channel_id/workspace_id 维度依赖 Agent C C8
+// P22.1 Cost dashboard；user_id/model_code/workspace_id 维度依赖 Agent C C8
 export type CostDimension =
   | 'agent_key'
   | 'app_id'
   | 'session_id'
   | 'user_id'
   | 'model_code'
-  | 'channel_id'
   | 'workspace_id';
 
 export interface CostTotalsResult {

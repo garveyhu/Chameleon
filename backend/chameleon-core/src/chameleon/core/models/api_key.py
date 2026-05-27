@@ -101,14 +101,8 @@ class CallLog(Base):
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    # model_code：实际命中的模型编码（路由后），cost dashboard 按模型聚合
+    # model_code：实际命中的模型编码，cost dashboard 按模型聚合
     model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # channel_id：实际命中的上游 channel（failover 后），按渠道聚合 / 成本归因
-    channel_id: Mapped[int | None] = mapped_column(
-        BigInteger,
-        ForeignKey("channels.id", ondelete="SET NULL"),
-        nullable=True,
-    )
     stream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)
     code: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -153,5 +147,4 @@ class CallLog(Base):
         # P23.C1 计费多维聚合（C8 cost dashboard group by dim 在时间窗内）
         Index("ix_call_logs_user_created", "user_id", "created_at"),
         Index("ix_call_logs_model_created", "model_code", "created_at"),
-        Index("ix_call_logs_channel_created", "channel_id", "created_at"),
     )
