@@ -1,8 +1,9 @@
 """备份导入：zip → DB
 
 策略：UPSERT（按业务 key 找现有 row，存在则 update / 不存在则 insert）。
-顺序：先建 apps → 再建 users → providers → models → external agents → embed_configs → api_keys。
+顺序：users → providers → models → external agents → embed_configs → api_keys。
 注意：permissions / roles 不导入（由 seed.defaults 决定，避免新版本权限点跟旧 zip 不一致）。
+apps「应用容器」已删，api_key 独立（app_id 仅为来源标签字符串）。
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    App,
     EmbedConfig,
     LLMModel,
     Provider,
@@ -32,7 +32,6 @@ from chameleon.core.models import (
 
 class ImportSummary:
     def __init__(self) -> None:
-        self.apps_upserted = 0
         self.users_upserted = 0
         self.providers_upserted = 0
         self.models_upserted = 0
@@ -43,7 +42,6 @@ class ImportSummary:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "apps_upserted": self.apps_upserted,
             "users_upserted": self.users_upserted,
             "providers_upserted": self.providers_upserted,
             "models_upserted": self.models_upserted,
@@ -64,9 +62,7 @@ async def apply_import_zip(
         names = set(zf.namelist())
         files = {n: zf.read(n) for n in names}
 
-    # 顺序很重要：依赖在前
-    if "apps.json" in files:
-        await _import_apps_first_phase(session, files["apps.json"], summary)
+    # 顺序很重要：依赖在前。apps「容器」已删，api_key 独立。
     if "users.json" in files:
         await _import_users(session, files["users.json"], summary)
     if "model.json" in files:
@@ -75,47 +71,16 @@ async def apply_import_zip(
         await _import_external_agents(session, files["agents.yaml"], summary)
     if "embed_configs.json" in files:
         await _import_embed_configs(session, files["embed_configs.json"], summary)
-    if "apps.json" in files:
-        await _import_api_keys_second_phase(session, files["apps.json"], summary)
+    # api_keys：新备份在 api_keys.json；老备份在 apps.json（含 api_keys 键）兜底
+    api_keys_raw = files.get("api_keys.json") or files.get("apps.json")
+    if api_keys_raw is not None:
+        await _import_api_keys(session, api_keys_raw, summary)
 
     await session.flush()
     return summary
 
 
 # ── 各域 import ────────────────────────────────────────────
-
-
-async def _import_apps_first_phase(
-    session: AsyncSession, raw: bytes, s: ImportSummary
-) -> None:
-    """先建 apps（让 api_keys / embed_configs 等 FK 有依赖）"""
-    data = json.loads(raw)
-    for entry in data.get("apps", []):
-        app_key = entry["app_key"]
-        existing = (
-            await session.execute(select(App).where(App.app_key == app_key))
-        ).scalar_one_or_none()
-        if existing is None:
-            session.add(
-                App(
-                    app_key=app_key,
-                    name=entry.get("name") or app_key,
-                    description=entry.get("description"),
-                    status=entry.get("status") or "active",
-                    meta=entry.get("meta"),
-                    qpm_limit=entry.get("qpm_limit"),
-                    qpd_limit=entry.get("qpd_limit"),
-                )
-            )
-        else:
-            existing.name = entry.get("name") or existing.name
-            existing.description = entry.get("description") or existing.description
-            existing.status = entry.get("status") or existing.status
-            existing.meta = entry.get("meta") or existing.meta
-            existing.qpm_limit = entry.get("qpm_limit") or existing.qpm_limit
-            existing.qpd_limit = entry.get("qpd_limit") or existing.qpd_limit
-        s.apps_upserted += 1
-    await session.flush()
 
 
 async def _import_users(
@@ -320,7 +285,6 @@ async def _import_embed_configs(
                     name=entry.get("name") or embed_key,
                     description=entry.get("description"),
                     agent_id=entry["agent_id"],
-                    app_id=entry["app_id"],
                     allowed_origins=entry.get("allowed_origins"),
                     ui_config=entry.get("ui_config"),
                     behavior=entry.get("behavior"),
@@ -340,10 +304,10 @@ async def _import_embed_configs(
     await session.flush()
 
 
-async def _import_api_keys_second_phase(
+async def _import_api_keys(
     session: AsyncSession, raw: bytes, s: ImportSummary
 ) -> None:
-    """apps 已建好，现在 import api_keys（FK 引用 apps.app_key）"""
+    """import api_keys（独立资源，app_id 仅为来源标签字符串，无 FK）"""
     data = json.loads(raw)
     existing_hashes = set(
         (await session.execute(select(ApiKey.key_hash))).scalars().all()
@@ -353,11 +317,15 @@ async def _import_api_keys_second_phase(
             continue
         session.add(
             ApiKey(
-                app_id=k["app_id"],
+                app_id=k.get("app_id") or "imported",
                 name=k.get("name") or "imported",
                 key_hash=k["key_hash"],
                 key_prefix=k.get("key_prefix") or "chm_imported",
                 scopes=k.get("scopes") or [],
+                scope_type=k.get("scope_type") or "global",
+                scope_ref=k.get("scope_ref"),
+                qpm_limit=k.get("qpm_limit"),
+                qpd_limit=k.get("qpd_limit"),
                 description=k.get("description"),
             )
         )

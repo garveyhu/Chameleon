@@ -10,7 +10,6 @@ from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
-    App,
     CallLog,
     Dataset,
     DatasetItem,
@@ -65,8 +64,6 @@ async def app_with_logs():
     app_key = f"e2e-dsapp-{suffix}"
 
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="ds test", status="active"))
-        await s.flush()
         for i in range(5):
             await record_call(
                 s,
@@ -97,7 +94,6 @@ async def app_with_logs():
             )
         )
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 
@@ -223,8 +219,6 @@ async def test_sample_pii_mask_in_preview(
     suffix = secrets.token_hex(3)
     app_key = f"e2e-dspii-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="pii test", status="active"))
-        await s.flush()
         await record_call(
             s,
             request_id=f"rid-pii-{suffix}-0",
@@ -278,7 +272,6 @@ async def test_sample_pii_mask_in_preview(
                 )
             )
             await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-            await s.execute(delete(App).where(App.app_key == app_key))
             await s.commit()
 
 
@@ -289,8 +282,6 @@ async def test_sample_pii_drop_strategy(
     suffix = secrets.token_hex(3)
     app_key = f"e2e-dsdrop-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="drop test", status="active"))
-        await s.flush()
         # 一条有 PII，一条无 PII
         await record_call(
             s,
@@ -347,7 +338,6 @@ async def test_sample_pii_drop_strategy(
                 )
             )
             await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-            await s.execute(delete(App).where(App.app_key == app_key))
             await s.commit()
 
 

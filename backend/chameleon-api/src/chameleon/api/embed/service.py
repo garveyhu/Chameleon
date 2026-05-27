@@ -28,7 +28,7 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.core.models import Agent, App, EmbedConfig
+from chameleon.core.models import Agent, EmbedConfig
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.errors import ProviderError
 from chameleon.providers.base.types import (
@@ -88,16 +88,9 @@ async def _resolve_agent(session: AsyncSession, embed: EmbedConfig) -> Agent:
     return agent
 
 
-async def _resolve_app_key(session: AsyncSession, embed: EmbedConfig) -> str:
-    """embed.app_id 是 apps.id（FK），call_logs.app_id 要用 apps.app_key 字符串"""
-    app = (
-        await session.execute(select(App).where(App.id == embed.app_id))
-    ).scalar_one_or_none()
-    if app is None:
-        raise BusinessError(
-            ResultCode.AgentNotFound, message=f"embed 关联 app 不存在: {embed.app_id}"
-        )
-    return app.app_key
+def _embed_app_label(embed: EmbedConfig) -> str:
+    """embed 发起的调用，call_logs.app_id 用 embed_key 派生的来源标签（不再查 apps 表）。"""
+    return f"embed:{embed.embed_key}"
 
 
 def _make_context(
@@ -145,7 +138,7 @@ async def _write_log(
     user_input: str,
     answer: str,
 ) -> None:
-    """call_logs 落表 —— embed 入口在 request_payload.source 标记，app_id 用真实 apps.app_key"""
+    """call_logs 落表 —— embed 入口在 request_payload.source 标记，app_id 用 embed: 来源标签"""
     try:
         await record_call(
             session,
@@ -194,7 +187,7 @@ async def invoke_once(
     await _ensure_session_matches(session_token, embed.id)
     await embed_session.check_rate_limit(session_token)
     agent = await _resolve_agent(session, embed)
-    app_key = await _resolve_app_key(session, embed)
+    app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
     sid = await embed_session.resolve_session_id(session_token)
     ctx = _make_context(
@@ -261,7 +254,7 @@ async def stream_invoke(
     await _ensure_session_matches(session_token, embed.id)
     await embed_session.check_rate_limit(session_token)
     agent = await _resolve_agent(session, embed)
-    app_key = await _resolve_app_key(session, embed)
+    app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
     sid = await embed_session.resolve_session_id(session_token)
     ctx = _make_context(

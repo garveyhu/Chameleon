@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from loguru import logger
@@ -17,12 +18,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.infra.auth import SCOPE_PREFIX, generate_api_key
-from chameleon.core.models import ApiKey, App, CallLog
+from chameleon.core.models import ApiKey, CallLog
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
     ApiKeyItem,
     CreateApiKeyRequest,
 )
+
+
+def _slugify(name: str) -> str:
+    """把 key 名归一化为 app_id 来源标签：小写 + 非字母数字转连字符。"""
+    slug = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+    return slug or "key"
 
 
 async def create_api_key(
@@ -33,23 +40,17 @@ async def create_api_key(
 ) -> ApiKeyCreated:
     """创建一个 api_key，返 ApiKeyCreated（含明文，仅响应可见）
 
-    v0.2 改造：移除 app_id 唯一校验（一 app 多 key 合法），FK 由 DB 强制 app 存在。
-
-    过渡：app_id 对应的 App 不存在时自动创建一个（P6 完整 apps CRUD 上线后移除此 upsert）。
+    单租户重构（块2）：key 不再挂 App 容器。app_id 是自由「调用方/来源标签」，
+    请求未传则默认用 name 的 slug 兜底（仅作聚合/展示用，归属靠 api_key_id）。
     """
-    # 过渡 upsert：让现有 v0.1 用法（直接发 key 不先建 app）继续工作
-    existing_app = (
-        await session.execute(select(App.id).where(App.app_key == req.app_id))
-    ).scalar_one_or_none()
-    if existing_app is None:
-        session.add(App(app_key=req.app_id, name=req.app_id))
-        await session.flush()
+    # app_id 标签：请求显式传则用之，否则用 name 的 slug 兜底
+    label = (req.app_id or "").strip() or _slugify(req.name)
 
-    # 前缀按作用域域区分（app→chm_ / agent→agent- / kb→kbs-）
+    # 前缀按作用域域区分（global→chm_ / app→app- / kb→kbs-）
     prefix = SCOPE_PREFIX.get(req.scope_type, "chm_")
     plaintext, key_hash, key_prefix = generate_api_key(prefix)
     row = ApiKey(
-        app_id=req.app_id,
+        app_id=label,
         name=req.name,
         key_hash=key_hash,
         key_prefix=key_prefix,
@@ -58,6 +59,8 @@ async def create_api_key(
         description=req.description,
         scope_type=req.scope_type,
         scope_ref=req.scope_ref,
+        qpm_limit=req.qpm_limit,
+        qpd_limit=req.qpd_limit,
         created_by_user_id=created_by_user_id,
     )
     session.add(row)

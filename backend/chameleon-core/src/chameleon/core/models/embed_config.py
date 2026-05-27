@@ -30,16 +30,10 @@ class EmbedConfig(Base, TimestampMixin, SoftDeleteMixin):
     agent_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("agents.id", ondelete="RESTRICT"), nullable=False
     )
-    app_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("apps.id", ondelete="RESTRICT"), nullable=False
-    )
     allowed_origins: Mapped[list | None] = mapped_column(JSON, nullable=True)
     ui_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     behavior: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    __table_args__ = (
-        Index("ix_embed_configs_agent", "agent_id"),
-        Index("ix_embed_configs_app", "app_id"),
-    )
+    __table_args__ = (Index("ix_embed_configs_agent", "agent_id"),)

@@ -16,7 +16,7 @@ from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import App, CallLog, Role, User, UserRole
+from chameleon.core.models import CallLog, Role, User, UserRole
 from chameleon.core.utils.passwords import hash_password
 from chameleon.system.api_key.service import record_call
 from chameleon.system.seed.runner import run_seed_if_empty
@@ -76,9 +76,6 @@ async def trace_app():
     emb_rid = f"trace-emb-{suffix}"
 
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="trace test", status="active"))
-        await s.flush()
-
         # root
         await record_call(
             s, request_id=root_rid, app_id=app_key, agent_key="example",
@@ -127,7 +124,6 @@ async def trace_app():
 
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 

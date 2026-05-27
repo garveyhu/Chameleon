@@ -1,9 +1,11 @@
 """ApiKey + CallLog 模型
 
-v0.2 重构：
-- ApiKey.app_id String 删除 unique 约束（一 app 多 key），加 FK 引用 apps.app_key
-- ApiKey.created_by_id 重命名为 created_by_user_id + 加 FK 引用 users.id
-- CallLog.app_id / agent_key 加 FK；加 api_key_id FK + error_class 字段
+单租户重构（块2 Key 管理）：apps「应用容器」整删，归属重锚到 api_key。
+- app_id 降级为自由字符串「调用方/来源标签」，去掉 FK→apps，仅留 index。
+  有 key 的调用靠 api_key_id 精确反查；无 key 的 admin/playground/eval 调用
+  靠 app_id 字符串标签（如 "admin"/"system"/"__eval__"）兜底。
+- 配额字段 qpm_limit / qpd_limit 从被删的 App 搬到 ApiKey（仅落字段，暂不 enforce）。
+- scope_type：global = 通吃所有服务；app = 仅某智能体/应用；kb = 仅某知识库。
 """
 
 from datetime import datetime
@@ -31,28 +33,27 @@ class ApiKey(Base, TimestampMixin):
     __tablename__ = "api_keys"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=next_id)
-    # app_id 是字符串 slug（对外可读，业务方调用时不直接出现，但所有表统一）
-    # FK 引用 apps.app_key（CASCADE：删 app 时 key 一起删）
-    app_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("apps.app_key", ondelete="CASCADE"),
-        nullable=False,
-    )
+    # app_id 是自由「调用方/来源标签」（无 FK，仅 index）：有 key 的调用靠 api_key_id
+    # 精确反查，此标签只用于聚合/展示（如 "admin" / "system" / name 的 slug）。
+    app_id: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     key_hash: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     key_prefix: Mapped[str] = mapped_column(String(16), nullable=False)
     # 明文留存：支持生成后重复进来复制（产品取舍——便利优先于"仅一次回显"）。
     # 注意：DB 因此持有可用密钥，泄露即等同泄密；老数据为 None（只能看前缀）。
     plain_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # 作用域（按领域）：app = 通吃所有服务（老语义，对应应用级密钥）；
-    # agent = 仅某工作流/智能体；kb = 仅某知识库。scope_ref 为域内目标：
-    # agent → agent_key；kb → kb_key；app → NULL。前缀按域区分（chm_/agent-/kbs-）。
+    # 作用域（key「能访问什么」，与容器无关）：global = 通吃所有服务；
+    # app = 仅某工作流/智能体；kb = 仅某知识库。scope_ref 为域内目标：
+    # app → agent_key；kb → kb_key；global → NULL。前缀按域区分（chm_/app-/kbs-）。
     scope_type: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="app", server_default="app"
+        String(16), nullable=False, default="global", server_default="global"
     )
     scope_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 配额（从被删的 App 搬来，nullable；仅落字段，暂不做 enforcement）
+    qpm_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    qpd_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -81,11 +82,8 @@ class CallLog(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, default=next_id)
     request_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    app_id: Mapped[str] = mapped_column(
-        String(64),
-        ForeignKey("apps.app_key", ondelete="CASCADE"),
-        nullable=False,
-    )
+    # app_id 自由「调用方/来源标签」（无 FK，仅 index）—— 同 ApiKey.app_id 语义
+    app_id: Mapped[str] = mapped_column(String(64), nullable=False)
     # agent_key FK 推到 P5（agents 表由 registry sync 在 P5 填充）
     agent_key: Mapped[str] = mapped_column(String(64), nullable=False)
     api_key_id: Mapped[int | None] = mapped_column(

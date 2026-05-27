@@ -4,7 +4,7 @@ zip 内容：
 - model.json         providers + models（API key 仍然加密文，但与本机 master key 解耦）
 - agents.yaml        external agents（source != 'local'）
 - users.json         users + roles + user_roles + role_permissions（含 password_hash）
-- apps.json          apps + api_keys（key_hash 不可还原 plaintext）
+- api_keys.json      api_keys（key_hash 不可还原 plaintext；app_id 为来源标签）
 - embed_configs.json embed 配置
 - README.md          说明导出文件意义 + 还原方法
 """
@@ -26,7 +26,6 @@ from chameleon.core.config.system_settings_schema import schema_dict
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    App,
     EmbedConfig,
     LLMModel,
     ModelDefault,
@@ -35,10 +34,8 @@ from chameleon.core.models import (
     RolePermission,
     Setting,
     User,
-    UserRole,
 )
 from chameleon.core.utils.crypto import get_or_decrypt
-
 
 # ── 各域 → dict ────────────────────────────────────────────
 
@@ -212,32 +209,14 @@ async def _export_users_json(session: AsyncSession) -> dict:
     }
 
 
-async def _export_apps_json(session: AsyncSession) -> dict:
-    apps = (
-        (await session.execute(select(App).where(App.deleted_at.is_(None))))
-        .scalars()
-        .all()
-    )
+async def _export_api_keys_json(session: AsyncSession) -> dict:
+    """导出未吊销的 api_keys（app_id 当普通来源标签；apps 容器已删）。"""
     keys = (
         (await session.execute(select(ApiKey).where(ApiKey.revoked_at.is_(None))))
         .scalars()
         .all()
     )
     return {
-        "apps": [
-            {
-                "id": a.id,
-                "app_key": a.app_key,
-                "name": a.name,
-                "description": a.description,
-                "status": a.status,
-                "meta": a.meta,
-                "qpm_limit": a.qpm_limit,
-                "qpd_limit": a.qpd_limit,
-                "created_at": a.created_at.isoformat() if a.created_at else None,
-            }
-            for a in apps
-        ],
         "api_keys": [
             {
                 "id": k.id,
@@ -246,6 +225,10 @@ async def _export_apps_json(session: AsyncSession) -> dict:
                 "key_hash": k.key_hash,
                 "key_prefix": k.key_prefix,
                 "scopes": k.scopes,
+                "scope_type": k.scope_type,
+                "scope_ref": k.scope_ref,
+                "qpm_limit": k.qpm_limit,
+                "qpd_limit": k.qpd_limit,
                 "description": k.description,
                 "created_at": k.created_at.isoformat() if k.created_at else None,
             }
@@ -270,7 +253,6 @@ async def _export_embed_configs(session: AsyncSession) -> list[dict]:
             "name": ec.name,
             "description": ec.description,
             "agent_id": ec.agent_id,
-            "app_id": ec.app_id,
             "allowed_origins": ec.allowed_origins,
             "ui_config": ec.ui_config,
             "behavior": ec.behavior,
@@ -299,7 +281,7 @@ _README_MARKDOWN = """# Chameleon 配置导出
 - `baseurl.json`：providers 的 base_url 去重抽出（参考用，导入时不强引用）
 - `agents.yaml`：外部 agent 注册（external，本地 agent 由 namespace 扫描重建）
 - `users.json`：用户 + 角色（含密码 hash，**不要泄漏**）
-- `apps.json`：业务应用 + API key（key_hash 不可还原明文）
+- `api_keys.json`：API key（key_hash 不可还原明文；app_id 为来源标签）
 - `embed_configs.json`：嵌入式 widget 配置
 
 ## 还原方法（导入二期；本期暂时手工）
@@ -313,7 +295,7 @@ C. 启动 chameleon —— seed runner 会读 config/*.{json,yaml} 重建
 ## 注意
 
 - `users.json` 含密码 hash（argon2id 算法），属于敏感数据
-- `apps.json` 的 key_hash 是 sha256 单向哈希，无法还原 plaintext；导入后业务方需要换发新 key
+- `api_keys.json` 的 key_hash 是 sha256 单向哈希，无法还原 plaintext；导入后业务方需要换发新 key
 - `cases.llm / embedding / vision` 字段表示"默认使用哪个 model"
 """
 
@@ -329,7 +311,7 @@ async def build_export_zip(session: AsyncSession) -> tuple[bytes, str]:
     baseurl = await _export_baseurl_json(session)
     agents = await _export_agents_yaml(session)
     users = await _export_users_json(session)
-    apps = await _export_apps_json(session)
+    api_keys = await _export_api_keys_json(session)
     embeds = await _export_embed_configs(session)
 
     buf = io.BytesIO()
@@ -343,7 +325,9 @@ async def build_export_zip(session: AsyncSession) -> tuple[bytes, str]:
             "agents.yaml", yaml.safe_dump(agents, allow_unicode=True, sort_keys=False)
         )
         zf.writestr("users.json", json.dumps(users, ensure_ascii=False, indent=2))
-        zf.writestr("apps.json", json.dumps(apps, ensure_ascii=False, indent=2))
+        zf.writestr(
+            "api_keys.json", json.dumps(api_keys, ensure_ascii=False, indent=2)
+        )
         zf.writestr(
             "embed_configs.json",
             json.dumps(embeds, ensure_ascii=False, indent=2),

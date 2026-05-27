@@ -21,7 +21,6 @@ from sqlalchemy import delete, select
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     Agent,
-    App,
     CallLog,
     EmbedConfig,
     Role,
@@ -76,8 +75,6 @@ async def trace_with_log():
     app_key = f"sc-app-{suffix}"
     rid = f"sc-rid-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="sc-test", status="active"))
-        await s.flush()
         await record_call(
             s,
             request_id=rid,
@@ -97,7 +94,6 @@ async def trace_with_log():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(Score).where(Score.call_log_id == rid))
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 
@@ -220,22 +216,15 @@ async def test_list_scores_by_call_log(
 
 @pytest_asyncio.fixture
 async def embed_target(trace_with_log: dict):
-    """临时 app + agent + embed_config，与 trace_with_log 共用 trace_id"""
+    """临时 agent + embed_config，与 trace_with_log 共用 trace_id"""
     suffix = secrets.token_hex(3)
     embed_key = f"sc-emb-{suffix}"
     async with AsyncSessionLocal() as s:
-        # 找 app
-        app = (
-            await s.execute(
-                select(App).where(App.app_key == trace_with_log["app_key"])
-            )
-        ).scalar_one()
         # 任意一个 agent
         ag = (await s.execute(select(Agent).limit(1))).scalar_one_or_none()
         assert ag is not None, "需要至少一个 agent 才能跑 embed feedback 测"
         cfg = EmbedConfig(
             embed_key=embed_key,
-            app_id=app.id,
             agent_id=ag.id,
             name="sc embed",
             enabled=True,

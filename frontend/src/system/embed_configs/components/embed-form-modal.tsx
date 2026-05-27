@@ -48,7 +48,6 @@ import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import type { EntityId } from '@/core/types/api';
 import { agentApi } from '@/system/agents/services/agent';
-import { appApi } from '@/system/apps/services/app';
 import { EmbedPreview } from '@/system/embed_configs/components/embed-preview';
 import type {
   Behavior,
@@ -110,7 +109,6 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [agentId, setAgentId] = useState<string>('');
-  const [appId, setAppId] = useState<string>('');
   // 外观
   const [ui, setUi] = useState<UiConfig>(DEFAULT_UI_CONFIG);
   // 行为
@@ -127,7 +125,6 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
       setName(initial.name);
       setDescription(initial.description || '');
       setAgentId(String(initial.agent_id));
-      setAppId(String(initial.app_id));
       setUi(mergeUiConfig(initial.ui_config));
       setBehavior(mergeBehavior(initial.behavior));
       setOrigins((initial.allowed_origins || []).join('\n'));
@@ -135,7 +132,6 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
       setName('');
       setDescription('');
       setAgentId('');
-      setAppId('');
       setUi(DEFAULT_UI_CONFIG);
       setBehavior(DEFAULT_BEHAVIOR);
       setOrigins('');
@@ -144,10 +140,6 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const agentsQ = useQuery({ queryKey: ['agents', 'all'], queryFn: () => agentApi.list() });
-  const appsQ = useQuery({
-    queryKey: ['apps', 'all'],
-    queryFn: () => appApi.list({ page: 1, page_size: 100 }),
-  });
 
   const originList = useMemo(
     () =>
@@ -158,7 +150,7 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
     [origins],
   );
 
-  const canSubmit = !!name && !!agentId && !!appId;
+  const canSubmit = !!name && !!agentId;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -175,7 +167,6 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
         name,
         description: description || undefined,
         agent_id: agentId,
-        app_id: appId,
         allowed_origins: originList,
         ui_config: ui,
         behavior,
@@ -227,13 +218,10 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
                   name={name}
                   description={description}
                   agentId={agentId}
-                  appId={appId}
                   agents={agentsQ.data || []}
-                  apps={appsQ.data?.items || []}
                   onName={setName}
                   onDescription={setDescription}
                   onAgentId={setAgentId}
-                  onAppId={setAppId}
                 />
               ) : null}
               {tab === 'appearance' ? <AppearanceTab ui={ui} onChange={setUi} /> : null}
@@ -274,36 +262,25 @@ interface AgentLite {
   agent_key: string;
   name: string;
 }
-interface AppLite {
-  id: EntityId;
-  app_key: string;
-  name: string;
-}
 
 const BasicTab: React.FC<{
   isEdit: boolean;
   name: string;
   description: string;
   agentId: string;
-  appId: string;
   agents: AgentLite[];
-  apps: AppLite[];
   onName: (v: string) => void;
   onDescription: (v: string) => void;
   onAgentId: (v: string) => void;
-  onAppId: (v: string) => void;
 }> = ({
   isEdit,
   name,
   description,
   agentId,
-  appId,
   agents,
-  apps,
   onName,
   onDescription,
   onAgentId,
-  onAppId,
 }) => (
   <div className="space-y-4">
     <Field label="名称" required>
@@ -326,20 +303,6 @@ const BasicTab: React.FC<{
           {agents.map(a => (
             <SelectItem key={a.id} value={String(a.id)}>
               {a.agent_key} · {a.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
-    <Field label="关联 App" required hint={isEdit ? '创建后不可改' : '用于配额计算 / 调用日志归属'}>
-      <Select value={appId} onValueChange={onAppId} disabled={isEdit}>
-        <SelectTrigger>
-          <SelectValue placeholder="选择 app" />
-        </SelectTrigger>
-        <SelectContent>
-          {apps.map(a => (
-            <SelectItem key={a.id} value={String(a.id)}>
-              {a.app_key} · {a.name}
             </SelectItem>
           ))}
         </SelectContent>

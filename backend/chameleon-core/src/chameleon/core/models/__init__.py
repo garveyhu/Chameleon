@@ -6,7 +6,6 @@
 from chameleon.core.models.agent import Agent
 from chameleon.core.models.agent_kb_link import AgentKbLink
 from chameleon.core.models.api_key import ApiKey, CallLog
-from chameleon.core.models.app import App, AppAgent
 from chameleon.core.models.app_template import AppTemplate
 from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
@@ -53,8 +52,6 @@ __all__ = [
     "UserRole",
     "RolePermission",
     # 应用域
-    "App",
-    "AppAgent",
     "ApiKey",
     # 模型域
     "Provider",

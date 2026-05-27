@@ -16,7 +16,6 @@ from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import (
     Agent,
-    App,
     EmbedConfig,
     KnowledgeBase,
     LLMModel,
@@ -26,7 +25,7 @@ from chameleon.core.models import (
 from chameleon.system.auth.dependencies import require_permission
 
 SearchType = Literal[
-    "agent", "model", "provider", "kb", "app", "user", "embed_config"
+    "agent", "model", "provider", "kb", "user", "embed_config"
 ]
 
 
@@ -93,7 +92,7 @@ async def search(
                 id=a.id,
                 title=a.name or a.agent_key,
                 snippet=_truncate(a.description or a.agent_key),
-                url=f"/agents",
+                url="/agents",
                 icon="bot",
             )
         )
@@ -182,36 +181,6 @@ async def search(
                 snippet=_truncate(kb.kb_key),
                 url="/kbs",
                 icon="library",
-            )
-        )
-
-    # apps
-    apps = (
-        (
-            await session.execute(
-                select(App)
-                .where(
-                    App.deleted_at.is_(None),
-                    or_(
-                        App.app_key.ilike(like),
-                        App.name.ilike(like),
-                    ),
-                )
-                .limit(per)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for a in apps:
-        out.append(
-            SearchResult(
-                type="app",
-                id=a.id,
-                title=a.name or a.app_key,
-                snippet=_truncate(a.app_key),
-                url="/apps",
-                icon="key",
             )
         )
 

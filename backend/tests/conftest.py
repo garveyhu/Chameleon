@@ -83,10 +83,8 @@ from chameleon.app.main import create_app
 from chameleon.core.embedding import set_for_test as set_embedding_for_test
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.infra.jwt import init_jwt
-from chameleon.core.utils.crypto import init_crypto
 from chameleon.core.models import (
     ApiKey,
-    App,
     CallLog,
     Chunk,
     Conversation,
@@ -95,8 +93,7 @@ from chameleon.core.models import (
     Message,
     Task,
 )
-from chameleon.system.api_key.schemas import CreateApiKeyRequest
-from chameleon.system.api_key.service import create_api_key
+from chameleon.core.utils.crypto import init_crypto
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
@@ -105,6 +102,8 @@ from chameleon.providers.base.types import (
     StreamEvent,
     StreamEventType,
 )
+from chameleon.system.api_key.schemas import CreateApiKeyRequest
+from chameleon.system.api_key.service import create_api_key
 
 # ── Mock Provider 注入 ──────────────────────────────────
 
@@ -270,18 +269,10 @@ async def _cleanup() -> AsyncIterator[None]:
         await s.execute(delete(Conversation))
         await s.execute(delete(CallLog))
         await s.execute(delete(ApiKey).where(ApiKey.app_id.like("e2e-%")))
-        # App 最后清（FK 被引）
-        await s.execute(delete(App).where(App.app_key.like("e2e-%")))
         await s.commit()
 
 
 # ── API key 工厂 ─────────────────────────────────────────
-
-
-async def _ensure_app(s, app_key: str) -> None:
-    """fixture 辅助：确保 apps 表里有对应 row（FK 前置）"""
-    s.add(App(app_key=app_key, name=app_key))
-    await s.flush()
 
 
 @pytest_asyncio.fixture
@@ -289,7 +280,6 @@ async def admin_key() -> str:
     rand = secrets.token_hex(3)
     app_id = f"e2e-admin-{rand}"
     async with AsyncSessionLocal() as s:
-        await _ensure_app(s, app_id)
         created = await create_api_key(
             s,
             CreateApiKeyRequest(
@@ -307,7 +297,6 @@ async def app_key() -> str:
     rand = secrets.token_hex(3)
     app_id = f"e2e-app-{rand}"
     async with AsyncSessionLocal() as s:
-        await _ensure_app(s, app_id)
         created = await create_api_key(
             s,
             CreateApiKeyRequest(

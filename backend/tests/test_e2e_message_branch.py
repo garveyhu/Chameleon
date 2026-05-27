@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import secrets
-from datetime import datetime, timezone
 
 import pytest_asyncio
 from sqlalchemy import delete, select
@@ -11,7 +10,7 @@ from sqlalchemy import delete, select
 from chameleon.api.conversation.schemas import AppendMessageDraft
 from chameleon.api.conversation.service import append, create
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import App, Conversation, Message
+from chameleon.core.models import Conversation, Message
 
 
 @pytest_asyncio.fixture
@@ -19,8 +18,6 @@ async def smoke_session():
     suffix = secrets.token_hex(3)
     app_key = f"e2e-br-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="branch test", status="active"))
-        await s.flush()
         conv = await create(
             s, agent_key="example", provider="local", app_id=app_key
         )
@@ -33,7 +30,6 @@ async def smoke_session():
         await s.execute(
             delete(Conversation).where(Conversation.session_id == sess_id)
         )
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 

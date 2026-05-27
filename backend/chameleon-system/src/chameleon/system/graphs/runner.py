@@ -32,7 +32,6 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
-    App,
     Graph,
     GraphNodeRun,
     GraphRun,
@@ -51,26 +50,9 @@ _NODE_TO_OBSERVATION_TYPE: dict[str, str] = {
 }
 
 
+# call_logs.app_id 是自由「调用方/来源标签」（无 FK）；admin 控制台触发的
+# graph run 用这个占位标签兜底（keyless 调用无法锚到 key）。
 _SYSTEM_APP_KEY = "system"
-
-
-async def _ensure_system_app(session: AsyncSession) -> None:
-    """call_logs.app_id 走 FK，admin 控制台触发的 graph run 用这个占位 app"""
-    exists = (
-        await session.execute(
-            select(App).where(App.app_key == _SYSTEM_APP_KEY)
-        )
-    ).scalar_one_or_none()
-    if exists is None:
-        session.add(
-            App(
-                app_key=_SYSTEM_APP_KEY,
-                name="System",
-                description="平台内部 app —— admin 控制台触发的 graph run / 任务等",
-                status="active",
-            )
-        )
-        await session.flush()
 
 
 async def run_graph(
@@ -102,10 +84,6 @@ async def run_graph(
         raise BusinessError(
             ResultCode.Fail, message=f"graph 不存在: {graph_id}"
         )
-
-    # 确保 call_logs.app_id FK 不被打断
-    if app_id == _SYSTEM_APP_KEY:
-        await _ensure_system_app(session)
 
     try:
         spec = GraphSpec.model_validate(g.spec)
@@ -227,9 +205,6 @@ async def resume_run(
     if g is None:
         raise BusinessError(ResultCode.Fail, message="关联 graph 不存在")
     spec = GraphSpec.model_validate(g.spec)
-
-    if app_id == _SYSTEM_APP_KEY:
-        await _ensure_system_app(session)
 
     seed: dict[str, Any] = dict(pending.resume_state or {})
     seed[pending.node_id] = value

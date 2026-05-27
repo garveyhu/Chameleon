@@ -43,11 +43,12 @@ class CurrentApp:
     """请求级当前应用上下文（来自鉴权 middleware）"""
 
     id: int
+    # app_id：自由「调用方/来源标签」（不再对应任何容器实体）。
     app_id: str
     name: str
     scopes: list[str]
-    # 作用域（按领域）：app = 通吃；agent/kb = 仅 scope_ref 指向的目标。
-    scope_type: str = "app"
+    # 作用域（key「能访问什么」）：global = 通吃；app/kb = 仅 scope_ref 指向的目标。
+    scope_type: str = "global"
     scope_ref: str | None = None
 
 
@@ -57,7 +58,7 @@ class CurrentApp:
 def generate_api_key(prefix: str = "chm_") -> tuple[str, str, str]:
     """生成 (plaintext, hash, key_prefix)
 
-    prefix 按作用域区分：app→chm_、agent→agent-、kb→kbs-。
+    prefix 按作用域区分：global→chm_、app→app-、kb→kbs-。
     plaintext 落库（明文留存策略），同时存 hash + key_prefix（前 12 字符回显）。
     """
     body = "".join(secrets.choice(_ALPHABET) for _ in range(_KEY_BODY_LEN))
@@ -67,10 +68,11 @@ def generate_api_key(prefix: str = "chm_") -> tuple[str, str, str]:
     return plaintext, digest, key_prefix
 
 
-#: 作用域域 → 密钥明文前缀
+#: 作用域域 → 密钥明文前缀。仅用于「生成新 key」与「展示」；校验靠 hash，
+#: 旧 "agent-" 前缀的已签发 key 不受影响（前缀变更不破坏其校验）。
 SCOPE_PREFIX: dict[str, str] = {
-    "app": "chm_",
-    "agent": "agent-",
+    "global": "chm_",
+    "app": "app-",
     "kb": "kbs-",
 }
 
@@ -78,10 +80,10 @@ SCOPE_PREFIX: dict[str, str] = {
 def assert_scope(app: "CurrentApp", domain: str, ref: str) -> None:
     """断言当前密钥可访问 domain 域下 ref 目标。
 
-    app 作用域通吃；否则要求 scope_type==domain 且 scope_ref==ref，
-    不匹配抛 AgentNotInScope。admin JWT（scope_type=app）放行。
+    global 作用域通吃；否则要求 scope_type==domain 且 scope_ref==ref，
+    不匹配抛 AgentNotInScope。admin JWT（scope_type=global）放行。
     """
-    if app.scope_type == "app":
+    if app.scope_type == "global":
         return
     if app.scope_type != domain or app.scope_ref != ref:
         raise PermissionDeniedError(

@@ -27,7 +27,6 @@ from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    App,
     EmbedConfig,
     Graph,
     GraphNodeRun,
@@ -304,7 +303,7 @@ async def ensure_web_app(
     """
     row = await _load(session, graph_id)
     # commit 会让 ORM 对象过期，先把要用的字段取出来
-    g_key, g_name, g_desc = row.graph_key, row.name, row.description
+    g_name, g_desc = row.name, row.description
     opener, suggested = _start_chat_cfg(row.spec)  # start 节点的开场白 / 建议问题
 
     agent = await _find_graph_agent(session, graph_id)
@@ -319,25 +318,11 @@ async def ensure_web_app(
 
     ec = await _find_embed(session, agent_id)
     if ec is None:
-        app_key = f"graph-{g_key}"
-        app = (
-            await session.execute(
-                select(App).where(
-                    App.app_key == app_key, App.deleted_at.is_(None)
-                )
-            )
-        ).scalar_one_or_none()
-        if app is None:
-            app = App(app_key=app_key, name=g_name)
-            session.add(app)
-            await session.flush()
-            await session.refresh(app)
         ec = EmbedConfig(
             embed_key=_gen_embed_key(),
             name=g_name,
             description=g_desc,
             agent_id=agent_id,
-            app_id=app.id,
             allowed_origins=["*"],  # 公开 Web App：任意 origin（embed_key 即访问凭据）
             behavior=_synced_behavior(None, opener, suggested),
             enabled=True,
@@ -642,12 +627,15 @@ async def _graph_agent(session: AsyncSession, graph_id: int) -> tuple[Graph, Age
 async def create_agent_key(
     session: AsyncSession, graph_id: int, name: str
 ) -> ApiKeyCreated:
-    """为该 graph 的 agent 生成一个智能体级密钥（仅对该 agent 有效）。"""
+    """为该 graph 的 agent 生成一个智能体级密钥（仅对该 agent 有效）。
+
+    智能体已升格为「应用」，作用域域名用 "app"，scope_ref = agent_key。
+    """
     g, agent = await _graph_agent(session, graph_id)
     req = CreateApiKeyRequest(
         app_id=f"graph-{g.graph_key}",
         name=name or f"{g.name} 密钥",
-        scope_type="agent",
+        scope_type="app",
         scope_ref=agent.agent_key,
     )
     return await api_key_service.create_api_key(session, req)
@@ -661,7 +649,7 @@ async def list_agent_keys(session: AsyncSession, graph_id: int) -> list[ApiKeyIt
             await session.execute(
                 select(ApiKey)
                 .where(
-                    ApiKey.scope_type == "agent",
+                    ApiKey.scope_type == "app",
                     ApiKey.scope_ref == agent.agent_key,
                     ApiKey.revoked_at.is_(None),
                 )
@@ -682,6 +670,6 @@ async def revoke_agent_key(
     row = (
         await session.execute(select(ApiKey).where(ApiKey.id == key_id))
     ).scalar_one_or_none()
-    if row is None or row.scope_type != "agent" or row.scope_ref != agent.agent_key:
+    if row is None or row.scope_type != "app" or row.scope_ref != agent.agent_key:
         raise BusinessError(ResultCode.Fail, message="密钥不存在或不属于该智能体")
     return await api_key_service.revoke_api_key(session, key_id)

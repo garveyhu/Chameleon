@@ -4,6 +4,11 @@ from datetime import datetime, timezone
 import pytest
 from sqlalchemy import delete
 
+from chameleon.core.api.exceptions import (
+    BusinessError,
+    PermissionDeniedError,
+    ResultCode,
+)
 from chameleon.core.infra.auth import (
     CurrentApp,
     current_app,
@@ -12,12 +17,7 @@ from chameleon.core.infra.auth import (
     require_scope,
 )
 from chameleon.core.infra.db import AsyncSessionLocal, get_session
-from chameleon.core.api.exceptions import (
-    BusinessError,
-    PermissionDeniedError,
-    ResultCode,
-)
-from chameleon.core.models import ApiKey, App
+from chameleon.core.models import ApiKey
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +25,6 @@ async def _cleanup():
     yield
     async with AsyncSessionLocal() as s:
         await s.execute(delete(ApiKey).where(ApiKey.app_id.like("test-auth-%")))
-        await s.execute(delete(App).where(App.app_key.like("test-auth-%")))
         await s.commit()
 
 
@@ -45,13 +44,11 @@ def test_generate_api_key_format() -> None:
 
 
 async def _make_test_key(*, scopes: list[str], revoked: bool = False) -> str:
-    """落一条 api_key 行，返 plaintext。FK 前置：先建 App。"""
+    """落一条 api_key 行，返 plaintext（app_id 为自由来源标签，无需建 App）。"""
     plain, digest, prefix = generate_api_key()
     rand = secrets.token_hex(4)
     app_id = f"test-auth-{rand}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_id, name=app_id))
-        await s.flush()
         s.add(
             ApiKey(
                 app_id=app_id,

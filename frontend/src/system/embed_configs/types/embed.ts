@@ -108,7 +108,6 @@ export interface EmbedConfigItem {
   name: string;
   description: string | null;
   agent_id: EntityId;
-  app_id: EntityId;
   allowed_origins: string[] | null;
   ui_config: Record<string, unknown> | null;
   behavior: Record<string, unknown> | null;
@@ -122,7 +121,6 @@ export interface CreateEmbedConfigRequest {
   name: string;
   description?: string;
   agent_id: EntityId;
-  app_id: EntityId;
   allowed_origins?: string[];
   ui_config?: UiConfig;
   behavior?: Behavior;

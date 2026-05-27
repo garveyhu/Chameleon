@@ -242,8 +242,8 @@ const SYSTEM_GROUP: NavGroup = {
       to: '/apps',
       icon: KeySquare,
       i18nKey: 'menu.apps',
-      fallbackTitle: '应用 & API Key',
-      perm: 'apps:read',
+      fallbackTitle: 'Key 管理',
+      perm: 'api_keys:read',
     },
     {
       to: '/users',

@@ -6,13 +6,13 @@ import secrets
 import sys
 from pathlib import Path
 
-import pytest_asyncio
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ApiKey, App, CallLog
+from chameleon.core.models import ApiKey, CallLog
 from chameleon.system.api_key.schemas import CreateApiKeyRequest
 from chameleon.system.api_key.service import create_api_key
 from chameleon.system.pricing import seed_default_pricing
@@ -22,7 +22,8 @@ _SDK_PATH = Path(__file__).resolve().parents[2] / "sdk" / "python"
 if str(_SDK_PATH) not in sys.path:
     sys.path.insert(0, str(_SDK_PATH))
 
-from chameleon_sdk import Client, AsyncClient as ChameleonAsyncClient  # noqa: E402
+from chameleon_sdk import AsyncClient as ChameleonAsyncClient
+from chameleon_sdk import Client  # noqa: E402
 
 
 @pytest_asyncio.fixture(scope="module", autouse=True)
@@ -37,8 +38,6 @@ async def app_with_key():
     suffix = secrets.token_hex(3)
     app_key = f"e2e-sdk-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="sdk test", status="active"))
-        await s.commit()
         rec = await create_api_key(
             s,
             CreateApiKeyRequest(
@@ -50,7 +49,6 @@ async def app_with_key():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
         await s.execute(delete(ApiKey).where(ApiKey.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 
@@ -197,7 +195,8 @@ def test_python_sdk_async_client_constructs():
 
 
 def test_trace_decorator_wraps_function():
-    from chameleon_sdk import set_default_client, trace as trace_deco
+    from chameleon_sdk import set_default_client
+    from chameleon_sdk import trace as trace_deco
 
     c = Client(api_key="x", base_url="http://example.com")
     set_default_client(c)
@@ -222,8 +221,8 @@ def test_get_default_client_raises_when_unset():
 
 def test_patch_all_silent_when_openai_missing():
     """patch_all 在 openai 未装时不抛错，仅静默跳过"""
-    from chameleon_sdk import patch_all
     import chameleon_sdk.decorators as deco
+    from chameleon_sdk import patch_all
 
     c = Client(api_key="x", base_url="http://example.com")
     original_patch = deco.patch_openai

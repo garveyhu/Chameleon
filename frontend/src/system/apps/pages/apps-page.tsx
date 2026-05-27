@@ -1,9 +1,9 @@
-/** apps + api_keys 管理页 */
+/** Key 管理：扁平 API Key 列表 + 新建 / 撤销 */
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Eye, EyeOff, Key, KeyRound, Plus, Trash2 } from 'lucide-react';
+import { Check, Copy, Eye, EyeOff, KeyRound, Plus } from 'lucide-react';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -35,18 +35,33 @@ import {
   ModalTitle,
 } from '@/core/components/ui/modal';
 import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
 import { Textarea } from '@/core/components/ui/textarea';
-import { formatDateTime } from '@/core/lib/format';
+import type { EntityId } from '@/core/types/api';
+import { formatRelative } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
-import { apiKeyApi, appApi } from '@/system/apps/services/app';
-import type { ApiKeyCreated, AppItem } from '@/system/apps/types/app';
+import { apiKeyApi } from '@/system/apps/services/app';
+import type {
+  ApiKeyCreated,
+  ApiKeyItem,
+  ApiKeyScopeType,
+  CreateApiKeyRequest,
+} from '@/system/apps/types/app';
+
+// scope 中文标签 + 徽标配色
+const SCOPE_META: Record<ApiKeyScopeType, { label: string; variant: 'primary' | 'success' | 'warning' }> = {
+  global: { label: '通用', variant: 'primary' },
+  app: { label: '应用', variant: 'success' },
+  kb: { label: '知识库', variant: 'warning' },
+};
+
+const scopeMeta = (t: string) =>
+  SCOPE_META[(t as ApiKeyScopeType) in SCOPE_META ? (t as ApiKeyScopeType) : 'global'];
 
 export const AppsPage = () => {
   const { t } = useTranslation();
@@ -54,70 +69,96 @@ export const AppsPage = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
-  const [keysApp, setKeysApp] = useState<AppItem | null>(null);
-  const [delApp, setDelApp] = useState<AppItem | null>(null);
+  const [revokeKey, setRevokeKey] = useState<ApiKeyItem | null>(null);
+  const [plain, setPlain] = useState<ApiKeyCreated | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['apps', page, pageSize],
-    queryFn: () => appApi.list({ page, page_size: pageSize }),
+    queryKey: ['api-keys', page, pageSize],
+    queryFn: () => apiKeyApi.list({ page, page_size: pageSize, include_revoked: true }),
   });
 
   const createMut = useMutation({
-    mutationFn: appApi.create,
-    onSuccess: () => {
-      toast.success('应用已创建');
-      qc.invalidateQueries({ queryKey: ['apps'] });
+    mutationFn: apiKeyApi.create,
+    onSuccess: created => {
+      qc.invalidateQueries({ queryKey: ['api-keys'] });
       setCreateOpen(false);
+      setPlain(created);
     },
   });
 
-  const delMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => appApi.delete(id),
+  const revokeMut = useMutation({
+    mutationFn: (id: EntityId) => apiKeyApi.revoke(id),
     onSuccess: () => {
-      toast.success('应用已删除');
-      qc.invalidateQueries({ queryKey: ['apps'] });
-      setDelApp(null);
+      toast.success('Key 已撤销');
+      qc.invalidateQueries({ queryKey: ['api-keys'] });
+      setRevokeKey(null);
     },
   });
 
-  const columns: DataTableColumn<AppItem>[] = [
-    {
-      key: 'app_key',
-      header: t('table.app_key'),
-      render: a => <span className="font-mono text-[12px] text-stone-700">{a.app_key}</span>,
-    },
+  const columns: DataTableColumn<ApiKeyItem>[] = [
     {
       key: 'name',
       header: t('common.name'),
-      render: a => <span className="font-medium text-stone-900">{a.name}</span>,
+      render: k => <span className="font-medium text-stone-900">{k.name}</span>,
+    },
+    {
+      key: 'scope',
+      header: '作用域',
+      width: 80,
+      render: k => {
+        const m = scopeMeta(k.scope_type);
+        return <Badge variant={m.variant}>{m.label}</Badge>;
+      },
+    },
+    {
+      key: 'scope_ref',
+      header: '目标',
+      render: k =>
+        k.scope_ref ? (
+          <span className="font-mono text-[11.5px] text-stone-600">{k.scope_ref}</span>
+        ) : (
+          <span className="text-stone-300">—</span>
+        ),
+    },
+    {
+      key: 'key',
+      header: '密钥',
+      width: 220,
+      render: k => <KeyCopyCell prefix={k.key_prefix} plain={k.plain_key} />,
+    },
+    {
+      key: 'app_id',
+      header: '来源标签',
+      render: k => <span className="font-mono text-[11px] text-stone-400">{k.app_id}</span>,
+    },
+    {
+      key: 'limits',
+      header: '配额',
+      width: 150,
+      render: k => (
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
+          QPM {k.qpm_limit ?? '∞'} · QPD {k.qpd_limit ?? '∞'}
+        </span>
+      ),
     },
     {
       key: 'status',
       header: t('common.status'),
       width: 80,
-      render: a => (
-        <Badge variant={a.status === 'active' ? 'success' : 'warning'}>
-          {a.status === 'active' ? t('common.active') : t('common.suspended')}
-        </Badge>
-      ),
+      render: k =>
+        k.revoked_at ? (
+          <Badge variant="danger">已撤销</Badge>
+        ) : (
+          <Badge variant="success">活跃</Badge>
+        ),
     },
     {
-      key: 'limits',
-      header: '配额',
-      width: 160,
-      render: a => (
+      key: 'last_used_at',
+      header: '最近使用',
+      width: 120,
+      render: k => (
         <span className="tnum font-mono text-[11.5px] text-stone-500">
-          QPM {a.qpm_limit ?? '∞'} · QPD {a.qpd_limit ?? '∞'}
-        </span>
-      ),
-    },
-    {
-      key: 'created_at',
-      header: t('common.created_at'),
-      width: 160,
-      render: a => (
-        <span className="tnum font-mono text-[11.5px] text-stone-500">
-          {formatDateTime(a.created_at)}
+          {k.last_used_at ? formatRelative(k.last_used_at) : '从未'}
         </span>
       ),
     },
@@ -125,27 +166,18 @@ export const AppsPage = () => {
       key: 'actions',
       header: t('common.actions'),
       align: 'right',
-      width: 130,
-      render: a => (
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            title="API Keys"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setKeysApp(a)}
+      width: 90,
+      render: k =>
+        k.revoked_at ? null : (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-red-600"
+            onClick={() => setRevokeKey(k)}
           >
-            <KeyRound className="h-3.5 w-3.5" /> Keys
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
-            onClick={() => setDelApp(a)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
+            撤销
+          </Button>
+        ),
     },
   ];
 
@@ -167,7 +199,7 @@ export const AppsPage = () => {
           loading={listQ.isLoading}
           emptyText={
             <EmptyState
-              icon={<Key strokeWidth={1.5} />}
+              icon={<KeyRound strokeWidth={1.5} />}
               title={t('empty.apps')}
               action={
                 <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
@@ -189,29 +221,31 @@ export const AppsPage = () => {
         />
       </SectionCard>
 
-      <CreateAppModal
+      <CreateKeyModal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={createMut.mutate}
         loading={createMut.isPending}
       />
-      <ApiKeysSheet app={keysApp} onClose={() => setKeysApp(null)} />
+
       <ConfirmDialog
-        open={!!delApp}
-        title="删除应用"
-        description={`删除应用 ${delApp?.app_key} 后所有 API key、会话、调用记录都会级联清除。`}
+        open={!!revokeKey}
+        title="撤销 API Key"
+        description={`撤销后用此 Key 的调用将被拒绝，且不可恢复（${revokeKey?.name}）。`}
         variant="danger"
-        confirmText="删除"
-        onConfirm={() => delApp && delMut.mutate(delApp.id)}
-        onCancel={() => setDelApp(null)}
+        confirmText="撤销"
+        onConfirm={() => revokeKey && revokeMut.mutate(revokeKey.id)}
+        onCancel={() => setRevokeKey(null)}
       />
+
+      <PlainKeyDialog plain={plain} onClose={() => setPlain(null)} />
     </div>
   );
 };
 
-// ── 创建应用 ───────────────────────────────────────────────
+// ── 新建 Key ────────────────────────────────────────────────
 
-const CreateAppModal = ({
+const CreateKeyModal = ({
   open,
   onClose,
   onSubmit,
@@ -219,50 +253,96 @@ const CreateAppModal = ({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (req: { app_key: string; name: string; description?: string }) => void;
+  onSubmit: (req: CreateApiKeyRequest) => void;
   loading: boolean;
 }) => {
-  const [k, setK] = useState('');
-  const [n, setN] = useState('');
-  const [d, setD] = useState('');
+  const [name, setName] = useState('');
+  const [appId, setAppId] = useState('');
+  const [scopeType, setScopeType] = useState<ApiKeyScopeType>('global');
+  const [scopeRef, setScopeRef] = useState('');
+  const [scopes, setScopes] = useState('');
+  const [desc, setDesc] = useState('');
+
+  const reset = () => {
+    setName('');
+    setAppId('');
+    setScopeType('global');
+    setScopeRef('');
+    setScopes('');
+    setDesc('');
+  };
+
+  const canSubmit = !!name && (scopeType === 'global' || !!scopeRef);
 
   return (
     <Modal
       open={open}
       onOpenChange={o => {
         if (!o) {
-          setK('');
-          setN('');
-          setD('');
+          reset();
           onClose();
         }
       }}
     >
       <ModalContent size="md">
         <ModalHeader>
-          <ModalTitle>新建应用</ModalTitle>
+          <ModalTitle>新建 API Key</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div className="space-y-1.5">
-            <Label>应用标识</Label>
+            <Label>名称</Label>
             <Input
-              value={k}
-              onChange={e => setK(e.target.value)}
-              placeholder="my-side-project"
-              className="font-mono text-[12.5px]"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="prod / ci / mobile-app"
             />
-            <p className="text-[11px] text-stone-500">
-              业务方调用时作为 <code className="font-mono">app_id</code> 传入；建议
-              kebab-case，创建后不可改。
-            </p>
+            <p className="text-[11px] text-stone-500">只用于识别和撤销，不是密钥本身</p>
           </div>
           <div className="space-y-1.5">
-            <Label>名称</Label>
-            <Input value={n} onChange={e => setN(e.target.value)} placeholder="我的项目" />
+            <Label>作用域</Label>
+            <Select value={scopeType} onValueChange={v => setScopeType(v as ApiKeyScopeType)}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="global">通用（通吃所有服务）</SelectItem>
+                <SelectItem value="app">应用（仅某智能体）</SelectItem>
+                <SelectItem value="kb">知识库（仅某知识库）</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {scopeType !== 'global' ? (
+            <div className="space-y-1.5">
+              <Label>目标标识</Label>
+              <Input
+                value={scopeRef}
+                onChange={e => setScopeRef(e.target.value)}
+                placeholder={scopeType === 'app' ? 'agent_key' : 'kb_key'}
+                className="font-mono text-[12.5px]"
+              />
+            </div>
+          ) : null}
+          <div className="space-y-1.5">
+            <Label>来源标签（可选）</Label>
+            <Input
+              value={appId}
+              onChange={e => setAppId(e.target.value)}
+              placeholder="留空则用名称自动生成"
+              className="font-mono text-[12.5px]"
+            />
+            <p className="text-[11px] text-stone-500">仅用于调用日志聚合 / 展示</p>
+          </div>
+          <div className="space-y-1.5">
+            <Label>scopes（逗号分隔，可选）</Label>
+            <Input
+              value={scopes}
+              onChange={e => setScopes(e.target.value)}
+              placeholder="留空 = 仅业务接口；admin = 含管理接口"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>描述</Label>
-            <Textarea value={d} onChange={e => setD(e.target.value)} rows={3} />
+            <Textarea value={desc} onChange={e => setDesc(e.target.value)} rows={2} />
           </div>
         </ModalBody>
         <ModalFooter>
@@ -270,10 +350,24 @@ const CreateAppModal = ({
             取消
           </Button>
           <Button
-            disabled={loading || !k || !n}
-            onClick={() => onSubmit({ app_key: k, name: n, description: d || undefined })}
+            disabled={!canSubmit || loading}
+            onClick={() =>
+              onSubmit({
+                name,
+                app_id: appId.trim() || undefined,
+                scope_type: scopeType,
+                scope_ref: scopeType === 'global' ? undefined : scopeRef.trim(),
+                scopes: scopes
+                  ? scopes
+                      .split(',')
+                      .map(s => s.trim())
+                      .filter(Boolean)
+                  : [],
+                description: desc || undefined,
+              })
+            }
           >
-            {loading ? '创建中...' : '创建'}
+            {loading ? '签发中...' : '签发并生成密钥'}
           </Button>
         </ModalFooter>
       </ModalContent>
@@ -281,215 +375,58 @@ const CreateAppModal = ({
   );
 };
 
-// ── API Keys 子表 ──────────────────────────────────────────
+// ── 新签发明文 token ────────────────────────────────────────
 
-const ApiKeysSheet = ({ app, onClose }: { app: AppItem | null; onClose: () => void }) => {
-  const qc = useQueryClient();
-  const [newKeyName, setNewKeyName] = useState('');
-  const [newScopes, setNewScopes] = useState('');
-  const [plain, setPlain] = useState<ApiKeyCreated | null>(null);
-
-  const keysQ = useQuery({
-    queryKey: ['app-keys', app?.id],
-    queryFn: () => (app ? appApi.listApiKeys(app.id) : Promise.resolve([])),
-    enabled: !!app,
-  });
-
-  const createKeyMut = useMutation({
-    mutationFn: () =>
-      apiKeyApi.create({
-        app_id: app!.app_key,
-        name: newKeyName,
-        scopes: newScopes
-          ? newScopes
-              .split(',')
-              .map(s => s.trim())
-              .filter(Boolean)
-          : [],
-      }),
-    onSuccess: created => {
-      qc.invalidateQueries({ queryKey: ['app-keys'] });
-      setPlain(created);
-      setNewKeyName('');
-      setNewScopes('');
-    },
-  });
-
-  const revokeMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => apiKeyApi.revoke(id),
-    onSuccess: () => {
-      toast.success('Key 已撤销');
-      qc.invalidateQueries({ queryKey: ['app-keys'] });
-    },
-  });
-
+const PlainKeyDialog = ({
+  plain,
+  onClose,
+}: {
+  plain: ApiKeyCreated | null;
+  onClose: () => void;
+}) => {
+  const copy = () => {
+    if (plain?.plain_key) {
+      navigator.clipboard.writeText(plain.plain_key);
+      toast.success('已复制');
+    }
+  };
   return (
-    <>
-      <Sheet open={!!app} onOpenChange={o => !o && onClose()}>
-        <SheetContent width="w-[640px]">
-          <SheetHeader>
-            <SheetTitle>{app?.name} · API Keys</SheetTitle>
-          </SheetHeader>
-          <SheetBody className="space-y-6">
-            {/* 新建 key */}
-            <div className="rounded-lg border border-stone-200 bg-stone-50 p-4">
-              <div className="mb-1 text-xs font-semibold text-stone-500 uppercase">
-                签发新 API Key
-              </div>
-              <p className="mb-3 text-[11.5px] text-stone-500">
-                密钥由系统随机生成，签发后留存明文，可随时在下方列表展开 / 复制。
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">标识名</Label>
-                  <Input
-                    value={newKeyName}
-                    onChange={e => setNewKeyName(e.target.value)}
-                    placeholder="prod / ci / mobile-app"
-                  />
-                  <p className="mt-1 text-[10.5px] text-stone-400">
-                    只用于识别和撤销，不是密钥本身
-                  </p>
-                </div>
-                <div>
-                  <Label className="text-xs">scopes（逗号分隔）</Label>
-                  <Input
-                    value={newScopes}
-                    onChange={e => setNewScopes(e.target.value)}
-                    placeholder="留空 = 仅业务接口；admin = 含管理接口"
-                  />
-                  <p className="mt-1 text-[10.5px] text-stone-400">
-                    例：<code className="font-mono">admin</code> 给后台脚本用
-                  </p>
-                </div>
-              </div>
-              <Button
-                className="mt-3"
-                size="sm"
-                disabled={!newKeyName || createKeyMut.isPending}
-                onClick={() => createKeyMut.mutate()}
-              >
-                {createKeyMut.isPending ? '签发中...' : '签发并生成密钥'}
-              </Button>
-            </div>
-
-            {/* 已签发 key 列表 */}
-            <div>
-              <div className="mb-2 text-xs font-semibold text-stone-500 uppercase">已签发</div>
-              <table className="w-full text-sm">
-                <thead className="text-xs text-stone-500">
-                  <tr>
-                    <th className="py-1 text-left">前缀</th>
-                    <th className="py-1 text-left">名称</th>
-                    <th className="py-1 text-left">scopes</th>
-                    <th className="py-1 text-left">状态</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {(keysQ.data || []).map(k => (
-                    <tr key={k.id}>
-                      <td className="py-2">
-                        <KeyCopyCell prefix={k.key_prefix} plain={k.plain_key} />
-                      </td>
-                      <td>{k.name}</td>
-                      <td>
-                        {k.scopes.length === 0 ? (
-                          '—'
-                        ) : (
-                          <div className="flex gap-1">
-                            {k.scopes.map(s => (
-                              <Badge key={s} variant="outline">
-                                {s}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        {k.revoked_at ? (
-                          <Badge variant="danger">已撤销</Badge>
-                        ) : (
-                          <Badge variant="success">活跃</Badge>
-                        )}
-                      </td>
-                      <td className="text-right">
-                        {!k.revoked_at && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-600"
-                            onClick={() => revokeMut.mutate(k.id)}
-                          >
-                            撤销
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </SheetBody>
-          <SheetFooter>
-            <Button variant="ghost" onClick={onClose}>
-              关闭
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-
-      {/* 新签发明文 token（也可随时在列表展开复制） */}
-      <Dialog open={!!plain} onOpenChange={o => !o && setPlain(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>新 API Key 已签发</DialogTitle>
-            <DialogDescription>
-              明文已留存，可随时在下方列表展开 / 复制；建议立即保存到安全位置。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="bg-warm-2/40 overflow-hidden rounded-lg border border-stone-200/80">
-            <div className="flex items-center justify-between border-b border-stone-200/70 bg-white/40 px-3 py-1.5">
-              <span className="text-[11.5px] font-medium text-stone-700">API Key（明文）</span>
-              <button
-                type="button"
-                onClick={() => {
-                  if (plain?.plain_key) {
-                    navigator.clipboard.writeText(plain.plain_key);
-                    toast.success('已复制');
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-stone-500 transition hover:bg-stone-100 hover:text-stone-900"
-              >
-                <Copy className="h-3 w-3" />
-                复制
-              </button>
-            </div>
-            <pre className="overflow-x-auto px-3.5 py-3 font-mono text-[12.5px] leading-relaxed break-all whitespace-pre-wrap text-stone-800">
-              {plain?.plain_key}
-            </pre>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (plain?.plain_key) {
-                  navigator.clipboard.writeText(plain.plain_key);
-                  toast.success('已复制');
-                }
-              }}
+    <Dialog open={!!plain} onOpenChange={o => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>新 API Key 已签发</DialogTitle>
+          <DialogDescription>
+            明文已留存，可随时在列表展开 / 复制；建议立即保存到安全位置。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="bg-warm-2/40 overflow-hidden rounded-lg border border-stone-200/80">
+          <div className="flex items-center justify-between border-b border-stone-200/70 bg-white/40 px-3 py-1.5">
+            <span className="text-[11.5px] font-medium text-stone-700">API Key（明文）</span>
+            <button
+              type="button"
+              onClick={copy}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-stone-500 transition hover:bg-stone-100 hover:text-stone-900"
             >
-              <Copy className="h-4 w-4" /> 复制
-            </Button>
-            <Button onClick={() => setPlain(null)}>已保存</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+              <Copy className="h-3 w-3" />
+              复制
+            </button>
+          </div>
+          <pre className="overflow-x-auto px-3.5 py-3 font-mono text-[12.5px] leading-relaxed break-all whitespace-pre-wrap text-stone-800">
+            {plain?.plain_key}
+          </pre>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={copy}>
+            <Copy className="h-4 w-4" /> 复制
+          </Button>
+          <Button onClick={onClose}>已保存</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
-/** 列表里的密钥单元格：默认掩码，点眼睛展开全文，点复制拷全文（老数据无明文只显前缀） */
+/** 密钥单元格：默认掩码，点眼睛展开全文，点复制拷全文（老数据无明文只显前缀） */
 const KeyCopyCell = ({ prefix, plain }: { prefix: string; plain: string | null }) => {
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);

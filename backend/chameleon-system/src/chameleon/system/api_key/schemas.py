@@ -12,15 +12,21 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreateApiKeyRequest(BaseModel):
-    app_id: str = Field(..., min_length=1, max_length=64, description="应用 slug")
+    # app_id：自由「调用方/来源标签」，可选；不传则服务端用 name 的 slug 兜底
+    app_id: str | None = Field(
+        default=None, max_length=64, description="调用方/来源标签（可选）"
+    )
     name: str = Field(..., min_length=1, max_length=128, description="可读名称")
     scopes: list[str] = Field(default_factory=list, description='["admin"] 或 []')
     description: str | None = None
-    # 作用域域：app（通吃）/ agent（某智能体）/ kb（某知识库）
-    scope_type: str = Field(default="app", pattern="^(app|agent|kb)$")
+    # 作用域：global（通吃）/ app（某智能体/应用）/ kb（某知识库）
+    scope_type: str = Field(default="global", pattern="^(global|app|kb)$")
     scope_ref: str | None = Field(
-        None, description="域内目标：agent→agent_key、kb→kb_key、app→空"
+        None, description="域内目标：app→agent_key、kb→kb_key、global→空"
     )
+    # 配额（可选，仅落字段暂不 enforce）
+    qpm_limit: int | None = Field(default=None, ge=0)
+    qpd_limit: int | None = Field(default=None, ge=0)
 
 
 class ApiKeyItem(BaseModel):
@@ -32,8 +38,10 @@ class ApiKeyItem(BaseModel):
     plain_key: str | None = None
     scopes: list[str]
     description: str | None
-    scope_type: str = "app"
+    scope_type: str = "global"
     scope_ref: str | None = None
+    qpm_limit: int | None = None
+    qpd_limit: int | None = None
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None

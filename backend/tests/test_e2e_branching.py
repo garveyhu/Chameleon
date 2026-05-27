@@ -13,7 +13,6 @@ from chameleon.api.conversation.schemas import AppendMessageDraft
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     ApiKey,
-    App,
     Conversation,
     Message,
 )
@@ -27,8 +26,6 @@ async def app_with_key():
     suffix = secrets.token_hex(3)
     app_key = f"e2e-branch-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="branch test", status="active"))
-        await s.commit()
         rec = await create_api_key(
             s,
             CreateApiKeyRequest(
@@ -40,7 +37,6 @@ async def app_with_key():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(ApiKey).where(ApiKey.app_id == app_key))
         await s.execute(delete(Conversation).where(Conversation.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 

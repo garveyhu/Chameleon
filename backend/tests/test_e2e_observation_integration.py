@@ -11,25 +11,19 @@ import pytest_asyncio
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import App, CallLog
+from chameleon.core.models import CallLog
 from chameleon.core.observe import ObservationType, observe
 from chameleon.system.api_key.service import record_call
 
 
 @pytest_asyncio.fixture
 async def tmp_app():
-    """临时 app，测试完清理（含其下的 call_logs）"""
+    """临时来源标签（app_id 已是自由字符串，无需建 app 行），测试完清理 call_logs"""
     suffix = secrets.token_hex(3)
     app_key = f"obs-app-{suffix}"
-    async with AsyncSessionLocal() as s:
-        a = App(app_key=app_key, name="obs test", status="active")
-        s.add(a)
-        await s.flush()
-        await s.commit()
     yield app_key
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 

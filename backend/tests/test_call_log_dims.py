@@ -13,20 +13,18 @@ import pytest_asyncio
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import App, CallLog, User
+from chameleon.core.models import CallLog, User
 from chameleon.core.utils.passwords import hash_password
 from chameleon.system.api_key.service import record_call
 
 
 @pytest_asyncio.fixture
 async def dims_fixture():
-    """临时 app + user（FK 前置）"""
+    """临时 user（app_id 已是自由来源标签，无需建 app 行）"""
     suffix = secrets.token_hex(3)
     app_key = f"dims-app-{suffix}"
 
     async with AsyncSessionLocal() as s:
-        app = App(app_key=app_key, name="dims test", status="active")
-        s.add(app)
         user = User(
             username=f"dims-user-{suffix}",
             password_hash=hash_password("Pwd123!xx"),
@@ -42,7 +40,6 @@ async def dims_fixture():
 
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.execute(delete(User).where(User.id == ids["user_id"]))
         await s.commit()
 

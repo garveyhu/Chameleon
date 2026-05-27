@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import secrets
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
@@ -96,13 +95,6 @@ async def test_permissions_list_has_resource_filter(
     assert all(p["resource"] == "agents" for p in perms)
 
 
-async def test_apps_list_after_seed(client: AsyncClient, admin_token: str):
-    r = await client.get(
-        "/v1/admin/apps", headers={"Authorization": f"Bearer {admin_token}"}
-    )
-    assert r.status_code == 200
-
-
 async def test_providers_list_includes_seeded(
     client: AsyncClient, admin_token: str
 ):
@@ -173,41 +165,6 @@ async def test_audit_logs_list_ok(client: AsyncClient, admin_token: str):
 
 
 # ── CRUD 闭环：创建 → 改 → 删 ────────────────────────────
-
-
-async def test_app_crud_loop(client: AsyncClient, admin_token: str):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-
-    # create
-    import secrets
-
-    key = f"e2e-p6-{secrets.token_hex(3)}"
-    r = await client.post(
-        "/v1/admin/apps",
-        headers=headers,
-        json={"app_key": key, "name": "p6-test"},
-    )
-    assert r.status_code == 200, r.text
-    app_id = r.json()["data"]["id"]
-
-    # update
-    r = await client.post(
-        f"/v1/admin/apps/{app_id}/update",
-        headers=headers,
-        json={"name": "p6-test-renamed", "status": "suspended"},
-    )
-    assert r.status_code == 200
-    assert r.json()["data"]["name"] == "p6-test-renamed"
-    assert r.json()["data"]["status"] == "suspended"
-
-    # delete
-    r = await client.post(f"/v1/admin/apps/{app_id}/delete", headers=headers)
-    assert r.status_code == 200
-
-    # list 应不含已删
-    r = await client.get("/v1/admin/apps", headers=headers)
-    keys = {a["app_key"] for a in r.json()["data"]["items"]}
-    assert key not in keys
 
 
 async def test_agent_disable_enable_loop(

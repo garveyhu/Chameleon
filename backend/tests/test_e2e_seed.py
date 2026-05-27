@@ -6,30 +6,24 @@
 from __future__ import annotations
 
 import io
-import json
 import zipfile
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import delete, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
 from chameleon.core.infra.db import AsyncSessionLocal, engine
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    App,
-    LLMModel,
     Permission,
     Provider,
     Role,
-    RolePermission,
     User,
-    UserRole,
 )
 from chameleon.core.utils.crypto import decrypt, encrypt
-from chameleon.system.seed.defaults import all_permissions, default_roles
+from chameleon.system.seed.defaults import all_permissions
 from chameleon.system.seed.runner import run_seed_if_empty
 
 
@@ -41,14 +35,10 @@ async def empty_db():
             "user_roles",
             "role_permissions",
             "api_keys",
-            "app_agents",
             "embed_configs",
             "models",
         ):
             await conn.execute(text(f"DELETE FROM {tbl}"))
-        await conn.execute(
-            text("DELETE FROM apps WHERE app_key NOT IN ('admin-cli', 'debug-kb', 'dbg-bg')")
-        )
         await conn.execute(text("DELETE FROM agents"))
         await conn.execute(text("DELETE FROM providers"))
         await conn.execute(text("DELETE FROM users"))
@@ -188,14 +178,14 @@ async def test_export_zip_structure(client: AsyncClient, empty_db):
         "model.json",
         "agents.yaml",
         "users.json",
-        "apps.json",
+        "api_keys.json",
         "embed_configs.json",
         "README.md",
     }
 
 
 async def test_export_then_import_roundtrip(client: AsyncClient, empty_db):
-    """seed → 导出 → drop 业务数据 → 导入 → 验 user / app 还原"""
+    """seed → 导出 → drop 业务数据 → 导入 → 验 user / api_key 还原"""
     creds = await run_seed_if_empty()
     r = await client.post(
         "/v1/auth/login",
@@ -203,9 +193,19 @@ async def test_export_then_import_roundtrip(client: AsyncClient, empty_db):
     )
     token = r.json()["data"]["access_token"]
 
-    # 加一个 app + key（让导出有内容）
+    # 加一个 api_key（让导出有内容；app_id 为自由来源标签）
+    test_hash = "export-test-hash"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key="export-test-app", name="export test"))
+        s.add(
+            ApiKey(
+                app_id="export-test-app",
+                name="export test key",
+                key_hash=test_hash,
+                key_prefix="chm_exptst",
+                scopes=[],
+                scope_type="global",
+            )
+        )
         await s.commit()
 
     # 导出
@@ -219,7 +219,6 @@ async def test_export_then_import_roundtrip(client: AsyncClient, empty_db):
     async with engine.begin() as conn:
         await conn.execute(text("DELETE FROM api_keys"))
         await conn.execute(text("DELETE FROM user_roles"))
-        await conn.execute(text("DELETE FROM apps WHERE app_key = 'export-test-app'"))
         await conn.execute(text("DELETE FROM users"))
 
     # 重新登录用不了 → 用临时方法：直接复用 token？token 已废（user 没了）
@@ -240,15 +239,16 @@ async def test_export_then_import_roundtrip(client: AsyncClient, empty_db):
     )
     assert r3.status_code == 200, r3.text
     summary = r3.json()["data"]
-    assert summary["apps_upserted"] >= 1
+    assert summary["api_keys_upserted"] >= 1
     assert summary["users_upserted"] >= 1
 
-    # 验证 export-test-app 又回来了
+    # 验证 export-test-app 的 api_key 又回来了
     async with AsyncSessionLocal() as s:
         rows = (
-            await s.execute(select(App).where(App.app_key == "export-test-app"))
+            await s.execute(select(ApiKey).where(ApiKey.key_hash == test_hash))
         ).scalars().all()
         assert len(rows) == 1
+        assert rows[0].app_id == "export-test-app"
 
 
 async def test_import_requires_confirm(client: AsyncClient, empty_db):

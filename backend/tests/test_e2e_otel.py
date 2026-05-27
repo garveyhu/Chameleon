@@ -9,7 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ApiKey, App, CallLog
+from chameleon.core.models import ApiKey, CallLog
 from chameleon.system.api_key.schemas import CreateApiKeyRequest
 from chameleon.system.api_key.service import create_api_key
 from chameleon.system.pricing import seed_default_pricing
@@ -27,8 +27,6 @@ async def app_with_key():
     suffix = secrets.token_hex(3)
     app_key = f"e2e-otel-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="otel test", status="active"))
-        await s.commit()
         rec = await create_api_key(
             s,
             CreateApiKeyRequest(
@@ -40,7 +38,6 @@ async def app_with_key():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
         await s.execute(delete(ApiKey).where(ApiKey.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 

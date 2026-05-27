@@ -1,8 +1,6 @@
 """共享 ORM 模型基本 round-trip 测试
 
-v0.2 重构后：
-- app_id / agent_key 是 FK，依赖 apps / agents 表里有对应 row
-- 测试 fixture 准备/清理顺序按 FK 依赖
+单租户重构后：app_id 是自由「来源标签」字符串（无 FK→apps），agent_key 为字符串。
 """
 
 import secrets
@@ -16,7 +14,6 @@ from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    App,
     Conversation,
     LLMModel,
     Message,
@@ -38,7 +35,6 @@ async def _cleanup_after_test():
         await s.execute(delete(Message))
         await s.execute(delete(Conversation).where(Conversation.app_id.like("test-%")))
         await s.execute(delete(ApiKey).where(ApiKey.app_id.like("test-%")))
-        await s.execute(delete(App).where(App.app_key.like("test-%")))
         await s.execute(delete(Agent).where(Agent.agent_key.like("test-%")))
         await s.execute(delete(LLMModel).where(LLMModel.code.like("test-%")))
         await s.execute(delete(Provider).where(Provider.code.like("test-%")))
@@ -54,14 +50,6 @@ async def _cleanup_after_test():
 async def test_create_api_key_roundtrip() -> None:
     rand = secrets.token_hex(4)
     async with AsyncSessionLocal() as s:
-        # FK 前置：建 app
-        app = App(
-            app_key=f"test-{rand}",
-            name="test app",
-        )
-        s.add(app)
-        await s.flush()
-
         key = ApiKey(
             app_id=f"test-{rand}",
             name="t",
@@ -81,15 +69,13 @@ async def test_conversation_with_messages() -> None:
     rand = secrets.token_hex(4)
     sid = f"sess_{rand}"
     async with AsyncSessionLocal() as s:
-        # FK 前置
-        app = App(app_key=f"test-{rand}", name="test app")
         agent = Agent(
             agent_key=f"test-agent-{rand}",
             name="test agent",
             source="local",
             local_class_path="x.Y",
         )
-        s.add_all([app, agent])
+        s.add(agent)
         await s.flush()
 
         conv = Conversation(
@@ -218,22 +204,3 @@ async def test_agent_key_unique() -> None:
         with pytest.raises(Exception):
             await s.commit()
         await s.rollback()
-
-
-# ── 新表：应用域 ────────────────────────────────────────
-
-
-async def test_app_soft_delete_via_marker() -> None:
-    """deleted_at 字段可写入；按习惯不删 row，标 deleted_at"""
-    rand = secrets.token_hex(4)
-    async with AsyncSessionLocal() as s:
-        app = App(app_key=f"test-{rand}", name="t")
-        s.add(app)
-        await s.commit()
-        await s.refresh(app)
-        assert app.deleted_at is None
-
-        app.deleted_at = datetime.now(timezone.utc)
-        await s.commit()
-        await s.refresh(app)
-        assert app.deleted_at is not None

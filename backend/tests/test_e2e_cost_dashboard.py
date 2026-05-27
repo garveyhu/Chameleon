@@ -11,7 +11,6 @@ from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
-    App,
     CallLog,
     ModelPricing,
     Role,
@@ -61,8 +60,6 @@ async def seeded_calls_with_cost():
     suffix = secrets.token_hex(3)
     app_key = f"e2e-cost-app-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="cost test", status="active"))
-        await s.commit()
         now = datetime.now(timezone.utc)
         for i, (agent, cost) in enumerate(
             [
@@ -97,18 +94,16 @@ async def seeded_calls_with_cost():
     yield {"app_key": app_key, "suffix": suffix}
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 
 @pytest_asyncio.fixture
 async def seeded_multidim_calls():
-    """造 user + app，几条带 user/model 的 call_log，验证多维度聚合"""
+    """造 user，几条带 user/model 的 call_log，验证多维度聚合（app_id 为来源标签）"""
     suffix = secrets.token_hex(3)
     app_key = f"md-app-{suffix}"
     model_code = f"md-model-{suffix}"
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="md app"))
         u = User(
             username=f"md-user-{suffix}",
             password_hash=hash_password("Pwd123!xx"),
@@ -146,7 +141,6 @@ async def seeded_multidim_calls():
     }
     async with AsyncSessionLocal() as s:
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.execute(delete(User).where(User.id == uid))
         await s.commit()
 

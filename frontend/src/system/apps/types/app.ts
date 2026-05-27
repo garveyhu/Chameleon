@@ -1,29 +1,11 @@
 import type { EntityId } from '@/core/types/api';
 
-export interface AppItem {
-  id: EntityId;
-  app_key: string;
-  name: string;
-  description: string | null;
-  status: 'active' | 'suspended';
-  owner_user_id: number | null;
-  meta: Record<string, unknown> | null;
-  qpm_limit: number | null;
-  qpd_limit: number | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateAppRequest {
-  app_key: string;
-  name: string;
-  description?: string;
-  qpm_limit?: number;
-  qpd_limit?: number;
-}
+/** key 作用域域：global=通吃 / app=某智能体 / kb=某知识库 */
+export type ApiKeyScopeType = 'global' | 'app' | 'kb';
 
 export interface ApiKeyItem {
   id: EntityId;
+  /** 调用方/来源标签（自由字符串，非容器实体） */
   app_id: string;
   name: string;
   key_prefix: string;
@@ -31,16 +13,25 @@ export interface ApiKeyItem {
   plain_key: string | null;
   scopes: string[];
   description: string | null;
+  scope_type: ApiKeyScopeType;
+  scope_ref: string | null;
+  qpm_limit: number | null;
+  qpd_limit: number | null;
   last_used_at: string | null;
   revoked_at: string | null;
   created_at: string;
 }
 
 export interface CreateApiKeyRequest {
-  app_id: string;
+  /** 来源标签，可选；不传则后端用 name 的 slug 兜底 */
+  app_id?: string;
   name: string;
   scopes?: string[];
   description?: string;
+  scope_type?: ApiKeyScopeType;
+  scope_ref?: string;
+  qpm_limit?: number;
+  qpd_limit?: number;
 }
 
 export interface ApiKeyCreated extends ApiKeyItem {

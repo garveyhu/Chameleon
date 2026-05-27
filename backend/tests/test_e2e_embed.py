@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import secrets
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
@@ -20,7 +19,6 @@ from sqlalchemy import delete, select
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     Agent,
-    App,
     EmbedConfig,
     Role,
     User,
@@ -67,17 +65,9 @@ async def admin_token(client: AsyncClient):
 
 @pytest_asyncio.fixture
 async def embed_setup(client: AsyncClient, admin_token: str):
-    """建一个 embed_config 关联 mock-echo agent + 临时 app"""
+    """建一个 embed_config 关联 mock-echo agent（apps 容器已删，embed 不再挂 app）"""
     headers = {"Authorization": f"Bearer {admin_token}"}
     rand = secrets.token_hex(3)
-
-    # 临时 app
-    r = await client.post(
-        "/v1/admin/apps",
-        headers=headers,
-        json={"app_key": f"e2e-p7-{rand}", "name": "p7"},
-    )
-    app_id = r.json()["data"]["id"]
 
     # 找 mock-echo agent（conftest 注入的）— 它没有 DB 行，要建一个
     async with AsyncSessionLocal() as s:
@@ -102,7 +92,6 @@ async def embed_setup(client: AsyncClient, admin_token: str):
         json={
             "name": f"test-embed-{rand}",
             "agent_id": agent_id,
-            "app_id": app_id,
             "allowed_origins": ["https://allowed.example.com"],
             "ui_config": {"theme": "light"},
             "behavior": {"welcome_message": "你好"},
@@ -114,7 +103,6 @@ async def embed_setup(client: AsyncClient, admin_token: str):
     yield {
         "embed_key": data["embed_key"],
         "config_id": data["id"],
-        "app_id": app_id,
         "agent_id": agent_id,
     }
 
@@ -123,7 +111,6 @@ async def embed_setup(client: AsyncClient, admin_token: str):
         await s.execute(
             delete(EmbedConfig).where(EmbedConfig.id == data["id"])
         )
-        await s.execute(delete(App).where(App.id == app_id))
         await s.commit()
 
 

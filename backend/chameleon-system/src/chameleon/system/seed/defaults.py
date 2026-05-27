@@ -14,7 +14,6 @@ _RESOURCES: dict[str, tuple[str, ...]] = {
     "users": ("read", "write", "delete"),
     "roles": ("read", "write", "delete"),
     "permissions": ("read",),  # permissions 表只读 / seed-only
-    "apps": ("read", "write", "delete"),
     "api_keys": ("read", "write", "delete"),
     "providers": ("read", "write", "delete"),
     "models": ("read", "write", "delete"),
@@ -61,7 +60,7 @@ _ADMIN_PERMS = ["*:*"]
 
 # developer：业务资源 CRUD + 看 dashboard + call_logs，不能管 users / roles / permissions / settings
 _DEVELOPER_RESOURCES = {
-    "apps", "api_keys", "providers", "models", "agents",
+    "api_keys", "providers", "models", "agents",
     "kbs", "embed_configs", "call_logs", "dashboard", "playground",
     "schemas", "graphs", "tools", "datasets",
 }
@@ -90,7 +89,7 @@ def default_roles() -> list[tuple[str, str, str, list[str]]]:
         (
             "developer",
             "开发者",
-            "管理业务资源（agents / models / providers / apps / kbs），不能管用户和角色",
+            "管理业务资源（agents / models / providers / api_keys / kbs），不能管用户和角色",
             _DEVELOPER_PERMS,
         ),
         (

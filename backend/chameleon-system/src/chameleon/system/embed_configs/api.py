@@ -18,7 +18,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import PageResult, Result
 from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent, App, EmbedConfig
+from chameleon.core.models import Agent, EmbedConfig
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import (
@@ -38,7 +38,6 @@ class EmbedConfigItem(BaseModel):
     name: str
     description: str | None = None
     agent_id: int
-    app_id: int
     allowed_origins: list | None = None
     ui_config: dict | None = None
     behavior: dict | None = None
@@ -52,7 +51,6 @@ class CreateEmbedConfigRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
     agent_id: int
-    app_id: int
     allowed_origins: list[str] = Field(
         default_factory=list,
         description="域名白名单，如 ['https://example.com']；为空表示拒绝所有跨域",
@@ -156,7 +154,7 @@ async def create_embed_config(
     audit: AuditContext = Depends(get_audit_context),
     __: object = Depends(require_permission("embed_configs:write")),
 ) -> Result[EmbedConfigItem]:
-    # 校验 agent / app 存在
+    # 校验 agent 存在
     agent = (
         await session.execute(
             select(Agent).where(
@@ -166,13 +164,6 @@ async def create_embed_config(
     ).scalar_one_or_none()
     if agent is None:
         raise ValidationError(message=f"agent 不存在: {req.agent_id}")
-    app = (
-        await session.execute(
-            select(App).where(App.id == req.app_id, App.deleted_at.is_(None))
-        )
-    ).scalar_one_or_none()
-    if app is None:
-        raise ValidationError(message=f"app 不存在: {req.app_id}")
 
     # 生成唯一 embed_key（极小概率冲突，重试一次）
     for _ in range(3):
@@ -194,7 +185,6 @@ async def create_embed_config(
         name=req.name,
         description=req.description,
         agent_id=req.agent_id,
-        app_id=req.app_id,
         allowed_origins=req.allowed_origins or None,
         ui_config=req.ui_config,
         behavior=req.behavior,

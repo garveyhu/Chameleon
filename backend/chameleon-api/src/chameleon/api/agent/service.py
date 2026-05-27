@@ -80,13 +80,14 @@ def get_agent(key: str) -> AgentItem:
 
 
 def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
-    """智能体级密钥只能调用其绑定的 agent；app 作用域密钥放行。
+    """智能体级密钥只能调用其绑定的 agent；global 作用域密钥放行。
 
     invoke / stream_invoke 共用入口，覆盖 /agents/{key}/invoke 与 /chat/completions。
+    作用域域名为 "app"（智能体已升格为「应用」），scope_ref = agent_key。
     """
     from chameleon.core.infra.auth import assert_scope
 
-    assert_scope(current_app, "agent", agent_key)
+    assert_scope(current_app, "app", agent_key)
 
 
 async def invoke(

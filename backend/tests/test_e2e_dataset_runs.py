@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import secrets
 from typing import Any
-from unittest.mock import patch
 
 import pytest_asyncio
 from httpx import AsyncClient
@@ -12,7 +11,6 @@ from sqlalchemy import delete, select
 
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
-    App,
     CallLog,
     Dataset,
     DatasetItem,
@@ -70,8 +68,6 @@ async def seeded_dataset(client: AsyncClient, admin_token: str):
     app_key = f"e2e-drapp-{suffix}"
 
     async with AsyncSessionLocal() as s:
-        s.add(App(app_key=app_key, name="dr test", status="active"))
-        await s.flush()
         for i in range(3):
             await record_call(
                 s,
@@ -110,7 +106,6 @@ async def seeded_dataset(client: AsyncClient, admin_token: str):
         await s.execute(delete(DatasetItem))
         await s.execute(delete(Dataset).where(Dataset.id == did))
         await s.execute(delete(CallLog).where(CallLog.app_id == app_key))
-        await s.execute(delete(App).where(App.app_key == app_key))
         await s.commit()
 
 
