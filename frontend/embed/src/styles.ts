@@ -157,60 +157,100 @@ export const buildStyles = (ui: UiConfig): string => {
 .panel.pos-right-top    { right: 24px; top: 96px; }
 .panel.pos-left-top     { left: 24px;  top: 96px; }
 
-/* ─── 侧栏（历史会话）─────────────────────────────── */
-.panel.has-sidebar { flex-direction: row; width: ${panelW + 180}px; max-width: calc(100vw - 24px); }
-.chat-area { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
-
+/* ─── 历史会话 overlay（FastGPT 风格，覆盖主对话区） ───────────── */
 .sidebar {
-  width: 180px; flex-shrink: 0;
+  position: absolute; inset: 0; z-index: 5;
   display: flex; flex-direction: column;
-  background: ${theme.paneBg === '#fff' ? '#fafafa' : 'rgba(255,255,255,.04)'};
-  border-right: 1px solid ${theme.borderColor};
-  transition: margin-left .18s ease;
+  background: ${theme.paneBg};
+  border-radius: inherit;
+  opacity: 0; transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity .14s ease, transform .14s ease;
 }
-.panel.has-sidebar:not(.sidebar-open) .sidebar { margin-left: -180px; }
+.panel.sidebar-open .sidebar {
+  opacity: 1; transform: translateY(0); pointer-events: auto;
+}
 
-.sidebar-head { padding: 10px; border-bottom: 1px solid ${theme.borderColor}; }
+.sidebar-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid ${theme.borderColor};
+}
+.sidebar-title {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 600; color: ${theme.paneText};
+}
+.sidebar-title::before {
+  content: ''; display: block;
+  width: 3px; height: 14px; border-radius: 2px;
+  background: ${theme.themeColor};
+}
+.sidebar-head-actions { display: inline-flex; align-items: center; gap: 6px; }
+
 .new-session-btn {
-  width: 100%;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px 10px;
-  background: ${theme.themeColor}; color: #fff;
-  border: none; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px;
+  background: ${theme.paneBg};
+  color: ${theme.themeColor};
+  border: 1px solid ${theme.themeColor}55;
+  border-radius: 999px;
   cursor: pointer;
   font-size: 12px; font-weight: 500;
-  transition: filter .12s ease;
+  transition: background .12s ease, border-color .12s ease;
 }
-.new-session-btn:hover { filter: brightness(.95); }
+.new-session-btn:hover { background: ${theme.themeColor}0d; border-color: ${theme.themeColor}; }
 .new-session-btn svg { width: 14px; height: 14px; }
 
+.sidebar-close {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px;
+  background: transparent; border: none; border-radius: 5px;
+  color: ${theme.subtleText};
+  cursor: pointer;
+}
+.sidebar-close:hover { background: rgba(127,127,127,.14); color: ${theme.paneText}; }
+.sidebar-close svg { width: 16px; height: 16px; }
+
 .sidebar-list {
-  flex: 1; overflow-y: auto; padding: 6px 6px 10px;
+  flex: 1; overflow-y: auto; padding: 8px;
   scrollbar-width: thin;
 }
 .sidebar-list::-webkit-scrollbar { width: 4px; }
 .sidebar-list::-webkit-scrollbar-thumb { background: ${theme.borderColor}; border-radius: 2px; }
 
 .sidebar-empty {
-  padding: 24px 12px; text-align: center;
-  font-size: 11.5px; color: ${theme.subtleText};
+  padding: 32px 12px; text-align: center;
+  font-size: 12px; color: ${theme.subtleText};
 }
 
 .sidebar-item {
   position: relative;
-  display: flex; align-items: center; gap: 4px;
-  padding: 7px 9px;
-  border-radius: 7px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 13px;
   color: ${theme.paneText};
   transition: background .12s ease;
 }
-.sidebar-item:hover { background: ${theme.paneBg === '#fff' ? 'rgba(0,0,0,.05)' : 'rgba(255,255,255,.06)'}; }
+.sidebar-item + .sidebar-item { margin-top: 2px; }
+.sidebar-item:hover { background: ${theme.paneBg === '#FFFFFF' ? 'rgba(0,0,0,.04)' : 'rgba(255,255,255,.04)'}; }
 .sidebar-item.active {
-  background: ${theme.themeColor}1a;
+  background: ${theme.themeColor}14;
   color: ${theme.themeColor};
 }
+
+.sidebar-item-avatar {
+  width: 24px; height: 24px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: ${theme.themeColor}1a;
+  color: ${theme.themeColor};
+  font-size: 14px; line-height: 1;
+  overflow: hidden;
+}
+.sidebar-item-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
 .sidebar-item-title {
   flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -219,29 +259,35 @@ export const buildStyles = (ui: UiConfig): string => {
   flex: 1; min-width: 0;
   font: inherit; color: inherit;
   background: transparent; border: 1px solid ${theme.themeColor};
-  border-radius: 4px; padding: 1px 4px; outline: none;
+  border-radius: 5px; padding: 2px 6px; outline: none;
 }
+.sidebar-item-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: ${theme.subtleText};
+}
+.sidebar-item.active .sidebar-item-time { color: ${theme.themeColor}; opacity: .7; }
+
 .sidebar-item-menu { flex-shrink: 0; opacity: 0; transition: opacity .12s; }
 .sidebar-item:hover .sidebar-item-menu, .sidebar-item.active .sidebar-item-menu { opacity: 1; }
 .sidebar-item-more {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; padding: 0;
+  width: 22px; height: 22px; padding: 0;
   background: transparent; border: none; border-radius: 4px;
   color: ${theme.subtleText};
   cursor: pointer;
 }
-.sidebar-item-more:hover { background: rgba(127,127,127,.18); color: ${theme.paneText}; }
+.sidebar-item-more:hover { background: rgba(127,127,127,.16); color: ${theme.paneText}; }
 .sidebar-item-more svg { width: 14px; height: 14px; }
 
 .sidebar-item-pop {
-  position: absolute; top: 100%; right: 4px; z-index: 10;
-  margin-top: 2px;
+  position: absolute; top: calc(100% + 2px); right: 6px; z-index: 12;
   background: ${theme.paneBg};
   border: 1px solid ${theme.borderColor};
-  border-radius: 7px;
-  box-shadow: 0 8px 20px rgba(0,0,0,.12);
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(0,0,0,.14);
   padding: 4px;
-  min-width: 92px;
+  min-width: 100px;
 }
 .sidebar-item-pop button {
   display: flex; align-items: center; gap: 6px;
@@ -259,16 +305,16 @@ export const buildStyles = (ui: UiConfig): string => {
 .sidebar-item-confirm {
   position: absolute; inset: 0;
   display: flex; align-items: center; gap: 4px;
-  padding: 0 8px;
+  padding: 0 10px;
   background: ${theme.paneBg};
-  border-radius: 7px;
-  font-size: 11.5px; color: ${theme.paneText};
+  border-radius: 8px;
+  font-size: 12px; color: ${theme.paneText};
 }
 .sidebar-item-confirm span { flex: 1; }
 .sidebar-item-confirm button {
   background: transparent; border: none; border-radius: 4px;
-  padding: 3px 7px;
-  font-size: 11.5px; cursor: pointer;
+  padding: 3px 8px;
+  font-size: 12px; cursor: pointer;
   color: ${theme.subtleText};
 }
 .sidebar-item-confirm button:hover { background: rgba(127,127,127,.14); color: ${theme.paneText}; }

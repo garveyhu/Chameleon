@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>代码框背景色方案对比</title>
+<style>
+  body { margin: 0; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafa; color: #1c1917; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 6px; }
+  .sub { font-size: 13px; color: #78716c; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; max-width: 1100px; }
+  .card { overflow: hidden; border-radius: 10px; border: 1px solid #e7e5e4; background: #fff; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: #f5f5f4; }
+  .card-head .title { font-size: 12.5px; font-weight: 500; color: #1c1917; }
+  .card-head .title small { color: #a8a29e; font-weight: 400; margin-left: 6px; }
+  .card-head .copy { font-size: 11.5px; color: #78716c; padding: 2px 6px; border-radius: 4px; }
+  pre { margin: 0; padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
+  .opt-label { display: inline-block; margin-top: 8px; padding: 2px 7px; font-size: 11px; border-radius: 4px; background: #e7e5e4; color: #44403c; }
+  .meta { font-size: 10.5px; color: #a8a29e; margin-top: 4px; }
+</style>
+</head>
+<body>
+<h1>嵌入代码框 · 背景配色方案</h1>
+<div class="sub">看哪个最舒服，给我编号（1-6）</div>
+
+<div class="grid">
+
+  <div>
+    <div class="opt-label">方案 1 · stone-100 暖浅灰（当前）</div>
+    <div class="meta">bg <code>#f5f5f4</code> · fg <code>#292524</code> · 跟全站 stone 系一致</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#f5f5f4; color:#292524;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="opt-label">方案 2 · slate-50 冷浅蓝灰（Notion / Linear 风）</div>
+    <div class="meta">bg <code>#f8fafc</code> · fg <code>#0f172a</code> · 极浅冷调</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#f8fafc; color:#0f172a;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="opt-label">方案 3 · blue-50 淡蓝（Stripe 文档风）</div>
+    <div class="meta">bg <code>#eff6ff</code> · fg <code>#1e3a8a</code> · 轻微色彩感、识别度高</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#eff6ff; color:#1e3a8a;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="opt-label">方案 4 · amber-50 暖米黄（GitHub Light 风）</div>
+    <div class="meta">bg <code>#fffbeb</code> · fg <code>#78350f</code> · 最柔和 / 适合长阅读</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#fffbeb; color:#78350f;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="opt-label">方案 5 · neutral-100 真中性灰</div>
+    <div class="meta">bg <code>#f5f5f5</code> · fg <code>#171717</code> · 纯灰、无暖冷调</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#f5f5f5; color:#171717;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+  <div>
+    <div class="opt-label">方案 6 · zinc-200 中灰（深一点的浅色）</div>
+    <div class="meta">bg <code>#e4e4e7</code> · fg <code>#27272a</code> · 比浅色再深一档但仍是浅</div>
+    <div class="card">
+      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre style="background:#e4e4e7; color:#27272a;">&lt;script
+  src="https://chameleon.example.com/widget.js"
+  data-embed-key="em_xxxxxxxxxx"
+  data-jwt-token="SIGNED_JWT"
+  defer
+&gt;&lt;/script&gt;</pre>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

@@ -102,7 +102,7 @@ export class ChameleonWidget {
   // 侧栏 / 续接状态
   private sessions: EmbedSessionItem[] = [];
   private currentSessionId: string | null = null;
-  private sidebarOpen = true;
+  private sidebarOpen = false;
 
   constructor(opts: WidgetOptions) {
     this.opts = opts;
@@ -300,11 +300,15 @@ export class ChameleonWidget {
 
     const sidebarHtml = showSidebar
       ? `
-        <aside class="sidebar">
+        <aside class="sidebar" aria-hidden="true">
           <div class="sidebar-head">
-            <button class="new-session-btn" type="button" title="新对话">
-              ${plusIcon}<span>新对话</span>
-            </button>
+            <div class="sidebar-title">历史记录</div>
+            <div class="sidebar-head-actions">
+              <button class="new-session-btn" type="button">
+                ${plusIcon}<span>新对话</span>
+              </button>
+              <button class="sidebar-close" type="button" aria-label="关闭">${closeIcon}</button>
+            </div>
           </div>
           <div class="sidebar-list" role="list"></div>
         </aside>
@@ -316,38 +320,36 @@ export class ChameleonWidget {
       <button class="bubble pos-${pos}" type="button" aria-label="${escapeAttr(title)}">
         ${getBubbleIcon(ui.bubble_icon)}
       </button>
-      <div class="panel pos-${pos}${showSidebar ? ' has-sidebar sidebar-open' : ''}" role="dialog" aria-label="${escapeAttr(title)}">
-        ${sidebarHtml}
-        <div class="chat-area">
-          <div class="header">
-            <div class="header-main">
-              ${
-                showSidebar
-                  ? `<button class="sidebar-toggle" type="button" title="历史会话">${menuIcon}</button>`
+      <div class="panel pos-${pos}${showSidebar ? ' has-sidebar' : ''}" role="dialog" aria-label="${escapeAttr(title)}">
+        <div class="header">
+          <div class="header-main">
+            ${
+              showSidebar
+                ? `<button class="sidebar-toggle" type="button" title="历史会话">${menuIcon}</button>`
+                : ''
+            }
+            ${
+              ui.icon_url
+                ? `<span class="header-emoji"><img src="${escapeAttr(ui.icon_url)}" alt=""></span>`
+                : ui.icon_emoji
+                  ? `<span class="header-emoji">${escapeText(ui.icon_emoji)}</span>`
                   : ''
-              }
-              ${
-                ui.icon_url
-                  ? `<span class="header-emoji"><img src="${escapeAttr(ui.icon_url)}" alt=""></span>`
-                  : ui.icon_emoji
-                    ? `<span class="header-emoji">${escapeText(ui.icon_emoji)}</span>`
-                    : ''
-              }
-              <div class="header-text">
-                <div class="header-title">${escapeText(title)}</div>
-                ${subtitle ? `<div class="header-sub">${escapeText(subtitle)}</div>` : ''}
-              </div>
+            }
+            <div class="header-text">
+              <div class="header-title">${escapeText(title)}</div>
+              ${subtitle ? `<div class="header-sub">${escapeText(subtitle)}</div>` : ''}
             </div>
-            <button class="close-btn" type="button" aria-label="关闭">${closeIcon}</button>
           </div>
-          <div class="messages"></div>
-          <div class="composer">
-            ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
-            <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
-            <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
-          </div>
-          <div class="brand">powered by <a href="https://github.com/" target="_blank" rel="noopener">Chameleon</a></div>
+          <button class="close-btn" type="button" aria-label="关闭">${closeIcon}</button>
         </div>
+        <div class="messages"></div>
+        <div class="composer">
+          ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
+          <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
+          <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
+        </div>
+        <div class="brand">powered by <a href="https://github.com/" target="_blank" rel="noopener">Chameleon</a></div>
+        ${sidebarHtml}
       </div>
     `;
 
@@ -382,8 +384,13 @@ export class ChameleonWidget {
     // 侧栏相关 —— 没渲就略过
     const sidebarToggle = this.shadow.querySelector('.sidebar-toggle') as HTMLButtonElement | null;
     sidebarToggle?.addEventListener('click', () => this.toggleSidebar());
+    const sidebarClose = this.shadow.querySelector('.sidebar-close') as HTMLButtonElement | null;
+    sidebarClose?.addEventListener('click', () => this.toggleSidebar(false));
     const newBtn = this.shadow.querySelector('.new-session-btn') as HTMLButtonElement | null;
-    newBtn?.addEventListener('click', () => void this.openNewSession());
+    newBtn?.addEventListener('click', () => {
+      void this.openNewSession();
+      this.toggleSidebar(false);
+    });
   }
 
   /** 把 this.sessions 重绘到侧栏列表 */
@@ -418,10 +425,28 @@ export class ChameleonWidget {
     wrap.className = 'sidebar-item';
     wrap.dataset.sid = s.session_id;
 
+    // 圆形 avatar：复用 UI 配置的头像（icon_url > icon_emoji > 默认）
+    const avatar = document.createElement('span');
+    avatar.className = 'sidebar-item-avatar';
+    if (this.ui.icon_url) {
+      const img = document.createElement('img');
+      img.src = this.ui.icon_url;
+      img.alt = '';
+      avatar.appendChild(img);
+    } else {
+      avatar.textContent = this.ui.icon_emoji || '💬';
+    }
+    wrap.appendChild(avatar);
+
     const titleEl = document.createElement('div');
     titleEl.className = 'sidebar-item-title';
     titleEl.textContent = s.title || '新对话';
     wrap.appendChild(titleEl);
+
+    const timeEl = document.createElement('span');
+    timeEl.className = 'sidebar-item-time';
+    timeEl.textContent = formatRelativeTime(s.last_message_at ?? s.created_at);
+    wrap.appendChild(timeEl);
 
     if (allowManage) {
       const menu = document.createElement('div');
@@ -435,8 +460,12 @@ export class ChameleonWidget {
     }
 
     wrap.addEventListener('click', () => {
-      if (s.session_id === this.currentSessionId) return;
+      if (s.session_id === this.currentSessionId) {
+        this.toggleSidebar(false);
+        return;
+      }
       void this.switchToSession(s.session_id);
+      this.toggleSidebar(false);
     });
     return wrap;
   }
@@ -991,4 +1020,19 @@ function escapeText(s: string): string {
     /[<>&"']/g,
     c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' })[c] || c,
   );
+}
+
+/** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / yyyy-MM-dd */
+function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return '';
+  const diffSec = Math.max(0, (Date.now() - ts) / 1000);
+  if (diffSec < 60) return '刚刚';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} 小时前`;
+  if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)} 天前`;
+  // 一周以上显示日期
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

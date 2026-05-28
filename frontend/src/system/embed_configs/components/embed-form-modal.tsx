@@ -875,7 +875,7 @@ const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-slate-700 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-slate-100 break-all whitespace-pre-wrap">
+      <pre className="overflow-x-auto bg-slate-50 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-slate-900 break-all whitespace-pre-wrap">
         {code}
       </pre>
     </div>
