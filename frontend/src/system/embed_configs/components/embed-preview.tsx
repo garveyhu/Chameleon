@@ -398,21 +398,19 @@ const BubbleWithTooltip: React.FC<{
     </button>
   );
 
-  // orbit：SVG 绝对定位在 wrap 上方（不放进 button，避免 overflow:hidden 截断）
-  if (tip && isOrbit) {
-    return (
-      <div
-        className={cn('relative inline-block transition-opacity', hidden && 'opacity-0')}
-      >
-        <OrbitTip text={tip} style={tipStyle} bubbleSize={bs} />
-        {bubbleButton}
-      </div>
-    );
+  // 没文字 → 仅 bubble
+  if (!tip) {
+    return <div className="inline-block">{bubbleButton}</div>;
   }
 
-  if (!tip || hidden) {
+  // orbit：SVG 绝对定位在 wrap 上方（不放进 button，避免 overflow:hidden 截断）
+  // hidden 只对 SVG fade，bubble 保持显示
+  if (isOrbit) {
     return (
-      <div className={cn('inline-block transition-opacity', hidden && 'opacity-0')}>
+      <div className="relative inline-block">
+        <div className={cn('transition-opacity', hidden && 'opacity-0')}>
+          <OrbitTip text={tip} style={tipStyle} bubbleSize={bs} />
+        </div>
         {bubbleButton}
       </div>
     );
@@ -430,13 +428,15 @@ const BubbleWithTooltip: React.FC<{
   const transparentTip = ui.bubble_tooltip_transparent;
   return (
     <div className={cn(wrapClass)}>
+      {/* hidden 只对 tooltip fade，bubble 不动 */}
       <div
         style={tipStyle}
         className={cn(
-          'whitespace-nowrap',
+          'whitespace-nowrap transition-opacity',
           transparentTip
             ? 'px-1 py-0.5'
             : 'rounded-2xl border border-stone-200 bg-white px-3 py-1.5 shadow-md',
+          hidden && 'opacity-0',
         )}
       >
         {tip}

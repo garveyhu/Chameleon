@@ -372,7 +372,7 @@ const TOOLTIP_POSITION_OPTIONS: {
   { value: 'right', label: '右侧' },
   { value: 'top', label: '上方' },
   { value: 'bottom', label: '下方' },
-  { value: 'orbit', label: '环绕浮窗' },
+  // orbit（环绕浮窗）暂时下线：SVG textPath 字头方向兼容性差，先去掉再做
 ];
 
 const BUBBLE_ICON_OPTIONS: {
