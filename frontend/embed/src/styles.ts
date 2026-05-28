@@ -673,16 +673,17 @@ export const buildStyles = (ui: UiConfig): string => {
   color: ${theme.subtleText};
 }
 
+/* 直角放在「贴近头像」一侧 —— bot 头像在左 → 左上小直角；user 头像在右 → 右上小直角 */
 .msg.user .bubble-text {
   background: ${theme.userBubble};
   color: ${theme.userBubbleText};
-  border-bottom-right-radius: ${bubbleTailRadius}px;
+  border-top-right-radius: ${bubbleTailRadius}px;
 }
 .msg.bot .bubble-text {
   background: ${theme.botBubble};
   color: ${theme.paneText};
   border: 1px solid ${theme.botBubbleBorder};
-  border-bottom-left-radius: ${bubbleTailRadius}px;
+  border-top-left-radius: ${bubbleTailRadius}px;
 }
 .msg.error .bubble-text {
   background: ${theme.errorBg};
@@ -765,12 +766,12 @@ export const buildStyles = (ui: UiConfig): string => {
 }
 .suggested-questions button:disabled { opacity: .5; cursor: not-allowed; }
 
+/* composer 去掉顶部分割线，让 textarea / send 自己的 soft shadow 当视觉分界 */
 .composer {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px 14px;
-  border-top: 1px solid ${theme.borderColor};
   background: ${theme.paneBg};
 }
 .upload-btn {
@@ -783,7 +784,7 @@ export const buildStyles = (ui: UiConfig): string => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
+  border-radius: 10px;
   line-height: 0;
   flex-shrink: 0;
   transition: background .15s ease, color .15s ease;
@@ -796,8 +797,8 @@ export const buildStyles = (ui: UiConfig): string => {
   border: 1px solid ${theme.inputBorder};
   background: ${theme.inputBg};
   color: ${theme.paneText};
-  border-radius: 22px;
-  padding: 10px 16px;
+  border-radius: 12px;
+  padding: 10px 14px;
   resize: none;
   font-family: inherit;
   font-size: ${font.panel}px;
@@ -813,11 +814,12 @@ export const buildStyles = (ui: UiConfig): string => {
 }
 .composer textarea:disabled { opacity: .5; cursor: not-allowed; }
 
+/* send 改回方形圆角，跟 textarea 形状呼应；保留软阴影 */
 .send-btn {
   background: ${theme.themeColor};
   color: #fff;
   border: none;
-  border-radius: 50%;
+  border-radius: 12px;
   width: 38px;
   height: 38px;
   cursor: pointer;
