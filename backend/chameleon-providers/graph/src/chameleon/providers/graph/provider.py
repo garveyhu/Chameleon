@@ -72,6 +72,20 @@ class GraphProvider(Provider):
         conv_in = dict((ctx.context_vars or {}).get("conversation_vars") or {})
         conv_update: dict[str, Any] = {}
 
+        # Phase D：把 InvokeContext.attachments 透到 sys.attachments，
+        # 让 LLM / KB / Code / Answer 节点能通过 {{#sys.attachments#}} 引用
+        extra_dict: dict[str, Any] = {
+            **(dict(ctx.context_vars) if ctx.context_vars else {}),
+            "conversation": conv_in,
+        }
+        sys_extra: dict[str, Any] = dict(extra_dict.get("sys") or {})
+        if ctx.attachments:
+            sys_extra["attachments"] = list(ctx.attachments)
+        if ctx.session_id:
+            sys_extra["session_id"] = ctx.session_id
+        if sys_extra:
+            extra_dict["sys"] = sys_extra
+
         node_ctx = NodeContext(
             request_id=ctx.request_id
             or f"graphagent-{graph_id}-{datetime.now(timezone.utc).timestamp():.0f}",
@@ -79,7 +93,7 @@ class GraphProvider(Provider):
             graph_run_id=0,  # in-memory，不持久化 graph_runs（trace 复用 agent call_log）
             depth=0,
             started_at=datetime.now(timezone.utc),
-            extra={**(dict(ctx.context_vars) if ctx.context_vars else {}), "conversation": conv_in},
+            extra=extra_dict,
         )
 
         logger.debug(

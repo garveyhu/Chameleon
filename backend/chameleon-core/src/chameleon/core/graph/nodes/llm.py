@@ -56,6 +56,30 @@ MAX_TOOL_ROUNDS_HARD_CAP = 8
 _QUERY_KEYS = ("query", "question", "input", "text", "prompt")
 
 
+def _append_image_blocks_to_last_user(messages: list, image_blocks: list[dict]) -> None:
+    """Phase D：把 image_url blocks 拼到 last user message 的 content 上（multimodal）
+
+    LangChain `HumanMessage.content` 可以是 str 或 list[ContentBlock]。这里：
+    - 找最后一条 user message
+    - 若 content 是 str → 转成 [{"type":"text","text":...}, *image_blocks]
+    - 若已经是 list → 追加 image_blocks
+    - 没找到 user message 时 append 一条新的（极端兜底）
+    """
+    from langchain_core.messages import HumanMessage
+
+    for m in reversed(messages):
+        if isinstance(m, HumanMessage):
+            cur = m.content
+            if isinstance(cur, str):
+                m.content = (
+                    [{"type": "text", "text": cur}, *image_blocks] if cur else list(image_blocks)
+                )
+            elif isinstance(cur, list):
+                m.content = [*cur, *image_blocks]
+            return
+    messages.append(HumanMessage(content=list(image_blocks)))
+
+
 def _with_sys_fallback(input: Any, sys_vars: dict[str, Any]) -> Any:
     """input 是 dict 时，用 sys.history / sys.query 补缺口（显式字段优先）。
 
@@ -156,6 +180,18 @@ class LLMNode(Node[Any, dict]):
             prompt_template,
             memory_window=memory_window,
         )
+
+        # Phase D：inspector 开关 `use_attachment_images` 默认 True；把 sys.attachments
+        # 里 image/* 翻成 HumanMessage 的 multimodal content 拼到 last user message
+        if data.get("use_attachment_images", True):
+            atts = sys_vars.get("attachments") or []
+            image_blocks = [
+                {"type": "image_url", "image_url": {"url": a.get("object_url")}}
+                for a in atts
+                if (a.get("mime") or "").startswith("image/") and a.get("object_url")
+            ]
+            if image_blocks:
+                _append_image_blocks_to_last_user(messages, image_blocks)
 
         logger.debug(
             "LLMNode {} | model={} | msgs={} | tools={} | stream={}",

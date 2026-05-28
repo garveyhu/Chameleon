@@ -196,42 +196,71 @@ const DataForm = ({
               className="h-7 text-[12px]"
             />
           </Field>
+          <Field label="附件">
+            <label className="flex items-center gap-2 text-[12px] text-stone-700">
+              <input
+                type="checkbox"
+                checked={(data.use_attachment_images as boolean | undefined) ?? true}
+                onChange={e => onPatch({ use_attachment_images: e.target.checked })}
+              />
+              消费 sys.attachments 里的图片（multimodal vision）
+            </label>
+            <div className="mt-0.5 text-[10.5px] leading-snug text-stone-500">
+              需所选模型支持视觉；非图片附件由 KB / Code 节点接管
+            </div>
+          </Field>
         </Section>
       </>
     );
   }
 
   if (type === 'kb') {
-    return (
-      <>
-        <Field label="知识库（必填）">
-          <KbKeyField
-            value={(data.kb_key as string) || ''}
-            onChange={v => onPatch({ kb_key: v })}
-          />
-        </Field>
-        <Field label="top_k">
-          <Input
-            type="number"
-            min={1}
-            value={(data.top_k as number | undefined) ?? 5}
-            onChange={e => onPatch({ top_k: Number(e.target.value) })}
-            className="h-7 text-[12px]"
-          />
-        </Field>
-        <Field label="min_score">
-          <Input
-            type="number"
-            min={0}
-            max={1}
-            step={0.05}
-            value={(data.min_score as number | undefined) ?? 0}
-            onChange={e => onPatch({ min_score: Number(e.target.value) })}
-            className="h-7 text-[12px]"
-          />
-        </Field>
-      </>
-    );
+    {
+      const useEph = (data.use_ephemeral_kb as boolean | undefined) ?? false;
+      return (
+        <>
+          <Field label="检索来源">
+            <label className="flex items-center gap-2 text-[12px] text-stone-700">
+              <input
+                type="checkbox"
+                checked={useEph}
+                onChange={e => onPatch({ use_ephemeral_kb: e.target.checked })}
+              />
+              使用会话临时 KB（用户上传的文档）
+            </label>
+            <div className="mt-0.5 text-[10.5px] leading-snug text-stone-500">
+              开启后按 session_id 找文档；下方 kb_key 占位不生效
+            </div>
+          </Field>
+          <Field label={useEph ? '知识库（临时模式下可留空占位）' : '知识库（必填）'}>
+            <KbKeyField
+              value={(data.kb_key as string) || ''}
+              onChange={v => onPatch({ kb_key: v })}
+            />
+          </Field>
+          <Field label="top_k">
+            <Input
+              type="number"
+              min={1}
+              value={(data.top_k as number | undefined) ?? 5}
+              onChange={e => onPatch({ top_k: Number(e.target.value) })}
+              className="h-7 text-[12px]"
+            />
+          </Field>
+          <Field label="min_score">
+            <Input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={(data.min_score as number | undefined) ?? 0}
+              onChange={e => onPatch({ min_score: Number(e.target.value) })}
+              className="h-7 text-[12px]"
+            />
+          </Field>
+        </>
+      );
+    }
   }
 
   if (type === 'tool') {
@@ -393,6 +422,20 @@ const DataForm = ({
             className="font-mono text-[11.5px]"
           />
         </Field>
+        <Field label="附件">
+          <label className="flex items-center gap-2 text-[12px] text-stone-700">
+            <input
+              type="checkbox"
+              checked={(data.mount_attachments as boolean | undefined) ?? false}
+              onChange={e => onPatch({ mount_attachments: e.target.checked })}
+            />
+            把 sys.attachments base64 注入 stdin 的 _attachments
+          </label>
+          <div className="mt-0.5 text-[10.5px] leading-snug text-stone-500">
+            用户代码读 input["_attachments"]; 每项 {'{filename, mime, size, content_b64}'}；
+            总尺寸上限 10MB
+          </div>
+        </Field>
         <div className="text-[10.5px] leading-snug text-stone-500">
           沙箱执行（docker 优先，dev 兜底 mock）；网络默认禁用。
         </div>
@@ -413,6 +456,16 @@ const DataForm = ({
           mono
           placeholder="{{#chat.answer#}}"
         />
+        <Field label="附件透出">
+          <label className="flex items-center gap-2 text-[12px] text-stone-700">
+            <input
+              type="checkbox"
+              checked={(data.include_attachments as boolean | undefined) ?? true}
+              onChange={e => onPatch({ include_attachments: e.target.checked })}
+            />
+            响应里附带 sys.attachments（让客户端历史回放渲附件）
+          </label>
+        </Field>
         <div className="mt-1.5 text-[10.5px] leading-snug text-stone-500">
           标记 graph 的最终回答来源；agent 调用时优先用本节点输出。
         </div>
@@ -578,6 +631,14 @@ const DataForm = ({
             className="text-[12px]"
           />
         </Field>
+        <div className="rounded-md border border-blue-100 bg-blue-50/70 px-2.5 py-2 text-[11px] leading-relaxed text-blue-800">
+          <div className="font-medium">支持附件输入</div>
+          <div className="mt-0.5 text-blue-700/80">
+            调用方上传的文件会注入到 <code className="font-mono">{'{{#sys.attachments#}}'}</code>
+            ；LLM 节点开「消费附件图片」、KB 节点开「会话临时 KB」、Code 节点开「附件入 stdin」
+            即可消费。
+          </div>
+        </div>
       </>
     );
   }
