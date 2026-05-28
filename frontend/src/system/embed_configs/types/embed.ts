@@ -44,7 +44,9 @@ export interface UiConfig {
   shadow: ShadowLevel;
 }
 
-/** 嵌入式智能体行为 —— 8 项（Dify 风） */
+export type FileKind = 'image' | 'audio' | 'document' | 'data';
+
+/** 嵌入式智能体行为 —— Dify 风，含附件限制 3 项 */
 export interface Behavior {
   /** 页面加载后自动展开面板 */
   auto_open: boolean;
@@ -62,6 +64,12 @@ export interface Behavior {
   streaming: boolean;
   /** 回复后用 LLM 生成 3 个动态追问，渲在 assistant 气泡下方 */
   show_followups: boolean;
+  /** 单文件大小上限（MB）；默认 10 */
+  max_file_size_mb: number;
+  /** 单条消息最多附件数；默认 5 */
+  max_files_per_message: number;
+  /** 允许的附件 kind 白名单 */
+  allowed_file_kinds: FileKind[];
 }
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
@@ -93,6 +101,9 @@ export const DEFAULT_BEHAVIOR: Behavior = {
   allow_file_upload: false,
   streaming: true,
   show_followups: false,
+  max_file_size_mb: 10,
+  max_files_per_message: 5,
+  allowed_file_kinds: ['image', 'audio', 'document', 'data'],
 };
 
 /** 终端用户识别方式（S13 重构） */

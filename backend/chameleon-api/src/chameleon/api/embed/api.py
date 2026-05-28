@@ -379,6 +379,48 @@ class _EmbedFinalizeBody(BaseModel):
     expected_size: int | None = None
 
 
+# ── 附件配置默认值（与 widget / admin 表单对齐） ─────────────────
+_DEFAULT_MAX_FILE_SIZE_MB = 10
+_DEFAULT_MAX_FILES_PER_MESSAGE = 5
+_DEFAULT_ALLOWED_FILE_KINDS = ["image", "audio", "document", "data"]
+
+
+def _file_limits(behavior: dict | None) -> tuple[int, int, list[str]]:
+    """从 behavior 配置里取 (max_size_bytes, max_files_per_message, allowed_kinds)"""
+    b = behavior or {}
+    max_mb = int(b.get("max_file_size_mb") or _DEFAULT_MAX_FILE_SIZE_MB)
+    if max_mb <= 0:
+        max_mb = _DEFAULT_MAX_FILE_SIZE_MB
+    max_per_msg = int(b.get("max_files_per_message") or _DEFAULT_MAX_FILES_PER_MESSAGE)
+    if max_per_msg <= 0:
+        max_per_msg = _DEFAULT_MAX_FILES_PER_MESSAGE
+    kinds = b.get("allowed_file_kinds")
+    if not isinstance(kinds, list) or not kinds:
+        kinds = list(_DEFAULT_ALLOWED_FILE_KINDS)
+    return max_mb * 1024 * 1024, max_per_msg, [str(k) for k in kinds]
+
+
+def _enforce_file_limits(
+    *, behavior: dict | None, size: int, mime: str
+) -> None:
+    """presign / finalize 前置校验：大小 + 类型 kind 是否被允许"""
+    from chameleon.core.api.exceptions import BusinessError, ResultCode
+    from chameleon.system.session_files.service import classify_kind
+
+    max_bytes, _, allowed = _file_limits(behavior)
+    if size > max_bytes:
+        raise BusinessError(
+            ResultCode.BadRequest,
+            message=f"文件超过大小上限（{max_bytes // (1024 * 1024)}MB）",
+        )
+    kind = classify_kind(mime)
+    if kind not in allowed:
+        raise BusinessError(
+            ResultCode.BadRequest,
+            message=f"该类型文件未被允许上传（{kind}）",
+        )
+
+
 @router.post("/{embed_key}/files/presigned-upload")
 async def embed_files_presigned(
     embed_key: str,
@@ -386,8 +428,10 @@ async def embed_files_presigned(
     origin: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ):
-    """widget 走的 presigned-upload：origin + session_token 鉴权"""
-    await _resolve_token_context(embed_key, body.session_token, origin, session)
+    """widget 走的 presigned-upload：origin + session_token 鉴权 + 按 behavior 配置校验大小/类型"""
+    e, _ = await _resolve_token_context(embed_key, body.session_token, origin, session)
+    _enforce_file_limits(behavior=e.behavior, size=body.size, mime=body.content_type)
+
     from chameleon.api.files.api import build_presigned_upload
     from chameleon.api.files.schemas import PresignedUploadRequest
 
@@ -422,10 +466,12 @@ async def embed_files_finalize(
 
     inner = FinalizeRequest(expected_size=body.expected_size)
     fin = finalize_uploaded_object(object_id, inner)
+    # 兜底（widget 可能绕过 presign 直接 PUT MinIO，所以 finalize 再校一遍）
+    _enforce_file_limits(behavior=e.behavior, size=fin.size, mime=fin.content_type or "")
 
-    # 立刻把附件挂到当前会话上（record_attachments：文档类异步入临时 KB）
+    # 立刻把附件挂到当前会话上（record_attachments：文档类异步解析）
     sid = await embed_session_mod.resolve_session_id(body.session_token)
-    await sf_svc.record_attachments(
+    rows = await sf_svc.record_attachments(
         session,
         session_id=sid,
         end_user_id=end_user_id,
@@ -440,7 +486,50 @@ async def embed_files_finalize(
         ],
     )
     await session.commit()
-    return Result.ok(fin)
+    # 把 SessionFile id + 当前 status 透出给 widget 做后续 status polling
+    sf_id = rows[0].id if rows else None
+    sf_status = rows[0].status if rows else "ready"
+    payload = fin.model_dump() if hasattr(fin, "model_dump") else dict(fin)
+    payload["session_file_id"] = sf_id
+    payload["status"] = sf_status
+    return Result.ok(payload)
+
+
+class _EmbedFileStatusBody(BaseModel):
+    session_token: str
+
+
+class _EmbedFileStatus(BaseModel):
+    id: int
+    status: str
+    error: str | None = None
+
+
+@router.post(
+    "/{embed_key}/files/{file_id}/status",
+    response_model=Result[_EmbedFileStatus],
+)
+async def embed_file_status(
+    embed_key: str,
+    file_id: int,
+    body: _EmbedFileStatusBody,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Result[_EmbedFileStatus]:
+    """widget 轮询附件解析状态：uploaded → parsing → indexing → ready / failed"""
+    e, end_user_id = await _resolve_token_context(
+        embed_key, body.session_token, origin, session
+    )
+    from chameleon.core.api.exceptions import BusinessError, ResultCode
+    from chameleon.system.session_files import service as sf_svc
+
+    sf = await sf_svc.get_one(session, file_id)
+    sid = await embed_session.resolve_session_id(body.session_token)
+    if sf.session_id != sid or (
+        end_user_id and sf.end_user_id and sf.end_user_id != end_user_id
+    ):
+        raise BusinessError(ResultCode.NotFound, message="文件不存在或不属于该会话")
+    return Result.ok(_EmbedFileStatus(id=sf.id, status=sf.status, error=sf.error))
 
 
 # ── Phase B：会话级附件管理（list / delete） ──────────────

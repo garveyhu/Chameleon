@@ -61,6 +61,7 @@ import type {
   BubblePosition,
   CreateEmbedConfigRequest,
   EmbedConfigItem,
+  FileKind,
   FontSize,
   IdentificationMode,
   SessionPolicy,
@@ -740,6 +741,80 @@ const BehaviorTab: React.FC<{
           onChange={c => patch('show_followups', c)}
         />
       </Section>
+
+      {v.allow_file_upload ? (
+        <Section title="附件限制" hint="仅在允许附件上传时生效；后端会兜底再校一遍">
+          <Field label="单文件大小上限" hint="超过会拒绝并提示用户">
+            <NumberWithUnit
+              value={v.max_file_size_mb}
+              onChange={n => patch('max_file_size_mb', Math.max(1, Math.min(200, n)))}
+              unit="MB"
+              min={1}
+              max={200}
+              step={1}
+            />
+          </Field>
+          <Field label="单条消息最多附件数">
+            <NumberWithUnit
+              value={v.max_files_per_message}
+              onChange={n => patch('max_files_per_message', Math.max(1, Math.min(20, n)))}
+              unit="个"
+              min={1}
+              max={20}
+              step={1}
+            />
+          </Field>
+          <Field label="允许的类型" hint="未勾选的类型会被 widget 端拒绝">
+            <FileKindsPicker
+              value={v.allowed_file_kinds}
+              onChange={kinds => patch('allowed_file_kinds', kinds)}
+            />
+          </Field>
+        </Section>
+      ) : null}
+    </div>
+  );
+};
+
+const FILE_KIND_OPTIONS: { value: FileKind; label: string; hint: string }[] = [
+  { value: 'image', label: '图片', hint: 'PNG/JPG/GIF/WEBP/SVG…' },
+  { value: 'audio', label: '音频', hint: 'MP3/WAV/M4A…' },
+  { value: 'document', label: '文档', hint: 'PDF/DOC/DOCX/PPTX/MD/TXT…' },
+  { value: 'data', label: '数据表', hint: 'CSV/XLS/XLSX' },
+];
+
+const FileKindsPicker: React.FC<{
+  value: FileKind[];
+  onChange: (next: FileKind[]) => void;
+}> = ({ value, onChange }) => {
+  const toggle = (k: FileKind) => {
+    const cur = new Set(value);
+    if (cur.has(k)) cur.delete(k);
+    else cur.add(k);
+    // 至少保留一个，否则 widget 一刀切禁用附件
+    if (cur.size === 0) return;
+    onChange(FILE_KIND_OPTIONS.map(o => o.value).filter(v => cur.has(v)));
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {FILE_KIND_OPTIONS.map(opt => {
+        const on = value.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => toggle(opt.value)}
+            title={opt.hint}
+            className={`rounded-md border px-2.5 py-1 text-[12px] transition ${
+              on
+                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                : 'border-stone-200 bg-white text-stone-500 hover:border-stone-300'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 };
