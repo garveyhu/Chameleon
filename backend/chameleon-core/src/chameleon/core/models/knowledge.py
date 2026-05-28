@@ -50,7 +50,7 @@ class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin):
         String(16), nullable=False, default="vector"
     )
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # Phase B：'normal' 常规 KB；'ephemeral_session' 会话临时 KB（业务层级联清理）
+    # 保留字段（曾用于区分会话临时 KB；v2 起临时附件不再进 KB 域，但字段保留供未来分类用）
     kind: Mapped[str] = mapped_column(
         String(24), nullable=False, default="normal", server_default="normal"
     )

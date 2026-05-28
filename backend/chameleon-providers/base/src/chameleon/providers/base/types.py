@@ -76,6 +76,9 @@ def normalize_content(content: str | list[ContentBlock] | list[dict[str, Any]]) 
             out.append(ImageUrlBlock.model_validate(item))
         elif t == "audio_url":
             out.append(AudioUrlBlock.model_validate(item))
+        elif t == "file_ref":
+            # Phase B：文档/数据类附件元数据，仅供前端历史回放渲染，不进 LLM ContentBlock
+            continue
         else:
             raise ValueError(f"未知 ContentBlock type: {t!r}")
     return out

@@ -48,6 +48,7 @@ const KIND_OPTIONS = [
 const STATUS_OPTIONS = [
   { value: 'uploaded', label: '已上传' },
   { value: 'parsing', label: '解析中' },
+  { value: 'indexing', label: '建索引' },
   { value: 'ready', label: '就绪' },
   { value: 'failed', label: '失败' },
 ];
@@ -59,6 +60,7 @@ const KIND_LABEL: Record<string, string> = Object.fromEntries(
 const STATUS_TONE: Record<string, 'neutral' | 'success' | 'warning' | 'error'> = {
   uploaded: 'neutral',
   parsing: 'warning',
+  indexing: 'warning',
   ready: 'success',
   failed: 'error',
 };
@@ -330,7 +332,7 @@ export const SessionFilesPage = () => {
                   确定删除文件 <strong>{deleting.filename}</strong>？
                 </p>
                 <p className="text-[12px] text-stone-500">
-                  同步软删 KB 文档 / 切块；MinIO object 后台异步清理。已发送过的消息引用该文件 URL
+                  同步软删该文件的所有切块；MinIO object 后台异步清理。已发送过的消息引用该文件 URL
                   将仍可见（但内容可能 404）。
                 </p>
               </div>
@@ -369,17 +371,26 @@ const DetailDrawer = ({
     queryFn: () => sessionFileApi.get(file!.id),
     enabled: open,
   });
+  const previewQ = useQuery({
+    queryKey: ['session-files', 'preview', file?.id],
+    queryFn: () => sessionFileApi.preview(file!.id),
+    enabled: open,
+  });
   const f = detailQ.data ?? file;
 
   return (
     <DrawerRoot open={open} onOpenChange={o => !o && onClose()}>
-      <SheetContent side="right" className="!w-[540px] !max-w-[88vw]">
+      <SheetContent side="right" className="!w-[640px] !max-w-[92vw]">
         <SheetHeader>
           <SheetTitle>{f?.filename ?? '会话文件详情'}</SheetTitle>
         </SheetHeader>
         {f ? (
           <div className="space-y-4 px-5 py-3 text-[12.5px]">
-            <FilePreview file={f} />
+            <FilePreview
+              filename={f.filename}
+              loading={previewQ.isLoading}
+              preview={previewQ.data ?? null}
+            />
             <KvBlock
               rows={[
                 ['ID', String(f.id)],
@@ -389,20 +400,33 @@ const DetailDrawer = ({
                 ['会话 ID', f.session_id],
                 ['终端用户', f.end_user_id || '—'],
                 ['上传时间', formatDateTime(f.created_at)],
-                ['关联 Document', f.document_id ? String(f.document_id) : '—'],
-                ['关联临时 KB', f.ephemeral_kb_id ? String(f.ephemeral_kb_id) : '—'],
-                ['切块数', detailQ.data?.chunk_count != null ? String(detailQ.data.chunk_count) : '—'],
+                [
+                  '解析结果',
+                  f.text_size != null
+                    ? `${f.text_size.toLocaleString()} 字符 · ${
+                        f.use_full_text ? '小文件全文喂' : '大文件切块向量'
+                      }`
+                    : '—',
+                ],
+                [
+                  '切块数',
+                  detailQ.data?.chunk_count != null
+                    ? String(detailQ.data.chunk_count)
+                    : '—',
+                ],
                 ['MinIO object_id', f.object_id],
                 ...(f.error ? ([['错误', f.error]] as [string, string][]) : []),
               ]}
             />
-            <div className="flex gap-2">
-              <Button asChild variant="outline" size="sm">
-                <a href={f.object_url} target="_blank" rel="noopener">
-                  在新标签页打开原文件
-                </a>
-              </Button>
-            </div>
+            {previewQ.data?.url ? (
+              <div className="flex gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <a href={previewQ.data.url} download={f.filename}>
+                    下载源文件
+                  </a>
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </SheetContent>
@@ -410,29 +434,77 @@ const DetailDrawer = ({
   );
 };
 
-const FilePreview = ({ file }: { file: SessionFileItem }) => {
-  if (file.mime.startsWith('image/')) {
+const FilePreview = ({
+  filename,
+  loading,
+  preview,
+}: {
+  filename: string;
+  loading: boolean;
+  preview: import('@/system/session_files/types/session-file').SessionFilePreview | null;
+}) => {
+  if (loading) {
     return (
-      <div className="overflow-hidden rounded-lg border border-stone-200">
-        <img src={file.object_url} alt="" className="max-h-[300px] w-full object-contain bg-stone-50" />
+      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-400">
+        加载预览中…
       </div>
     );
   }
-  if (file.mime === 'application/pdf') {
+  if (!preview) {
+    return (
+      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-400">
+        无预览数据
+      </div>
+    );
+  }
+  if (preview.note) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-[12px] text-amber-700">
+        {preview.note}
+      </div>
+    );
+  }
+
+  if (preview.kind === 'image' && preview.url) {
+    return (
+      <div className="overflow-hidden rounded-lg border border-stone-200">
+        <img
+          src={preview.url}
+          alt=""
+          className="max-h-[360px] w-full bg-stone-50 object-contain"
+        />
+      </div>
+    );
+  }
+  if (preview.kind === 'pdf' && preview.url) {
     return (
       <iframe
-        title={file.filename}
-        src={file.object_url}
-        className="h-[360px] w-full rounded-lg border border-stone-200"
+        title={filename}
+        src={preview.url}
+        className="h-[420px] w-full rounded-lg border border-stone-200"
       />
     );
   }
-  if (file.mime.startsWith('audio/')) {
-    return <audio controls src={file.object_url} className="w-full" />;
+  if (preview.kind === 'audio' && preview.url) {
+    return <audio controls src={preview.url} className="w-full" />;
   }
+  if ((preview.kind === 'text' || preview.kind === 'office') && preview.text != null) {
+    return (
+      <div className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
+        <div className="border-b border-stone-200 bg-white px-3 py-1.5 text-[11px] text-stone-500">
+          {preview.kind === 'office' ? '已抽取为纯文本' : '文本预览'}
+          {preview.truncated ? '（已截断）' : ''}
+        </div>
+        <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
+          {preview.text}
+        </pre>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-500">
-      该类型暂无内嵌预览，点击下方按钮在新标签打开
+      该类型不支持内嵌预览，请使用下方按钮下载查看
     </div>
   );
 };

@@ -11,6 +11,7 @@ from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
 from chameleon.core.models.session import ChatSession, Message
 from chameleon.core.models.session_file import SessionFile
+from chameleon.core.models.session_file_chunk import SessionFileChunk
 from chameleon.core.models.dataset import (
     Dataset,
     DatasetItem,
@@ -76,6 +77,7 @@ __all__ = [
     "EmbedConfig",
     # 附件
     "SessionFile",
+    "SessionFileChunk",
     # 工作流
     "Graph",
     "GraphRun",

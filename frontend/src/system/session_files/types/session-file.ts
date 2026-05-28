@@ -9,9 +9,11 @@ export interface SessionFileItem {
   size: number;
   /** image / audio / document / data / other */
   kind: string;
-  document_id: number | null;
-  ephemeral_kb_id: number | null;
-  /** uploaded / parsing / ready / failed */
+  /** 解析后文本字符数（用于看是小文件全文还是大文件切块） */
+  text_size: number | null;
+  /** true=小文件全文喂 prompt；false=大文件已切块 */
+  use_full_text: boolean;
+  /** uploaded / parsing / indexing / ready / failed */
   status: string;
   error: string | null;
   created_at: string;
@@ -19,6 +21,20 @@ export interface SessionFileItem {
 
 export interface SessionFileDetail extends SessionFileItem {
   session_title: string | null;
-  document_title: string | null;
-  chunk_count: number | null;
+  chunk_count: number;
+}
+
+/** GET /v1/admin/session-files/{id}/preview 返回 */
+export interface SessionFilePreview {
+  kind: 'text' | 'image' | 'pdf' | 'office' | 'audio' | 'download_only';
+  mime: string;
+  filename: string;
+  size: number;
+  /** text / office 时填 */
+  text: string | null;
+  /** image / pdf / audio / download_only 时填 presigned GET URL */
+  url: string | null;
+  truncated: boolean;
+  /** 异常 / 提示信息 */
+  note: string | null;
 }

@@ -3,6 +3,7 @@ import type { PageResult } from '@/core/types/api';
 import type {
   SessionFileDetail,
   SessionFileItem,
+  SessionFilePreview,
 } from '@/system/session_files/types/session-file';
 
 export interface ListParams {
@@ -19,6 +20,8 @@ export const sessionFileApi = {
   list: (params?: ListParams) =>
     get<PageResult<SessionFileItem>>('/v1/admin/session-files', { params }),
   get: (id: number) => get<SessionFileDetail>(`/v1/admin/session-files/${id}`),
+  preview: (id: number) =>
+    get<SessionFilePreview>(`/v1/admin/session-files/${id}/preview`),
   delete: (id: number) =>
     post<{ deleted: boolean }>(`/v1/admin/session-files/${id}/delete`, {}),
 };

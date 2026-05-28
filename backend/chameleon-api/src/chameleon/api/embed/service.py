@@ -446,6 +446,25 @@ async def invoke_once(
     if blocks:
         ctx_input = [ProviderMessage(role="user", content=blocks)]
         persist_blocks = [b.model_dump() for b in blocks]
+    # 文档/数据类附件：不进 LLM ContentBlock，仅落 file_ref 让前端历史回放渲附件卡片
+    if attachments:
+        file_refs = [
+            {
+                "type": "file_ref",
+                "object_url": a.get("object_url") or "",
+                "filename": a.get("filename") or "",
+                "mime": a.get("mime") or "",
+                "size": int(a.get("size") or 0),
+            }
+            for a in attachments
+            if not (a.get("mime") or "").startswith(("image/", "audio/"))
+            and a.get("object_url")
+        ]
+        if file_refs:
+            if persist_blocks is None:
+                persist_blocks = [{"type": "text", "text": user_input}, *file_refs] if user_input else list(file_refs)
+            else:
+                persist_blocks = persist_blocks + file_refs
 
     # Phase B：落 SessionFile + 异步入临时 KB
     if attachments:
@@ -467,8 +486,8 @@ async def invoke_once(
     if blocks:
         ctx.input = ctx_input  # 替换为多模态 Message 列表
 
-    # Phase B：ephemeral RAG 注入 system message 到 ctx.history 头
-    rag_hits = await session_file_svc.search_ephemeral(
+    # Phase B v2：会话级附件 RAG 注入 system message 到 ctx.history 头
+    rag_hits = await session_file_svc.search_session_files(
         session, session_id=sid, query=user_input, top_k=5
     )
     if rag_hits:
@@ -479,7 +498,7 @@ async def invoke_once(
             ),
             *ctx.history,
         ]
-        ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits}
+        ctx.context_vars = {**ctx.context_vars, "session_file_citations": rag_hits}
     if attachments:
         ctx.attachments = list(attachments)
 
@@ -604,6 +623,25 @@ async def stream_invoke(
     persist_blocks_s: list[dict] | None = None
     if blocks_s:
         persist_blocks_s = [b.model_dump() for b in blocks_s]
+    # 文档/数据类 → file_ref 落 message.content_blocks（仅供历史回放，不进 LLM）
+    if attachments:
+        file_refs_s = [
+            {
+                "type": "file_ref",
+                "object_url": a.get("object_url") or "",
+                "filename": a.get("filename") or "",
+                "mime": a.get("mime") or "",
+                "size": int(a.get("size") or 0),
+            }
+            for a in attachments
+            if not (a.get("mime") or "").startswith(("image/", "audio/"))
+            and a.get("object_url")
+        ]
+        if file_refs_s:
+            if persist_blocks_s is None:
+                persist_blocks_s = [{"type": "text", "text": user_input}, *file_refs_s] if user_input else list(file_refs_s)
+            else:
+                persist_blocks_s = persist_blocks_s + file_refs_s
 
     if attachments:
         await session_file_svc.record_attachments(
@@ -624,7 +662,7 @@ async def stream_invoke(
     if blocks_s:
         ctx.input = [ProviderMessage(role="user", content=blocks_s)]
 
-    rag_hits_s = await session_file_svc.search_ephemeral(
+    rag_hits_s = await session_file_svc.search_session_files(
         session, session_id=sid, query=user_input, top_k=5
     )
     if rag_hits_s:
@@ -635,7 +673,7 @@ async def stream_invoke(
             ),
             *ctx.history,
         ]
-        ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits_s}
+        ctx.context_vars = {**ctx.context_vars, "session_file_citations": rag_hits_s}
     if attachments:
         ctx.attachments = list(attachments)
 

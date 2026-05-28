@@ -131,9 +131,9 @@ def _apply_attachments(
 ) -> tuple[object, list[dict[str, Any]] | None]:
     """合并 attachments 到 current_input：
 
-    - 没附件 → 原样
-    - input 是 str 且有附件 → 转 list[ProviderMessage] 单元素，content 是 ContentBlock 列表
-    - input 是 list[ProviderMessage] 且有附件 → 把附件 blocks merge 到最后一条 user 上
+    - 图/音 → ContentBlock（multimodal LLM 路径）
+    - 文档/数据 → 不进 ContentBlock（由 ephemeral RAG 接管）；但元数据落 message.content_blocks
+      作 type='file_ref'，让前端历史回放能渲附件卡片
     返回 (new_input_obj, blocks_for_persistence)
     """
     attachments = (
@@ -145,13 +145,31 @@ def _apply_attachments(
         return current_input_obj, None
 
     blocks = blocks_from_attachments(current_input_text, attachments)
-    if blocks is None:
+    # file_ref 块：图/音之外的附件元数据；不进 LLM ContentBlock，但落库供前端回放
+    file_refs = [
+        {
+            "type": "file_ref",
+            "object_url": a.get("object_url") or "",
+            "filename": a.get("filename") or "",
+            "mime": a.get("mime") or "",
+            "size": int(a.get("size") or 0),
+        }
+        for a in attachments
+        if not (a.get("mime") or "").startswith(("image/", "audio/"))
+        and a.get("object_url")
+    ]
+
+    if blocks is None and not file_refs:
         return current_input_obj, None
+
+    if blocks is None:
+        # 仅有文档/数据：current_input_obj 不变（LLM 路径不动），只落 file_ref
+        persist = [{"type": "text", "text": current_input_text}, *file_refs] if current_input_text else list(file_refs)
+        return current_input_obj, persist
 
     if isinstance(current_input_obj, str):
         new_obj = [ProviderMessage(role="user", content=blocks)]
     else:
-        # list[ProviderMessage]：把 blocks 设到最后一条
         last = current_input_obj[-1]
         new_obj = list(current_input_obj[:-1]) + [
             ProviderMessage(
@@ -161,7 +179,8 @@ def _apply_attachments(
                 tool_call_id=last.tool_call_id,
             )
         ]
-    return new_obj, [b.model_dump() for b in blocks]
+    persist = [b.model_dump() for b in blocks] + list(file_refs)
+    return new_obj, persist
 
 
 def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
@@ -291,8 +310,8 @@ async def invoke(
             ),
         )
 
-    # Phase B：ephemeral RAG —— 若会话已有 ready 的临时 KB 文档，检索拼到 history 头
-    rag_hits: list[dict] = await session_file_svc.search_ephemeral(
+    # Phase B v2：会话级附件 RAG —— 小文件全文 + 大文件向量片段，拼成 system 进 history 头
+    rag_hits: list[dict] = await session_file_svc.search_session_files(
         session, session_id=conv.session_id, query=current_input_text, top_k=5
     )
     if rag_hits:
@@ -309,7 +328,7 @@ async def invoke(
         history=history,
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
-        context_vars={**req.context, "ephemeral_citations": rag_hits},
+        context_vars={**req.context, "session_file_citations": rag_hits},
         options=req.options,
         app_id=current_app.app_id,
         stream=False,
@@ -761,8 +780,8 @@ async def _prepare_invocation(
         ),
     )
 
-    # Phase B：ephemeral RAG 注入
-    rag_hits: list[dict] = await session_file_svc.search_ephemeral(
+    # Phase B v2：会话级附件 RAG 注入
+    rag_hits: list[dict] = await session_file_svc.search_session_files(
         session, session_id=conv.session_id, query=current_input_text, top_k=5
     )
     if rag_hits:
@@ -778,7 +797,7 @@ async def _prepare_invocation(
         history=history,
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
-        context_vars={**req.context, "ephemeral_citations": rag_hits},
+        context_vars={**req.context, "session_file_citations": rag_hits},
         options=req.options,
         app_id=current_app.app_id,
         stream=stream,
