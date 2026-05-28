@@ -1110,7 +1110,8 @@ token = jwt.encode(
     SECRET,
     algorithm="HS256",
 )
-# 把 token 渲到页面 data-jwt-token 属性`;
+# script：渲到 data-jwt-token 属性
+# iframe：拼到 src 的 ?jwt= 参数（如 /embed/{key}?jwt={token}）`;
   const nodeSignSnippet = `import jwt from 'jsonwebtoken';
 const SECRET = '<把后台「会话 tab → JWT 共享密钥」的值粘到这>';
 const token = jwt.sign(
@@ -1118,7 +1119,8 @@ const token = jwt.sign(
   SECRET,
   { algorithm: 'HS256', expiresIn: '1h' },
 );
-// 把 token 渲到页面 data-jwt-token 属性`;
+// script：渲到 data-jwt-token 属性
+// iframe：拼到 src 的 ?jwt= 参数（如 /embed/{key}?jwt=${token}）`;
 
   return (
     <div className="space-y-3">
@@ -1136,12 +1138,12 @@ const token = jwt.sign(
         <>
           <SnippetCard
             title="后端签 JWT · Python"
-            hint="把 token 渲到 data-jwt-token"
+            hint="script: data-jwt-token / iframe: ?jwt="
             code={pythonSignSnippet}
           />
           <SnippetCard
             title="后端签 JWT · Node"
-            hint="把 token 渲到 data-jwt-token"
+            hint="script: data-jwt-token / iframe: ?jwt="
             code={nodeSignSnippet}
           />
         </>
@@ -1152,12 +1154,11 @@ const token = jwt.sign(
 };
 
 const MODE_HINTS: Record<IdentificationMode, string | null> = {
-  anonymous_device:
-    null,
+  anonymous_device: null,
   external_user_id:
-    '本应用配置为「外部用户 ID」模式：业务方网页（最好 SSR 渲染）需把当前登录用户的 ID 注入 data-external-user-id；未注入时 widget 会显错并禁用输入。',
+    '本应用配置为「外部用户 ID」模式：业务方网页（最好 SSR 渲染）把当前登录用户的 ID 注入 —— script 走 data-external-user-id 属性，iframe 走 ?euid= URL 参数；未注入时 widget 显错并禁用输入。',
   signed_jwt:
-    '本应用配置为「签名 JWT」模式：业务方后端用「会话 tab」里录入的 HS256 密钥签 JWT，sub claim 当 end_user_id，把 token 注入 data-jwt-token。',
+    '本应用配置为「签名 JWT」模式：业务方后端用「会话 tab」里录入的 HS256 密钥签 JWT（sub claim 当 end_user_id），把 token 注入 —— script 走 data-jwt-token 属性，iframe 走 ?jwt= URL 参数。',
 };
 
 const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
