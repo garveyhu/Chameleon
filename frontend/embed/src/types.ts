@@ -143,6 +143,8 @@ export interface WidgetMessage {
   pending?: boolean;
   streaming?: boolean;
   error?: boolean;
+  /** 招呼语 / 系统提示等占位消息：不渲 actions（复制 / 重生成 / 反馈 / 删除） */
+  isGreeting?: boolean;
 }
 
 export interface WidgetOptions {

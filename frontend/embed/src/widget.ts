@@ -743,7 +743,12 @@ export class ChameleonWidget {
       this.renderSuggestedQuestionsIfAny();
       return;
     }
-    this.pushMessage({ id: this.nextId(), role: 'assistant', content: greeting });
+    this.pushMessage({
+      id: this.nextId(),
+      role: 'assistant',
+      content: greeting,
+      isGreeting: true,
+    });
     this.renderSuggestedQuestionsIfAny();
   }
 
@@ -851,7 +856,7 @@ export class ChameleonWidget {
       inner.appendChild(this.buildMessageActions(msg));
     }
 
-    if (msg.role === 'assistant' && !msg.pending && !msg.error) {
+    if (msg.role === 'assistant' && !msg.pending && !msg.error && !msg.isGreeting) {
       if (this.behavior.show_citations && msg.citations && msg.citations.length > 0) {
         const c = document.createElement('div');
         c.className = 'citations';
