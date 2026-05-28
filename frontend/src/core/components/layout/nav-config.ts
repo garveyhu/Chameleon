@@ -12,6 +12,7 @@ import {
   Boxes,
   Database,
   DollarSign,
+  FileText,
   FlaskConical,
   Globe,
   KeySquare,
@@ -110,6 +111,7 @@ export const DOMAINS: NavDomain[] = [
         children: [
           { to: '/sessions', icon: ScrollText, i18nKey: 'menu.sessions', fallbackTitle: '会话 & 运行', perm: 'call_logs:read' },
           { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
+          { to: '/session-files', icon: FileText, i18nKey: 'menu.session_files', fallbackTitle: '会话文件', perm: 'call_logs:read' },
           {
             to: '/playground',
             icon: MessageSquare,

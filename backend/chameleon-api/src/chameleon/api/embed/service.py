@@ -289,6 +289,10 @@ async def soft_delete_embed_session(
         db_session, embed=embed, session_id=session_id, end_user_id=end_user_id
     )
     row.deleted_at = datetime.now(timezone.utc)
+    # Phase B：级联清 SessionFile + 关联 ephemeral_kb（业务层）
+    from chameleon.system.session_files import service as sf_svc
+
+    await sf_svc.cascade_clean_for_session(db_session, session_id)
     await db_session.flush()
 
 
@@ -431,9 +435,10 @@ async def invoke_once(
             end_user_id=end_user_id,
         )
     )
-    # Phase A 附件 → ContentBlock（仅图/音；其他类型 raise NotImplemented）
+    # Phase A 附件 → ContentBlock（仅图/音）；Phase B 文档/数据走 ephemeral RAG
     from chameleon.api.agent.service import blocks_from_attachments
     from chameleon.providers.base.types import Message as ProviderMessage
+    from chameleon.system.session_files import service as session_file_svc
 
     blocks = blocks_from_attachments(user_input, attachments)
     ctx_input: object = user_input
@@ -441,6 +446,15 @@ async def invoke_once(
     if blocks:
         ctx_input = [ProviderMessage(role="user", content=blocks)]
         persist_blocks = [b.model_dump() for b in blocks]
+
+    # Phase B：落 SessionFile + 异步入临时 KB
+    if attachments:
+        await session_file_svc.record_attachments(
+            session,
+            session_id=sid,
+            end_user_id=end_user_id,
+            attachments=list(attachments),
+        )
 
     ctx = _make_context(
         agent_key=agent.agent_key,
@@ -452,6 +466,21 @@ async def invoke_once(
     )
     if blocks:
         ctx.input = ctx_input  # 替换为多模态 Message 列表
+
+    # Phase B：ephemeral RAG 注入 system message 到 ctx.history 头
+    rag_hits = await session_file_svc.search_ephemeral(
+        session, session_id=sid, query=user_input, top_k=5
+    )
+    if rag_hits:
+        ctx.history = [
+            ProviderMessage(
+                role="system",
+                content=session_file_svc.format_rag_system_prompt(rag_hits),
+            ),
+            *ctx.history,
+        ]
+        ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits}
+
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
     # S11 桥：往 sessions 表补行 + 落 user message，让历史 API 能查到
@@ -564,14 +593,23 @@ async def stream_invoke(
             end_user_id=end_user_id,
         )
     )
-    # Phase A 附件 → ContentBlock
+    # Phase A 附件 → ContentBlock；Phase B 文档/数据走 ephemeral RAG
     from chameleon.api.agent.service import blocks_from_attachments
     from chameleon.providers.base.types import Message as ProviderMessage
+    from chameleon.system.session_files import service as session_file_svc
 
     blocks_s = blocks_from_attachments(user_input, attachments)
     persist_blocks_s: list[dict] | None = None
     if blocks_s:
         persist_blocks_s = [b.model_dump() for b in blocks_s]
+
+    if attachments:
+        await session_file_svc.record_attachments(
+            session,
+            session_id=sid,
+            end_user_id=end_user_id,
+            attachments=list(attachments),
+        )
 
     ctx = _make_context(
         agent_key=agent.agent_key,
@@ -583,6 +621,20 @@ async def stream_invoke(
     )
     if blocks_s:
         ctx.input = [ProviderMessage(role="user", content=blocks_s)]
+
+    rag_hits_s = await session_file_svc.search_ephemeral(
+        session, session_id=sid, query=user_input, top_k=5
+    )
+    if rag_hits_s:
+        ctx.history = [
+            ProviderMessage(
+                role="system",
+                content=session_file_svc.format_rag_system_prompt(rag_hits_s),
+            ),
+            *ctx.history,
+        ]
+        ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits_s}
+
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
     # S11 桥：往 sessions 表补行 + 落 user message

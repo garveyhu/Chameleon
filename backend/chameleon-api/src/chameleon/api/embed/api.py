@@ -362,6 +362,95 @@ async def rename_my_session(
     )
 
 
+# ── Phase B：会话级附件管理（list / delete） ──────────────
+
+
+class _EmbedFileItem(BaseModel):
+    id: int
+    filename: str
+    mime: str
+    size: int
+    kind: str
+    status: str
+    object_url: str
+    created_at: str
+
+
+@router.get(
+    "/{embed_key}/sessions/{session_id}/files",
+    response_model=Result[list[_EmbedFileItem]],
+)
+async def list_session_files(
+    embed_key: str,
+    session_id: str,
+    session_token: str,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Result[list[_EmbedFileItem]]:
+    """end-user 拉自己在此会话上传的附件列表（受 end_user 隔离）"""
+    e, end_user_id = await _resolve_token_context(
+        embed_key, session_token, origin, session
+    )
+    # 越权校验：session 必须属于这个 end_user
+    await embed_service.get_embed_session(
+        session, embed=e, session_id=session_id, end_user_id=end_user_id
+    )
+    from chameleon.system.session_files import service as sf_svc
+
+    rows = await sf_svc.list_for_session(
+        session, session_id=session_id, end_user_id=end_user_id
+    )
+    items = [
+        _EmbedFileItem(
+            id=r.id,
+            filename=r.filename,
+            mime=r.mime,
+            size=r.size,
+            kind=r.kind,
+            status=r.status,
+            object_url=r.object_url,
+            created_at=r.created_at.isoformat(),
+        )
+        for r in rows
+    ]
+    return Result.ok(items)
+
+
+@router.post(
+    "/{embed_key}/sessions/{session_id}/files/{file_id}/delete",
+    response_model=Result[dict],
+)
+async def delete_session_file(
+    embed_key: str,
+    session_id: str,
+    file_id: int,
+    req: _TokenedRequest,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Result[dict]:
+    """end-user 删自己上传的附件 + 级联清相关资源（document/chunks/MinIO）"""
+    e, end_user_id = await _resolve_token_context(
+        embed_key, req.session_token, origin, session
+    )
+    await embed_service.get_embed_session(
+        session, embed=e, session_id=session_id, end_user_id=end_user_id
+    )
+    from chameleon.system.session_files import service as sf_svc
+
+    sf = await sf_svc.get_one(session, file_id)
+    if sf.session_id != session_id or (
+        end_user_id and sf.end_user_id and sf.end_user_id != end_user_id
+    ):
+        from chameleon.core.api.exceptions import BusinessError, ResultCode
+
+        raise BusinessError(
+            ResultCode.NotFound, message="文件不存在或不属于该会话"
+        )
+    await sf_svc.soft_delete(session, file_id)
+    await session.commit()
+    return Result.ok({"deleted": True})
+
+
 # ── 原有 feedback ─────────────────────────────────────────
 
 

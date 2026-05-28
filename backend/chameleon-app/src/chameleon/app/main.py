@@ -49,6 +49,7 @@ from chameleon.system.auth import auth_router
 from chameleon.system.dashboard import dashboard_router
 from chameleon.system.datasets import datasets_router
 from chameleon.system.embed_configs import embed_configs_router
+from chameleon.system.session_files import session_files_router
 from chameleon.system.eval_jobs import eval_jobs_router
 from chameleon.system.eval_jobs import scheduler as eval_scheduler
 from chameleon.system.eval_templates import eval_templates_router
@@ -173,6 +174,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(playground_router)
     app.include_router(audit_logs_router)
     app.include_router(embed_configs_router)
+    app.include_router(session_files_router)
     app.include_router(graphs_router)
     app.include_router(tools_router)
     app.include_router(datasets_router)

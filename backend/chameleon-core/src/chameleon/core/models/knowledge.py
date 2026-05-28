@@ -50,6 +50,10 @@ class KnowledgeBase(Base, TimestampMixin, SoftDeleteMixin):
         String(16), nullable=False, default="vector"
     )
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Phase B：'normal' 常规 KB；'ephemeral_session' 会话临时 KB（业务层级联清理）
+    kind: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="normal", server_default="normal"
+    )
 
 
 class Document(Base, TimestampMixin, SoftDeleteMixin):

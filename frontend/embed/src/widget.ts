@@ -383,7 +383,7 @@ export class ChameleonWidget {
         ${this.behavior.allow_file_upload ? '<div class="attachment-chips" hidden></div>' : ''}
         <div class="composer">
           ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
-          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*"/>' : ''}
+          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*,application/pdf,text/plain,text/markdown,.md,.docx,.csv,.xlsx"/>' : ''}
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>

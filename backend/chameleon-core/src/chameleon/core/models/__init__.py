@@ -10,6 +10,7 @@ from chameleon.core.models.app_template import AppTemplate
 from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
 from chameleon.core.models.session import ChatSession, Message
+from chameleon.core.models.session_file import SessionFile
 from chameleon.core.models.dataset import (
     Dataset,
     DatasetItem,
@@ -73,6 +74,8 @@ __all__ = [
     "Score",
     # 嵌入域
     "EmbedConfig",
+    # 附件
+    "SessionFile",
     # 工作流
     "Graph",
     "GraphRun",

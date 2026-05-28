@@ -98,30 +98,30 @@ def blocks_from_attachments(
     user_text: str,
     attachments: list[dict[str, Any]] | None,
 ) -> list[ContentBlock] | None:
-    """attachments + text → ContentBlock 列表。无附件返 None（调用方走 str 流程）。
+    """attachments + text → ContentBlock 列表（仅图/音）。无附件 / 全是文档类返 None。
 
-    Raises:
-        BusinessError(NotImplemented): 出现 Phase A 尚未支持的 mime 类型
+    Phase A：image_/audio_ → ContentBlock（multimodal LLM 路径）
+    Phase B：document/data → 不进 ContentBlock，由 session_file_service 入临时 KB；
+             agent.service 后续通过 ephemeral RAG 注入检索结果到 prompt。
     """
     if not attachments:
         return None
-    blocks: list[ContentBlock] = [TextBlock(text=user_text)] if user_text else []
+    media_blocks: list[ContentBlock] = []
     for att in attachments:
         url = att.get("object_url")
         mime = (att.get("mime") or "").lower()
         if not url:
             continue
         if mime.startswith("image/"):
-            blocks.append(ImageUrlBlock(image_url={"url": url}))
+            media_blocks.append(ImageUrlBlock(image_url={"url": url}))
         elif mime.startswith("audio/"):
-            blocks.append(AudioUrlBlock(audio_url={"url": url}))
-        else:
-            # PDF / CSV / DOCX 等：Phase B 临时 RAG 才接，Phase A 显式不静默丢
-            raise BusinessError(
-                ResultCode.NotImplemented,
-                message=f"暂不支持文件类型 {mime}（仅图片 / 音频）—— 文档与数据文件将随 Phase B 上线",
-            )
-    return blocks or None
+            media_blocks.append(AudioUrlBlock(audio_url={"url": url}))
+        # 其他类型：文档/数据 在 service 层另走 ephemeral RAG，不进多模态 message
+    if not media_blocks:
+        return None
+    blocks: list[ContentBlock] = [TextBlock(text=user_text)] if user_text else []
+    blocks.extend(media_blocks)
+    return blocks
 
 
 def _apply_attachments(
@@ -256,10 +256,26 @@ async def invoke(
             for m in req.input
         ]
 
-    # 附件 → ContentBlock（Phase A 仅图/音；其他类型 raise NotImplemented）
+    # 附件 → ContentBlock（仅图/音进 multimodal；文档/数据进 ephemeral KB）
     current_input_obj, persist_blocks = _apply_attachments(
         req, current_input_text, current_input_obj
     )
+
+    # Phase B：落 SessionFile 记账 + 触发 document 异步入临时 KB
+    from chameleon.system.session_files import service as session_file_svc
+
+    attachments_dump = (
+        [a.model_dump() if hasattr(a, "model_dump") else a for a in req.attachments]
+        if req.attachments
+        else []
+    )
+    if attachments_dump:
+        await session_file_svc.record_attachments(
+            session,
+            session_id=conv.session_id,
+            end_user_id=conv.end_user_id,
+            attachments=attachments_dump,
+        )
 
     # ④ 落库 user msg（先写防丢；list 模式只落 last user，不落 client 自管历史）
     with rec.span("history_persist"):
@@ -275,6 +291,17 @@ async def invoke(
             ),
         )
 
+    # Phase B：ephemeral RAG —— 若会话已有 ready 的临时 KB 文档，检索拼到 history 头
+    rag_hits: list[dict] = await session_file_svc.search_ephemeral(
+        session, session_id=conv.session_id, query=current_input_text, top_k=5
+    )
+    if rag_hits:
+        rag_system = ProviderMessage(
+            role="system",
+            content=session_file_svc.format_rag_system_prompt(rag_hits),
+        )
+        history = [rag_system, *history]
+
     # ⑤ 装 InvokeContext
     ctx = InvokeContext(
         agent_def=agent_def,
@@ -282,7 +309,7 @@ async def invoke(
         history=history,
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
-        context_vars=req.context,
+        context_vars={**req.context, "ephemeral_citations": rag_hits},
         options=req.options,
         app_id=current_app.app_id,
         stream=False,
@@ -700,10 +727,26 @@ async def _prepare_invocation(
             for m in req.input
         ]
 
-    # 附件 → ContentBlock（Phase A 仅图/音；其他类型 raise NotImplemented）
+    # 附件 → ContentBlock（仅图/音）；文档/数据走 ephemeral RAG
     current_input_obj, persist_blocks = _apply_attachments(
         req, current_input_text, current_input_obj
     )
+
+    # Phase B：落 SessionFile 记账 + 触发 document 异步入临时 KB
+    from chameleon.system.session_files import service as session_file_svc
+
+    attachments_dump = (
+        [a.model_dump() if hasattr(a, "model_dump") else a for a in req.attachments]
+        if req.attachments
+        else []
+    )
+    if attachments_dump:
+        await session_file_svc.record_attachments(
+            session,
+            session_id=conv.session_id,
+            end_user_id=conv.end_user_id,
+            attachments=attachments_dump,
+        )
 
     await session_service.append(
         session,
@@ -716,6 +759,17 @@ async def _prepare_invocation(
             end_user_id=conv.end_user_id,
         ),
     )
+
+    # Phase B：ephemeral RAG 注入
+    rag_hits: list[dict] = await session_file_svc.search_ephemeral(
+        session, session_id=conv.session_id, query=current_input_text, top_k=5
+    )
+    if rag_hits:
+        rag_system = ProviderMessage(
+            role="system",
+            content=session_file_svc.format_rag_system_prompt(rag_hits),
+        )
+        history = [rag_system, *history]
 
     ctx = InvokeContext(
         agent_def=agent_def,
