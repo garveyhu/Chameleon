@@ -17,9 +17,10 @@ export const closeIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentCo
 
 export const sendIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
-export const thumbsUpIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v12"/><path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H7"/></svg>`;
+// 重画 thumbs-up/down：拇指座 + 手掌一起铺满 24×24 viewBox，跟 copy / regen / trash 视觉高度一致
+export const thumbsUpIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="4" height="13" rx="1"/><path d="M6 9l3-6a2 2 0 0 1 4 .5L12 9h5.5a2 2 0 0 1 2 2.3l-1.2 8A2 2 0 0 1 16.4 21H6"/></svg>`;
 
-export const thumbsDownIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V2"/><path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H17"/></svg>`;
+export const thumbsDownIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="4" height="13" rx="1"/><path d="M6 15l3 6a2 2 0 0 0 4-.5L12 15h5.5a2 2 0 0 0 2-2.3l-1.2-8A2 2 0 0 0 16.4 3H6"/></svg>`;
 
 export const paperclipIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.93 8.83l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
 
