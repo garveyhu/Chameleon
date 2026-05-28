@@ -261,6 +261,19 @@ export const buildStyles = (ui: UiConfig): string => {
 .panel.pos-right-top    { right: 24px; top: 96px; }
 .panel.pos-left-top     { left: 24px;  top: 96px; }
 
+/* 全屏模式：iframe 嵌入场景 —— 占满父容器、无圆角无阴影无 transform 动画 */
+.panel.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+}
+
 /* ─── 历史会话 overlay（FastGPT 风格，覆盖主对话区） ───────────── */
 .sidebar {
   position: absolute; inset: 0; z-index: 5;

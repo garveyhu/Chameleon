@@ -203,4 +203,7 @@ export interface WidgetOptions {
   externalUserId?: string;
   /** S12：接入方签名的 JWT（signed_jwt 模式用） */
   jwtToken?: string;
+  /** 全屏模式：iframe 嵌入场景 —— 不渲气泡 + 不渲招呼语 + panel 占满父容器、
+   *  无圆角无阴影、永远 open，视觉细节复用 widget 主题；script 模式仍用浮窗。 */
+  fullscreen?: boolean;
 }

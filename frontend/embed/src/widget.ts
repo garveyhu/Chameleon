@@ -154,11 +154,21 @@ export class ChameleonWidget {
 
     this.host = document.createElement('div');
     this.host.id = `chameleon-widget-${this.opts.embedKey}`;
+    // 全屏模式：把 host 撑满（iframe 容器内是 100vw/100vh，正好填满）
+    if (this.opts.fullscreen) {
+      this.host.style.cssText =
+        'position:fixed;inset:0;width:100%;height:100%;z-index:2147483647;';
+    }
     document.body.appendChild(this.host);
     this.shadow = this.host.attachShadow({ mode: 'open' });
 
     this.renderShell();
     this.bindEvents();
+    // 全屏：默认 open，省去用户先点气泡这步
+    if (this.opts.fullscreen) {
+      this.isOpen = true;
+      this.panel.classList.add('open');
+    }
 
     // 模式 vs 业务方传入的身份匹配性检查 —— 不匹配直接显错并禁用输入
     const policyErr = this.checkIdentityAgainstPolicy();
@@ -182,7 +192,7 @@ export class ChameleonWidget {
       );
     }
 
-    if (this.behavior.auto_open) {
+    if (this.behavior.auto_open && !this.opts.fullscreen) {
       const delay = Math.max(0, this.behavior.auto_open_delay_ms ?? 0);
       window.setTimeout(() => this.toggle(true), delay);
     }
@@ -417,15 +427,20 @@ export class ChameleonWidget {
       ? renderTooltip(ui)
       : '';
 
+    const isFullscreen = !!this.opts.fullscreen;
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="bubble-wrap pos-${pos} tip-${ui.bubble_tooltip_position || 'left'}">
+      ${
+        isFullscreen
+          ? ''
+          : `<div class="bubble-wrap pos-${pos} tip-${ui.bubble_tooltip_position || 'left'}">
         ${tooltipHtml}
         <button class="bubble ${bubbleClasses}" type="button" aria-label="${escapeAttr(title)}">
           ${bubbleInner}
         </button>
-      </div>
-      <div class="panel pos-${pos}${showSidebar ? ' has-sidebar' : ''}" role="dialog" aria-label="${escapeAttr(title)}">
+      </div>`
+      }
+      <div class="panel${isFullscreen ? ' fullscreen open' : ` pos-${pos}`}${showSidebar ? ' has-sidebar' : ''}" role="dialog" aria-label="${escapeAttr(title)}">
         <div class="header">
           <div class="header-main">
             ${
@@ -445,7 +460,7 @@ export class ChameleonWidget {
               ${subtitle ? `<div class="header-sub">${escapeText(subtitle)}</div>` : ''}
             </div>
           </div>
-          <button class="close-btn" type="button" aria-label="关闭">${closeIcon}</button>
+          ${isFullscreen ? '' : `<button class="close-btn" type="button" aria-label="关闭">${closeIcon}</button>`}
         </div>
         <div class="messages"></div>
         ${this.behavior.allow_file_upload ? '<div class="attachment-chips" hidden></div>' : ''}
@@ -461,6 +476,8 @@ export class ChameleonWidget {
     `;
 
     this.shadow.appendChild(wrap);
+    // 全屏模式没渲气泡 —— this.bubble 不会被访问（bindEvents 已守卫），
+    // querySelector 拿不到也允许；类型上保留 non-null 断言以减少改动量
     this.bubble = this.shadow.querySelector('.bubble') as HTMLButtonElement;
     this.panel = this.shadow.querySelector('.panel') as HTMLDivElement;
     this.messagesEl = this.shadow.querySelector('.messages') as HTMLDivElement;
@@ -524,11 +541,14 @@ export class ChameleonWidget {
   }
 
   private bindEvents(): void {
-    this.bubble.addEventListener('click', () => this.toggle());
-    (this.shadow.querySelector('.close-btn') as HTMLButtonElement).addEventListener(
-      'click',
-      () => this.toggle(false),
-    );
+    // 全屏模式没渲染气泡 + 关闭按钮，跳过事件绑定
+    if (!this.opts.fullscreen) {
+      this.bubble.addEventListener('click', () => this.toggle());
+      (this.shadow.querySelector('.close-btn') as HTMLButtonElement).addEventListener(
+        'click',
+        () => this.toggle(false),
+      );
+    }
     this.sendBtn.addEventListener('click', () => this.handleSend(this.textarea.value.trim()));
     this.textarea.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) {
