@@ -52,8 +52,12 @@ const DEFAULT_UI: Required<UiConfig> = {
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
   bubble_image_url: null,
+  bubble_transparent: false,
   bubble_tooltip_text: '',
   bubble_tooltip_color: '#1f2937',
+  bubble_tooltip_font_size: 13,
+  bubble_tooltip_font_weight: 'normal',
+  bubble_tooltip_position: 'left',
   bubble_tooltip_dismiss_on_open: true,
   show_powered_by: true,
   mode: 'light',
@@ -389,22 +393,24 @@ export class ChameleonWidget {
       `
       : '';
 
-    // bubble 图片优先 → 内置 icon 兜底（图片时整圆 cover，去掉纯色 bg）
+    // bubble 图片优先 → 内置 icon 兜底；transparent 模式去掉纯色背景仅显图标
     const bubbleInner = ui.bubble_image_url
       ? `<img class="bubble-img" src="${escapeAttr(ui.bubble_image_url)}" alt=""/>`
       : getBubbleIcon(ui.bubble_icon);
+    const bubbleClasses = [
+      `pos-${pos}`,
+      ui.bubble_image_url ? 'has-img' : '',
+      ui.bubble_transparent ? 'transparent' : '',
+    ].filter(Boolean).join(' ');
     const tooltipHtml = ui.bubble_tooltip_text
-      ? `<div class="bubble-tip pos-${pos}"
-            style="color:${escapeAttr(ui.bubble_tooltip_color || '#1f2937')}">
-           ${escapeText(ui.bubble_tooltip_text)}
-         </div>`
+      ? renderTooltip(ui)
       : '';
 
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="bubble-wrap pos-${pos}">
+      <div class="bubble-wrap pos-${pos} tip-${ui.bubble_tooltip_position || 'left'}">
         ${tooltipHtml}
-        <button class="bubble pos-${pos}${ui.bubble_image_url ? ' has-img' : ''}" type="button" aria-label="${escapeAttr(title)}">
+        <button class="bubble ${bubbleClasses}" type="button" aria-label="${escapeAttr(title)}">
           ${bubbleInner}
         </button>
       </div>
@@ -1444,6 +1450,39 @@ export class ChameleonWidget {
 }
 
 // ─── helpers ─────────────────────────────────────────────────
+
+/**
+ * 渲染气泡旁招呼语：
+ * - 直线（left/right/top/bottom）：普通 div + 颜色/字号/粗细 内联样式
+ * - orbit：SVG textPath 沿圆弧排文字（围绕 bubble 顶部 200° 弧）
+ */
+function renderTooltip(ui: Required<UiConfig>): string {
+  const text = ui.bubble_tooltip_text;
+  if (!text) return '';
+  const color = ui.bubble_tooltip_color || '#1f2937';
+  const fontSize = Math.max(10, Math.min(28, Number(ui.bubble_tooltip_font_size || 13)));
+  const weight = ui.bubble_tooltip_font_weight === 'bold' ? '700' : '400';
+  const baseStyle = `color:${escapeAttr(color)};font-size:${fontSize}px;font-weight:${weight}`;
+
+  if (ui.bubble_tooltip_position === 'orbit') {
+    // 在 bubble 上方圆弧排字（半径 38px = bubble 28r + 10 留白）
+    // path A 写法：M(x1 y1) A rx ry 0 0 1 x2 y2
+    const r = 40;
+    const cx = 28; // bubble 中心（bubble 56x56，相对 wrap）
+    const cy = 28;
+    // 顶部半圆，从左到右
+    const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+    return `
+      <svg class="bubble-tip orbit" width="${cx * 2 + 8}" height="${r + 8}" viewBox="0 0 ${cx * 2 + 8} ${r + 8}" aria-hidden="true">
+        <defs><path id="orbit-path" d="${path}"/></defs>
+        <text style="${baseStyle}">
+          <textPath href="#orbit-path" startOffset="50%" text-anchor="middle">${escapeText(text)}</textPath>
+        </text>
+      </svg>`;
+  }
+
+  return `<div class="bubble-tip line" style="${baseStyle}">${escapeText(text)}</div>`;
+}
 
 /** 用 normalizeMime 兜底（浏览器 .md 这类常返空 file.type），再 classifyKind 推 image/audio/document/data/other */
 function guessKindFromFile(f: File): WidgetAttachment['kind'] {

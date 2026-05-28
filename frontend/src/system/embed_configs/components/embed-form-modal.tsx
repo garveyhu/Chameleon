@@ -364,6 +364,17 @@ const BUBBLE_POSITION_OPTIONS: { value: BubblePosition; label: string }[] = [
   { value: 'left-top', label: '左上角' },
 ];
 
+const TOOLTIP_POSITION_OPTIONS: {
+  value: UiConfig['bubble_tooltip_position'];
+  label: string;
+}[] = [
+  { value: 'left', label: '左侧' },
+  { value: 'right', label: '右侧' },
+  { value: 'top', label: '上方' },
+  { value: 'bottom', label: '下方' },
+  { value: 'orbit', label: '环绕浮窗' },
+];
+
 const BUBBLE_ICON_OPTIONS: {
   value: BubbleIcon;
   label: string;
@@ -669,13 +680,19 @@ const AppearanceTab: React.FC<{
         </div>
       </Section>
 
-      <Section title="浮窗自定义" hint="图片优先于内置 icon；旁边招呼语可选">
+      <Section title="浮窗自定义" hint="图片 / 透明背景 / 旁边招呼语 都可选">
         <Field label="自定义图片" hint="圆形显示，建议正方形 PNG/JPG，≤ 2MB">
           <BubbleImagePicker
             value={ui.bubble_image_url}
             onChange={v => patch('bubble_image_url', v)}
           />
         </Field>
+        <ToggleField
+          label="透明背景"
+          hint="去掉浮窗的纯色圆背景，仅显图标 / 图片本身"
+          checked={ui.bubble_transparent}
+          onChange={c => patch('bubble_transparent', c)}
+        />
         <Field label="招呼语" hint="空字符串关闭；浮在浮窗旁边的文字（如 hi, 让我帮助你～）">
           <Input
             value={ui.bubble_tooltip_text}
@@ -686,12 +703,58 @@ const AppearanceTab: React.FC<{
         </Field>
         {ui.bubble_tooltip_text ? (
           <>
-            <Field label="文字颜色">
-              <ColorInput
-                value={ui.bubble_tooltip_color}
-                onChange={v => patch('bubble_tooltip_color', v)}
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="位置">
+                <Select
+                  value={ui.bubble_tooltip_position}
+                  onValueChange={v =>
+                    patch('bubble_tooltip_position', v as UiConfig['bubble_tooltip_position'])
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TOOLTIP_POSITION_OPTIONS.map(o => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="字号">
+                <NumberWithUnit
+                  value={ui.bubble_tooltip_font_size}
+                  onChange={v => patch('bubble_tooltip_font_size', Math.max(10, Math.min(28, v)))}
+                  unit="px"
+                  min={10}
+                  max={28}
+                />
+              </Field>
+              <Field label="文字颜色">
+                <ColorInput
+                  value={ui.bubble_tooltip_color}
+                  onChange={v => patch('bubble_tooltip_color', v)}
+                />
+              </Field>
+              <Field label="粗细">
+                <Select
+                  value={ui.bubble_tooltip_font_weight}
+                  onValueChange={v =>
+                    patch('bubble_tooltip_font_weight', v as 'normal' | 'bold')
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">常规</SelectItem>
+                    <SelectItem value="bold">加粗</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
             <ToggleField
               label="打开会话后隐藏"
               hint="点开面板时招呼语淡出"

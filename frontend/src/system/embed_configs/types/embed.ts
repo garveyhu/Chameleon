@@ -30,10 +30,18 @@ export interface UiConfig {
   bubble_icon: BubbleIcon;
   /** 浮窗自定义图片 URL（非空时整个 bubble 用图片代替纯色 + 内置 icon） */
   bubble_image_url: string | null;
+  /** 浮窗背景透明：仅显 icon / 图片本体，无纯色圆形背景 */
+  bubble_transparent: boolean;
   /** 浮窗旁招呼语（如 "hi, 让我帮助你～"，空字符串关闭） */
   bubble_tooltip_text: string;
   /** 招呼语文字颜色 hex */
   bubble_tooltip_color: string;
+  /** 招呼语字号 px */
+  bubble_tooltip_font_size: number;
+  /** 招呼语粗细 */
+  bubble_tooltip_font_weight: 'normal' | 'bold';
+  /** 招呼语位置：left/right/top/bottom 直线；orbit 沿气泡顶部圆弧环绕（FastGPT 风） */
+  bubble_tooltip_position: 'left' | 'right' | 'top' | 'bottom' | 'orbit';
   /** 面板打开后自动隐藏招呼语（默认 true） */
   bubble_tooltip_dismiss_on_open: boolean;
   /** 面板底部 "powered by Chameleon" 水印（默认 true） */
@@ -94,8 +102,12 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
   bubble_image_url: null,
+  bubble_transparent: false,
   bubble_tooltip_text: '',
   bubble_tooltip_color: '#1f2937',
+  bubble_tooltip_font_size: 13,
+  bubble_tooltip_font_weight: 'normal',
+  bubble_tooltip_position: 'left',
   bubble_tooltip_dismiss_on_open: true,
   show_powered_by: true,
   mode: 'light',

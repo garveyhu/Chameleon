@@ -105,7 +105,7 @@ export const buildStyles = (ui: UiConfig): string => {
 
 * { box-sizing: border-box; }
 
-/* bubble-wrap 包裹气泡 + tooltip，方便相对定位 */
+/* bubble-wrap 包裹气泡 + tooltip；按 tip 位置切 flex 方向；orbit 走 absolute */
 .bubble-wrap {
   position: fixed;
   z-index: 2147483647;
@@ -113,10 +113,26 @@ export const buildStyles = (ui: UiConfig): string => {
   align-items: center;
   gap: 10px;
 }
-.bubble-wrap.pos-right-bottom { right: 24px; bottom: 24px; flex-direction: row-reverse; }
-.bubble-wrap.pos-left-bottom  { left: 24px;  bottom: 24px; flex-direction: row; }
-.bubble-wrap.pos-right-top    { right: 24px; top: 24px; flex-direction: row-reverse; }
-.bubble-wrap.pos-left-top     { left: 24px;  top: 24px; flex-direction: row; }
+.bubble-wrap.pos-right-bottom { right: 24px; bottom: 24px; }
+.bubble-wrap.pos-left-bottom  { left: 24px;  bottom: 24px; }
+.bubble-wrap.pos-right-top    { right: 24px; top: 24px; }
+.bubble-wrap.pos-left-top     { left: 24px;  top: 24px; }
+
+/* tooltip 位置：直线方向取决于 tip-* class，不再受 bubble 位置反推 */
+.bubble-wrap.tip-left   { flex-direction: row-reverse; }
+.bubble-wrap.tip-right  { flex-direction: row; }
+.bubble-wrap.tip-top    { flex-direction: column-reverse; align-items: center; }
+.bubble-wrap.tip-bottom { flex-direction: column; align-items: center; }
+.bubble-wrap.tip-orbit  { display: block; }
+.bubble-wrap.tip-orbit .bubble { position: relative; }
+.bubble-wrap.tip-orbit .bubble-tip.orbit {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  margin-bottom: -8px;
+}
 
 .bubble {
   position: relative;
@@ -137,16 +153,24 @@ export const buildStyles = (ui: UiConfig): string => {
 }
 .bubble:hover { transform: scale(1.06); }
 .bubble.has-img { background: transparent; padding: 0; }
+.bubble.transparent {
+  background: transparent;
+  box-shadow: none;
+  color: ${theme.bubbleColor};
+}
+.bubble.transparent svg {
+  /* icon 描黑外环让透明背景下仍清晰 */
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
+}
 .bubble-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
 .bubble svg { width: 26px; height: 26px; }
 
 /* bubble 旁招呼文字（FastGPT 风格）—— 浅气泡，淡入；面板打开淡出 */
-.bubble-tip {
+.bubble-tip.line {
   background: ${theme.paneBg};
   border: 1px solid ${theme.borderColor};
   border-radius: 14px;
   padding: 7px 12px;
-  font-size: 13px;
   line-height: 1.4;
   white-space: nowrap;
   max-width: 220px;
@@ -154,6 +178,11 @@ export const buildStyles = (ui: UiConfig): string => {
   transition: opacity .25s ease, transform .25s ease;
   animation: bubble-tip-in .35s ease both;
 }
+.bubble-tip.orbit {
+  transition: opacity .25s ease;
+  animation: bubble-tip-in .35s ease both;
+}
+.bubble-tip.orbit text { font-family: inherit; }
 .bubble-tip.hidden { opacity: 0; pointer-events: none; transform: translateY(4px); }
 @keyframes bubble-tip-in {
   from { opacity: 0; transform: translateY(4px); }
@@ -700,7 +729,7 @@ export const buildStyles = (ui: UiConfig): string => {
 
 .composer {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid ${theme.borderColor};
@@ -711,9 +740,14 @@ export const buildStyles = (ui: UiConfig): string => {
   border: none;
   cursor: pointer;
   color: ${theme.subtleText};
-  padding: 8px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
   line-height: 0;
+  flex-shrink: 0;
 }
 .upload-btn:hover { background: rgba(127,127,127,.12); color: ${theme.paneText}; }
 .upload-btn svg { width: 16px; height: 16px; }

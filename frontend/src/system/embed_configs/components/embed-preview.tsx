@@ -56,7 +56,8 @@ interface EmbedPreviewProps {
 }
 
 export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, className }) => {
-  const [bubbleOpen, setBubbleOpen] = useState(true);
+  // 默认气泡态（关闭面板），让用户能看到 bubble 图片 / 招呼语 / 透明背景效果
+  const [bubbleOpen, setBubbleOpen] = useState(false);
   const BubbleIconCmp = BUBBLE_ICON_MAP[ui.bubble_icon] ?? MessageSquare;
   const fontSize = FONT_SIZE_MAP[ui.font_size];
 
@@ -90,23 +91,15 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
         <MockSitePattern />
       </div>
 
-      {/* 浮窗气泡 */}
+      {/* 浮窗气泡 + 招呼语 tooltip */}
       <div className={cn('absolute', positionAnchor, positionVAnchor, 'z-10')}>
-        <button
-          type="button"
-          onClick={() => setBubbleOpen(o => !o)}
-          className={cn(
-            'flex h-12 w-12 items-center justify-center text-white transition hover:scale-105',
-            SHADOW_MAP[ui.shadow],
-          )}
-          style={{
-            backgroundColor: ui.bubble_color,
-            borderRadius: '50%',
-          }}
-          title="预览气泡（点击切换面板）"
-        >
-          <BubbleIconCmp className="h-5 w-5" strokeWidth={1.75} />
-        </button>
+        <BubbleWithTooltip
+          ui={ui}
+          BubbleIconCmp={BubbleIconCmp}
+          shadowClass={SHADOW_MAP[ui.shadow]}
+          hidden={bubbleOpen && ui.bubble_tooltip_dismiss_on_open}
+          onToggle={() => setBubbleOpen(o => !o)}
+        />
       </div>
 
       {/* 对话面板（缩放显示） */}
@@ -344,6 +337,104 @@ const BubbleMsg: React.FC<BubbleMsgProps> = ({
         ) : null}
       </div>
     </div>
+  );
+};
+
+/** 浮窗气泡 + 旁边招呼语 tooltip（含 orbit 圆弧文字） */
+const BubbleWithTooltip: React.FC<{
+  ui: UiConfig;
+  BubbleIconCmp: LucideIcon;
+  shadowClass: string;
+  hidden: boolean;
+  onToggle: () => void;
+}> = ({ ui, BubbleIconCmp, shadowClass, hidden, onToggle }) => {
+  const tip = ui.bubble_tooltip_text || '';
+  const tipPos = ui.bubble_tooltip_position || 'left';
+  const tipStyle: React.CSSProperties = {
+    color: ui.bubble_tooltip_color || '#1f2937',
+    fontSize: `${ui.bubble_tooltip_font_size || 13}px`,
+    fontWeight: ui.bubble_tooltip_font_weight === 'bold' ? 700 : 400,
+  };
+  const isOrbit = tipPos === 'orbit';
+
+  const bubble = (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        'relative flex h-12 w-12 items-center justify-center text-white transition hover:scale-105',
+        !ui.bubble_transparent && shadowClass,
+      )}
+      style={{
+        backgroundColor:
+          ui.bubble_transparent || ui.bubble_image_url ? 'transparent' : ui.bubble_color,
+        borderRadius: '50%',
+        overflow: 'hidden',
+        color: ui.bubble_transparent ? ui.bubble_color : '#fff',
+      }}
+      title="预览气泡（点击切换面板）"
+    >
+      {ui.bubble_image_url ? (
+        <img src={ui.bubble_image_url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <BubbleIconCmp className="h-5 w-5" strokeWidth={1.75} />
+      )}
+      {/* orbit 模式 tooltip 绝对定位在气泡上方 */}
+      {tip && isOrbit && !hidden ? <OrbitTip text={tip} style={tipStyle} /> : null}
+    </button>
+  );
+
+  if (!tip || isOrbit || hidden) {
+    return tip && isOrbit && hidden ? <div className="opacity-0 transition">{bubble}</div> : bubble;
+  }
+
+  // 直线方向：四向 flex 布局
+  const wrapClass =
+    tipPos === 'left'
+      ? 'flex flex-row-reverse items-center gap-2.5'
+      : tipPos === 'right'
+        ? 'flex flex-row items-center gap-2.5'
+        : tipPos === 'top'
+          ? 'flex flex-col-reverse items-center gap-2'
+          : 'flex flex-col items-center gap-2';
+  return (
+    <div className={cn(wrapClass, 'transition-opacity', hidden && 'opacity-0')}>
+      <div
+        style={tipStyle}
+        className={cn(
+          'whitespace-nowrap rounded-2xl border border-stone-200 bg-white px-3 py-1.5 shadow-md',
+        )}
+      >
+        {tip}
+      </div>
+      {bubble}
+    </div>
+  );
+};
+
+const OrbitTip: React.FC<{ text: string; style: React.CSSProperties }> = ({ text, style }) => {
+  const r = 38;
+  const cx = 24;
+  const cy = 24;
+  const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  return (
+    <svg
+      width={cx * 2 + 8}
+      height={r + 8}
+      viewBox={`0 0 ${cx * 2 + 8} ${r + 8}`}
+      aria-hidden="true"
+      className="pointer-events-none absolute left-1/2 -translate-x-1/2"
+      style={{ bottom: '100%' }}
+    >
+      <defs>
+        <path id="preview-orbit-path" d={path} />
+      </defs>
+      <text style={style}>
+        <textPath href="#preview-orbit-path" startOffset="50%" textAnchor="middle">
+          {text}
+        </textPath>
+      </text>
+    </svg>
   );
 };
 
