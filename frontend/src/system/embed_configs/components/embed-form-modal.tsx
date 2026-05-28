@@ -1120,7 +1120,7 @@ const token = jwt.sign(
   { algorithm: 'HS256', expiresIn: '1h' },
 );
 // script：渲到 data-jwt-token 属性
-// iframe：拼到 src 的 ?jwt= 参数（如 /embed/{key}?jwt=${token}）`;
+// iframe：拼到 src 的 ?jwt= 参数（如 /embed/{key}?jwt=\${token}）`;
 
   return (
     <div className="space-y-3">
