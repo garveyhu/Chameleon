@@ -36,8 +36,8 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.core.models import Agent, ChatSession, EmbedConfig
-from chameleon.core.observe import TraceContext, set_trace_context
+from chameleon.core.models import Agent, ChatSession, EmbedConfig, Model
+from chameleon.core.observe import TraceContext, reset_trace_context, set_trace_context
 from chameleon.core.utils.crypto import get_or_decrypt
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.errors import ProviderError
@@ -823,6 +823,53 @@ async def stream_invoke(
             api_key_id=embed.api_key_id,
             end_user_id=end_user_id,
         )
+
+
+async def suggest_followups_for_embed(
+    session: AsyncSession,
+    *,
+    embed: EmbedConfig,
+    end_user_id: str | None,
+    session_token: str,
+    question: str,
+    answer: str,
+) -> list[str]:
+    """嵌入式 followups —— 推归属模型 + 挂 embed trace + 调 graph generator。
+
+    api 层只做鉴权 + 调本函数；模型推断、trace 编排都在这里完成。
+    """
+    from chameleon.system.graphs import generator as graph_generator
+
+    # 1. 推 model_code：embed.agent_id → Agent.default_model_id → Model.code
+    model_code: str | None = None
+    agent: Agent | None = (
+        await session.get(Agent, embed.agent_id) if embed.agent_id else None
+    )
+    if agent and agent.default_model_id:
+        m = await session.get(Model, agent.default_model_id)
+        if m:
+            model_code = m.code
+
+    # 2. set TraceContext，让 GenerationRecorder 把这次 followups 的 generation
+    #    行归到 embed 应用 而不是兜底的 internal
+    sid = await embed_session.resolve_session_id(session_token)
+    token = set_trace_context(
+        TraceContext(
+            request_id=uuid.uuid4().hex,
+            channel="embed",
+            app_id=getattr(embed, "app_id", None),
+            api_key_id=embed.api_key_id,
+            agent_key=agent.agent_key if agent else None,
+            session_id=sid,
+            end_user_id=end_user_id,
+        )
+    )
+    try:
+        return await graph_generator.suggest_followups(
+            question, answer, model_code=model_code
+        )
+    finally:
+        reset_trace_context(token)
 
 
 def _classify_error_code(exc: Exception) -> int:
