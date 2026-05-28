@@ -133,11 +133,14 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   // 安全
   const [origins, setOrigins] = useState('');
 
-  // 打开 / 切换 initial 时把外部 initial 同步进表单（合法的"开局重置"副作用）
+  // 弹窗刚开时把 tab 归到「基本」；initial 变化（保存后切到编辑模式 / 父组件传新数据）只回填字段，
+  // 不动用户当前正在编辑的 tab —— 否则保存成功后从「外观」跳回「基本」打断 UX。
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    if (open) setTab('basic');
+  }, [open]);
+  useEffect(() => {
     if (!open) return;
-    setTab('basic');
     if (initial) {
       setName(initial.name);
       setDescription(initial.description || '');

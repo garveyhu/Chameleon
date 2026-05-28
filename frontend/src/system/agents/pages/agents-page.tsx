@@ -292,28 +292,35 @@ const EmbedActionModal = ({
     qc.invalidateQueries({ queryKey: ['embed-configs'] });
   };
 
+  // 保存成功后不关弹窗 —— 用内部 state 跟踪当前编辑对象（创建后切到编辑模式 / 更新后回填最新数据）
+  const [liveInitial, setLiveInitial] = useState<EmbedConfigItem | null>(target?.initial ?? null);
+  useEffect(() => {
+    // target 变化（开 / 关 / 切到另一张卡）→ 重置 internal
+    setLiveInitial(target?.initial ?? null);
+  }, [target]);
+
   const createMut = useMutation({
     mutationFn: (req: CreateEmbedConfigRequest) => embedConfigApi.create(req),
-    onSuccess: () => {
+    onSuccess: created => {
       toast.success('嵌入配置已创建');
       invalidate();
-      onClose();
+      setLiveInitial(created); // 切到「编辑模式」，避免再点保存又新建一份
     },
   });
   const updateMut = useMutation({
     mutationFn: (args: { id: EntityId; req: UpdateEmbedConfigRequest }) =>
       embedConfigApi.update(args.id, args.req),
-    onSuccess: () => {
+    onSuccess: updated => {
       toast.success('已保存');
       invalidate();
-      onClose();
+      setLiveInitial(updated); // 回填最新数据，允许连续修改
     },
   });
 
   return (
     <EmbedFormModal
       open={!!target}
-      initial={target?.initial ?? null}
+      initial={liveInitial}
       presetAgentId={target?.agentId ?? null}
       loading={createMut.isPending || updateMut.isPending}
       onClose={onClose}
