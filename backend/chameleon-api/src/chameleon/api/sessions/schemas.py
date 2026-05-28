@@ -42,6 +42,8 @@ class MessageItem(BaseModel):
     parent_message_id: int | None = None
     # 本条消息所属调用的 trace_id（= request_id），widget 反馈按钮按此落 score 表
     request_id: str | None = None
+    # 用户对该消息的反馈：1 = 👍，-1 = 👎，None = 未反馈（按 scores 表 thumbs 反查）
+    feedback: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

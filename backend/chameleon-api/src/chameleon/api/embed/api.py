@@ -265,7 +265,31 @@ async def list_my_session_messages(
         .scalars()
         .all()
     )
-    items = [MessageItem.model_validate(r) for r in rows]
+    # 一次性查 scores 表把 thumbs 反馈合到 message 上（widget 历史回放高亮 👍/👎）
+    from chameleon.core.models import Score
+
+    rids = [r.request_id for r in rows if r.request_id]
+    feedback_map: dict[str, int] = {}
+    if rids:
+        score_rows = (
+            (
+                await session.execute(
+                    select(Score.call_log_id, Score.value)
+                    .where(Score.call_log_id.in_(rids), Score.name == "thumbs")
+                )
+            )
+            .all()
+        )
+        for call_log_id, value in score_rows:
+            if value is not None:
+                feedback_map[call_log_id] = int(value)
+
+    items: list[MessageItem] = []
+    for r in rows:
+        item = MessageItem.model_validate(r)
+        if r.request_id and r.request_id in feedback_map:
+            item.feedback = feedback_map[r.request_id]
+        items.append(item)
     # 顺手把 token 上绑的 sid 切过去（前端续接的核心一步）
     await embed_session.rebind_session_id(session_token, session_id)
     return Result.ok(items)

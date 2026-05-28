@@ -99,7 +99,7 @@ export interface Behavior {
 }
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
-  theme_color: '#2563EB',
+  theme_color: '#6366F1',
   icon_url: null,
   icon_emoji: '🤖',
   title: 'AI 助手',
@@ -107,7 +107,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   greeting: '你好！我是你的 AI 助手，有什么可以帮你的？',
   placeholder: '请输入你的问题…',
   bubble_position: 'right-bottom',
-  bubble_color: '#2563EB',
+  bubble_color: '#6366F1',
   bubble_icon: 'chat',
   bubble_image_url: null,
   bubble_size: 56,
@@ -127,7 +127,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   font_size: 'md',
   panel_width: 400,
   panel_height: 600,
-  header_bg: '#2563EB',
+  header_bg: '#FFFFFF',
   shadow: 'lg',
 };
 

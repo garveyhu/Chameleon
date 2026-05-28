@@ -56,16 +56,30 @@ const isDark = (mode: ThemeMode): boolean => {
   return false;
 };
 
+/** 简易 hex 亮度判断：浅底（如白色）header 文字用深色，深底用白 */
+const isLightHex = (hex: string): boolean => {
+  const m = hex.replace('#', '');
+  if (m.length !== 3 && m.length !== 6) return false;
+  const full = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  // YIQ 亮度
+  return (r * 299 + g * 587 + b * 114) / 1000 > 175;
+};
+
 const resolveTheme = (ui: UiConfig): ResolvedTheme => {
-  const themeColor = ui.theme_color || '#2563EB';
+  const themeColor = ui.theme_color || '#6366F1';
   const bubbleColor = ui.bubble_color || themeColor;
   const headerBg = ui.header_bg || themeColor;
   const dark = isDark(ui.mode || 'light');
+  // header 文字按 header 底色自适应：白/浅底 → 深字（用 paneText），深底 → 白
+  const headerText = isLightHex(headerBg) ? (dark ? '#F1F5F9' : '#111827') : '#FFFFFF';
   return {
     themeColor,
     bubbleColor,
     headerBg,
-    headerText: '#FFFFFF',
+    headerText,
     paneBg: dark ? '#0F172A' : '#FFFFFF',
     paneText: dark ? '#F1F5F9' : '#111827',
     subtleText: dark ? '#94A3B8' : '#6B7280',
@@ -91,7 +105,9 @@ const resolveTheme = (ui: UiConfig): ResolvedTheme => {
 export const buildStyles = (ui: UiConfig): string => {
   const theme = resolveTheme(ui);
   const radius = Math.max(0, Math.min(32, ui.border_radius ?? 12));
-  const bubbleRadius = radius >= 16 ? 16 : 12;
+  // 气泡圆角整体放大，让单角直角（4px）的「指向头像」对比更明显
+  const bubbleRadius = 18;
+  const bubbleTailRadius = 4;
   const font = FONT_PX[ui.font_size ?? 'md'];
   const shadow = SHADOW_CSS[ui.shadow ?? 'lg'];
   const panelW = Math.max(280, Math.min(520, ui.panel_width ?? 400));
@@ -660,13 +676,13 @@ export const buildStyles = (ui: UiConfig): string => {
 .msg.user .bubble-text {
   background: ${theme.userBubble};
   color: ${theme.userBubbleText};
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: ${bubbleTailRadius}px;
 }
 .msg.bot .bubble-text {
   background: ${theme.botBubble};
   color: ${theme.paneText};
   border: 1px solid ${theme.botBubbleBorder};
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: ${bubbleTailRadius}px;
 }
 .msg.error .bubble-text {
   background: ${theme.errorBg};
@@ -752,8 +768,8 @@ export const buildStyles = (ui: UiConfig): string => {
 .composer {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 12px 14px 14px;
   border-top: 1px solid ${theme.borderColor};
   background: ${theme.paneBg};
 }
@@ -762,51 +778,61 @@ export const buildStyles = (ui: UiConfig): string => {
   border: none;
   cursor: pointer;
   color: ${theme.subtleText};
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 50%;
   line-height: 0;
   flex-shrink: 0;
+  transition: background .15s ease, color .15s ease;
 }
-.upload-btn:hover { background: rgba(127,127,127,.12); color: ${theme.paneText}; }
-.upload-btn svg { width: 16px; height: 16px; }
+.upload-btn:hover { background: rgba(127,127,127,.10); color: ${theme.paneText}; }
+.upload-btn svg { width: 17px; height: 17px; }
 
 .composer textarea {
   flex: 1;
   border: 1px solid ${theme.inputBorder};
   background: ${theme.inputBg};
   color: ${theme.paneText};
-  border-radius: 10px;
-  padding: 8px 10px;
+  border-radius: 22px;
+  padding: 10px 16px;
   resize: none;
   font-family: inherit;
   font-size: ${font.panel}px;
-  line-height: 1.45;
+  line-height: 1.5;
   max-height: 110px;
   outline: none;
-  transition: border-color .15s ease;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.04);
+  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.composer textarea:focus { border-color: ${theme.inputFocus}; }
+.composer textarea:focus {
+  border-color: ${theme.inputFocus};
+  box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 14px rgba(15,23,42,.06);
+}
 .composer textarea:disabled { opacity: .5; cursor: not-allowed; }
 
 .send-btn {
   background: ${theme.themeColor};
   color: #fff;
   border: none;
-  border-radius: 10px;
-  width: 36px;
-  height: 36px;
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: opacity .15s ease;
+  box-shadow: 0 2px 6px rgba(99,102,241,.30);
+  transition: opacity .15s ease, transform .12s ease, box-shadow .15s ease;
 }
-.send-btn:disabled { opacity: .45; cursor: not-allowed; }
+.send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 10px rgba(99,102,241,.40);
+}
+.send-btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .send-btn svg { width: 16px; height: 16px; }
 
 .brand {

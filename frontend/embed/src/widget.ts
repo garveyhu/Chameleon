@@ -41,7 +41,7 @@ const DEFAULT_GREETING = '';
 const DEFAULT_PLACEHOLDER = '请输入你的问题…';
 
 const DEFAULT_UI: Required<UiConfig> = {
-  theme_color: '#2563EB',
+  theme_color: '#6366F1',
   icon_url: null,
   icon_emoji: '🤖',
   title: DEFAULT_TITLE,
@@ -49,7 +49,7 @@ const DEFAULT_UI: Required<UiConfig> = {
   greeting: DEFAULT_GREETING,
   placeholder: DEFAULT_PLACEHOLDER,
   bubble_position: 'right-bottom',
-  bubble_color: '#2563EB',
+  bubble_color: '#6366F1',
   bubble_icon: 'chat',
   bubble_image_url: null,
   bubble_size: 56,
@@ -69,7 +69,7 @@ const DEFAULT_UI: Required<UiConfig> = {
   font_size: 'md',
   panel_width: 400,
   panel_height: 600,
-  header_bg: '#2563EB',
+  header_bg: '#FFFFFF',
   shadow: 'lg',
 };
 
@@ -301,6 +301,9 @@ export class ChameleonWidget {
       }
       if (atts.length) attachments = atts;
     }
+    // 后端按 scores.thumbs 反查的历史反馈（1/-1/null）→ widgetMessage.feedback
+    const fb: 1 | -1 | null =
+      m.feedback === 1 ? 1 : m.feedback === -1 ? -1 : null;
     return {
       id: String(m.id ?? this.nextId()),
       role: m.role,
@@ -309,6 +312,7 @@ export class ChameleonWidget {
       attachments,
       // 回填 trace_id（后端 messages 端点透出），让反馈按钮落到原始调用链
       requestId: m.request_id || undefined,
+      feedback: fb,
     };
   }
 

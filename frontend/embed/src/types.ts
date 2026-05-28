@@ -119,6 +119,8 @@ export interface EmbedMessageItem {
   content_blocks?: { type: string; [k: string]: unknown }[];
   /** 本条消息所属调用的 trace_id —— widget 反馈按钮历史回放时按它落 score */
   request_id?: string | null;
+  /** 用户对该消息的历史反馈：1 = 👍，-1 = 👎；后端按 scores 表 thumbs 反查 */
+  feedback?: number | null;
 }
 
 export interface InvokeResponse {
