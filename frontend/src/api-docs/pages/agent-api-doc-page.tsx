@@ -1,11 +1,14 @@
 /** 智能体 API 文档页 —— 独立路由 /api-docs/agent/:agentKey
  *
- * 套用通用 ApiDocTemplate。供应用详情页「API」tab 的「查看 API 文档」跳转；
- * 与编辑器内的 AgentApiDocView 同一套端点说明，但此处按 agent_key 独立成页（本地 / 外部 / 图应用通用）。
+ * Dify 风扁平契约：key 即应用身份，路径不再带 agent_key 占位。
+ * 本地代码 / 外部 / 图应用通用 —— 同一套扁平端点说明。
+ * agent_key 仅作为右上角"绑定到此应用"展示用，不进路径。
  */
-import { useNavigate, useParams } from 'react-router-dom';
+import { BookOpen } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { ApiDocTemplate, type ApiDocSection } from '@/api-docs/components/api-doc-template';
+import { Button } from '@/core/components/ui/button';
 
 export const AgentApiDocPage = () => {
   const { agentKey = '' } = useParams<{ agentKey: string }>();
@@ -18,38 +21,55 @@ export const AgentApiDocPage = () => {
       label: '鉴权',
       desc: (
         <>
-          Service API 使用 API-Key 鉴权，强烈建议存放在后端、勿泄露到客户端。每个请求都在{' '}
+          Service API 用 API-Key 鉴权，强烈建议存放在后端、勿泄露到客户端。每个请求都在{' '}
           <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
             Authorization
           </code>{' '}
-          头携带。密钥为本应用的 <strong>app-</strong> 作用域密钥（在应用详情「API」tab 生成）。
+          头携带。密钥为本应用的 <strong>app-</strong> 作用域密钥（在应用详情「API」tab 生成），
+          key 已绑定到 <code className="font-mono text-[11.5px]">{agentKey}</code>，路径无须再带应用标识。
         </>
       ),
       code: 'Authorization: Bearer app-xxxxxxxxxxxxxxxx',
     },
     {
-      id: 'detail',
-      label: '应用详情',
+      id: 'info',
+      label: '应用信息',
       method: 'GET',
-      path: `/agents/${agentKey}`,
-      desc: '获取该应用的基本信息（名称、类型、是否在线）。',
-      code: `curl '${base}/agents/${agentKey}' \\\n  -H 'Authorization: Bearer {API_KEY}'`,
+      path: '/info',
+      desc: '返当前 key 绑定的应用信息（名称、provider、版本等）—— 用于客户端启动时确认 key 代表什么应用。',
+      code: `curl '${base}/info' \\\n  -H 'Authorization: Bearer {API_KEY}'`,
     },
     {
       id: 'invoke',
-      label: '原生调用',
+      label: '调用应用',
       method: 'POST',
-      path: `/agents/${agentKey}/invoke`,
-      desc: '本平台原生协议，返回 answer / session_id / request_id。',
-      code: `curl -X POST '${base}/agents/${agentKey}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    "input": "你好",\n    "stream": false\n  }'`,
+      path: '/invoke',
+      desc: '统一调用端点。app 作用域 key 自动锁定到绑定的应用；body.stream=true 走 SSE。',
+      code: `curl -X POST '${base}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    "input": "你好",\n    "user": "end-user-id-12345",\n    "session_id": null,\n    "stream": false\n  }'`,
     },
     {
       id: 'stream',
       label: '流式调用 (SSE)',
       method: 'POST',
-      path: `/agents/${agentKey}/invoke`,
+      path: '/invoke',
       desc: '同一端点，body 传 stream:true 即走 SSE。每行 data: {JSON}，末尾 data: [DONE]。',
-      code: `curl -N -X POST '${base}/agents/${agentKey}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{ "input": "你好", "stream": true }'\n\n# 响应（text/event-stream）\ndata: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好", "usage": {...}}\ndata: [DONE]`,
+      code: `curl -N -X POST '${base}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{ "input": "你好", "stream": true, "user": "end-user-id" }'\n\n# 响应（text/event-stream）\ndata: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好", "usage": {...}}\ndata: [DONE]`,
+    },
+    {
+      id: 'sessions',
+      label: '会话列表',
+      method: 'GET',
+      path: '/sessions',
+      desc: '列当前 key 范围内的历史会话；?user= 按终端用户过滤；?page= / ?page_size= 分页。',
+      code: `curl '${base}/sessions?user=end-user-id-12345&page=1&page_size=10' \\\n  -H 'Authorization: Bearer {API_KEY}'`,
+    },
+    {
+      id: 'messages',
+      label: '会话消息',
+      method: 'GET',
+      path: '/sessions/{session_id}/messages',
+      desc: '加载某历史会话的消息列表（按 seq 正序）。',
+      code: `curl '${base}/sessions/sess_xxx/messages' \\\n  -H 'Authorization: Bearer {API_KEY}'`,
     },
     {
       id: 'openai',
@@ -57,7 +77,7 @@ export const AgentApiDocPage = () => {
       method: 'POST',
       path: '/chat/completions',
       desc: '标准 OpenAI 协议，model 传 agent_key。可直接接入 OpenAI SDK / 第三方工具。',
-      code: `curl -X POST '${base}/chat/completions' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    "model": "${agentKey}",\n    "messages": [\n      {"role": "user", "content": "你好"}\n    ],\n    "stream": false\n  }'`,
+      code: `curl -X POST '${base}/chat/completions' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    "model": "${agentKey}",\n    "messages": [\n      {"role": "user", "content": "你好"}\n    ],\n    "user": "end-user-id-12345",\n    "stream": false\n  }'`,
     },
     {
       id: 'files',
@@ -77,12 +97,18 @@ export const AgentApiDocPage = () => {
       onBack={() => navigate(-1)}
       intro={
         <>
-          通过统一对外端点调用本应用（Base URL 见右上角「通用端点」），
-          <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">
-            agent_key = {agentKey}
-          </code>
-          。所有请求在 Header 携带 API Key。
+          用统一扁平端点调用：<strong>key 即应用身份</strong>，路径不再带应用标识。
+          本应用绑定的 key 已锁定到 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">{agentKey}</code>，
+          一个 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11.5px] text-stone-700">Authorization: Bearer</code> 头就够。
         </>
+      }
+      actions={
+        <Button size="sm" variant="ghost" asChild>
+          <Link to="/api-docs?endpoint=invoke">
+            <BookOpen className="mr-1 h-3.5 w-3.5" />
+            文档站
+          </Link>
+        </Button>
       }
     />
   );

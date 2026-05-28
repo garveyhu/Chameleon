@@ -89,6 +89,41 @@ export const DEFAULT_BEHAVIOR: Behavior = {
   streaming: true,
 };
 
+/** 终端用户识别方式（S13 重构） */
+export type IdentificationMode = 'anonymous_device' | 'external_user_id' | 'signed_jwt';
+
+/** 嵌入式会话策略 —— 落 embed_configs.session_policy JSON */
+export interface SessionPolicy {
+  /** 终端用户识别方式 */
+  identification_mode: IdentificationMode;
+  /** signed_jwt 模式用的 HS256 共享密钥（加密存）；其他模式留空 */
+  jwt_signing_secret_encrypted: string | null;
+  /** widget 是否显示历史会话侧栏 */
+  show_history_sidebar: boolean;
+  /** 加载时是否自动续接 localStorage 里的上次会话 */
+  auto_resume_last: boolean;
+  /** 是否允许终端用户改名 / 删除自己的会话 */
+  allow_user_manage: boolean;
+  /** 历史会话列表的时间窗（天） */
+  max_history_days: number;
+}
+
+export const DEFAULT_SESSION_POLICY: SessionPolicy = {
+  identification_mode: 'anonymous_device',
+  jwt_signing_secret_encrypted: null,
+  show_history_sidebar: true,
+  auto_resume_last: true,
+  allow_user_manage: true,
+  max_history_days: 90,
+};
+
+export const mergeSessionPolicy = (
+  raw: Record<string, unknown> | null | undefined,
+): SessionPolicy => ({
+  ...DEFAULT_SESSION_POLICY,
+  ...(raw as Partial<SessionPolicy> | null | undefined),
+});
+
 /** UI / behavior 字段补丁：兼容存量空值 / 部分字段 */
 export const mergeUiConfig = (raw: Record<string, unknown> | null | undefined): UiConfig => ({
   ...DEFAULT_UI_CONFIG,
@@ -108,9 +143,13 @@ export interface EmbedConfigItem {
   name: string;
   description: string | null;
   agent_id: EntityId;
+  /** S13：owner api_key（嵌入流量归属 / 复用 key 限流） */
+  api_key_id: EntityId | null;
   allowed_origins: string[] | null;
   ui_config: Record<string, unknown> | null;
   behavior: Record<string, unknown> | null;
+  /** S13：嵌入式会话策略（识别模式 / 侧栏 / 用户自管理） */
+  session_policy: Record<string, unknown> | null;
   enabled: boolean;
   created_by_user_id: EntityId | null;
   created_at: string;
@@ -121,16 +160,20 @@ export interface CreateEmbedConfigRequest {
   name: string;
   description?: string;
   agent_id: EntityId;
+  api_key_id?: EntityId | null;
   allowed_origins?: string[];
   ui_config?: UiConfig;
   behavior?: Behavior;
+  session_policy?: SessionPolicy;
 }
 
 export interface UpdateEmbedConfigRequest {
   name?: string;
   description?: string;
+  api_key_id?: EntityId | null;
   allowed_origins?: string[];
   ui_config?: UiConfig;
   behavior?: Behavior;
+  session_policy?: SessionPolicy;
   enabled?: boolean;
 }

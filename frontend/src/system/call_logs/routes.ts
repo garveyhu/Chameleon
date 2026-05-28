@@ -12,8 +12,6 @@ const module: ModuleRouteConfig = {
   routes: [
     // 会话 & 运行账本（主入口）
     { path: '/sessions', lazy: loadLedger },
-    // 兼容旧路径：调用日志
-    { path: '/call-logs', lazy: loadLedger },
   ],
 };
 

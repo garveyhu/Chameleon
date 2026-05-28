@@ -1,6 +1,6 @@
 """Phase 3 端到端非流冒烟（注：流式在 Phase 4 加）
 
-链路：admin key → 发 app key → 调 mock-echo agent → 验 session/messages/call_logs
+链路：admin key → 发 app key → POST /v1/invoke 调 mock-echo agent → 验 session/messages/call_logs
 """
 
 from httpx import AsyncClient
@@ -38,21 +38,29 @@ async def test_app_key_cannot_access_admin(client: AsyncClient, app_key: str) ->
 
 
 async def test_list_agents(client: AsyncClient, app_key: str) -> None:
+    """GET /v1/agents 已删除；改为通过 GET /v1/info 验当前 key 绑定的应用信息。
+
+    app_key fixture 发的是 scope_type='global' 的通吃 key，所以 /info 应返
+    scope_type='global'、agent=None，name 字段存在。
+    """
     r = await client.get(
-        "/v1/agents",
+        "/v1/info",
         headers={"Authorization": f"Bearer {app_key}"},
     )
     assert r.status_code == 200
-    keys = {a["key"] for a in r.json()["data"]}
-    assert "mock-echo" in keys
+    body = r.json()
+    assert body["success"]
+    data = body["data"]
+    assert data["scope_type"] == "global"
+    assert "name" in data
 
 
 async def test_invoke_non_stream_str_input(client: AsyncClient, app_key: str) -> None:
     """str input → 自动签发 session + history 走 PG"""
     r = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hello", "stream": False},
+        json={"input": "hello", "stream": False, "agent_key": "mock-echo"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -72,22 +80,27 @@ async def test_invoke_multi_turn_history_replay(
     headers = {"Authorization": f"Bearer {app_key}"}
 
     r1 = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "round1", "stream": False},
+        json={"input": "round1", "stream": False, "agent_key": "mock-echo"},
     )
     sid = r1.json()["data"]["session_id"]
 
     r2 = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "round2", "session_id": sid, "stream": False},
+        json={
+            "input": "round2",
+            "session_id": sid,
+            "stream": False,
+            "agent_key": "mock-echo",
+        },
     )
     assert r2.json()["data"]["session_id"] == sid
     assert r2.json()["data"]["answer"] == "echo: round2"
 
     msgs = await client.get(
-        f"/v1/conversations/{sid}/messages",
+        f"/v1/sessions/{sid}/messages",
         headers=headers,
     )
     items = msgs.json()["data"]["items"]
@@ -104,15 +117,15 @@ async def test_invoke_list_messages_input_no_session_history(
 
     # 先建一轮制造历史
     r1 = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "前置消息", "stream": False},
+        json={"input": "前置消息", "stream": False, "agent_key": "mock-echo"},
     )
     sid = r1.json()["data"]["session_id"]
 
     # 用 list 形式调，应不消费 session 历史
     r2 = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
         json={
             "input": [
@@ -122,6 +135,7 @@ async def test_invoke_list_messages_input_no_session_history(
             ],
             "session_id": sid,
             "stream": False,
+            "agent_key": "mock-echo",
         },
     )
     body = r2.json()
@@ -130,7 +144,7 @@ async def test_invoke_list_messages_input_no_session_history(
 
     # 验证只有最后一条 user 落库了（A10 裁决）
     msgs = await client.get(
-        f"/v1/conversations/{sid}/messages",
+        f"/v1/sessions/{sid}/messages",
         headers=headers,
     )
     items = msgs.json()["data"]["items"]
@@ -146,7 +160,7 @@ async def test_invoke_list_messages_input_no_session_history(
 
 async def test_conversation_not_found(client: AsyncClient, app_key: str) -> None:
     r = await client.get(
-        "/v1/conversations/sess_nonexistent",
+        "/v1/sessions/sess_nonexistent",
         headers={"Authorization": f"Bearer {app_key}"},
     )
     assert r.status_code == 404
@@ -175,14 +189,14 @@ async def test_cross_app_session_isolation(client: AsyncClient) -> None:
     a_key, b_key = a_key_obj.plain_key, b_key_obj.plain_key
 
     r = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {a_key}"},
-        json={"input": "from A", "stream": False},
+        json={"input": "from A", "stream": False, "agent_key": "mock-echo"},
     )
     sid = r.json()["data"]["session_id"]
 
     r_b = await client.get(
-        f"/v1/conversations/{sid}",
+        f"/v1/sessions/{sid}",
         headers={"Authorization": f"Bearer {b_key}"},
     )
     assert r_b.status_code == 404
@@ -197,9 +211,9 @@ async def test_admin_call_logs_filter(
     headers_admin = {"Authorization": f"Bearer {admin_key}"}
 
     invoke_resp = await client.post(
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers_app,
-        json={"input": "trace this", "stream": False},
+        json={"input": "trace this", "stream": False, "agent_key": "mock-echo"},
     )
     rid = invoke_resp.json()["data"]["request_id"]
 
@@ -228,16 +242,21 @@ async def test_session_agent_mismatch_rejected(
     try:
         headers = {"Authorization": f"Bearer {app_key}"}
         r1 = await client.post(
-            "/v1/agents/mock-echo/invoke",
+            "/v1/invoke",
             headers=headers,
-            json={"input": "a", "stream": False},
+            json={"input": "a", "stream": False, "agent_key": "mock-echo"},
         )
         sid = r1.json()["data"]["session_id"]
 
         r2 = await client.post(
-            "/v1/agents/mock-echo-2/invoke",
+            "/v1/invoke",
             headers=headers,
-            json={"input": "b", "session_id": sid, "stream": False},
+            json={
+                "input": "b",
+                "session_id": sid,
+                "stream": False,
+                "agent_key": "mock-echo-2",
+            },
         )
         body = r2.json()
         assert body["success"] is False

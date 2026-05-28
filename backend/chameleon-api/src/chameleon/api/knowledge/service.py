@@ -91,6 +91,12 @@ async def create_kb(
     return KbItem.model_validate(row)
 
 
+async def get_kb(session: AsyncSession, kb_key: str) -> KbItem:
+    """按 kb_key 取 KB 元信息（公开 API `GET /v1/kb` 用）"""
+    row = await _get_kb_by_key(session, kb_key)
+    return KbItem.model_validate(row)
+
+
 async def update_kb(session: AsyncSession, kb_key: str, req: UpdateKbRequest) -> KbItem:
     row = await _get_kb_by_key(session, kb_key)
     if req.name is not None:

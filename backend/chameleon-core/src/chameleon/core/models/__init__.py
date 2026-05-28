@@ -9,7 +9,7 @@ from chameleon.core.models.api_key import ApiKey, CallLog
 from chameleon.core.models.app_template import AppTemplate
 from chameleon.core.models.audit_log import AuditLog
 from chameleon.core.models.base import Base
-from chameleon.core.models.conversation import Conversation, Message
+from chameleon.core.models.session import ChatSession, Message
 from chameleon.core.models.dataset import (
     Dataset,
     DatasetItem,
@@ -60,7 +60,7 @@ __all__ = [
     "Agent",
     "AgentKbLink",
     # 业务域
-    "Conversation",
+    "ChatSession",
     "Message",
     "KbCollection",
     "KbMetadataField",

@@ -40,7 +40,7 @@ graph TB
 
     UI ==>|/v1/admin/*| SYS
     Widget ==>|/v1/embed/*| EMBED
-    SDK ==>|/v1/agents/{key}/invoke| API
+    SDK ==>|/v1/invoke| API
 
     API --> Auth --> DB --> PG
     SYS --> Auth
@@ -71,7 +71,7 @@ chameleon-providers/   Provider 抽象层
 chameleon-agents/      业务 agent 包（namespace 扫描自动注册）
 
 chameleon-api/         对外 AI 业务 API
-  ├ agent/             /v1/agents/{key}/invoke
+  ├ agent/             /v1/invoke
   ├ knowledge/         /v1/knowledge/*
   ├ conversation/      /v1/conversations/*
   ├ task/              /v1/tasks/*

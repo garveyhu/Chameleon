@@ -1,7 +1,7 @@
 /** 知识库密钥管理面板（新建 + 列表 + 掩码/复制）—— 可复用
  *
  * 被「服务 API 弹窗」与「API 文档页 → 管理密钥」共用，避免密钥表三处重复。
- * 密钥为 KB 作用域（kbs- 前缀），仅对该 KB 公开 API /v1/kbs/{kb_key}/* 有效。
+ * 密钥为 KB 作用域（kbs- 前缀），仅对该 KB 公开 API /v1/kb/* 有效（key 已绑定 KB，路径无须再带 kb_key）。
  */
 import { useState } from 'react';
 

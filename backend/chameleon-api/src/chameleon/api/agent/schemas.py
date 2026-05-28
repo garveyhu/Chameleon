@@ -28,6 +28,11 @@ class InvokeRequest(BaseModel):
         ..., description="str → 取 session 历史；list → 客户端自管历史"
     )
     session_id: str | None = Field(None, description="缺省 → 新建会话，响应回显新 ID")
+    user: str | None = Field(
+        None,
+        description="终端用户外部标识（接入方维护的不透明字符串，类似 Dify/OpenAI 协议的 user）。"
+        "用于会话归属、历史隔离、按用户统计计费。",
+    )
     stream: bool = Field(False, description="true → SSE；false → 单次 JSON")
     context: dict[str, Any] = Field(
         default_factory=dict, description="业务上下文（user_id 等）"

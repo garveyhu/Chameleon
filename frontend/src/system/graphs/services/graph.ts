@@ -32,6 +32,8 @@ export interface CreateGraphPayload {
 export interface UpdateGraphPayload {
   name?: string;
   description?: string | null;
+  /** 头像 data URL；空串 = 清除回默认图标 */
+  icon?: string | null;
   kind?: GraphKind;
   spec?: GraphSpec;
   enabled?: boolean;

@@ -16,6 +16,8 @@ export interface AgentItem {
   tags: string[] | null;
   enabled: boolean;
   version: string | null;
+  /** 头像 data URL（null 用默认按类型图标） */
+  icon: string | null;
   created_at: string;
   updated_at: string;
 }

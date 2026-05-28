@@ -52,14 +52,13 @@ class ResultCode(IntEnum):
     # NotFound
     NotFound = 40400  # 通用 404（plugin / workspace / eval_job / registry 等）
     AgentNotFound = 40401
-    ConversationNotFound = 40402
+    SessionNotFound = 40402
     KnowledgeBaseNotFound = 40403
     DocumentNotFound = 40404
     TaskNotFound = 40405
 
     # 限流 / 配额
     AppRateLimit = 42901
-    WorkspaceQuotaExceeded = 42902
 
     # 5xxxx - 服务端
     InternalError = 50001
@@ -100,11 +99,10 @@ _CODE_MESSAGES: dict[ResultCode, str] = {
     ResultCode.AdminScopeRequired: "需要 admin 权限",
     ResultCode.AgentNotInScope: "无权访问该 agent",
     ResultCode.KbNotInScope: "无权访问该知识库",
-    ResultCode.WorkspaceQuotaExceeded: "workspace 配额已用尽",
     ResultCode.PermissionDenied: "权限不足",
     ResultCode.NotFound: "资源不存在",
     ResultCode.AgentNotFound: "agent 不存在",
-    ResultCode.ConversationNotFound: "会话不存在",
+    ResultCode.SessionNotFound: "会话不存在",
     ResultCode.KnowledgeBaseNotFound: "知识库不存在",
     ResultCode.DocumentNotFound: "文档不存在",
     ResultCode.TaskNotFound: "任务不存在",
@@ -193,8 +191,8 @@ class AgentNotFoundError(NotFoundError):
     code = ResultCode.AgentNotFound
 
 
-class ConversationNotFoundError(NotFoundError):
-    code = ResultCode.ConversationNotFound
+class ChatSessionNotFoundError(NotFoundError):
+    code = ResultCode.SessionNotFound
 
 
 class KnowledgeBaseNotFoundError(NotFoundError):

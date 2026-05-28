@@ -71,9 +71,9 @@ async def test_stream_all_event_types(stream_client: AsyncClient, app_key: str) 
     """mock provider 应 emit step + delta×2 + metadata + done"""
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hi", "stream": True},
+        json={"input": "hi", "stream": True, "agent_key": "mock-echo"},
     ) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
@@ -99,9 +99,9 @@ async def test_stream_multi_turn_history_replay(
 
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "round1", "stream": True},
+        json={"input": "round1", "stream": True, "agent_key": "mock-echo"},
     ) as r:
         body1 = "".join([c async for c in r.aiter_text()])
     events1 = _parse_sse(body1)
@@ -110,9 +110,14 @@ async def test_stream_multi_turn_history_replay(
 
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "round2", "session_id": sid, "stream": True},
+        json={
+            "input": "round2",
+            "session_id": sid,
+            "stream": True,
+            "agent_key": "mock-echo",
+        },
     ) as r:
         body2 = "".join([c async for c in r.aiter_text()])
     events2 = _parse_sse(body2)
@@ -120,7 +125,7 @@ async def test_stream_multi_turn_history_replay(
 
     # /messages 应该有 4 条（2 轮 user + assistant）
     msgs = await stream_client.get(
-        f"/v1/conversations/{sid}/messages",
+        f"/v1/sessions/{sid}/messages",
         headers=headers,
     )
     contents = [m["content"] for m in msgs.json()["data"]["items"]]
@@ -141,9 +146,9 @@ async def test_stream_list_messages_input_no_session_history(
     # 先建一轮制造历史
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "前置", "stream": True},
+        json={"input": "前置", "stream": True, "agent_key": "mock-echo"},
     ) as r:
         body1 = "".join([c async for c in r.aiter_text()])
     sid = _parse_sse(body1)
@@ -151,7 +156,7 @@ async def test_stream_list_messages_input_no_session_history(
 
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers=headers,
         json={
             "input": [
@@ -161,6 +166,7 @@ async def test_stream_list_messages_input_no_session_history(
             ],
             "session_id": sid,
             "stream": True,
+            "agent_key": "mock-echo",
         },
     ) as r:
         body2 = "".join([c async for c in r.aiter_text()])
@@ -169,7 +175,7 @@ async def test_stream_list_messages_input_no_session_history(
     assert text == "echo: 当前轮"
 
     msgs = await stream_client.get(
-        f"/v1/conversations/{sid}/messages",
+        f"/v1/sessions/{sid}/messages",
         headers=headers,
     )
     contents = [m["content"] for m in msgs.json()["data"]["items"]]
@@ -215,9 +221,9 @@ async def test_stream_provider_failure_emits_error_no_assistant_msg(
 
     async with stream_client.stream(
         "POST",
-        "/v1/agents/fail-agent/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "trigger fail", "stream": True},
+        json={"input": "trigger fail", "stream": True, "agent_key": "fail-agent"},
     ) as r:
         body = "".join([c async for c in r.aiter_text()])
     events = _parse_sse(body)
@@ -228,7 +234,7 @@ async def test_stream_provider_failure_emits_error_no_assistant_msg(
 
     # 找 session_id：error 事件没带，从 conversation 列表查最新的
     convs = await stream_client.get(
-        "/v1/conversations?agent_key=fail-agent",
+        "/v1/sessions?agent_key=fail-agent",
         headers=headers,
     )
     items = convs.json()["data"]["items"]
@@ -236,7 +242,7 @@ async def test_stream_provider_failure_emits_error_no_assistant_msg(
     sid = items[0]["session_id"]
 
     msgs = await stream_client.get(
-        f"/v1/conversations/{sid}/messages",
+        f"/v1/sessions/{sid}/messages",
         headers=headers,
     )
     contents = [m["content"] for m in msgs.json()["data"]["items"]]
@@ -255,9 +261,9 @@ async def test_stream_failure_recorded_in_call_logs(
 
     async with stream_client.stream(
         "POST",
-        "/v1/agents/fail-agent/invoke",
+        "/v1/invoke",
         headers=headers,
-        json={"input": "x", "stream": True},
+        json={"input": "x", "stream": True, "agent_key": "fail-agent"},
     ) as r:
         async for _ in r.aiter_text():
             pass
@@ -286,9 +292,9 @@ async def test_done_event_data_is_complete_invoke_result(
     """done event 的 data 字段应与非流模式响应同源（A 设计）"""
     async with stream_client.stream(
         "POST",
-        "/v1/agents/mock-echo/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "compat-test", "stream": True},
+        json={"input": "compat-test", "stream": True, "agent_key": "mock-echo"},
     ) as r:
         body = "".join([c async for c in r.aiter_text()])
     events = _parse_sse(body)

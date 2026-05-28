@@ -87,7 +87,7 @@ from chameleon.core.models import (
     ApiKey,
     CallLog,
     Chunk,
-    Conversation,
+    ChatSession,
     Document,
     KnowledgeBase,
     Message,
@@ -266,7 +266,7 @@ async def _cleanup() -> AsyncIterator[None]:
         await s.execute(delete(KnowledgeBase).where(KnowledgeBase.kb_key.like("e2e-%")))
         await s.execute(delete(Task))
         await s.execute(delete(Message))
-        await s.execute(delete(Conversation))
+        await s.execute(delete(ChatSession))
         await s.execute(delete(CallLog))
         await s.execute(delete(ApiKey).where(ApiKey.app_id.like("e2e-%")))
         await s.commit()

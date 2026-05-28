@@ -1,5 +1,9 @@
+import { createElement } from 'react';
+import { Navigate } from 'react-router-dom';
+
 import type { ModuleRouteConfig } from '@/core/types/router';
 
+/** /embed-configs 旧列表入口 —— 嵌入已并入「应用」卡片操作/详情，重定向到应用库 */
 const module: ModuleRouteConfig = {
   moduleId: 'embed_configs',
   parentPath: '/',
@@ -7,10 +11,7 @@ const module: ModuleRouteConfig = {
   routes: [
     {
       path: '/embed-configs',
-      lazy: async () => {
-        const m = await import('@/system/embed_configs/pages/embed-configs-page');
-        return { Component: m.EmbedConfigsPage };
-      },
+      Component: () => createElement(Navigate, { to: '/agents', replace: true }),
     },
   ],
 };

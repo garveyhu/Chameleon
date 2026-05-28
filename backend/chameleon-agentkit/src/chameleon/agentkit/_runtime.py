@@ -117,7 +117,7 @@ class AgentRun:
         """高层糖：一次性出文本，自动 generation span + usage。"""
         chat = self._t.chat_model(slot=None if model else slot, model=model)
         msgs = self._build_messages(system, user, context)
-        async with self._t.span("llm.complete", type="generation"):
+        async with self._t.span("llm.complete", type="span"):
             resp = await chat.ainvoke(msgs, **kw)
         return _content_to_text(resp)
 
@@ -134,7 +134,7 @@ class AgentRun:
         """高层糖：流式出文本（逐增量 yield），自动 span + usage。"""
         chat = self._t.chat_model(slot=None if model else slot, model=model)
         msgs = self._build_messages(system, user, context)
-        async with self._t.span("llm.stream", type="generation"):
+        async with self._t.span("llm.stream", type="span"):
             async for chunk in chat.astream(msgs, **kw):
                 text = _content_to_text(chunk)
                 if text:

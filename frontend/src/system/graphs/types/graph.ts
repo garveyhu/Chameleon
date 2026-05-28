@@ -48,6 +48,8 @@ export interface GraphItem {
   graph_key: string;
   name: string;
   description: string | null;
+  /** 头像 data URL（null 用默认按类型图标） */
+  icon: string | null;
   kind: GraphKind;
   schema_version: number;
   enabled: boolean;

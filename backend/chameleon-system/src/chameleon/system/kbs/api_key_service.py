@@ -1,7 +1,7 @@
 """知识库作用域 API 密钥 CRUD
 
 scope_type='kb'、scope_ref=kb_key，前缀 kbs-。仅对该知识库的公开 API
-（/v1/kbs/{kb_key}/...）有效；应用级密钥（scope_type=app）通吃。复用通用
+（/v1/kb/* —— key 即 KB 身份）有效；全局密钥（scope_type=global）通吃。复用通用
 api_key 服务，仅在此封装「按 KB 归属」的增列改。
 """
 

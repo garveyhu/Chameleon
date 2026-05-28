@@ -136,6 +136,45 @@ async def revoke_api_key(session: AsyncSession, key_id: int) -> ApiKeyItem:
 # ── call_log helpers（被 agent 模块使用） ─────────────────
 
 
+async def aggregate_generation_usage(
+    session: AsyncSession, parent_request_id: str
+) -> tuple[int | None, int | None, int | None]:
+    """汇总某 trace 下所有 generation 子行的 token 用量。
+
+    用于 provider 自身没透出 usage（比如图引擎下的多个 LLMNode）时，从
+    BaseLLM 回调写下的 generation call_log 行反向聚合，填回 InvokeResult.usage。
+
+    Returns:
+        (prompt_tokens, completion_tokens, total_tokens)；零结果或全 NULL 时
+        各项为 None（保持 InvokeResult.usage=None 的语义而非给 0）。
+    """
+    from sqlalchemy import func, select
+
+    from chameleon.core.models import CallLog
+
+    row = (
+        await session.execute(
+            select(
+                func.sum(CallLog.prompt_tokens),
+                func.sum(CallLog.completion_tokens),
+                func.sum(CallLog.total_tokens),
+            ).where(
+                CallLog.parent_id == parent_request_id,
+                CallLog.observation_type == "generation",
+            )
+        )
+    ).one()
+    p, c, t = row
+    if p is None and c is None and t is None:
+        return None, None, None
+    # 缺 total 用 p+c 兜底（流式 usage_metadata 偶尔不带 total）
+    if t is None and (p is not None or c is not None):
+        t = (p or 0) + (c or 0)
+    return (int(p) if p is not None else None,
+            int(c) if c is not None else None,
+            int(t) if t is not None else None)
+
+
 async def record_call(
     session: AsyncSession,
     *,
@@ -165,6 +204,9 @@ async def record_call(
     user_id: int | None = None,
     # 会话账本：调用来源渠道（api/openai/embed/playground/internal）
     channel: str | None = None,
+    # S5 重构：归属冗余（每条 call_log 都能直接按 key / 终端用户聚合，免 join）
+    api_key_id: int | None = None,
+    end_user_id: str | None = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -199,8 +241,10 @@ async def record_call(
         request_id=request_id,
         app_id=app_id,
         agent_key=agent_key,
+        api_key_id=api_key_id,
         session_id=session_id,
         user_id=user_id,
+        end_user_id=end_user_id,
         model_code=model_code,
         channel=channel,
         stream=stream,

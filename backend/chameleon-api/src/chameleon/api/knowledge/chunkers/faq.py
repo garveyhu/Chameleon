@@ -6,8 +6,8 @@
 ## Q: 如何重置密码？
 点击右上角头像 → 设置 → 修改密码。
 
-## Q: 我能跨 workspace 共享 agent 吗？
-不能。Agent 归属当前 workspace。
+## Q: 我能跨应用复用知识库吗？
+能。在应用详情『关联 KB』tab 选这个知识库。
 ```
 
 每个 `## Q:` 段一个 chunk：content = Q + A，qa_question = Q（用于 BM25 + 显示）。

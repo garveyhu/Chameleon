@@ -1,12 +1,26 @@
 """Observation contextvar + 嵌套上下文管理器
 
-设计：
-- ContextVar 保存当前 "active observation id"（即 call_log.request_id）
-- async with observe(...) 进入时：把传入 / 生成的 id 写入 ContextVar；
-  自动从 ContextVar 取上一级当 parent_id
-- 退出时恢复上一级 ContextVar（栈式语义）
+S4 重构：双 ContextVar 结构
 
-这套机制让"嵌套调用"不需要业务侧到处手传 parent_id。
+1. `_CURRENT_TRACE` —— 请求级 `TraceContext`，由入口（agent.invoke / embed /
+   openai / agentkit transport / KB ingest）开 scope 时一次性写入。携带：
+   request_id / app_id / api_key_id / channel / agent_key / session_id /
+   end_user_id —— 用于 generation 回调写 call_logs 时的归属冗余。
+
+2. `_CURRENT_OBS_ID` —— 嵌套观测的 parent_id 链（沿用原行为）。`observe(...)`
+   每次进入一个嵌套段时把当前 id 入栈，退出复位；observe 自动从 contextvar
+   读 parent 完成嵌套。
+
+设计要点：
+- TraceContext 在请求生命周期内**不变**；ObservationContext 是 per-span 的，
+  会嵌套。LangChain BaseLLM 回调（GenerationRecorder）触发时同时读两个：
+  parent_id 从 _CURRENT_OBS_ID 拿，归属字段从 TraceContext 拿。
+- 凡是没开 trace scope 的路径（如 KB 摄入裸调 resolve_llm），TraceContext
+  为 None；GenerationRecorder 兜底落 `channel='internal'` 独立行。
+- 与之前的 SpanRecorder（utils/spans.py）配套使用：SpanRecorder 用于在请求
+  内累计 timing 打点（dump 到 root call_log.spans JSON）；TraceContext 用于
+  跨 call_log 行（root + generation 子行）的归属冗余字段。S7/S8 会把
+  SpanRecorder 也下沉到 ContextVar。
 """
 
 from __future__ import annotations
@@ -14,6 +28,7 @@ from __future__ import annotations
 import uuid
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -46,7 +61,73 @@ class ObservationType(StrEnum):
     GUARDRAIL = "guardrail"
 
 
-# ── contextvar ─────────────────────────────────────────────
+# ── TraceContext：请求级归属上下文 ────────────────────────────
+
+
+@dataclass(frozen=True)
+class TraceContext:
+    """请求级归属上下文（一次请求只 set 一次，整段生命周期内不变）
+
+    入口处用 `open_trace_scope(...)` 写入；嵌套子观测从同一个 ContextVar 读
+    （ContextVar 在 asyncio 任务间会自动 copy-on-write 传播）。
+    """
+
+    request_id: str
+    channel: str = "api"  # api / openai / embed / playground / internal
+    app_id: str | None = None
+    api_key_id: int | None = None
+    agent_key: str | None = None
+    session_id: str | None = None
+    end_user_id: str | None = None
+    user_id: int | None = None  # 后台操作者（admin / playground），与 end_user_id 区分
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+_CURRENT_TRACE: ContextVar[TraceContext | None] = ContextVar(
+    "current_trace_context", default=None
+)
+
+
+def current_trace_context() -> TraceContext | None:
+    """读取当前请求级 TraceContext（无 scope 时返 None，调用方应有兜底）"""
+    return _CURRENT_TRACE.get()
+
+
+@asynccontextmanager
+async def open_trace_scope(ctx: TraceContext):
+    """请求入口处开 trace scope；退出复位
+
+    用法（agent.service / embed / openai / ...）：
+        async with open_trace_scope(TraceContext(request_id=..., ...)):
+            ... 业务逻辑 ...
+            # 此期间任何 BaseLLM.ainvoke() 触发的 on_llm_end 都能读到 ctx
+    """
+    token: Token = _CURRENT_TRACE.set(ctx)
+    try:
+        yield ctx
+    finally:
+        _CURRENT_TRACE.reset(token)
+
+
+def set_trace_context(ctx: TraceContext) -> Token:
+    """非缩进式 set；与 reset_trace_context 配对用 try/finally 控制生命周期。
+
+    用于不愿因 `async with` 改一大段缩进的入口（如 agent.invoke）：
+
+        token = set_trace_context(TraceContext(...))
+        try:
+            ... 大段业务逻辑保持原缩进 ...
+        finally:
+            reset_trace_context(token)
+    """
+    return _CURRENT_TRACE.set(ctx)
+
+
+def reset_trace_context(token: Token) -> None:
+    _CURRENT_TRACE.reset(token)
+
+
+# ── ObservationContext：嵌套观测段 ───────────────────────────
 
 
 _CURRENT_OBS_ID: ContextVar[str | None] = ContextVar(
@@ -55,11 +136,8 @@ _CURRENT_OBS_ID: ContextVar[str | None] = ContextVar(
 
 
 def current_observation_id() -> str | None:
-    """读取当前激活的 observation id（即 call_log.request_id）"""
+    """读取当前激活的 observation id（即嵌套链最深一层的 request_id/span_id）"""
     return _CURRENT_OBS_ID.get()
-
-
-# ── 上下文模型 ─────────────────────────────────────────────
 
 
 class ObservationContext(BaseModel):
@@ -74,9 +152,6 @@ class ObservationContext(BaseModel):
     observation_type: str = Field(default=ObservationType.GENERATION.value)
     name: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
-
-
-# ── 嵌套上下文管理器 ───────────────────────────────────────
 
 
 @asynccontextmanager

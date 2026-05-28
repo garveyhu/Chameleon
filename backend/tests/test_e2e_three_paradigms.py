@@ -4,7 +4,7 @@
 - example-echo-langgraph（BaseAgent + LangGraph CompiledGraph） —— 范式 A
 - example-echo-runnable（BaseAgent + LangChain Runnable） —— 范式 C
 - example-echo-native（BaseAgent + 纯 Python） —— 范式 B
-三种范式通过同一统一接口 POST /v1/agents/{key}/invoke 调用，对客户端完全透明。
+三种范式通过同一统一接口 POST /v1/invoke 调用，对客户端完全透明。
 """
 
 import json
@@ -55,9 +55,9 @@ async def stream_client() -> AsyncIterator[AsyncClient]:
 
 async def test_echo_native_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/example-echo-native/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hi", "stream": False},
+        json={"input": "hi", "stream": False, "agent_key": "example-echo-native"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -73,9 +73,9 @@ async def test_echo_native_non_stream(client: AsyncClient, app_key: str) -> None
 async def test_echo_native_stream(stream_client: AsyncClient, app_key: str) -> None:
     async with stream_client.stream(
         "POST",
-        "/v1/agents/example-echo-native/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "world", "stream": True},
+        json={"input": "world", "stream": True, "agent_key": "example-echo-native"},
     ) as r:
         assert r.status_code == 200
         body = "".join([c async for c in r.aiter_text()])
@@ -94,9 +94,9 @@ async def test_echo_native_stream(stream_client: AsyncClient, app_key: str) -> N
 
 async def test_echo_runnable_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/example-echo-runnable/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "abc", "stream": False},
+        json={"input": "abc", "stream": False, "agent_key": "example-echo-runnable"},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -108,9 +108,9 @@ async def test_echo_runnable_non_stream(client: AsyncClient, app_key: str) -> No
 async def test_echo_runnable_stream(stream_client: AsyncClient, app_key: str) -> None:
     async with stream_client.stream(
         "POST",
-        "/v1/agents/example-echo-runnable/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "lcel", "stream": True},
+        json={"input": "lcel", "stream": True, "agent_key": "example-echo-runnable"},
     ) as r:
         assert r.status_code == 200
         body = "".join([c async for c in r.aiter_text()])
@@ -137,9 +137,9 @@ async def test_three_paradigms_uniform_interface(
         "example-echo-runnable",
     ):
         r = await client.post(
-            f"/v1/agents/{key}/invoke",
+            "/v1/invoke",
             headers=headers,
-            json={"input": "uniform", "stream": False},
+            json={"input": "uniform", "stream": False, "agent_key": key},
         )
         assert r.status_code == 200, f"{key}: {r.text}"
         data = r.json()["data"]

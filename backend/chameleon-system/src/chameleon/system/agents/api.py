@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -26,7 +26,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent, ApiKey, CallLog, Graph
+from chameleon.core.models import Agent, ApiKey, CallLog, EmbedConfig, Graph
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service
 from chameleon.system.api_key import service as api_key_service
@@ -61,6 +61,7 @@ class AgentItem(BaseModel):
     tags: list | None = None
     enabled: bool
     version: str | None = None
+    icon: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -82,6 +83,8 @@ class UpdateAgentRequest(BaseModel):
     default_model_id: int | None = None
     tags: list | None = None
     version: str | None = None
+    # 头像 data URL；传空串 = 清除回默认图标
+    icon: str | None = None
 
 
 class TestInvokeRequest(BaseModel):
@@ -246,6 +249,8 @@ async def update_agent(
         a.tags = req.tags
     if req.version is not None:
         a.version = req.version
+    if req.icon is not None:
+        a.icon = req.icon or None  # 空串 = 清除回默认图标
     item = await _serialize_and_commit(session, a)
     await write_audit_log(
         session,
@@ -272,9 +277,27 @@ async def delete_agent(
     a = await _get_or_404(session, agent_id)
     if a.source == "local":
         raise ValidationError(message="本地 agent 不可删除（仅可 disable）")
-    before = {"agent_key": a.agent_key, "name": a.name}
-    a.deleted_at = datetime.now(timezone.utc)
-    a.agent_key = f"__deleted_{a.id}_{a.agent_key}"
+    original_key = a.agent_key
+    before = {"agent_key": original_key, "name": a.name}
+    now = datetime.now(timezone.utc)
+    # 级联：撤销该应用的 API 密钥（scope=app / scope_ref=agent_key）+ 软删其嵌入配置；
+    # 调用日志 / Trace 作为历史留存，不删。
+    await session.execute(
+        update(ApiKey)
+        .where(
+            ApiKey.scope_type == "app",
+            ApiKey.scope_ref == original_key,
+            ApiKey.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    await session.execute(
+        update(EmbedConfig)
+        .where(EmbedConfig.agent_id == a.id, EmbedConfig.deleted_at.is_(None))
+        .values(deleted_at=now)
+    )
+    a.deleted_at = now
+    a.agent_key = f"__deleted_{a.id}_{original_key}"
     await session.flush()
     await session.commit()
     await reload_agent_registry()

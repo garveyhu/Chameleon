@@ -47,7 +47,7 @@
 ### 普通 invoke
 
 ```
-client → /v1/agents/{key}/invoke
+client → /v1/invoke
    → chameleon-api/agent/service.invoke()
       ① AGENTS.get(key) → AgentDef
       ② conv_service.create / get + history load

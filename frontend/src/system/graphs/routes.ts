@@ -1,6 +1,9 @@
+import { createElement } from 'react';
+import { Navigate } from 'react-router-dom';
+
 import type { ModuleRouteConfig } from '@/core/types/router';
 
-/** 工作流列表 —— 挂在后台壳（MainLayout）内 */
+/** /graphs 旧列表入口 —— 工作流已并入「应用」卡片库，重定向过去 */
 const listModule: ModuleRouteConfig = {
   moduleId: 'graphs',
   parentPath: '/',
@@ -8,10 +11,7 @@ const listModule: ModuleRouteConfig = {
   routes: [
     {
       path: '/graphs',
-      lazy: async () => {
-        const m = await import('@/system/graphs/pages/graphs-page');
-        return { Component: m.GraphsPage };
-      },
+      Component: () => createElement(Navigate, { to: '/agents', replace: true }),
     },
   ],
 };

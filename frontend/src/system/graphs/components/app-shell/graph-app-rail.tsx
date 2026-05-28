@@ -22,7 +22,6 @@ import {
   type LucideIcon,
   MessageSquare,
   Rocket,
-  ScrollText,
   Server,
   Settings,
   Workflow,
@@ -40,12 +39,12 @@ import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/graph';
 
-export type EditorTab = 'orchestrate' | 'api' | 'logs' | 'monitor';
+export type EditorTab = 'orchestrate' | 'api' | 'monitor';
 
 // 访问 API 不在二级导航——由下方「后端服务 API」卡片的「API 文档」入口覆盖
+// 日志已并入「监测」（监测视图内两个子 tab：日志 / 监测）
 const NAV: { key: EditorTab; label: string; icon: LucideIcon }[] = [
   { key: 'orchestrate', label: '编排', icon: Layers },
-  { key: 'logs', label: '日志', icon: ScrollText },
   { key: 'monitor', label: '监测', icon: Activity },
 ];
 
@@ -146,7 +145,7 @@ export const GraphAppRail = ({
           <button
             type="button"
             onClick={onReturn}
-            title="返回工作流"
+            title="返回应用"
             className="rounded-md p-2 text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -206,7 +205,7 @@ export const GraphAppRail = ({
               className="inline-flex items-center gap-1 text-[11.5px] text-stone-500 transition hover:text-stone-800"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
-              返回工作流
+              返回应用
             </button>
             <button
               type="button"

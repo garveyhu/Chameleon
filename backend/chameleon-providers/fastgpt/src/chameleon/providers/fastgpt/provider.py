@@ -34,31 +34,19 @@ class FastGPTProvider(Provider):
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         cfg = ctx.agent_def.config
 
-        # P17.A2: 优先 channel_override（矩阵路由），fallback 老 agent.config 路径
-        if ctx.channel_override is not None:
-            endpoint = ctx.channel_override.base_url or cfg.get("endpoint")
-            api_key = ctx.channel_override.api_key
-            if not endpoint or not api_key:
-                raise ProviderConfigError(
-                    message=(
-                        f"fastgpt channel #{ctx.channel_override.channel_id} 缺 "
-                        "base_url / api_key（请在 admin /channels 配置）"
-                    )
+        endpoint = cfg.get("endpoint")
+        api_key_env = cfg.get("api_key_env")
+        if not endpoint or not api_key_env:
+            raise ProviderConfigError(
+                message=(
+                    f"fastgpt agent {ctx.agent_def.key} missing endpoint / api_key_env"
                 )
-        else:
-            endpoint = cfg.get("endpoint")
-            api_key_env = cfg.get("api_key_env")
-            if not endpoint or not api_key_env:
-                raise ProviderConfigError(
-                    message=(
-                        f"fastgpt agent {ctx.agent_def.key} missing endpoint / api_key_env"
-                    )
-                )
-            api_key = os.environ.get(api_key_env)
-            if not api_key:
-                raise ProviderConfigError(
-                    message=f"env {api_key_env} not set for agent {ctx.agent_def.key}"
-                )
+            )
+        api_key = os.environ.get(api_key_env)
+        if not api_key:
+            raise ProviderConfigError(
+                message=f"env {api_key_env} not set for agent {ctx.agent_def.key}"
+            )
 
         timeout_ms = inventory.provider_timeout_ms("fastgpt")
         client = FastGPTClient(endpoint, api_key, timeout=timeout_ms / 1000)

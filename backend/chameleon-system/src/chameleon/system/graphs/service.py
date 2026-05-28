@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -113,6 +113,8 @@ async def update_graph(
         row.name = req.name
     if req.description is not None:
         row.description = req.description
+    if req.icon is not None:
+        row.icon = req.icon or None  # 空串 = 清除回默认图标
     if req.kind is not None:
         row.kind = req.kind
     if req.spec is not None:
@@ -128,11 +130,51 @@ async def update_graph(
 
 
 async def delete_graph(session: AsyncSession, graph_id: int) -> None:
-    """软删 —— graph_runs 历史保留（cascade 不触发，因为软删不删行）"""
+    """软删工作流 + 级联清理其发布出的应用
+
+    级联：本图发布的应用（agents.source='graph'）软删 + 撤销其 API 密钥
+    + 软删其嵌入配置。graph_runs / call_logs 历史保留（软删不删行）。
+    """
     row = await _load(session, graph_id)
-    row.deleted_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    linked_agents = (
+        (
+            await session.execute(
+                select(Agent).where(
+                    Agent.graph_id == graph_id, Agent.deleted_at.is_(None)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for ag in linked_agents:
+        await session.execute(
+            update(ApiKey)
+            .where(
+                ApiKey.scope_type == "app",
+                ApiKey.scope_ref == ag.agent_key,
+                ApiKey.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
+        )
+        await session.execute(
+            update(EmbedConfig)
+            .where(EmbedConfig.agent_id == ag.id, EmbedConfig.deleted_at.is_(None))
+            .values(deleted_at=now)
+        )
+        ag.deleted_at = now
+        ag.agent_key = f"__deleted_{ag.id}_{ag.agent_key}"
+
+    row.deleted_at = now
     await session.flush()
     await session.commit()
+
+    if linked_agents:
+        from chameleon.providers.base import reload_agent_registry
+
+        await reload_agent_registry()
 
 
 async def publish_graph(
@@ -169,7 +211,7 @@ async def publish_as_agent(
 
     - 若未发布则先 freeze published_spec；
     - upsert 一个 graph-backed Agent（按 graph_id 找已有，否则以 graph_key 为 agent_key 新建）；
-    - reload agent registry，使其立即可从统一端点 /v1/agents/{key}/invoke 调用。
+    - reload agent registry，使其立即可从统一端点 /v1/invoke 调用。
     """
     import copy
 

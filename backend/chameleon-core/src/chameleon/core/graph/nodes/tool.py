@@ -30,7 +30,6 @@ from chameleon.core.graph.registry import register_node_type
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import ToolInstance
 from chameleon.core.tools import (
-    Tool,
     ToolContext,
     ToolResult,
     get_tool_class,
@@ -60,7 +59,7 @@ async def run_tool(
     ToolNode 与 LLMNode 的多轮 tool_call 循环（A2）共用此入口，避免逻辑分叉。
 
     流程：get_tool_class → 查 tool_instances admin config（含 enabled 闸门）→
-    实例化 → run_with_validation（真 Tool）或 run（老 duck-typed）。
+    实例化 → run_with_validation（按 parameters_schema 校验入参）。
 
     Args:
         tool_key: 注册的 tool key
@@ -71,8 +70,7 @@ async def run_tool(
         config_override: 覆盖 admin config 的同名字段（spec.data.config）
 
     Returns:
-        真 Tool：{tool_key, ok, data, error, meta}
-        老 Tool：{tool_key, result}
+        {tool_key, ok, data, error, meta}
         admin 禁用：{tool_key, ok: False, error: "...被 admin 禁用", meta}
     """
     tool_cls = get_tool_class(tool_key)
@@ -82,28 +80,21 @@ async def run_tool(
         )
 
     config: dict[str, Any] = {}
-    if _is_real_tool(tool_cls):
-        inst = await _load_tool_instance(tool_key)
-        if inst is not None and not inst.enabled:
-            return {
-                "tool_key": tool_key,
-                "ok": False,
-                "data": None,
-                "error": f"tool {tool_key!r} 被 admin 禁用",
-                "meta": {"instance_id": inst.id},
-            }
-        if inst is not None:
-            config = inst.config or {}
-        if config_override:
-            config = {**config, **config_override}
-    else:
-        config = config_override or {}
+    inst = await _load_tool_instance(tool_key)
+    if inst is not None and not inst.enabled:
+        return {
+            "tool_key": tool_key,
+            "ok": False,
+            "data": None,
+            "error": f"tool {tool_key!r} 被 admin 禁用",
+            "meta": {"instance_id": inst.id},
+        }
+    if inst is not None:
+        config = inst.config or {}
+    if config_override:
+        config = {**config, **config_override}
 
-    # 实例化兼容两种形态：真 Tool 子类 / 老 duck-typed 类
-    try:
-        tool = tool_cls(config) if _is_real_tool(tool_cls) else tool_cls()
-    except TypeError:
-        tool = tool_cls()
+    tool = tool_cls(config)
 
     tool_ctx = ToolContext(
         caller=caller,
@@ -111,19 +102,14 @@ async def run_tool(
         extra=extra or {},
     )
 
-    if _is_real_tool(tool_cls):
-        result = await tool.run_with_validation(args, tool_ctx)
-        return {
-            "tool_key": tool_key,
-            "ok": result.ok,
-            "data": result.data,
-            "error": result.error,
-            "meta": result.meta,
-        }
-
-    # 兼容老 duck-typed Tool：直接调 run，结果整体返回
-    legacy = await tool.run(args, tool_ctx)
-    return {"tool_key": tool_key, "result": legacy}
+    result = await tool.run_with_validation(args, tool_ctx)
+    return {
+        "tool_key": tool_key,
+        "ok": result.ok,
+        "data": result.data,
+        "error": result.error,
+        "meta": result.meta,
+    }
 
 
 class ToolNode(Node[Any, dict]):
@@ -152,14 +138,6 @@ class ToolNode(Node[Any, dict]):
             extra={"graph_id": ctx.graph_id, "node_id": self.id},
             config_override=self.spec.data.get("config"),
         )
-
-
-def _is_real_tool(cls: type) -> bool:
-    """检测是否真正继承 chameleon.core.tools.Tool 基类"""
-    try:
-        return issubclass(cls, Tool)
-    except TypeError:
-        return False
 
 
 async def _load_tool_instance(tool_key: str) -> ToolInstance | None:

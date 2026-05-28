@@ -39,7 +39,7 @@
 | Endpoint 类型 | 鉴权方式 |
 |---|---|
 | `/v1/admin/*` | `Authorization: Bearer <jwt-access-token>` |
-| `/v1/agents/{key}/invoke` | `Authorization: Bearer <app-api-key>` |
+| `/v1/invoke` | `Authorization: Bearer <app-api-key>` |
 | `/v1/embed/{embed_key}/*` | 无（公开，校验 Origin + session_token） |
 | `/v1/auth/refresh` | HTTP-only Cookie `refresh_token` |
 

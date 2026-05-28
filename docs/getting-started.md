@@ -20,7 +20,7 @@
  LangGraph  HTTP      HTTP       将来
 ```
 
-**核心承诺**：你的应用只学**一个**调用方式（`POST /v1/agents/{key}/invoke`），背后的智能体来源（自己写的 / DIFY 编排的 / FastGPT 编排的 / 未来 Coze 的）随便换，**消费者代码不动**。
+**核心承诺**：你的应用只学**一个**调用方式（`POST /v1/invoke`），背后的智能体来源（自己写的 / DIFY 编排的 / FastGPT 编排的 / 未来 Coze 的）随便换，**消费者代码不动**。
 
 **对 agent 作者的承诺**：本地 agent 框架**不锁死编排库**——你可以用：
 - 纯 Python 异步生成器（最自由，可接 Anthropic SDK / 自研 client）
@@ -797,7 +797,7 @@ curl -X POST http://localhost:7009/v1/agents/echo/invoke \
 | **chameleon-agents** | `chameleon-agents/<key>/` | **你的智能体资产**（一个 agent 一个子包） |
 | └ echo | `chameleon-agents/examples/echo_langgraph/` | 范式样板（演示 step/delta/citation） |
 | **chameleon-api** | `chameleon-api/src/chameleon/api/` | ★ 对外 AI 服务能力（业务方调）—— 平台"能力清单" |
-| ├ agent | `api/agent/` | `/v1/agents/{key}/invoke` 路由 + 9 步编排 |
+| ├ agent | `api/agent/` | `/v1/invoke` 路由 + 9 步编排 |
 | ├ conversation | `api/conversation/` | `/v1/conversations/*` 会话管理 |
 | ├ knowledge | `api/knowledge/` | `/v1/knowledge/*` 知识库 CRUD + ingest |
 | └ task | `api/task/` | `/v1/tasks/{id}` 异步任务进度 |

@@ -1,30 +1,31 @@
-/** 应用目录页：统一展示可被调用的 AI 能力（代码 / 对话编排 / 流程编排 / 外部）
+/** 应用卡片库：统一展示可被调用的 AI 能力（代码 / 对话流 / 流程 / 外部）
  *
- * - kind 徽标 + kind 筛选 tab
- * - 行为按 kind 分流：source=graph → graph 编辑器；其余 → agent 详情页
- * - 新建应用：编排方式选择器（对话编排 / 流程编排 → 建 graph 跳编辑器；代码应用 → 指引弹窗）
+ * 一个「应用」融三个侧面：图类应用（编排方式）+ 嵌入（投放渠道）。
+ *   - 卡片网格（Dify 风，对齐知识库 kbs-page），不是表格
+ *   - 数据合并 / 去重：见 useAppCards
+ *   - 行为分流：图类 → graph 编辑器；代码/外部 → agent 详情页
+ *   - 嵌入：从卡片操作进入，复用 embed_configs 的表单弹窗（不在主导航）
+ *   - 新建应用：Dify 式编排方式选择器（对话/流程 → 建 graph 跳编辑器；代码 → 指引）
  */
-import { useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, Code2, MessageSquare, Play, Plus, Trash2, Workflow } from 'lucide-react';
-
-import { OrchestrationBadge } from '@/core/components/common/orchestration-badge';
-import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
-import { EmptyState } from '@/core/components/common/empty-state';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  DataTable,
-  type DataTableColumn,
-  SectionCard,
-  TablePagination,
-  TableToolbar,
-} from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
+  Boxes,
+  Code2,
+  Globe,
+  ImagePlus,
+  LayoutGrid,
+  MessageSquare,
+  Plus,
+  Search,
+  Workflow,
+  X,
+} from 'lucide-react';
+
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
-import { Label } from '@/core/components/ui/label';
 import {
   Modal,
   ModalBody,
@@ -33,28 +34,27 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
-import {
-  Sheet,
-  SheetBody,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/core/components/ui/sheet';
-import { Switch } from '@/core/components/ui/switch';
 import { Textarea } from '@/core/components/ui/textarea';
-import { useClientPagination } from '@/core/hooks/use-client-pagination';
-import { useSmartNavigate } from '@/core/hooks/use-smart-navigate';
 import { cn } from '@/core/lib/cn';
-import { resolveOrchestrationKind } from '@/core/lib/orchestration';
+import { confirm } from '@/core/lib/confirm';
+import { fileToIconDataUrl } from '@/core/lib/image';
+import type { OrchestrationKind } from '@/core/lib/orchestration';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { AppCard } from '@/system/agents/components/app-card';
+import { type AppCard as AppCardModel, useAppCards } from '@/system/agents/hooks/useAppCards';
 import { agentApi } from '@/system/agents/services/agent';
-import type { AgentItem } from '@/system/agents/types/agent';
+import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-modal';
+import { embedConfigApi } from '@/system/embed_configs/services/embed';
+import type {
+  CreateEmbedConfigRequest,
+  EmbedConfigItem,
+  UpdateEmbedConfigRequest,
+} from '@/system/embed_configs/types/embed';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphKind, GraphSpec } from '@/system/graphs/types/graph';
 
-// ── 新建工作流初始 spec（复用 graphs-page 同款，避免重造）─────────
+// ── 新建工作流初始 spec ──────────────────────────────────────
 /** 流程型：空管线（start → end），自己往里拖节点 */
 const WORKFLOW_SPEC: GraphSpec = {
   nodes: [
@@ -89,210 +89,132 @@ const CHATFLOW_SPEC: GraphSpec = {
   ],
 };
 
-// ── kind 筛选 ──────────────────────────────────────────────
-type KindFilter = 'all' | 'code' | 'chatflow' | 'workflow' | 'external';
+// ── 类型筛选 ─────────────────────────────────────────────────
+type KindFilter = 'all' | OrchestrationKind;
 
-const KIND_FILTERS: { key: KindFilter; label: string }[] = [
-  { key: 'all', label: '全部' },
-  { key: 'code', label: '代码' },
-  { key: 'chatflow', label: '对话编排' },
-  { key: 'workflow', label: '流程编排' },
-  { key: 'external', label: '外部' },
+const KIND_FILTERS: { key: KindFilter; label: string; icon: typeof MessageSquare }[] = [
+  { key: 'all', label: '全部', icon: LayoutGrid },
+  { key: 'workflow', label: '流程型', icon: Workflow },
+  { key: 'chatflow', label: '对话型', icon: MessageSquare },
+  { key: 'code', label: '代码型', icon: Code2 },
+  { key: 'external', label: '外部', icon: Globe },
 ];
 
 export const AgentsPage = () => {
-  const { t } = useTranslation();
-  const smartNav = useSmartNavigate();
   const nav = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [testAgent, setTestAgent] = useState<AgentItem | null>(null);
-  const [delAgent, setDelAgent] = useState<AgentItem | null>(null);
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+  const [keyword, setKeyword] = useState('');
+  /** 嵌入操作目标：已存在的 embed 配置（编辑），或仅 agentId（新建） */
+  const [embedTarget, setEmbedTarget] = useState<
+    { initial: EmbedConfigItem | null; agentId: EntityId } | null
+  >(null);
+  /** 编辑目标卡片（头像 / 名称 / 描述） */
+  const [editTarget, setEditTarget] = useState<AppCardModel | null>(null);
 
-  const listQ = useQuery({ queryKey: ['agents'], queryFn: () => agentApi.list() });
-  const rows = useMemo(() => listQ.data ?? [], [listQ.data]);
+  const { cards, isLoading } = useAppCards();
 
   const counts = useMemo(() => {
     const acc: Record<KindFilter, number> = {
-      all: rows.length,
+      all: cards.length,
       code: 0,
       chatflow: 0,
       workflow: 0,
       external: 0,
     };
-    for (const a of rows) {
-      const k = resolveOrchestrationKind(a.source, a.graph_kind);
-      if (k) acc[k] += 1;
-    }
+    for (const c of cards) acc[c.kind] += 1;
     return acc;
-  }, [rows]);
+  }, [cards]);
 
-  const filtered = useMemo(
-    () =>
-      kindFilter === 'all'
-        ? rows
-        : rows.filter(a => resolveOrchestrationKind(a.source, a.graph_kind) === kindFilter),
-    [rows, kindFilter],
-  );
-  const pg = useClientPagination(filtered);
+  const filtered = useMemo(() => {
+    const kw = keyword.trim().toLowerCase();
+    return cards.filter(c => {
+      if (kindFilter !== 'all' && c.kind !== kindFilter) return false;
+      if (kw && !`${c.name} ${c.key} ${c.description ?? ''}`.toLowerCase().includes(kw)) {
+        return false;
+      }
+      return true;
+    });
+  }, [cards, kindFilter, keyword]);
 
-  const toggleMut = useMutation({
-    mutationFn: (args: { id: EntityId; enabled: boolean }) =>
-      args.enabled ? agentApi.enable(args.id) : agentApi.disable(args.id),
-    onMutate: async args => {
-      await qc.cancelQueries({ queryKey: ['agents'] });
-      const prev = qc.getQueryData<AgentItem[]>(['agents']);
-      qc.setQueryData<AgentItem[]>(['agents'], old =>
-        old?.map(a => (a.id === args.id ? { ...a, enabled: args.enabled } : a)),
-      );
-      return { prev };
-    },
-    onError: (_e, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(['agents'], ctx.prev);
-    },
-    onSettled: () => qc.invalidateQueries({ queryKey: ['agents'] }),
-  });
-  const delMut = useMutation({
-    mutationFn: (id: EntityId) => agentApi.delete(id),
-    onSuccess: () => {
-      toast.success('已删除');
-      qc.invalidateQueries({ queryKey: ['agents'] });
-      setDelAgent(null);
-    },
-  });
-
-  /** source=graph 的应用主操作 = 编辑（跳 graph 编辑器）；其余 = 详情页 */
-  const openApp = (a: AgentItem) => {
-    if (a.source === 'graph' && a.graph_id != null) {
-      nav(`/graphs/${a.graph_id}/edit`);
+  /** 卡片分流：图类 → graph 编辑器；代码/外部 → agent 详情页 */
+  const openCard = (c: AppCardModel) => {
+    if (c.source === 'graph') {
+      nav(`/graphs/${c.entityId}/edit`);
       return;
     }
-    smartNav(`/agents/${a.id}`, {
-      prefetch: () =>
-        Promise.all([
-          qc.prefetchQuery({ queryKey: ['agent', a.id], queryFn: () => agentApi.get(a.id) }),
-          qc.prefetchQuery({
-            queryKey: ['agent-linked-kbs', a.id],
-            queryFn: () => agentApi.linkedKbs(a.id),
-          }),
-        ]),
+    void qc.prefetchQuery({
+      queryKey: ['agent', c.entityId],
+      queryFn: () => agentApi.get(c.entityId),
     });
+    nav(`/agents/${c.entityId}`);
   };
 
-  const columns: DataTableColumn<AgentItem>[] = [
-    {
-      key: 'agent_key',
-      header: t('table.agent_key'),
-      width: 180,
-      render: a => <span className="font-mono text-[11.5px] text-stone-700">{a.agent_key}</span>,
+  /** 嵌入：已有该 agent 的 embed 配置则进编辑，否则带预选 agent 进新建 */
+  const openEmbed = (c: AppCardModel) => {
+    if (c.embedAgentId == null) {
+      toast.error('该应用尚未发布，发布后才能配置嵌入');
+      return;
+    }
+    const embeds = qc.getQueryData<{ items: EmbedConfigItem[] }>([
+      'embed-configs',
+      'all-for-cards',
+    ]);
+    const existing = embeds?.items.find(e => String(e.agent_id) === String(c.embedAgentId)) ?? null;
+    setEmbedTarget({ initial: existing, agentId: c.embedAgentId });
+  };
+
+  const delMut = useMutation({
+    mutationFn: async (c: AppCardModel) => {
+      if (c.source === 'graph') await graphApi.delete(c.entityId);
+      else await agentApi.delete(c.entityId);
     },
-    {
-      key: 'name',
-      header: t('common.name'),
-      render: a => <span className="font-medium text-stone-900">{a.name}</span>,
+    onSuccess: () => {
+      toast.success('已删除');
+      qc.invalidateQueries({ queryKey: ['graphs'] });
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      qc.invalidateQueries({ queryKey: ['embed-configs'] });
     },
-    {
-      key: 'kind',
-      header: t('table.orchestration', '编排方式'),
-      width: 96,
-      render: a => <OrchestrationBadge source={a.source} graphKind={a.graph_kind} />,
-    },
-    {
-      key: 'tags',
-      header: t('table.tags'),
-      render: a =>
-        a.tags && a.tags.length ? (
-          <div className="flex gap-1">
-            {a.tags.map(tag => (
-              <Badge key={tag} variant="outline">
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="text-stone-400">—</span>
-        ),
-    },
-    {
-      key: 'enabled',
-      header: t('common.enabled'),
-      width: 70,
-      render: a => (
-        <span onClick={e => e.stopPropagation()}>
-          <Switch
-            checked={a.enabled}
-            onCheckedChange={c => toggleMut.mutate({ id: a.id, enabled: c })}
-          />
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: t('common.actions'),
-      align: 'right',
-      width: 110,
-      render: a => (
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            title={t('common.test')}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={e => {
-              e.stopPropagation();
-              setTestAgent(a);
-            }}
-          >
-            <Play className="h-3.5 w-3.5" /> {t('common.test')}
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
-            disabled={a.source === 'local'}
-            onClick={e => {
-              e.stopPropagation();
-              setDelAgent(a);
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  });
+
+  const askDelete = async (c: AppCardModel) => {
+    const ok = await confirm({
+      title: `删除应用「${c.name}」？`,
+      description:
+        '将一并删除它的 API 密钥与嵌入配置；调用日志 / Trace 作为历史保留。此操作不可撤销。',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (ok) delMut.mutate(c);
+  };
 
   return (
-    <div>
-      <SectionCard>
-        <TableToolbar
-          title={t('page.agents_title')}
-          extra={
-            <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-3.5 w-3.5" /> {t('agents.create_app', '新建应用')}
-            </Button>
-          }
-        />
-
-        <div className="mb-2 flex items-center gap-1">
-          {KIND_FILTERS.map(({ key, label }) => (
+    <div className="px-1">
+      {/* 工具条：标题 + 筛选 tab + 搜索 + 新建 */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1">
+          {KIND_FILTERS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
               type="button"
               onClick={() => setKindFilter(key)}
               className={cn(
-                'rounded-md px-2.5 py-1 text-[11.5px] transition',
+                'flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[12px] font-medium transition',
                 kindFilter === key
-                  ? 'bg-stone-900 text-white'
+                  ? 'bg-blue-50 text-blue-700'
                   : 'text-stone-500 hover:bg-stone-100 hover:text-stone-700',
               )}
             >
+              <Icon
+                className={cn(
+                  'h-3.5 w-3.5',
+                  kindFilter === key ? 'text-blue-600' : 'text-stone-400',
+                )}
+              />
               {label}
               <span
-                className={cn(
-                  'ml-1 text-[10px]',
-                  kindFilter === key ? 'text-stone-300' : 'text-stone-400',
-                )}
+                className={cn('text-[10px]', kindFilter === key ? 'text-blue-400' : 'text-stone-400')}
               >
                 {counts[key]}
               </span>
@@ -300,45 +222,253 @@ export const AgentsPage = () => {
           ))}
         </div>
 
-        <DataTable
-          columns={columns}
-          rows={pg.rows}
-          rowKey="id"
-          loading={listQ.isLoading}
-          onRowClick={openApp}
-          emptyText={
-            <EmptyState
-              icon={<Boxes strokeWidth={1.5} />}
-              title={t('empty.agents')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t('agents.create_app', '新建应用')}
-                </Button>
-              }
-            />
-          }
-        />
-        <TablePagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          total={pg.total}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-        />
-      </SectionCard>
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-400" />
+          <Input
+            value={keyword}
+            onChange={e => setKeyword(e.target.value)}
+            placeholder="搜索应用…"
+            className="h-8 w-56 pl-8 text-[12.5px]"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {/* 创建入口卡 */}
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          className="group flex h-[148px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 bg-white/60 text-stone-500 transition hover:border-blue-400 hover:bg-blue-50/40 hover:text-blue-600"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-stone-100 transition group-hover:bg-blue-100">
+            <Plus className="h-5 w-5" strokeWidth={1.75} />
+          </div>
+          <span className="text-[13px] font-medium">新建应用</span>
+          <span className="text-[11px] text-stone-400">对话 / 流程编排，或接入代码应用</span>
+        </button>
+
+        {/* 应用卡片 */}
+        {filtered.map(c => (
+          <AppCard
+            key={c.cardId}
+            card={c}
+            onOpen={openCard}
+            onEdit={setEditTarget}
+            onEmbed={openEmbed}
+            onDelete={askDelete}
+          />
+        ))}
+
+        {/* 加载骨架 */}
+        {isLoading &&
+          cards.length === 0 &&
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={`skl-${i}`} className="skeleton h-[148px] rounded-xl opacity-60" />
+          ))}
+      </div>
+
+      {!isLoading && filtered.length === 0 && cards.length > 0 ? (
+        <div className="mt-8 text-center text-[12.5px] text-stone-400">没有匹配的应用</div>
+      ) : null}
 
       <CreateAppModal open={createOpen} onClose={() => setCreateOpen(false)} />
-      <TestAgentSheet agent={testAgent} onClose={() => setTestAgent(null)} />
-      <ConfirmDialog
-        open={!!delAgent}
-        title="删除外部应用"
-        description={`确认删除 ${delAgent?.agent_key}？代码应用仅能 disable。`}
-        variant="danger"
-        confirmText="删除"
-        onConfirm={() => delAgent && delMut.mutate(delAgent.id)}
-        onCancel={() => setDelAgent(null)}
-      />
+      <EditAppModal card={editTarget} onClose={() => setEditTarget(null)} />
+      <EmbedActionModal target={embedTarget} onClose={() => setEmbedTarget(null)} />
     </div>
+  );
+};
+
+// ── 嵌入操作：复用 embed_configs 的表单弹窗 ──────────────────────
+const EmbedActionModal = ({
+  target,
+  onClose,
+}: {
+  target: { initial: EmbedConfigItem | null; agentId: EntityId } | null;
+  onClose: () => void;
+}) => {
+  const qc = useQueryClient();
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['embed-configs'] });
+  };
+
+  const createMut = useMutation({
+    mutationFn: (req: CreateEmbedConfigRequest) => embedConfigApi.create(req),
+    onSuccess: () => {
+      toast.success('嵌入配置已创建');
+      invalidate();
+      onClose();
+    },
+  });
+  const updateMut = useMutation({
+    mutationFn: (args: { id: EntityId; req: UpdateEmbedConfigRequest }) =>
+      embedConfigApi.update(args.id, args.req),
+    onSuccess: () => {
+      toast.success('已保存');
+      invalidate();
+      onClose();
+    },
+  });
+
+  return (
+    <EmbedFormModal
+      open={!!target}
+      initial={target?.initial ?? null}
+      presetAgentId={target?.agentId ?? null}
+      loading={createMut.isPending || updateMut.isPending}
+      onClose={onClose}
+      onSubmitCreate={req => createMut.mutate(req)}
+      onSubmitUpdate={(id, req) => updateMut.mutate({ id, req })}
+    />
+  );
+};
+
+// ── 编辑应用：头像 + 名称/描述（代码应用仅头像，名称/描述由代码定义）──────
+const EditAppModal = ({ card, onClose }: { card: AppCardModel | null; onClose: () => void }) => {
+  const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [icon, setIcon] = useState('');
+  const [lastId, setLastId] = useState<string | null>(null);
+
+  // card 变化时同步初值（合法的 reset-on-prop-change）
+  if (card && card.cardId !== lastId) {
+    setLastId(card.cardId);
+    setName(card.name);
+    setDescription(card.description ?? '');
+    setIcon(card.icon ?? '');
+  }
+
+  // 名称/描述：图类应用 + 外部应用可改；代码应用由代码定义，仅可改头像
+  const nameEditable = !!card && (card.source === 'graph' || card.kind === 'external');
+
+  const pickFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('图片过大，请选 4MB 以内');
+      return;
+    }
+    try {
+      setIcon(await fileToIconDataUrl(file));
+    } catch {
+      toast.error('图片读取失败');
+    }
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      if (!card) throw new Error('no card');
+      const iconVal = icon === (card.icon ?? '') ? undefined : icon; // 空串 = 清除
+      const payload = {
+        name: nameEditable ? name.trim() : undefined,
+        description: nameEditable ? description.trim() : undefined,
+        icon: iconVal,
+      };
+      if (card.source === 'graph') await graphApi.update(card.entityId, payload);
+      else await agentApi.update(card.entityId, payload);
+    },
+    onSuccess: () => {
+      toast.success('已保存');
+      qc.invalidateQueries({ queryKey: ['graphs'] });
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      onClose();
+    },
+  });
+
+  return (
+    <Modal open={!!card} onOpenChange={o => !o && onClose()}>
+      <ModalContent size="md">
+        <ModalHeader>
+          <ModalTitle>编辑应用</ModalTitle>
+        </ModalHeader>
+        <ModalBody className="space-y-3">
+          <div>
+            <label className="mb-1 block text-[12px] text-stone-600">头像</label>
+            <div className="flex items-center gap-3">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-stone-100 text-stone-500">
+                {icon ? (
+                  <img src={icon} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <Boxes className="h-6 w-6" strokeWidth={1.6} />
+                )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <ImagePlus className="mr-1.5 h-3.5 w-3.5" />
+                  上传图片
+                </Button>
+                {icon && (
+                  <button
+                    type="button"
+                    onClick={() => setIcon('')}
+                    className="inline-flex items-center gap-1 text-[11px] text-stone-400 hover:text-rose-600"
+                  >
+                    <X className="h-3 w-3" />
+                    移除，用默认图标
+                  </button>
+                )}
+              </div>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) pickFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </div>
+            <p className="mt-1 text-[10.5px] text-stone-400">自动裁剪缩放为 128×128 小图</p>
+          </div>
+
+          {nameEditable ? (
+            <>
+              <div>
+                <label className="mb-1 block text-[12px] text-stone-600">名称</label>
+                <Input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="应用名称"
+                  className="h-8"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[12px] text-stone-600">描述</label>
+                <Textarea
+                  value={description}
+                  onChange={e => setDescription(e.target.value)}
+                  placeholder="一句话说明这个应用做什么"
+                  rows={2}
+                />
+              </div>
+            </>
+          ) : (
+            <p className="rounded-lg border border-stone-200 bg-stone-50 p-2.5 text-[11.5px] leading-relaxed text-stone-500">
+              代码应用的名称 / 描述由代码定义，此处仅支持更换头像。
+            </p>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" onClick={onClose}>
+            取消
+          </Button>
+          <Button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
+            {saveMut.isPending ? '保存中…' : '保存'}
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
   );
 };
 
@@ -498,61 +628,5 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
         </ModalFooter>
       </ModalContent>
     </Modal>
-  );
-};
-
-const TestAgentSheet = ({ agent, onClose }: { agent: AgentItem | null; onClose: () => void }) => {
-  const [input, setInput] = useState('hi');
-  const [result, setResult] = useState<string>('');
-  const mut = useMutation({
-    mutationFn: () => agentApi.test(agent!.id, input),
-    onSuccess: r => setResult(r.answer),
-    onError: () => setResult(''),
-  });
-
-  return (
-    <Sheet
-      open={!!agent}
-      onOpenChange={o => {
-        if (!o) {
-          setInput('hi');
-          setResult('');
-          onClose();
-        }
-      }}
-    >
-      <SheetContent width="w-[560px]">
-        <SheetHeader>
-          <SheetTitle>测试 · {agent?.agent_key}</SheetTitle>
-        </SheetHeader>
-        <SheetBody className="space-y-4">
-          <div className="space-y-1.5">
-            <Label>输入</Label>
-            <Textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              rows={4}
-              placeholder="hi"
-            />
-          </div>
-          <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
-            {mut.isPending ? '调用中...' : '发送'}
-          </Button>
-          {result && (
-            <div>
-              <Label>回复</Label>
-              <div className="mt-1 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm whitespace-pre-wrap">
-                {result}
-              </div>
-            </div>
-          )}
-        </SheetBody>
-        <SheetFooter>
-          <Button variant="ghost" onClick={onClose}>
-            关闭
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
   );
 };

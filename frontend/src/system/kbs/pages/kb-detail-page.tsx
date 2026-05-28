@@ -3,7 +3,7 @@
  * Bundle 1（本提交）实现 概览 + 文档。其他 tab 留占位，由后续 C.2/C.3/C.4 填。
  */
 import type { ReactElement } from 'react';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
@@ -19,6 +19,7 @@ import {
   Tag,
 } from 'lucide-react';
 
+import { KbApiDocView } from '@/api-docs/components/kb-api-doc-view';
 import { SectionCard } from '@/core/components/table';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
@@ -29,7 +30,6 @@ import { DocumentUploadZone } from '@/system/kbs/components/document-upload-zone
 import { EvaluationListTab } from '@/system/kbs/components/evaluation-list';
 import { HitTestPanel } from '@/system/kbs/components/hit-test-panel';
 import { KbConfigForm } from '@/system/kbs/components/kb-config-form';
-import { KbServiceApiModal } from '@/system/kbs/components/kb-service-api-modal';
 import { MetadataFieldsTab } from '@/system/kbs/components/metadata-fields-tab';
 import { kbApi } from '@/system/kbs/services/kb';
 import type { KbItem } from '@/system/kbs/types/kb';
@@ -42,6 +42,7 @@ type TabKey =
   | 'search'
   | 'eval'
   | 'consistency'
+  | 'service-api'
   | 'config';
 
 interface TabDef {
@@ -76,6 +77,7 @@ const NAV_ADVANCED: TabDef[] = [
   { key: 'metadata', label: '元数据', icon: <Tag className="h-4 w-4" /> },
   { key: 'eval', label: '评测', icon: <FlaskConical className="h-4 w-4" /> },
   { key: 'consistency', label: '一致性', icon: <ShieldCheck className="h-4 w-4" /> },
+  { key: 'service-api', label: '服务 API', icon: <KeyRound className="h-4 w-4" /> },
   { key: 'config', label: '设置', icon: <Settings className="h-4 w-4" /> },
 ];
 
@@ -90,7 +92,6 @@ export const KbDetailPage = () => {
     next.set('tab', t);
     setSearchParams(next, { replace: true });
   };
-  const [serviceApiOpen, setServiceApiOpen] = useState(false);
 
   const kbQ = useQuery({
     queryKey: ['kb', kbId],
@@ -123,91 +124,77 @@ export const KbDetailPage = () => {
     </button>
   );
 
-  return (
-    <div className="space-y-3">
-      <Header
-        kb={kbQ.data ?? null}
-        loading={kbQ.isLoading}
-        onServiceApi={() => setServiceApiOpen(true)}
-      />
-      {kbQ.data && (
-        <KbServiceApiModal
-          kb={kbQ.data}
-          open={serviceApiOpen}
-          onClose={() => setServiceApiOpen(false)}
-        />
-      )}
-      <div className="flex gap-4">
-        {/* 左导航（Dify 式） */}
-        <nav className="w-40 shrink-0 space-y-0.5">
-          {NAV_PRIMARY.map(navBtn)}
-          <div className="my-2 border-t border-stone-200/60" />
-          <div className="px-3 pb-1 text-[10.5px] tracking-wider text-stone-400 uppercase">
-            进阶
+  const sideNav = (
+    <nav className="w-44 shrink-0 space-y-0.5">
+      {/* KB 身份（替代原面包屑）：← 返回 + 名称 / key，置于左栏顶部 */}
+      <div className="mb-3 flex items-center gap-2 px-1">
+        <Link
+          to="/kbs"
+          title="返回知识库"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold text-stone-900">
+            {kbQ.data?.name ?? (kbQ.isLoading ? '加载中…' : '未找到')}
           </div>
-          {NAV_ADVANCED.map(navBtn)}
-        </nav>
-
-        {/* 主内容 */}
-        <SectionCard className="min-w-0 flex-1">
-          {tab === 'overview' && <OverviewTab kb={kbQ.data ?? null} />}
-          {tab === 'documents' && <DocumentsTab kbId={kbId} />}
-          {tab === 'collections' && <CollectionsTab kbId={kbId} />}
-          {tab === 'metadata' && <MetadataFieldsTab kbId={kbId} />}
-          {tab === 'search' &&
-            (kbQ.data ? (
-              <HitTestPanel kb={kbQ.data} />
-            ) : (
-              <PlaceholderTab title="召回测试" hint="加载 KB 信息中…" />
-            ))}
-          {tab === 'eval' && <EvaluationListTab kbId={kbId} />}
-          {tab === 'consistency' && <ConsistencyTab kbId={kbId} />}
-          {tab === 'config' &&
-            (kbQ.data ? (
-              <KbConfigForm kb={kbQ.data} />
-            ) : (
-              <PlaceholderTab title="设置" hint="加载中…" />
-            ))}
-        </SectionCard>
+          {kbQ.data && (
+            <div className="truncate font-mono text-[10.5px] text-stone-400">{kbQ.data.kb_key}</div>
+          )}
+        </div>
       </div>
+      {NAV_PRIMARY.map(navBtn)}
+      <div className="my-2 border-t border-stone-200/60" />
+      <div className="px-3 pb-1 text-[10.5px] tracking-wider text-stone-400 uppercase">进阶</div>
+      {NAV_ADVANCED.map(navBtn)}
+    </nav>
+  );
+
+  // 服务 API tab：直接嵌入 API 文档内容（需有界高度让模版内部滚动生效）
+  if (tab === 'service-api') {
+    return (
+      <div className="flex h-[calc(100vh-5.5rem)] gap-4">
+        {sideNav}
+        <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-stone-200 bg-[var(--color-paper)]">
+          {kbQ.data ? (
+            <KbApiDocView kbKey={kbQ.data.kb_key} kb={kbQ.data} />
+          ) : (
+            <PlaceholderTab title="服务 API" hint="加载中…" />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-4">
+      {sideNav}
+
+      {/* 主内容 */}
+      <SectionCard className="min-w-0 flex-1">
+        {tab === 'overview' && <OverviewTab kb={kbQ.data ?? null} />}
+        {tab === 'documents' && <DocumentsTab kbId={kbId} />}
+        {tab === 'collections' && <CollectionsTab kbId={kbId} />}
+        {tab === 'metadata' && <MetadataFieldsTab kbId={kbId} />}
+        {tab === 'search' &&
+          (kbQ.data ? (
+            <HitTestPanel kb={kbQ.data} />
+          ) : (
+            <PlaceholderTab title="召回测试" hint="加载 KB 信息中…" />
+          ))}
+        {tab === 'eval' && <EvaluationListTab kbId={kbId} />}
+        {tab === 'consistency' && <ConsistencyTab kbId={kbId} />}
+        {tab === 'config' &&
+          (kbQ.data ? (
+            <KbConfigForm kb={kbQ.data} />
+          ) : (
+            <PlaceholderTab title="设置" hint="加载中…" />
+          ))}
+      </SectionCard>
     </div>
   );
 };
-
-interface HeaderProps {
-  kb: KbItem | null;
-  loading: boolean;
-  onServiceApi: () => void;
-}
-
-const Header = ({ kb, loading, onServiceApi }: HeaderProps) => (
-  <div className="flex items-center gap-3">
-    <Link
-      to="/kbs"
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-    >
-      <ArrowLeft className="h-3.5 w-3.5" /> 知识库
-    </Link>
-    <span className="text-stone-300">/</span>
-    {loading ? (
-      <span className="text-[12.5px] text-stone-400">加载中…</span>
-    ) : kb ? (
-      <div className="flex flex-1 items-center gap-2">
-        <span className="text-[15px] font-medium text-stone-900">{kb.name}</span>
-        <span className="font-mono text-[11.5px] text-stone-500">{kb.kb_key}</span>
-        <button
-          type="button"
-          onClick={onServiceApi}
-          className="ml-auto inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11.5px] text-stone-700 hover:border-emerald-300 hover:bg-emerald-50/40 hover:text-emerald-700"
-        >
-          <KeyRound className="h-3.5 w-3.5" /> 服务 API
-        </button>
-      </div>
-    ) : (
-      <span className="text-[12.5px] text-stone-400">未找到</span>
-    )}
-  </div>
-);
 
 const OverviewTab = ({ kb }: { kb: KbItem | null }) => {
   const stats = useMemo(

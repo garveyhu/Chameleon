@@ -43,6 +43,8 @@ class Graph(Base, TimestampMixin, SoftDeleteMixin):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 头像：用户上传图片缩放后的 data URL（None 用默认按类型图标）
+    icon: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 工作流形态：chatflow（对话型，有聊天 I/O，可发布为智能体）/ workflow（流程型，一次性管线）
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default="chatflow", server_default="chatflow"
