@@ -139,6 +139,27 @@ async def record_attachments(
     """
     if not attachments:
         return []
+
+    # 去重：finalize 端点和 invoke 都会调本函数（widget 上传立刻 record + 发消息再透
+    # attachments）；按 (session_id, object_id) 拒绝重复 INSERT。
+    incoming_oids = [
+        (a.get("object_id") or _extract_object_id_from_url(a.get("object_url") or ""))
+        for a in attachments
+    ]
+    existing = set(
+        (
+            await session.execute(
+                select(SessionFile.object_id).where(
+                    SessionFile.session_id == session_id,
+                    SessionFile.object_id.in_([o for o in incoming_oids if o]),
+                    SessionFile.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
     rows: list[SessionFile] = []
     kb_for_docs: KnowledgeBase | None = None
 
@@ -147,6 +168,8 @@ async def record_attachments(
         kind = classify_kind(mime)
         object_url = att.get("object_url") or ""
         object_id = att.get("object_id") or _extract_object_id_from_url(object_url)
+        if object_id and object_id in existing:
+            continue  # 已经在表里（finalize 阶段插过）→ 跳过避免重复
         sf = SessionFile(
             session_id=session_id,
             end_user_id=end_user_id,
@@ -161,6 +184,8 @@ async def record_attachments(
         session.add(sf)
         rows.append(sf)
 
+    if not rows:
+        return []
     await session.flush()
 
     # document/data 类型：懒建 ephemeral_kb + 触发 ingest

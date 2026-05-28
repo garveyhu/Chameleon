@@ -362,6 +362,87 @@ async def rename_my_session(
     )
 
 
+# ── Phase E：嵌入端走 origin+token 鉴权的文件上传（不需要 API Key） ─────
+
+
+class _EmbedPresignBody(BaseModel):
+    """widget 上传文件时调用，鉴权同 invoke（origin + session_token）"""
+
+    session_token: str
+    filename: str = Field(min_length=1, max_length=256)
+    content_type: str = Field(min_length=1, max_length=128)
+    size: int = Field(ge=1)
+
+
+class _EmbedFinalizeBody(BaseModel):
+    session_token: str
+    expected_size: int | None = None
+
+
+@router.post("/{embed_key}/files/presigned-upload")
+async def embed_files_presigned(
+    embed_key: str,
+    body: _EmbedPresignBody,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    """widget 走的 presigned-upload：origin + session_token 鉴权"""
+    await _resolve_token_context(embed_key, body.session_token, origin, session)
+    from chameleon.api.files.api import build_presigned_upload
+    from chameleon.api.files.schemas import PresignedUploadRequest
+
+    inner = PresignedUploadRequest(
+        filename=body.filename,
+        content_type=body.content_type,
+        size=body.size,
+        namespace=f"embed-attach/{embed_key}",
+    )
+    return Result.ok(build_presigned_upload(inner))
+
+
+@router.post("/{embed_key}/files/{object_id:path}/finalize")
+async def embed_files_finalize(
+    embed_key: str,
+    object_id: str,
+    body: _EmbedFinalizeBody,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+):
+    """widget 走的 finalize：鉴权同上；同时把附件落 SessionFile + 异步入临时 KB，
+    让用户即使不立刻发消息，文件也已暂存在当前会话上 ——
+    下一次发消息时 RAG 直接命中（不必再等 parsing）。
+    """
+    e, end_user_id = await _resolve_token_context(
+        embed_key, body.session_token, origin, session
+    )
+    from chameleon.api.files.api import finalize_uploaded_object
+    from chameleon.api.files.schemas import FinalizeRequest
+    from chameleon.api.embed import session as embed_session_mod
+    from chameleon.system.session_files import service as sf_svc
+
+    inner = FinalizeRequest(expected_size=body.expected_size)
+    fin = finalize_uploaded_object(object_id, inner)
+
+    # 立刻把附件挂到当前会话上（record_attachments：文档类异步入临时 KB）
+    sid = await embed_session_mod.resolve_session_id(body.session_token)
+    await sf_svc.record_attachments(
+        session,
+        session_id=sid,
+        end_user_id=end_user_id,
+        attachments=[
+            {
+                "object_url": fin.object_url,
+                "object_id": fin.object_id,
+                "filename": object_id.rsplit("/", 1)[-1],
+                "mime": fin.content_type or "application/octet-stream",
+                "size": fin.size,
+            }
+        ],
+    )
+    await session.commit()
+    return Result.ok(fin)
+
+
 # ── Phase B：会话级附件管理（list / delete） ──────────────
 
 

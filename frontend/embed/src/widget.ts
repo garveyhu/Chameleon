@@ -480,7 +480,8 @@ export class ChameleonWidget {
     await Promise.all(
       placeholders.map(async ({ file, att }) => {
         try {
-          const uploaded = await this.api.uploadFile(file);
+          const token = await this.session.getToken();
+          const uploaded = await this.api.uploadFile(file, token);
           // 用真实 attachment 替换占位
           Object.assign(att, uploaded);
         } catch (e) {

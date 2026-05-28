@@ -40,13 +40,8 @@ _PUT_TTL_SEC = 600  # 10 min
 _GET_TTL_SEC = 24 * 3600  # 24h
 
 
-@router.post("/presigned-upload", response_model=Result[PresignedUploadResult])
-async def presigned_upload(
-    req: PresignedUploadRequest,
-    _: CurrentApp = Depends(current_app_or_admin),
-) -> Result[PresignedUploadResult]:
-    """生成直传 MinIO 的 presigned PUT URL"""
-    # 浏览器对 .md / .svg / .epub 等的 file.type 经常为空 → 按文件名扩展名兜底
+def build_presigned_upload(req: PresignedUploadRequest) -> PresignedUploadResult:
+    """presign + 校验逻辑核心 —— 鉴权由调用方负责，service 层不关心"""
     from chameleon.api.files.schemas import normalize_mime
 
     normalized_mime = normalize_mime(req.filename, req.content_type)
@@ -61,24 +56,19 @@ async def presigned_upload(
     upload_url = store.presigned_put_url(object_id, expires_seconds=_PUT_TTL_SEC)
     object_url = store.presigned_get_url(object_id, expires_seconds=_GET_TTL_SEC)
 
-    return Result.ok(
-        PresignedUploadResult(
-            object_id=object_id,
-            upload_url=upload_url,
-            object_url=object_url,
-            expires_in=_GET_TTL_SEC,
-            max_bytes=MAX_UPLOAD_BYTES,
-        )
+    return PresignedUploadResult(
+        object_id=object_id,
+        upload_url=upload_url,
+        object_url=object_url,
+        expires_in=_GET_TTL_SEC,
+        max_bytes=MAX_UPLOAD_BYTES,
     )
 
 
-@router.post("/{object_id:path}/finalize", response_model=Result[FinalizeResult])
-async def finalize_upload(
-    object_id: str,
-    req: FinalizeRequest,
-    _: CurrentApp = Depends(current_app_or_admin),
-) -> Result[FinalizeResult]:
-    """前端上传完后通知；后端 stat MinIO 确认存在 + 返长效 GET URL"""
+def finalize_uploaded_object(
+    object_id: str, req: FinalizeRequest
+) -> FinalizeResult:
+    """finalize 核心 —— stat + 校验 + 返长效 GET URL"""
     store = get_object_store()
     try:
         info = store.stat(object_id)
@@ -95,22 +85,38 @@ async def finalize_upload(
             message=f"对象大小非法：{size} (limit {MAX_UPLOAD_BYTES})",
         )
     if req.expected_size is not None and abs(size - req.expected_size) > 0:
-        # 客户端声称的大小 ≠ 实际上传 → 拒绝；防中间被改包
         raise BusinessError(
             ResultCode.ValidationError,
             message=f"size mismatch: expected={req.expected_size} actual={size}",
         )
 
     object_url = store.presigned_get_url(object_id, expires_seconds=_GET_TTL_SEC)
-    return Result.ok(
-        FinalizeResult(
-            object_id=object_id,
-            size=size,
-            content_type=info.get("content_type"),
-            etag=info.get("etag"),
-            object_url=object_url,
-        )
+    return FinalizeResult(
+        object_id=object_id,
+        size=size,
+        content_type=info.get("content_type"),
+        etag=info.get("etag"),
+        object_url=object_url,
     )
+
+
+@router.post("/presigned-upload", response_model=Result[PresignedUploadResult])
+async def presigned_upload(
+    req: PresignedUploadRequest,
+    _: CurrentApp = Depends(current_app_or_admin),
+) -> Result[PresignedUploadResult]:
+    """生成直传 MinIO 的 presigned PUT URL（需 API Key / admin）"""
+    return Result.ok(build_presigned_upload(req))
+
+
+@router.post("/{object_id:path}/finalize", response_model=Result[FinalizeResult])
+async def finalize_upload(
+    object_id: str,
+    req: FinalizeRequest,
+    _: CurrentApp = Depends(current_app_or_admin),
+) -> Result[FinalizeResult]:
+    """前端上传完后通知；后端 stat MinIO 确认存在 + 返长效 GET URL"""
+    return Result.ok(finalize_uploaded_object(object_id, req))
 
 
 # ── 内部 helper ──────────────────────────────────────

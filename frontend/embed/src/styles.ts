@@ -324,9 +324,11 @@ export const buildStyles = (ui: UiConfig): string => {
 /* ─── 附件 chips（composer 上方） + 用户消息附件 ───────────── */
 .attachment-chips {
   display: flex; flex-wrap: wrap; gap: 6px;
-  padding: 8px 12px 0;
+  padding: 8px 12px;
   border-top: 1px solid ${theme.borderColor};
 }
+/* chips 显示时它已经有顶边线；下面的 composer 不再加 border-top 避免双线 */
+.panel:has(.attachment-chips:not([hidden])) .composer { border-top: none; }
 .att-chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 8px 4px 4px;

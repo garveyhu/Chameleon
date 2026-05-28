@@ -146,21 +146,24 @@ export class EmbedApi {
   }
 
   /** 三步上传到 MinIO：presign → PUT → finalize（返回 long-lived object_url） */
-  async uploadFile(file: File): Promise<WidgetAttachment> {
+  async uploadFile(file: File, sessionToken: string): Promise<WidgetAttachment> {
     // 浏览器对 .md / .svg / .epub 经常给空 file.type → 按扩展名兜底
     const effectiveMime = normalizeMime(file.name, file.type);
-    // 1. presign
+    // 1. presign —— 走 embed 路由（origin + session_token 鉴权，无需 API Key）
     const presign = (await this.unwrap(
-      await fetch(`${this.apiBase}/v1/files/presigned-upload`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          content_type: effectiveMime,
-          size: file.size,
-          namespace: 'embed-attach',
-        }),
-      }),
+      await fetch(
+        `${this.apiBase}/v1/embed/${this.embedKey}/files/presigned-upload`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            session_token: sessionToken,
+            filename: file.name,
+            content_type: effectiveMime,
+            size: file.size,
+          }),
+        },
+      ),
     )) as { object_id: string; upload_url: string; object_url: string };
     // 2. PUT MinIO（不带 Authorization；MinIO presigned 自验签）
     const putResp = await fetch(presign.upload_url, {
@@ -171,14 +174,14 @@ export class EmbedApi {
     if (!putResp.ok) {
       throw new EmbedError(putResp.status, `直传 MinIO 失败: ${putResp.status}`);
     }
-    // 3. finalize
+    // 3. finalize —— 同样走 embed 路由
     const fin = (await this.unwrap(
       await fetch(
-        `${this.apiBase}/v1/files/${encodeURIComponent(presign.object_id)}/finalize`,
+        `${this.apiBase}/v1/embed/${this.embedKey}/files/${encodeURIComponent(presign.object_id)}/finalize`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ content_type: file.type }),
+          body: JSON.stringify({ session_token: sessionToken }),
         },
       ),
     )) as { object_url: string; content_type: string | null };
