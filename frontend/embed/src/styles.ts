@@ -775,7 +775,7 @@ export const buildStyles = (ui: UiConfig): string => {
 .composer {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   padding: 12px 14px 6px;
   background: ${theme.paneBg};
 }
@@ -803,11 +803,13 @@ export const buildStyles = (ui: UiConfig): string => {
   background: ${theme.inputBg};
   color: ${theme.paneText};
   border-radius: 12px;
-  padding: 10px 14px;
+  /* 单行高度跟 send / upload 对齐到 38；line-height 1.4 + padding 8 让文字垂直居中 */
+  min-height: 38px;
+  padding: 8px 14px;
   resize: none;
   font-family: inherit;
   font-size: ${font.panel}px;
-  line-height: 1.5;
+  line-height: 1.4;
   max-height: 110px;
   outline: none;
   box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.04);
