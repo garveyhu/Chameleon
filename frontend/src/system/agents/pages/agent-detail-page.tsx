@@ -7,31 +7,23 @@ import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Activity, ArrowLeft, ArrowRight, BookOpen, Cpu, Info, KeyRound, MessagesSquare, Workflow } from 'lucide-react';
 
 import { OrchestrationBadge } from '@/core/components/common/orchestration-badge';
 import { SectionCard } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/core/components/ui/select';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
-import { toast } from '@/core/lib/toast';
 import { AgentApiTab } from '@/system/agents/components/agent-api-tab';
 import { AgentConfigForm } from '@/system/agents/components/agent-config-form';
+import { AgentHelperModelField } from '@/system/agents/components/agent-helper-model-field';
 import { AgentOverviewTab } from '@/system/agents/components/agent-overview-tab';
 import { AgentSessionsTab } from '@/system/agents/components/agent-sessions-tab';
 import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
 import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
-import { modelApi } from '@/system/models/services/model';
 
 type TabKey = 'info' | 'kbs' | 'model' | 'sessions' | 'api' | 'monitor';
 
@@ -168,7 +160,7 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
         <Kv label="provider_id" value={String(agent.provider_id ?? '—')} mono />
         <Kv label="local_class_path" value={agent.local_class_path ?? '—'} mono />
         <Kv label="version" value={agent.version ?? '—'} mono />
-        <DefaultModelCodeField agent={agent} />
+        <AgentHelperModelField agent={agent} />
         <Kv label="tags" value={(agent.tags ?? []).join(', ') || '—'} />
         <Kv label="config" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
         <Kv label="description" value={agent.description ?? '—'} full />
@@ -177,66 +169,6 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
       </div>
       <AgentConfigForm agentId={agent.id} />
     </>
-  );
-};
-
-/** 应用辅助调用模型 inline 编辑器
- *
- * 语义：followup / 自动标题 / 摘要等「系统侧辅助调用」用的模型。
- * - local 应用：同时也是业务调用模型
- * - graph 应用：业务调用走节点各自绑定的模型；这里只配辅助
- */
-const DefaultModelCodeField = ({ agent }: { agent: AgentItem }) => {
-  const qc = useQueryClient();
-  const modelsQ = useQuery({
-    queryKey: ['models', 'chat'],
-    queryFn: () => modelApi.list({ kind: 'chat' }),
-    staleTime: 60_000,
-  });
-  const updateMut = useMutation({
-    mutationFn: (code: string | null) =>
-      agentApi.update(agent.id, { default_model_code: code }),
-    onSuccess: () => {
-      toast.success('已保存');
-      qc.invalidateQueries({ queryKey: ['agent', String(agent.id)] });
-    },
-    onError: e => toast.error(`保存失败：${(e as Error).message}`),
-  });
-
-  const current = agent.default_model_code ?? '';
-  const desc = agent.source === 'graph'
-    ? '辅助调用（followup / 标题 / 摘要）用此模型；业务调用走画布节点各自绑定的模型'
-    : 'followup / 自动标题 / 摘要等辅助调用使用';
-
-  return (
-    <div className="col-span-2 rounded-md border border-stone-200/70 bg-white px-3 py-2">
-      <div className="mb-1 flex items-center justify-between gap-3">
-        <div>
-          <div className="text-[11px] text-stone-500">辅助模型 · default_model_code</div>
-          <div className="text-[11px] leading-tight text-stone-400">{desc}</div>
-        </div>
-        <Select
-          value={current || '__none__'}
-          onValueChange={v => updateMut.mutate(v === '__none__' ? null : v)}
-          disabled={modelsQ.isLoading || updateMut.isPending}
-        >
-          <SelectTrigger className="w-60">
-            <SelectValue placeholder="未配置" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__none__">— 未配置（走系统默认）—</SelectItem>
-            {(modelsQ.data ?? []).map(m => (
-              <SelectItem key={m.id} value={m.code}>
-                {m.code}
-                {m.provider_code && (
-                  <span className="ml-2 text-[10.5px] text-stone-400">@{m.provider_code}</span>
-                )}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
   );
 };
 

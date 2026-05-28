@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
   ChevronLeft,
@@ -15,6 +15,7 @@ import {
   ChevronsRight,
   Code2,
   Copy,
+  Cpu,
   ExternalLink,
   Globe,
   KeyRound,
@@ -30,6 +31,8 @@ import {
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { AgentHelperModelField } from '@/system/agents/components/agent-helper-model-field';
+import { agentApi } from '@/system/agents/services/agent';
 import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-modal';
 import { embedConfigApi } from '@/system/embed_configs/services/embed';
 import type { EmbedConfigItem, UpdateEmbedConfigRequest } from '@/system/embed_configs/types/embed';
@@ -78,6 +81,15 @@ export const GraphAppRail = ({
   const [embedCfg, setEmbedCfg] = useState<EmbedConfigItem | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
+
+  // 反查该 graph 对应的 agent —— graph 应用编辑器没经过应用详情页，
+  // 这里把 agent.default_model_code 拉过来直接 inline 编辑，避免用户跳转
+  const graphAgentsQ = useQuery({
+    queryKey: ['agents', 'graph'],
+    queryFn: () => agentApi.list({ source: 'graph' }),
+    staleTime: 60_000,
+  });
+  const linkedAgent = (graphAgentsQ.data ?? []).find(a => a.graph_id === graph.id) ?? null;
 
   const updateEmbedMut = useMutation({
     mutationFn: (p: { id: EntityId; req: UpdateEmbedConfigRequest }) =>
@@ -316,6 +328,13 @@ export const GraphAppRail = ({
               <RailAction label="API 密钥" icon={KeyRound} onClick={() => setKeysOpen(true)} />
             </div>
           </Card>
+
+          {/* 应用辅助模型 —— 业务调用走画布节点；followup/标题/摘要 走此处 */}
+          {linkedAgent && (
+            <Card icon={Cpu} title="辅助模型" tone={linkedAgent.default_model_code ? 'on' : 'off'}>
+              <AgentHelperModelField agent={linkedAgent} compact />
+            </Card>
+          )}
         </div>
       </aside>
 
