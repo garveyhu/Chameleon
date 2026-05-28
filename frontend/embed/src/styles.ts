@@ -526,7 +526,8 @@ export const buildStyles = (ui: UiConfig): string => {
   color: ${theme.themeColor};
   text-decoration: underline;
 }
-.bubble-text h1, .bubble-text h2, .bubble-text h3 {
+.bubble-text h1, .bubble-text h2, .bubble-text h3,
+.bubble-text h4, .bubble-text h5, .bubble-text h6 {
   font-weight: 600;
   margin: 8px 0 4px;
   line-height: 1.3;
@@ -534,6 +535,38 @@ export const buildStyles = (ui: UiConfig): string => {
 .bubble-text h1 { font-size: 1.15em; }
 .bubble-text h2 { font-size: 1.08em; }
 .bubble-text h3 { font-size: 1.02em; }
+.bubble-text h4 { font-size: 1em; }
+.bubble-text h5, .bubble-text h6 { font-size: 0.95em; color: ${theme.subtleText}; }
+.bubble-text hr {
+  border: 0;
+  border-top: 1px solid ${theme.borderColor};
+  margin: 10px 0;
+}
+.bubble-text del { color: ${theme.subtleText}; }
+.bubble-text input.md-task {
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.bubble-text ul.contains-task-list { list-style: none; padding-left: 4px; }
+.bubble-text table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 0.95em;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+.bubble-text table th, .bubble-text table td {
+  border: 1px solid ${theme.borderColor};
+  padding: 4px 8px;
+}
+.bubble-text table th {
+  background: rgba(127,127,127,.08);
+  font-weight: 600;
+}
+.bubble-text table tr:nth-child(even) td {
+  background: rgba(127,127,127,.04);
+}
 .bubble-text blockquote {
   border-left: 3px solid ${theme.borderColor};
   padding-left: 8px;

@@ -174,14 +174,14 @@ export class EmbedApi {
     if (!putResp.ok) {
       throw new EmbedError(putResp.status, `直传 MinIO 失败: ${putResp.status}`);
     }
-    // 3. finalize —— 同样走 embed 路由
+    // 3. finalize —— 同样走 embed 路由；把原 filename 传过去，让 SessionFile 用原名落库
     const fin = (await this.unwrap(
       await fetch(
         `${this.apiBase}/v1/embed/${this.embedKey}/files/${encodeURIComponent(presign.object_id)}/finalize`,
         {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ session_token: sessionToken }),
+          body: JSON.stringify({ session_token: sessionToken, filename: file.name }),
         },
       ),
     )) as {

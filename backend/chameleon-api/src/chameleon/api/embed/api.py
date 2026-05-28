@@ -377,6 +377,9 @@ class _EmbedPresignBody(BaseModel):
 class _EmbedFinalizeBody(BaseModel):
     session_token: str
     expected_size: int | None = None
+    # 原文件名（widget 传），用于 SessionFile.filename 落库 + 历史回放 / 引用卡片显示
+    # 不传时退化为 object_id 末段（带 hash 噪声，但兜底可读）
+    filename: str | None = Field(None, max_length=255)
 
 
 # ── 附件配置默认值（与 widget / admin 表单对齐） ─────────────────
@@ -479,7 +482,7 @@ async def embed_files_finalize(
             {
                 "object_url": fin.object_url,
                 "object_id": fin.object_id,
-                "filename": object_id.rsplit("/", 1)[-1],
+                "filename": body.filename or object_id.rsplit("/", 1)[-1],
                 "mime": fin.content_type or "application/octet-stream",
                 "size": fin.size,
             }

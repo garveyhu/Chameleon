@@ -428,14 +428,51 @@ export class ChameleonWidget {
     this.bubble = this.shadow.querySelector('.bubble') as HTMLButtonElement;
     this.panel = this.shadow.querySelector('.panel') as HTMLDivElement;
     this.messagesEl = this.shadow.querySelector('.messages') as HTMLDivElement;
-    // 滚动 follow：用户上滑 → autoFollow 关，回到底部 → 重开
+    // 滚动 follow：
+    // - 用户主动上滑（wheel / touchmove / PageUp / ArrowUp）→ 立刻关 follow
+    // - scroll listener 在 scrollTop 触底（≤ 8px）时重开 follow（让滚回底自动跟随）
+    // 关键：不在 scroll listener 里关 follow —— scrollToBottom 自己也会触发 scroll，
+    // 不分开就会自相矛盾。用户真正离开底部只能靠 wheel/touch 这些原始输入事件检测。
+    const stopFollowIfUserUp = (deltaY: number) => {
+      if (deltaY < 0) {
+        if (this.autoFollow) {
+          this.autoFollow = false;
+          this.updateJumpToLatestBtn();
+        }
+      }
+    };
+    this.messagesEl.addEventListener('wheel', (e: WheelEvent) => stopFollowIfUserUp(e.deltaY), {
+      passive: true,
+    });
+    let lastTouchY = 0;
+    this.messagesEl.addEventListener(
+      'touchstart',
+      (e: TouchEvent) => {
+        lastTouchY = e.touches[0]?.clientY ?? 0;
+      },
+      { passive: true },
+    );
+    this.messagesEl.addEventListener(
+      'touchmove',
+      (e: TouchEvent) => {
+        const y = e.touches[0]?.clientY ?? 0;
+        // 手指向下移动 = 列表向上滚（看更早的消息）
+        stopFollowIfUserUp(-(y - lastTouchY));
+        lastTouchY = y;
+      },
+      { passive: true },
+    );
+    this.messagesEl.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'PageUp' || e.key === 'ArrowUp' || (e.key === 'Home' && !e.metaKey)) {
+        stopFollowIfUserUp(-1);
+      }
+    });
+    // scroll 事件只用于：用户滚回了"绝对底"（距底 ≤ 8px）→ 自动 reopen follow
     this.messagesEl.addEventListener('scroll', () => {
-      const STICK_PX = 80;
       const distance =
         this.messagesEl.scrollHeight - this.messagesEl.scrollTop - this.messagesEl.clientHeight;
-      const nearBottom = distance <= STICK_PX;
-      if (this.autoFollow !== nearBottom) {
-        this.autoFollow = nearBottom;
+      if (distance <= 8 && !this.autoFollow) {
+        this.autoFollow = true;
         this.updateJumpToLatestBtn();
       }
     });
