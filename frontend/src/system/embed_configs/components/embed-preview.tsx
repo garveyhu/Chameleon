@@ -145,7 +145,15 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
               }}
             >
               <div className="flex items-center gap-2">
-                <span className="text-[18px] leading-none">{ui.icon_emoji}</span>
+                {ui.icon_url ? (
+                  <img
+                    src={ui.icon_url}
+                    alt=""
+                    className="h-[20px] w-[20px] rounded object-cover"
+                  />
+                ) : (
+                  <span className="text-[18px] leading-none">{ui.icon_emoji}</span>
+                )}
                 <div className="leading-tight">
                   <div className={cn('font-medium', fontSize.bubble)}>{ui.title}</div>
                   <div className={cn(fontSize.meta, 'opacity-80')}>{ui.subtitle}</div>
@@ -168,6 +176,7 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
                   role="assistant"
                   text={ui.greeting}
                   emoji={ui.icon_emoji}
+                  iconUrl={ui.icon_url}
                   themeColor={ui.theme_color}
                   paneText={paneText}
                   subtleText={subtleText}
@@ -250,6 +259,7 @@ interface BubbleMsgProps {
   role: 'assistant' | 'user';
   text: string;
   emoji: string;
+  iconUrl: string | null;
   themeColor: string;
   paneText: string;
   subtleText: string;
@@ -264,6 +274,7 @@ const BubbleMsg: React.FC<BubbleMsgProps> = ({
   role,
   text,
   emoji,
+  iconUrl,
   themeColor,
   paneText,
   subtleText,
@@ -287,7 +298,11 @@ const BubbleMsg: React.FC<BubbleMsgProps> = ({
   }
   return (
     <div className="flex items-start gap-1.5">
-      <span className="text-[16px] leading-none">{emoji}</span>
+      {iconUrl ? (
+        <img src={iconUrl} alt="" className="h-[18px] w-[18px] rounded object-cover" />
+      ) : (
+        <span className="text-[16px] leading-none">{emoji}</span>
+      )}
       <div className="max-w-[80%] space-y-1">
         <div
           className={cn('whitespace-pre-line px-2.5 py-1.5', fontSize.panel)}

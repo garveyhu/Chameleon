@@ -38,13 +38,19 @@ from chameleon.system.scores.schemas import FeedbackRequest, ScoreItem
 
 
 class EmbedPublicConfig(BaseModel):
-    """业务方网页能拿到的公开配置（不含 agent_id / app_id 等内部 ID）"""
+    """业务方网页能拿到的公开配置（不含 agent_id / app_id 等内部 ID）
+
+    session_policy 里只暴露给 widget 需要的开关（identification_mode /
+    show_history_sidebar / auto_resume_last / allow_user_manage / max_history_days），
+    密钥（jwt_signing_secret_encrypted）由后端服务端使用，绝不下发。
+    """
 
     embed_key: str
     name: str
     description: str | None = None
     ui_config: dict | None = None
     behavior: dict | None = None
+    session_policy: dict | None = None
 
 
 class CreateSessionResponse(BaseModel):
@@ -80,6 +86,9 @@ async def get_public_config(
     """业务方 widget 首次加载时拉配置"""
     e = await embed_service.resolve_embed(session, embed_key)
     embed_service.check_origin(e.allowed_origins, origin)
+    # 仅暴露非机密字段；密钥（jwt_signing_secret_encrypted）剥掉
+    policy_raw = dict(e.session_policy or {})
+    policy_raw.pop("jwt_signing_secret_encrypted", None)
     return Result.ok(
         EmbedPublicConfig(
             embed_key=e.embed_key,
@@ -87,6 +96,7 @@ async def get_public_config(
             description=e.description,
             ui_config=e.ui_config,
             behavior=e.behavior,
+            session_policy=policy_raw or None,
         )
     )
 
@@ -218,7 +228,12 @@ async def list_my_session_messages(
     origin: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
 ) -> Result[list[MessageItem]]:
-    """切到某历史会话，加载消息列表（按 seq 正序）"""
+    """切到某历史会话，加载消息列表（按 seq 正序）+ rebind token 到此 sid
+
+    隐式 side-effect：拉某个老会话的消息 = 用户要切到这个会话上继续聊；
+    所以拉消息时顺手把 token 上绑的 sid 切过去，下一条 invoke 就落入这个老
+    会话。仅看不发等价于不发消息，sid 切过去也无害。
+    """
     e, end_user_id = await _resolve_token_context(
         embed_key, session_token, origin, session
     )
@@ -239,6 +254,8 @@ async def list_my_session_messages(
         .all()
     )
     items = [MessageItem.model_validate(r) for r in rows]
+    # 顺手把 token 上绑的 sid 切过去（前端续接的核心一步）
+    await embed_session.rebind_session_id(session_token, session_id)
     return Result.ok(items)
 
 
@@ -334,6 +351,29 @@ async def rename_my_session(
 
 
 # ── 原有 feedback ─────────────────────────────────────────
+
+
+class _FollowupsRequest(_TokenedRequest):
+    question: str = Field(min_length=1, max_length=2000)
+    answer: str = Field(min_length=1, max_length=8000)
+
+
+@router.post(
+    "/{embed_key}/suggest-followups",
+    response_model=Result[list[str]],
+)
+async def suggest_followups(
+    embed_key: str,
+    req: _FollowupsRequest,
+    origin: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> Result[list[str]]:
+    """基于刚才的问答生成 3 个建议追问 —— widget 在 SSE end 后调用，按
+    behavior.show_followups 渲染气泡。鉴权同 invoke（origin + session_token）。"""
+    await _resolve_token_context(embed_key, req.session_token, origin, session)
+    from chameleon.system.graphs import generator as graph_generator
+
+    return Result.ok(await graph_generator.suggest_followups(req.question, req.answer))
 
 
 @router.post("/{embed_key}/feedback", response_model=Result[ScoreItem])

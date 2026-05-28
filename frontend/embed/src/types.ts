@@ -8,6 +8,8 @@ export type ShadowLevel = 'none' | 'sm' | 'md' | 'lg';
 
 export interface UiConfig {
   theme_color?: string;
+  /** 自定义头像图片 URL；优先级高于 icon_emoji */
+  icon_url?: string | null;
   icon_emoji?: string;
   title?: string;
   subtitle?: string;
@@ -33,6 +35,17 @@ export interface BehaviorConfig {
   show_citations?: boolean;
   allow_file_upload?: boolean;
   streaming?: boolean;
+  /** 回复后让 widget 调 /suggest-followups 拿 3 个动态追问气泡 */
+  show_followups?: boolean;
+}
+
+/** /config 端点透出的 session_policy（密钥已剥） */
+export interface PublicSessionPolicy {
+  identification_mode?: 'anonymous_device' | 'external_user_id' | 'signed_jwt';
+  show_history_sidebar?: boolean;
+  auto_resume_last?: boolean;
+  allow_user_manage?: boolean;
+  max_history_days?: number;
 }
 
 export interface EmbedPublicConfig {
@@ -41,11 +54,38 @@ export interface EmbedPublicConfig {
   description: string | null;
   ui_config: UiConfig | null;
   behavior: BehaviorConfig | null;
+  session_policy: PublicSessionPolicy | null;
 }
 
 export interface CreateSessionResponse {
   session_token: string;
   expires_in: number;
+}
+
+/** 历史会话条目（GET /sessions 返回） */
+export interface EmbedSessionItem {
+  session_id: string;
+  title: string | null;
+  last_message_at: string | null;
+  created_at: string;
+}
+
+/** 显式开新对话（POST /sessions/new 返回） */
+export interface CreateNewSessionResponse {
+  session_token: string;
+  session_id: string;
+  expires_in: number;
+}
+
+/** GET /sessions/{sid}/messages 单条 */
+export interface EmbedMessageItem {
+  id: number | string;
+  role: 'user' | 'assistant';
+  content: string;
+  seq?: number;
+  created_at?: string;
+  /** 后端可能透出的引用列表（assistant 行） */
+  citations?: { title?: string; source?: string; snippet?: string }[];
 }
 
 export interface InvokeResponse {

@@ -6,11 +6,13 @@ export type BubbleIcon = 'chat' | 'sparkles' | 'help-circle' | 'message-circle' 
 export type FontSize = 'sm' | 'md' | 'lg';
 export type ShadowLevel = 'none' | 'sm' | 'md' | 'lg';
 
-/** 嵌入式智能体外观 —— 16 项（Dify 全量对齐） */
+/** 嵌入式智能体外观 —— Dify 对齐 */
 export interface UiConfig {
   /** 主色 hex */
   theme_color: string;
-  /** 头像 emoji（单字符 / 短组合） */
+  /** 自定义头像图片 URL（MinIO presigned；优先级高于 icon_emoji） */
+  icon_url: string | null;
+  /** 头像 emoji（单字符 / 短组合）；icon_url 为空时使用 */
   icon_emoji: string;
   /** 面板顶部标题 */
   title: string;
@@ -42,7 +44,7 @@ export interface UiConfig {
   shadow: ShadowLevel;
 }
 
-/** 嵌入式智能体行为 —— 7 项（Dify 风） */
+/** 嵌入式智能体行为 —— 8 项（Dify 风） */
 export interface Behavior {
   /** 页面加载后自动展开面板 */
   auto_open: boolean;
@@ -58,10 +60,13 @@ export interface Behavior {
   allow_file_upload: boolean;
   /** 流式输出（关闭则一次性返回） */
   streaming: boolean;
+  /** 回复后用 LLM 生成 3 个动态追问，渲在 assistant 气泡下方 */
+  show_followups: boolean;
 }
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
   theme_color: '#2563EB',
+  icon_url: null,
   icon_emoji: '🤖',
   title: 'AI 助手',
   subtitle: '在线为您服务',
@@ -87,6 +92,7 @@ export const DEFAULT_BEHAVIOR: Behavior = {
   show_citations: true,
   allow_file_upload: false,
   streaming: true,
+  show_followups: false,
 };
 
 /** 终端用户识别方式（S13 重构） */

@@ -2,8 +2,11 @@
 
 import type {
   ApiResult,
+  CreateNewSessionResponse,
   CreateSessionResponse,
+  EmbedMessageItem,
   EmbedPublicConfig,
+  EmbedSessionItem,
   InvokeResponse,
   StreamChunk,
 } from './types';
@@ -43,6 +46,63 @@ export class EmbedApi {
     );
   }
 
+  // ── S11/S12B：会话管理 ────────────────────────────────────────
+
+  /** 列出当前 token 绑的 end_user 的历史会话（按 last_message_at 倒序） */
+  async listSessions(sessionToken: string): Promise<EmbedSessionItem[]> {
+    const url = `${this.apiBase}/v1/embed/${this.embedKey}/sessions?session_token=${encodeURIComponent(sessionToken)}`;
+    return this.unwrap(await fetch(url, { method: 'GET' }));
+  }
+
+  /** 切到某历史会话，加载其消息列表（按 seq 正序） */
+  async listMessages(sessionToken: string, sessionId: string): Promise<EmbedMessageItem[]> {
+    const url = `${this.apiBase}/v1/embed/${this.embedKey}/sessions/${encodeURIComponent(sessionId)}/messages?session_token=${encodeURIComponent(sessionToken)}`;
+    return this.unwrap(await fetch(url, { method: 'GET' }));
+  }
+
+  /** 显式开新对话 —— 同 token 切到新 sid，不刷新页面 */
+  async createNewSession(sessionToken: string): Promise<CreateNewSessionResponse> {
+    return this.unwrap(
+      await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/sessions/new`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session_token: sessionToken }),
+      }),
+    );
+  }
+
+  /** end-user 软删自己的会话；受 session_policy.allow_user_manage */
+  async deleteSession(sessionToken: string, sessionId: string): Promise<void> {
+    await this.unwrap(
+      await fetch(
+        `${this.apiBase}/v1/embed/${this.embedKey}/sessions/${encodeURIComponent(sessionId)}/delete`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session_token: sessionToken }),
+        },
+      ),
+    );
+  }
+
+  /** end-user 重命名自己的会话；受 session_policy.allow_user_manage */
+  async renameSession(
+    sessionToken: string,
+    sessionId: string,
+    title: string,
+  ): Promise<EmbedSessionItem> {
+    return this.unwrap(
+      await fetch(
+        `${this.apiBase}/v1/embed/${this.embedKey}/sessions/${encodeURIComponent(sessionId)}/name`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session_token: sessionToken, title }),
+        },
+      ),
+    );
+  }
+
   async invoke(sessionToken: string, input: string): Promise<InvokeResponse> {
     return this.unwrap(
       await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/invoke`, {
@@ -50,6 +110,21 @@ export class EmbedApi {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ session_token: sessionToken, input }),
       })
+    );
+  }
+
+  /** 回复后建议追问（基于刚才一轮 Q/A 让 LLM 生成 3 个 follow-up） */
+  async suggestFollowups(
+    sessionToken: string,
+    question: string,
+    answer: string,
+  ): Promise<string[]> {
+    return this.unwrap(
+      await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/suggest-followups`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session_token: sessionToken, question, answer }),
+      }),
     );
   }
 

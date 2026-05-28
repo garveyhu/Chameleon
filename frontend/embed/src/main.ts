@@ -4,11 +4,18 @@
  *   <script src="https://chameleon.example.com/widget.js"
  *           data-embed-key="abc123"
  *           data-api-base="https://chameleon.example.com"
+ *           data-external-user-id="biz-user-123"  (可选；external_user_id 模式)
+ *           data-jwt-token="eyJhbGci..."          (可选；signed_jwt 模式)
  *           defer></script>
  *
- * 也支持手动初始化：
+ * 三种身份模式都能 SSR 把值塞到 data-* 上自动初始化；动态场景（登录后异步拿
+ * token）才需要走手动 init：
  *   <script>
- *     window.ChameleonWidget.init({ embedKey: 'abc123', apiBase: 'https://chameleon.example.com' });
+ *     window.ChameleonWidget.init({
+ *       embedKey: 'abc123',
+ *       apiBase: 'https://chameleon.example.com',
+ *       jwtToken: '...',
+ *     });
  *   </script>
  */
 
@@ -54,7 +61,9 @@ const auto = () => {
   const embedKey = fallback.getAttribute('data-embed-key');
   if (!embedKey) return;
   const apiBase = fallback.getAttribute('data-api-base') || deriveApiBase(fallback.src);
-  init({ embedKey, apiBase });
+  const externalUserId = fallback.getAttribute('data-external-user-id') || undefined;
+  const jwtToken = fallback.getAttribute('data-jwt-token') || undefined;
+  init({ embedKey, apiBase, externalUserId, jwtToken });
 };
 
 function findSelfScript(): HTMLScriptElement | null {

@@ -4,7 +4,7 @@
  * - 中间表单
  * - 右侧静态预览（实时响应 ui_config + behavior）
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -14,6 +14,7 @@ import {
   Cog,
   Copy,
   HelpCircle,
+  Loader2,
   MessageCircle,
   MessageSquare,
   MessagesSquare,
@@ -23,12 +24,16 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  Upload,
+  X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
+import { toast } from '@/core/lib/toast';
+import { uploadFile } from '@/system/files/services/file-upload';
 import {
   Modal,
   ModalBody,
@@ -263,7 +268,12 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
                   originCount={originList.length}
                 />
               ) : null}
-              {tab === 'access' ? <AccessTab embedKey={initial?.embed_key ?? null} /> : null}
+              {tab === 'access' ? (
+                <AccessTab
+                  embedKey={initial?.embed_key ?? null}
+                  identificationMode={sessionPolicy.identification_mode}
+                />
+              ) : null}
             </div>
 
             {/* preview */}
@@ -383,6 +393,118 @@ const SHADOW_OPTIONS: { value: ShadowLevel; label: string }[] = [
 
 const EMOJI_PRESETS = ['🤖', '✨', '💬', '👋', '🦊', '🐼', '🧠', '🎯'];
 
+const AvatarPicker: React.FC<{
+  iconUrl: string | null;
+  iconEmoji: string;
+  onChangeUrl: (next: string | null) => void;
+  onChangeEmoji: (next: string) => void;
+}> = ({ iconUrl, iconEmoji, onChangeUrl, onChangeEmoji }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleSelect = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    // 头像不需要大图，前端 2MB 软限（后端硬限 20MB）
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('头像图片不能超过 2MB');
+      return;
+    }
+    setUploading(true);
+    try {
+      const res = await uploadFile(file, { namespace: 'embed-icons' });
+      onChangeUrl(res.object_url);
+    } catch (e) {
+      toast.error(`上传失败：${(e as Error).message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* 当前头像预览 + 操作 */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-stone-50 text-[28px]">
+          {iconUrl ? (
+            <img src={iconUrl} alt="头像" className="h-full w-full object-cover" />
+          ) : (
+            <span>{iconEmoji || '🤖'}</span>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) void handleSelect(f);
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="mr-1 h-3.5 w-3.5" />
+              )}
+              {iconUrl ? '更换图片' : '上传图片'}
+            </Button>
+            {iconUrl && (
+              <Button
+                size="sm"
+                variant="ghost"
+                type="button"
+                onClick={() => onChangeUrl(null)}
+                title="移除图片，使用 emoji"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+          <span className="text-[11px] text-stone-400">PNG / JPG / SVG，≤ 2MB；不传则用 emoji</span>
+        </div>
+      </div>
+
+      {/* emoji 回退选项（图片为空时生效） */}
+      <div className={cn('flex flex-wrap items-center gap-1.5', iconUrl && 'opacity-50')}>
+        <Input
+          value={iconEmoji}
+          onChange={e => onChangeEmoji(e.target.value)}
+          className="w-20 text-center text-[16px]"
+          maxLength={4}
+          disabled={!!iconUrl}
+        />
+        {EMOJI_PRESETS.map(e => (
+          <button
+            key={e}
+            type="button"
+            onClick={() => onChangeEmoji(e)}
+            disabled={!!iconUrl}
+            className={cn(
+              'flex h-8 w-8 items-center justify-center rounded text-[16px] transition hover:bg-stone-100 disabled:cursor-not-allowed',
+              iconEmoji === e && !iconUrl ? 'bg-blue-50 ring-1 ring-blue-200' : '',
+            )}
+          >
+            {e}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const AppearanceTab: React.FC<{
   ui: UiConfig;
   onChange: (next: UiConfig) => void;
@@ -421,28 +543,13 @@ const AppearanceTab: React.FC<{
       </Section>
 
       <Section title="文案">
-        <Field label="头像 emoji">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Input
-              value={ui.icon_emoji}
-              onChange={e => patch('icon_emoji', e.target.value)}
-              className="w-20 text-center text-[16px]"
-              maxLength={4}
-            />
-            {EMOJI_PRESETS.map(e => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => patch('icon_emoji', e)}
-                className={cn(
-                  'flex h-8 w-8 items-center justify-center rounded text-[16px] transition hover:bg-stone-100',
-                  ui.icon_emoji === e ? 'bg-blue-50 ring-1 ring-blue-200' : '',
-                )}
-              >
-                {e}
-              </button>
-            ))}
-          </div>
+        <Field label="头像" hint="上传图片优先；未上传时使用 emoji">
+          <AvatarPicker
+            iconUrl={ui.icon_url}
+            iconEmoji={ui.icon_emoji}
+            onChangeUrl={v => patch('icon_url', v)}
+            onChangeEmoji={v => patch('icon_emoji', v)}
+          />
         </Field>
         <Field label="标题">
           <Input value={ui.title} onChange={e => patch('title', e.target.value)} />
@@ -623,6 +730,12 @@ const BehaviorTab: React.FC<{
           checked={v.allow_file_upload}
           onChange={c => patch('allow_file_upload', c)}
         />
+        <ToggleField
+          label="回复后建议追问"
+          hint="基于刚才一轮问答让 LLM 生成 3 个 follow-up 气泡（点击直接发送）"
+          checked={v.show_followups}
+          onChange={c => patch('show_followups', c)}
+        />
       </Section>
     </div>
   );
@@ -650,7 +763,10 @@ const SecurityTab: React.FC<{
 );
 
 // ── 接入方式：JS Widget + iframe 代码片段 ──────────────────────
-const AccessTab: React.FC<{ embedKey: string | null }> = ({ embedKey }) => {
+const AccessTab: React.FC<{
+  embedKey: string | null;
+  identificationMode: IdentificationMode;
+}> = ({ embedKey, identificationMode }) => {
   if (!embedKey) {
     return (
       <div className="rounded-lg border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
@@ -659,14 +775,76 @@ const AccessTab: React.FC<{ embedKey: string | null }> = ({ embedKey }) => {
     );
   }
   const origin = window.location.origin;
-  const script = `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer>\n</script>`;
+
+  // 按身份模式拼 script —— anonymous 极简；其余加 data-* 占位 + 服务端示例
+  const script =
+    identificationMode === 'external_user_id'
+      ? `<!-- 把 BIZ_USER_ID 替换为当前登录用户在你系统里的 ID -->\n<script\n  src="${origin}/widget.js"\n  data-embed-key="${embedKey}"\n  data-external-user-id="BIZ_USER_ID"\n  defer\n></script>`
+      : identificationMode === 'signed_jwt'
+        ? `<!-- 把 SIGNED_JWT 替换为你后端签发的 JWT；签发示例见下方 -->\n<script\n  src="${origin}/widget.js"\n  data-embed-key="${embedKey}"\n  data-jwt-token="SIGNED_JWT"\n  defer\n></script>`
+        : `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer>\n</script>`;
+
   const iframe = `<iframe src="${origin}/embed/${embedKey}" style="width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)">\n</iframe>`;
+
+  // 模式 2/3 给的接入提示
+  const modeHint = MODE_HINTS[identificationMode];
+
+  // 模式 3 额外：后端签 JWT 的 Python / Node 示例
+  const pythonSignSnippet = `import jwt, time
+SECRET = "<把后台「会话 tab → JWT 共享密钥」的值粘到这>"
+token = jwt.encode(
+    {"sub": "biz-user-12345", "exp": int(time.time()) + 3600},
+    SECRET,
+    algorithm="HS256",
+)
+# 把 token 渲到页面 data-jwt-token 属性`;
+  const nodeSignSnippet = `import jwt from 'jsonwebtoken';
+const SECRET = '<把后台「会话 tab → JWT 共享密钥」的值粘到这>';
+const token = jwt.sign(
+  { sub: 'biz-user-12345' },
+  SECRET,
+  { algorithm: 'HS256', expiresIn: '1h' },
+);
+// 把 token 渲到页面 data-jwt-token 属性`;
+
   return (
     <div className="space-y-3">
-      <SnippetCard title="JS Widget" hint="推荐：右下角浮动气泡" code={script} />
+      {modeHint ? (
+        <div className="rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11.5px] leading-relaxed text-blue-800">
+          {modeHint}
+        </div>
+      ) : null}
+      <SnippetCard
+        title="JS Widget"
+        hint="推荐：右下角浮动气泡"
+        code={script}
+      />
+      {identificationMode === 'signed_jwt' ? (
+        <>
+          <SnippetCard
+            title="后端签 JWT · Python"
+            hint="把 token 渲到 data-jwt-token"
+            code={pythonSignSnippet}
+          />
+          <SnippetCard
+            title="后端签 JWT · Node"
+            hint="把 token 渲到 data-jwt-token"
+            code={nodeSignSnippet}
+          />
+        </>
+      ) : null}
       <SnippetCard title="iframe" hint="嵌入到页面内某个区域" code={iframe} />
     </div>
   );
+};
+
+const MODE_HINTS: Record<IdentificationMode, string | null> = {
+  anonymous_device:
+    null,
+  external_user_id:
+    '本应用配置为「外部用户 ID」模式：业务方网页（最好 SSR 渲染）需把当前登录用户的 ID 注入 data-external-user-id；未注入时 widget 会显错并禁用输入。',
+  signed_jwt:
+    '本应用配置为「签名 JWT」模式：业务方后端用「会话 tab」里录入的 HS256 密钥签 JWT，sub claim 当 end_user_id，把 token 注入 data-jwt-token。',
 };
 
 const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
@@ -697,7 +875,7 @@ const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed font-medium break-all whitespace-pre-wrap text-stone-900">
+      <pre className="overflow-x-auto bg-slate-700 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-slate-100 break-all whitespace-pre-wrap">
         {code}
       </pre>
     </div>
@@ -835,6 +1013,17 @@ const SuggestedQuestionsEditor: React.FC<{
   );
 };
 
+/** 生成 HS256 推荐密钥：32 字节随机 → base64url（无填充）。
+ *  够强（256 bit 熵），可读字符可放 .env / data attr。 */
+const generateHs256Secret = (): string => {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  // base64url（URL safe）
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
 // ── S13b：会话策略 + owner key picker ────────────────────────
 
 const IDENTIFICATION_MODE_OPTIONS: { value: IdentificationMode; label: string; desc: string }[] = [
@@ -850,7 +1039,7 @@ const IDENTIFICATION_MODE_OPTIONS: { value: IdentificationMode; label: string; d
   },
   {
     value: 'signed_jwt',
-    label: '签名 JWT（推荐生产）',
+    label: '签名 JWT',
     desc: '接入方后端 HS256 签名 JWT，后端用配置的密钥验签，sub claim 当 end_user_id。',
   },
 ];
@@ -941,14 +1130,45 @@ const SessionTab: React.FC<{
       {policy.identification_mode === 'signed_jwt' ? (
         <section className="space-y-1.5">
           <Label>JWT 共享密钥（HS256）</Label>
-          <Input
-            type="password"
-            value={policy.jwt_signing_secret_encrypted ?? ''}
-            onChange={e =>
-              patch('jwt_signing_secret_encrypted', e.target.value || null)
-            }
-            placeholder="保存后会加密落库；空 = 该模式无法使用"
-          />
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="text"
+              value={policy.jwt_signing_secret_encrypted ?? ''}
+              onChange={e =>
+                patch('jwt_signing_secret_encrypted', e.target.value || null)
+              }
+              placeholder="点「生成」自动产出，或粘贴你已有的 HS256 密钥"
+              className="font-mono text-[11.5px]"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              type="button"
+              onClick={() => patch('jwt_signing_secret_encrypted', generateHs256Secret())}
+              title="随机生成 32 字节 base64url 密钥"
+            >
+              生成
+            </Button>
+            {policy.jwt_signing_secret_encrypted ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard.writeText(
+                    policy.jwt_signing_secret_encrypted ?? '',
+                  );
+                  toast.success('密钥已复制');
+                }}
+                title="复制"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+          </div>
+          <div className="text-[11px] text-amber-600">
+            ⚠️ 复制保管好这串密钥，业务方后端用同一份签 JWT；保存后页面会用密文落库。
+          </div>
         </section>
       ) : null}
 
