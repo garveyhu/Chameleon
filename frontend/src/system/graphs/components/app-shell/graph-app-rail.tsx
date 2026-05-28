@@ -15,7 +15,6 @@ import {
   ChevronsRight,
   Code2,
   Copy,
-  Cpu,
   ExternalLink,
   Globe,
   KeyRound,
@@ -25,9 +24,11 @@ import {
   Rocket,
   Server,
   Settings,
+  Sliders,
   Workflow,
 } from 'lucide-react';
 
+import { Popover, PopoverContent, PopoverTrigger } from '@/core/components/ui/popover';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
@@ -219,14 +220,38 @@ export const GraphAppRail = ({
               <ChevronLeft className="h-3.5 w-3.5" />
               返回应用
             </button>
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              title="收起应用栏"
-              className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-0.5">
+              {linkedAgent && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      title="应用设置（辅助模型）"
+                      className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+                    >
+                      <Sliders className="h-4 w-4" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" side="bottom" className="w-72 p-3">
+                    <div className="mb-2 text-[12px] font-medium text-stone-800">应用设置</div>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-[11px] font-medium text-stone-600">辅助模型</div>
+                        <AgentHelperModelField agent={linkedAgent} compact />
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+              <button
+                type="button"
+                onClick={() => setCollapsed(true)}
+                title="收起应用栏"
+                className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+              >
+                <ChevronsLeft className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex items-start gap-2.5">
             <span
@@ -329,12 +354,6 @@ export const GraphAppRail = ({
             </div>
           </Card>
 
-          {/* 应用辅助模型 —— 业务调用走画布节点；followup/标题/摘要 走此处 */}
-          {linkedAgent && (
-            <Card icon={Cpu} title="辅助模型" tone={linkedAgent.default_model_code ? 'on' : 'off'}>
-              <AgentHelperModelField agent={linkedAgent} compact />
-            </Card>
-          )}
         </div>
       </aside>
 
