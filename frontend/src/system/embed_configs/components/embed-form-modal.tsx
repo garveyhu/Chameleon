@@ -537,6 +537,12 @@ const AppearanceTab: React.FC<{
           <Field label="头部背景色">
             <ColorInput value={ui.header_bg} onChange={v => patch('header_bg', v)} />
           </Field>
+          <Field label="头部文字颜色" hint="留空 / 透明值时按底色自动反色">
+            <ColorInput
+              value={ui.header_text_color}
+              onChange={v => patch('header_text_color', v)}
+            />
+          </Field>
           <Field label="浮窗按钮色">
             <ColorInput value={ui.bubble_color} onChange={v => patch('bubble_color', v)} />
           </Field>

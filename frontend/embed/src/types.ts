@@ -47,6 +47,8 @@ export interface UiConfig {
   panel_width?: number;
   panel_height?: number;
   header_bg?: string;
+  /** 头部文字颜色；空 / 不传 = 自动反色 */
+  header_text_color?: string;
   shadow?: ShadowLevel;
 }
 

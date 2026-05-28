@@ -148,10 +148,15 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
               color: paneText,
             }}
           >
-            {/* header —— 文字色按 header_bg 亮度自适应（白底 → 深字） */}
+            {/* header —— header_text_color 优先；空字符串时按 header_bg 亮度自适应 */}
             {(() => {
               const headerLight = isLightHex(ui.header_bg);
-              const headerText = headerLight ? paneText : '#FFFFFF';
+              const configured = (ui.header_text_color || '').trim();
+              const headerText = configured
+                ? configured
+                : headerLight
+                  ? paneText
+                  : '#FFFFFF';
               const closeHover = headerLight ? 'hover:bg-stone-100' : 'hover:bg-white/10';
               const headerBorderBottom = headerLight
                 ? `1px solid ${dividerBorder}`
@@ -219,6 +224,22 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
                 />
               ) : null}
 
+              {/* user 示例气泡 —— 让 theme_color 主色能在预览里被看见 */}
+              <BubbleMsg
+                role="user"
+                text="你好，能介绍下你的能力吗？"
+                emoji={ui.icon_emoji}
+                iconUrl={ui.icon_url}
+                themeColor={ui.theme_color}
+                paneText={paneText}
+                subtleText={subtleText}
+                isDark={isDark}
+                cornerPx={corner}
+                fontSize={fontSize}
+                showCitation={false}
+                showFeedback={false}
+              />
+
               {behavior.suggested_questions.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {behavior.suggested_questions.map((q, i) => (
@@ -244,7 +265,7 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
 
             {/* input bar —— 跟 widget 对齐：去顶线 / textarea 方形圆角 + shadow / 方形 send */}
             <div
-              className="flex items-center gap-1.5 px-3 py-2.5"
+              className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5"
               style={{ backgroundColor: paneBg }}
             >
               {behavior.allow_file_upload ? (
@@ -278,11 +299,11 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
                 <Send className="h-3 w-3" />
               </button>
             </div>
-            {/* powered-by 水印 */}
+            {/* powered-by 水印 —— 去顶线，跟 input 上下空白均匀 */}
             {ui.show_powered_by !== false ? (
               <div
-                className={cn('text-center py-1', fontSize.meta)}
-                style={{ color: subtleText, opacity: 0.7 }}
+                className={cn('text-center px-3 pb-1.5', fontSize.meta)}
+                style={{ color: subtleText, opacity: 0.7, backgroundColor: paneBg }}
               >
                 {ui.powered_by_text || 'powered by Chameleon'}
               </div>

@@ -66,6 +66,8 @@ export interface UiConfig {
   panel_height: number;
   /** 头部背景色 hex（默认随主色） */
   header_bg: string;
+  /** 头部文字颜色 hex；空字符串 = 按 header_bg 亮度自动反色（白底深字 / 深底白字） */
+  header_text_color: string;
   /** 阴影强度 */
   shadow: ShadowLevel;
 }
@@ -128,6 +130,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   panel_width: 400,
   panel_height: 600,
   header_bg: '#FFFFFF',
+  header_text_color: '',
   shadow: 'lg',
 };
 

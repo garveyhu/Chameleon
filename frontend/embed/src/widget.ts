@@ -70,6 +70,7 @@ const DEFAULT_UI: Required<UiConfig> = {
   panel_width: 400,
   panel_height: 600,
   header_bg: '#FFFFFF',
+  header_text_color: '',
   shadow: 'lg',
 };
 

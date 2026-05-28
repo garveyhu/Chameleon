@@ -73,8 +73,13 @@ const resolveTheme = (ui: UiConfig): ResolvedTheme => {
   const bubbleColor = ui.bubble_color || themeColor;
   const headerBg = ui.header_bg || themeColor;
   const dark = isDark(ui.mode || 'light');
-  // header 文字按 header 底色自适应：白/浅底 → 深字（用 paneText），深底 → 白
-  const headerText = isLightHex(headerBg) ? (dark ? '#F1F5F9' : '#111827') : '#FFFFFF';
+  // header 文字优先用配置色；空时按 header 底色自适应
+  const configuredHeaderText = (ui.header_text_color || '').trim();
+  const headerText = configuredHeaderText
+    ? configuredHeaderText
+    : isLightHex(headerBg)
+      ? dark ? '#F1F5F9' : '#111827'
+      : '#FFFFFF';
   return {
     themeColor,
     bubbleColor,
@@ -771,7 +776,7 @@ export const buildStyles = (ui: UiConfig): string => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 14px 14px;
+  padding: 12px 14px 6px;
   background: ${theme.paneBg};
 }
 .upload-btn {
@@ -841,9 +846,9 @@ export const buildStyles = (ui: UiConfig): string => {
   text-align: center;
   font-size: 11px;
   color: ${theme.brandText};
-  padding: 6px 0 8px;
+  /* composer 已经收尾 padding-bottom 14；这里 6/0/6 让水印上下空白对称 */
+  padding: 4px 0 8px;
   background: ${theme.brandBg};
-  border-top: 1px solid ${theme.borderColor};
 }
 .brand a { color: inherit; text-decoration: none; }
 
