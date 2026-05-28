@@ -232,7 +232,7 @@ export const GraphAppRail = ({
                       <Sliders className="h-4 w-4" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent align="end" side="bottom" className="w-72 p-3">
+                  <PopoverContent side="right" align="start" sideOffset={8} className="w-72 p-3">
                     <div className="mb-2 text-[12px] font-medium text-stone-800">应用设置</div>
                     <div className="space-y-3">
                       <div>
@@ -256,11 +256,21 @@ export const GraphAppRail = ({
           <div className="flex items-start gap-2.5">
             <span
               className={cn(
-                'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-                isChat ? 'bg-violet-100 text-violet-600' : 'bg-sky-100 text-sky-600',
+                'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg',
+                graph.icon
+                  ? 'bg-stone-100'
+                  : isChat
+                    ? 'bg-violet-100 text-violet-600'
+                    : 'bg-sky-100 text-sky-600',
               )}
             >
-              {isChat ? <MessageSquare className="h-4 w-4" /> : <Workflow className="h-4 w-4" />}
+              {graph.icon ? (
+                <img src={graph.icon} alt="" className="h-full w-full object-cover" />
+              ) : isChat ? (
+                <MessageSquare className="h-4 w-4" />
+              ) : (
+                <Workflow className="h-4 w-4" />
+              )}
             </span>
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13px] font-semibold text-stone-900">{graph.name}</div>

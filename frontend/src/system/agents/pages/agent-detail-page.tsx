@@ -8,13 +8,28 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { useQuery } from '@tanstack/react-query';
-import { Activity, ArrowLeft, ArrowRight, BookOpen, Cpu, Info, KeyRound, MessagesSquare, Workflow } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  Code2,
+  Cpu,
+  Globe,
+  Info,
+  KeyRound,
+  type LucideIcon,
+  MessageSquare,
+  MessagesSquare,
+  Workflow,
+} from 'lucide-react';
 
 import { OrchestrationBadge } from '@/core/components/common/orchestration-badge';
 import { SectionCard } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { resolveOrchestrationKind } from '@/core/lib/orchestration';
 import { AgentApiTab } from '@/system/agents/components/agent-api-tab';
 import { AgentConfigForm } from '@/system/agents/components/agent-config-form';
 import { AgentHelperModelField } from '@/system/agents/components/agent-helper-model-field';
@@ -103,33 +118,63 @@ export const AgentDetailPage = () => {
   );
 };
 
-const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean }) => (
-  <div className="flex items-center gap-3">
-    <Link
-      to="/agents"
-      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-    >
-      <ArrowLeft className="h-3.5 w-3.5" /> 应用
-    </Link>
-    <span className="text-stone-300">/</span>
-    {loading ? (
-      <span className="text-[12.5px] text-stone-400">加载中…</span>
-    ) : agent ? (
-      <div className="flex items-baseline gap-2">
-        <span className="text-[15px] font-medium text-stone-900">{agent.name}</span>
-        <span className="font-mono text-[11.5px] text-stone-500">{agent.agent_key}</span>
-        <OrchestrationBadge source={agent.source} graphKind={agent.graph_kind} />
-        {!agent.enabled && (
-          <Badge variant="outline" className="bg-stone-100 text-[10.5px] text-stone-500">
-            已停用
-          </Badge>
-        )}
-      </div>
-    ) : (
-      <span className="text-[12.5px] text-stone-400">未找到</span>
-    )}
-  </div>
-);
+/** kind → 默认头像（用户未上传 icon 时按编排方式给个色） */
+const KIND_TILE: Record<
+  ReturnType<typeof resolveOrchestrationKind> & string,
+  { Icon: LucideIcon; tile: string }
+> = {
+  code: { Icon: Code2, tile: 'bg-indigo-50 text-indigo-600' },
+  chatflow: { Icon: MessageSquare, tile: 'bg-sky-50 text-sky-600' },
+  workflow: { Icon: Workflow, tile: 'bg-violet-50 text-violet-600' },
+  external: { Icon: Globe, tile: 'bg-amber-50 text-amber-600' },
+};
+
+const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean }) => {
+  const kind = agent ? resolveOrchestrationKind(agent.source, agent.graph_kind) : null;
+  const meta = (kind && KIND_TILE[kind]) || KIND_TILE.external;
+  const Icon = meta.Icon;
+  return (
+    <div className="flex items-center gap-3">
+      <Link
+        to="/agents"
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> 应用
+      </Link>
+      <span className="text-stone-300">/</span>
+      {loading ? (
+        <span className="text-[12.5px] text-stone-400">加载中…</span>
+      ) : agent ? (
+        <div className="flex items-center gap-2.5">
+          <div
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg',
+              agent.icon ? 'bg-stone-100' : meta.tile,
+            )}
+          >
+            {agent.icon ? (
+              <img src={agent.icon} alt="" className="h-full w-full object-cover" />
+            ) : (
+              <Icon className="h-5 w-5" strokeWidth={1.75} />
+            )}
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[15px] font-medium text-stone-900">{agent.name}</span>
+            <span className="font-mono text-[11.5px] text-stone-500">{agent.agent_key}</span>
+            <OrchestrationBadge source={agent.source} graphKind={agent.graph_kind} />
+            {!agent.enabled && (
+              <Badge variant="outline" className="bg-stone-100 text-[10.5px] text-stone-500">
+                已停用
+              </Badge>
+            )}
+          </div>
+        </div>
+      ) : (
+        <span className="text-[12.5px] text-stone-400">未找到</span>
+      )}
+    </div>
+  );
+};
 
 const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
   if (!agent) return <div className="py-12 text-center text-sm text-stone-400">—</div>;
