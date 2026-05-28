@@ -164,11 +164,24 @@ async def append(
             normalize_content,
         )
 
-        normalized = normalize_content(blocks)
-        # content 字段总是同步 flatten 后的文本，方便 LIKE / 全文检索
-        content_str = flatten_to_text(normalized)
-        # 序列化回 list[dict] 入库
-        blocks = [b.model_dump() for b in normalized]
+        # file_ref 是历史回放专用 block（前端附件 chip），不进 LLM ContentBlock，
+        # 也不参与 flatten —— 但要原样落 DB 让历史回放能渲附件
+        file_refs = [
+            b for b in blocks
+            if isinstance(b, dict) and b.get("type") == "file_ref"
+        ]
+        llm_blocks = [
+            b for b in blocks
+            if not (isinstance(b, dict) and b.get("type") == "file_ref")
+        ]
+
+        if llm_blocks:
+            normalized = normalize_content(llm_blocks)
+            content_str = flatten_to_text(normalized)
+            blocks = [b.model_dump() for b in normalized] + file_refs
+        else:
+            # 只有 file_ref（少见，正常会有 text block 一起进来）→ content 仍用 draft.content
+            blocks = file_refs or None
 
     msg = Message(
         session_id=session_id,

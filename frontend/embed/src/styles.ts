@@ -369,6 +369,23 @@ export const buildStyles = (ui: UiConfig): string => {
   padding-right: 2px;
 }
 .att-chip.failed .att-chip-status { color: rgb(190, 18, 60); }
+/* 流式时若用户上滑，display 「跳到最新」浮按钮（点击回到底） */
+.jump-latest-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 88px;
+  background: ${theme.paneBg};
+  color: ${theme.paneText};
+  border: 1px solid ${theme.borderColor};
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 5;
+}
+.jump-latest-btn:hover { background: rgba(127,127,127,0.06); }
 .att-chip-spinner {
   width: 14px; height: 14px;
   border: 2px solid currentColor;

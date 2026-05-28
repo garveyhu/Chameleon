@@ -101,6 +101,13 @@ export class ChameleonWidget {
   private messages: WidgetMessage[] = [];
   private isOpen = false;
   private isSending = false;
+  /**
+   * 流式 / 新消息时是否自动跟随到底部。
+   * - 用户向上滚动 → false，停止强拉（避免打断阅读）
+   * - 用户滚回最底部（< STICK_THRESHOLD_PX）→ 重新 true
+   * - 用户主动发送消息时强制 reset true
+   */
+  private autoFollow = true;
   private msgIdSeq = 0;
   private currentAbort: AbortController | null = null;
   // 侧栏 / 续接状态
@@ -421,6 +428,17 @@ export class ChameleonWidget {
     this.bubble = this.shadow.querySelector('.bubble') as HTMLButtonElement;
     this.panel = this.shadow.querySelector('.panel') as HTMLDivElement;
     this.messagesEl = this.shadow.querySelector('.messages') as HTMLDivElement;
+    // 滚动 follow：用户上滑 → autoFollow 关，回到底部 → 重开
+    this.messagesEl.addEventListener('scroll', () => {
+      const STICK_PX = 80;
+      const distance =
+        this.messagesEl.scrollHeight - this.messagesEl.scrollTop - this.messagesEl.clientHeight;
+      const nearBottom = distance <= STICK_PX;
+      if (this.autoFollow !== nearBottom) {
+        this.autoFollow = nearBottom;
+        this.updateJumpToLatestBtn();
+      }
+    });
     this.textarea = this.shadow.querySelector('textarea') as HTMLTextAreaElement;
     this.sendBtn = this.shadow.querySelector('.send-btn') as HTMLButtonElement;
     if (showSidebar) {
@@ -897,7 +915,8 @@ export class ChameleonWidget {
   private pushMessage(msg: WidgetMessage): void {
     this.messages.push(msg);
     this.renderMessage(msg);
-    this.scrollToBottom();
+    // 新消息出现 → 强制 follow 一次，让用户立刻看到。后续 delta 仍按 autoFollow 决定。
+    this.scrollToBottom(true);
   }
 
   private updateMessage(id: string, patch: Partial<WidgetMessage>): void {
@@ -907,7 +926,9 @@ export class ChameleonWidget {
     const el = this.messagesEl.querySelector(`[data-mid="${id}"]`);
     if (el) {
       el.replaceWith(this.buildMessageEl(this.messages[idx]));
+      // 流式过程中 scrollToBottom 受 autoFollow 控制；流式结束时同步 jump 按钮可见性
       this.scrollToBottom();
+      if (patch.streaming === false) this.updateJumpToLatestBtn();
     }
   }
 
@@ -1111,10 +1132,36 @@ export class ChameleonWidget {
     await this.handleSend(userInput);
   }
 
-  private scrollToBottom(): void {
+  /**
+   * 仅在 autoFollow=true 时滚到底（流式 / 自然刷新）；force=true 时强制（pushMessage / 用户主动发送 / 切换会话）
+   */
+  private scrollToBottom(force = false): void {
+    if (!force && !this.autoFollow) return;
     requestAnimationFrame(() => {
       this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+      if (force) {
+        this.autoFollow = true;
+        this.updateJumpToLatestBtn();
+      }
     });
+  }
+
+  /** 「跳到最新」浮按钮：仅在 autoFollow=false 且流式中时显示 */
+  private updateJumpToLatestBtn(): void {
+    if (!this.shadow) return;
+    let btn = this.shadow.querySelector('.jump-latest-btn') as HTMLButtonElement | null;
+    const shouldShow = !this.autoFollow && this.messages.some(m => m.streaming);
+    if (shouldShow && !btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'jump-latest-btn';
+      btn.setAttribute('aria-label', '跳到最新');
+      btn.innerHTML = '↓ 跳到最新';
+      btn.addEventListener('click', () => this.scrollToBottom(true));
+      this.panel.appendChild(btn);
+    } else if (!shouldShow && btn) {
+      btn.remove();
+    }
   }
 
   // ─── Send ────────────────────────────────────────────────
@@ -1140,6 +1187,8 @@ export class ChameleonWidget {
     this.textarea.value = '';
     this.textarea.style.height = 'auto';
     this.setComposerDisabled(true);
+    // 用户主动发送 → 强制重新 follow，让自己的消息立即可见
+    this.autoFollow = true;
 
     // 清掉首屏的推荐问题面板（点击后已发，留着没意义）
     this.messagesEl.querySelector('.suggested-questions[data-role="suggested"]')?.remove();

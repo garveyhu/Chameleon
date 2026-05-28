@@ -538,12 +538,24 @@ async def invoke_once(
         duration_ms = int((time.monotonic() - start) * 1000)
         # 成功 → 写 assistant message + touch（标题取首条 user 内容）
         if err is None and result is not None:
+            # citations 合并：provider 端的 + session_files RAG hits
+            non_stream_citations: list[dict] = []
+            for hit in rag_hits:
+                non_stream_citations.append({
+                    "source": hit.get("filename") or "",
+                    "title": hit.get("filename") or "",
+                    "snippet": (hit.get("snippet") or "")[:240],
+                    "score": hit.get("score"),
+                })
+            for c in result.citations:
+                non_stream_citations.append(c.model_dump(exclude_none=True))
             await session_service.append(
                 session,
                 sid,
                 AppendMessageDraft(
                     role="assistant",
                     content=result.answer,
+                    citations=non_stream_citations or None,
                     usage=result.usage.model_dump() if result.usage else None,
                     end_user_id=end_user_id,
                 ),
@@ -705,6 +717,21 @@ async def stream_invoke(
         request_id=rid,
     )
 
+    # 会话级附件 RAG → 转 citation chunk 推给 widget（流式时 show_citations=True 才推；
+    # 同时下面 _assistant_citations 攒着等 stream 结束后写 message.citations 一并落 DB）
+    _assistant_citations: list[dict] = []
+    if rag_hits_s:
+        for hit in rag_hits_s:
+            cit = {
+                "source": hit.get("filename") or "",
+                "title": hit.get("filename") or "",
+                "snippet": (hit.get("snippet") or "")[:240],
+                "score": hit.get("score"),
+            }
+            _assistant_citations.append(cit)
+            if show_citations:
+                yield event_citation(cit)
+
     agg = _StreamAggregator(session_id=ctx.session_id, request_id=rid)
     start = time.monotonic()
     err: dict | None = None
@@ -745,7 +772,11 @@ async def stream_invoke(
                     total_tokens=pu.total_tokens or 0,
                 )
             yield event_end(usage=sse_usage, answer=agg_result.answer)
-            # 落 assistant message + touch（与非流路径对齐）
+            # 落 assistant message + touch（与非流路径对齐）；citations 合并
+            # provider emit 的 + session_files RAG hits，让刷新后还能看到引用卡片
+            merged_citations: list[dict] = list(_assistant_citations)
+            for c in agg_result.citations:
+                merged_citations.append(c.model_dump(exclude_none=True))
             try:
                 await session_service.append(
                     session,
@@ -753,6 +784,7 @@ async def stream_invoke(
                     AppendMessageDraft(
                         role="assistant",
                         content=agg_result.answer,
+                        citations=merged_citations or None,
                         usage=agg_result.usage.model_dump()
                         if agg_result.usage
                         else None,
