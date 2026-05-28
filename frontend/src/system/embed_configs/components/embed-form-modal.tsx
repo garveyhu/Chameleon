@@ -1088,7 +1088,16 @@ const AccessTab: React.FC<{
         ? `<!-- 把 SIGNED_JWT 替换为你后端签发的 JWT；签发示例见下方 -->\n<script\n  src="${origin}/widget.js"\n  data-embed-key="${embedKey}"\n  data-jwt-token="SIGNED_JWT"\n  defer\n></script>`
         : `<script src="${origin}/widget.js" data-embed-key="${embedKey}" defer>\n</script>`;
 
-  const iframe = `<iframe src="${origin}/embed/${embedKey}" style="width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)">\n</iframe>`;
+  // iframe 同样按身份模式分支：external_user_id → ?euid=...，signed_jwt → ?jwt=...，
+  // anonymous_device 保持极简（不带身份参数，widget 内自动用 localStorage device_id）
+  const iframeStyle =
+    'width:400px;height:600px;border:0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.1)';
+  const iframe =
+    identificationMode === 'external_user_id'
+      ? `<!-- 把 BIZ_USER_ID 替换为当前登录用户在你系统里的 ID -->\n<iframe\n  src="${origin}/embed/${embedKey}?euid=BIZ_USER_ID"\n  style="${iframeStyle}"\n></iframe>`
+      : identificationMode === 'signed_jwt'
+        ? `<!-- 把 SIGNED_JWT 替换为你后端签发的 JWT；签发示例见上方 -->\n<iframe\n  src="${origin}/embed/${embedKey}?jwt=SIGNED_JWT"\n  style="${iframeStyle}"\n></iframe>`
+        : `<iframe src="${origin}/embed/${embedKey}" style="${iframeStyle}">\n</iframe>`;
 
   // 模式 2/3 给的接入提示
   const modeHint = MODE_HINTS[identificationMode];
