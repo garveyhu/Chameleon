@@ -121,16 +121,6 @@ class WebAppInfo(BaseModel):
     enabled: bool = True
 
 
-class UpdateWebAppRequest(BaseModel):
-    """Web App 设置：写回 embed_config 的展示/行为配置"""
-
-    name: str | None = Field(default=None, max_length=128)
-    description: str | None = Field(default=None, max_length=2000)
-    ui_config: dict[str, Any] | None = None
-    behavior: dict[str, Any] | None = None
-    enabled: bool | None = None
-
-
 class NodeRunItem(BaseModel):
     """test-run 返的单节点执行摘要"""
 

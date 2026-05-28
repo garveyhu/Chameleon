@@ -49,7 +49,6 @@ from chameleon.system.graphs.schemas import (
     TestRunRequest,
     TestRunResult,
     UpdateGraphRequest,
-    UpdateWebAppRequest,
     WebAppInfo,
 )
 
@@ -381,33 +380,6 @@ async def ensure_web_app(
         ec.allowed_origins = ["*"]
     await session.flush()
     info = _web_app_info(ec, agent_key)
-    await session.commit()
-    return info
-
-
-async def update_web_app(
-    session: AsyncSession, graph_id: int, req: UpdateWebAppRequest
-) -> WebAppInfo:
-    """Web App 设置：写回 embed_config 的展示 / 行为配置。"""
-    await ensure_web_app(session, graph_id)  # 确保存在
-    agent = await _find_graph_agent(session, graph_id)
-    if agent is None:
-        raise BusinessError(ResultCode.Fail, message="尚未发布为智能体")
-    ec = await _find_embed(session, agent.id)
-    if ec is None:
-        raise BusinessError(ResultCode.Fail, message="Web App 配置不存在")
-    if req.name is not None:
-        ec.name = req.name
-    if req.description is not None:
-        ec.description = req.description
-    if req.ui_config is not None:
-        ec.ui_config = req.ui_config
-    if req.behavior is not None:
-        ec.behavior = req.behavior
-    if req.enabled is not None:
-        ec.enabled = req.enabled
-    await session.flush()
-    info = _web_app_info(ec, agent.agent_key)
     await session.commit()
     return info
 
