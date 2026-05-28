@@ -2,34 +2,81 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>代码框背景色方案对比</title>
+<title>嵌入代码卡片 · 配色方案 v2（标题与代码块对比）</title>
 <style>
   body { margin: 0; padding: 32px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #fafafa; color: #1c1917; }
-  h1 { font-size: 18px; font-weight: 600; margin: 0 0 6px; }
-  .sub { font-size: 13px; color: #78716c; margin-bottom: 24px; }
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; max-width: 1100px; }
-  .card { overflow: hidden; border-radius: 10px; border: 1px solid #e7e5e4; background: #fff; }
-  .card-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 12px; background: #f5f5f4; }
-  .card-head .title { font-size: 12.5px; font-weight: 500; color: #1c1917; }
-  .card-head .title small { color: #a8a29e; font-weight: 400; margin-left: 6px; }
-  .card-head .copy { font-size: 11.5px; color: #78716c; padding: 2px 6px; border-radius: 4px; }
-  pre { margin: 0; padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: #78716c; margin-bottom: 22px; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; max-width: 1200px; }
   .opt-label { display: inline-block; margin-top: 8px; padding: 2px 7px; font-size: 11px; border-radius: 4px; background: #e7e5e4; color: #44403c; }
-  .meta { font-size: 10.5px; color: #a8a29e; margin-top: 4px; }
+  .meta { font-size: 10.5px; color: #a8a29e; margin-top: 4px; line-height: 1.5; }
+  .card-shell { margin-top: 8px; border-radius: 10px; overflow: hidden; border: 1px solid #e7e5e4; }
+
+  /* 各方案 header / pre 复用结构 */
+  .h { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; font-size: 12.5px; font-weight: 500; }
+  .h small { color: #a8a29e; font-weight: 400; margin-left: 6px; font-size: 11px; }
+  .h .copy { font-size: 11px; padding: 2px 7px; border-radius: 4px; cursor: pointer; }
+  pre { margin: 0; padding: 12px 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.65; white-space: pre-wrap; word-break: break-all; }
+
+  /* ─── 方案 A：header 浅冷灰 + pre 白底 ─────────── */
+  .A .h { background: #e2e8f0; color: #0f172a; }
+  .A .h .copy { color: #475569; }
+  .A .h .copy:hover { background: #cbd5e1; }
+  .A pre { background: #ffffff; color: #0f172a; }
+
+  /* ─── 方案 B：header stone-100 + pre slate-50（两色系拉开） ─────────── */
+  .B .h { background: #f5f5f4; color: #292524; }
+  .B .h .copy { color: #78716c; }
+  .B .h .copy:hover { background: #e7e5e4; }
+  .B pre { background: #f8fafc; color: #0f172a; border-top: 1px solid #e2e8f0; }
+
+  /* ─── 方案 C：header 白底+左侧蓝竖条 + pre slate-50 ─────────── */
+  .C { border: 1px solid #e2e8f0; }
+  .C .h { background: #ffffff; color: #0f172a; padding-left: 0; }
+  .C .h .title-wrap { display: inline-flex; align-items: center; gap: 10px; }
+  .C .h .accent { display: block; width: 3px; height: 14px; background: #2563eb; border-radius: 2px; margin-left: 14px; }
+  .C .h .copy { color: #2563eb; }
+  .C .h .copy:hover { background: #eff6ff; }
+  .C pre { background: #f8fafc; color: #0f172a; border-top: 1px solid #e2e8f0; }
+
+  /* ─── 方案 D：header 深灰标签风 + pre 浅 ─────────── */
+  .D { border: none; }
+  .D .h { background: #27272a; color: #fafafa; }
+  .D .h small { color: #a1a1aa; }
+  .D .h .copy { color: #d4d4d8; }
+  .D .h .copy:hover { background: rgba(255,255,255,.12); }
+  .D pre { background: #f8fafc; color: #0f172a; }
+
+  /* ─── 方案 E：header blue-50 品牌色 + pre 白底（GitHub PR 风） ─────────── */
+  .E { border: 1px solid #bfdbfe; }
+  .E .h { background: #eff6ff; color: #1e3a8a; }
+  .E .h small { color: #60a5fa; }
+  .E .h .copy { color: #2563eb; }
+  .E .h .copy:hover { background: #dbeafe; }
+  .E pre { background: #ffffff; color: #1e293b; border-top: 1px solid #bfdbfe; }
+
+  /* ─── 方案 F：header 暖米黄 + pre 白底（GitHub Light） ─────────── */
+  .F { border: 1px solid #fde68a; }
+  .F .h { background: #fffbeb; color: #78350f; }
+  .F .h small { color: #b45309; }
+  .F .h .copy { color: #b45309; }
+  .F .h .copy:hover { background: #fef3c7; }
+  .F pre { background: #ffffff; color: #292524; border-top: 1px solid #fde68a; }
 </style>
 </head>
 <body>
-<h1>嵌入代码框 · 背景配色方案</h1>
-<div class="sub">看哪个最舒服，给我编号（1-6）</div>
+
+<h1>嵌入代码卡片 · 配色方案 v2</h1>
+<div class="sub">重点：标题行 & 代码块视觉上明显区分（之前 slate-50 不够）。给我编号 A-F。</div>
 
 <div class="grid">
 
   <div>
-    <div class="opt-label">方案 1 · stone-100 暖浅灰（当前）</div>
-    <div class="meta">bg <code>#f5f5f4</code> · fg <code>#292524</code> · 跟全站 stone 系一致</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#f5f5f4; color:#292524;">&lt;script
+    <div class="opt-label">方案 A · 浅冷灰 header + 白底代码</div>
+    <div class="meta">header <code>#e2e8f0</code> 灰带条 · pre <code>#ffffff</code> 干净白 · 反差强</div>
+    <div class="card-shell A">
+      <div class="h"><span>JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"
@@ -39,11 +86,11 @@
   </div>
 
   <div>
-    <div class="opt-label">方案 2 · slate-50 冷浅蓝灰（Notion / Linear 风）</div>
-    <div class="meta">bg <code>#f8fafc</code> · fg <code>#0f172a</code> · 极浅冷调</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#f8fafc; color:#0f172a;">&lt;script
+    <div class="opt-label">方案 B · stone vs slate 两色系</div>
+    <div class="meta">header <code>#f5f5f4</code> 暖灰 · pre <code>#f8fafc</code> 冷灰 · 细分隔线</div>
+    <div class="card-shell B">
+      <div class="h"><span>JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"
@@ -53,11 +100,14 @@
   </div>
 
   <div>
-    <div class="opt-label">方案 3 · blue-50 淡蓝（Stripe 文档风）</div>
-    <div class="meta">bg <code>#eff6ff</code> · fg <code>#1e3a8a</code> · 轻微色彩感、识别度高</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#eff6ff; color:#1e3a8a;">&lt;script
+    <div class="opt-label">方案 C · 白底标题带蓝竖条 + 浅蓝代码区</div>
+    <div class="meta">极简：白 header + 蓝色 accent · 跟应用主色呼应（推荐 ⭐）</div>
+    <div class="card-shell C">
+      <div class="h">
+        <span class="title-wrap"><span class="accent"></span>JS Widget<small>· 推荐：右下角浮动气泡</small></span>
+        <span class="copy">📋 复制</span>
+      </div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"
@@ -67,11 +117,11 @@
   </div>
 
   <div>
-    <div class="opt-label">方案 4 · amber-50 暖米黄（GitHub Light 风）</div>
-    <div class="meta">bg <code>#fffbeb</code> · fg <code>#78350f</code> · 最柔和 / 适合长阅读</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#fffbeb; color:#78350f;">&lt;script
+    <div class="opt-label">方案 D · 深灰标签风 header + 浅代码</div>
+    <div class="meta">header <code>#27272a</code> 深灰像 IDE 标签 · pre <code>#f8fafc</code> · 反差最大</div>
+    <div class="card-shell D">
+      <div class="h"><span>JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"
@@ -81,11 +131,11 @@
   </div>
 
   <div>
-    <div class="opt-label">方案 5 · neutral-100 真中性灰</div>
-    <div class="meta">bg <code>#f5f5f5</code> · fg <code>#171717</code> · 纯灰、无暖冷调</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#f5f5f5; color:#171717;">&lt;script
+    <div class="opt-label">方案 E · 品牌淡蓝 header + 白底代码（GitHub PR 风）</div>
+    <div class="meta">header <code>#eff6ff</code> 淡蓝 + 蓝字 · pre 白底深灰字 · 有色彩感</div>
+    <div class="card-shell E">
+      <div class="h"><span>JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"
@@ -95,11 +145,11 @@
   </div>
 
   <div>
-    <div class="opt-label">方案 6 · zinc-200 中灰（深一点的浅色）</div>
-    <div class="meta">bg <code>#e4e4e7</code> · fg <code>#27272a</code> · 比浅色再深一档但仍是浅</div>
-    <div class="card">
-      <div class="card-head"><span class="title">JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
-      <pre style="background:#e4e4e7; color:#27272a;">&lt;script
+    <div class="opt-label">方案 F · 暖米黄 header + 白底代码（GitHub Light）</div>
+    <div class="meta">header <code>#fffbeb</code> 暖米黄 · pre 白底 · 柔和不刺眼</div>
+    <div class="card-shell F">
+      <div class="h"><span>JS Widget<small>· 推荐：右下角浮动气泡</small></span><span class="copy">📋 复制</span></div>
+      <pre>&lt;script
   src="https://chameleon.example.com/widget.js"
   data-embed-key="em_xxxxxxxxxx"
   data-jwt-token="SIGNED_JWT"

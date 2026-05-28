@@ -864,7 +864,7 @@ const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
   };
   return (
     <div className="overflow-hidden rounded-lg border border-stone-200">
-      <div className="flex items-center justify-between bg-stone-50 px-3 py-1.5">
+      <div className="flex items-center justify-between bg-stone-100 px-3 py-1.5">
         <span className="text-[12.5px] font-medium text-stone-800">
           {title}
           <span className="ml-1.5 text-[11px] font-normal text-stone-400">· {hint}</span>
@@ -878,7 +878,7 @@ const SnippetCard: React.FC<{ title: string; hint: string; code: string }> = ({
           {copied ? '已复制' : '复制'}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-slate-50 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-slate-900 break-all whitespace-pre-wrap">
+      <pre className="overflow-x-auto border-t border-slate-200 bg-slate-50 px-3 py-2.5 font-mono text-[11.5px] leading-relaxed text-slate-900 break-all whitespace-pre-wrap">
         {code}
       </pre>
     </div>
