@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chameleon · A 方案（选中书签竖条）</title>
+<script src="https://unpkg.com/lucide@latest"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ════════════════════════════════════════════════════════════
+   A 方案（原 nav-fullbleed 的 A，已重建）：
+   浅通栏顶栏 · 域切换左对齐 · 无边左导航 · 占满整屏 full-bleed 无圆角无空隙
+   唯一移植：左导航「选中项左侧书签竖条」（借鉴自磨砂版）
+   token：#fffefb 纸 / #f4f3ee 轨 / #fafaf7 底 / #1c1917 墨 / 主蓝 #3b82f6
+   ════════════════════════════════════════════════════════════ */
+:root {
+  --base: #fafaf7; --rail: #f4f3ee; --paper: #fffefb;
+  --ink: #1c1917; --ink-2: #57534e; --ink-3: #a8a29e;
+  --line: rgba(120,113,108,0.14); --line-2: rgba(120,113,108,0.26);
+  --accent: #3b82f6; --accent-600: #2563eb; --accent-soft: #eef4ff;
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 4%), 0 4px 12px rgb(0 0 0 / 3%);
+  --shadow-pop: 0 10px 30px rgb(0 0 0 / 9%), 0 2px 8px rgb(0 0 0 / 4%);
+  --r-md: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family:'Plus Jakarta Sans','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+  background: var(--base); color: var(--ink); -webkit-font-smoothing: antialiased; overflow: hidden; }
+.mono { font-family:'JetBrains Mono',monospace; font-variant-numeric: tabular-nums; }
+[data-lucide] { width: 18px; height: 18px; stroke-width: 2; }
+
+/* 全屏外壳 */
+.app { height: 100vh; display: flex; flex-direction: column; }
+
+/* ── 浅通栏顶栏（域左对齐）── */
+.top { height: 56px; flex-shrink: 0; background: var(--paper); border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 18px; padding: 0 18px; }
+.top .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: -0.01em; }
+.top .brand .dot { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(135deg,#3b82f6,#22c55e); display: grid; place-items: center; }
+.top .brand .dot svg { width: 16px; height: 16px; color: #fff; }
+.top .divider { width: 1px; height: 22px; background: var(--line-2); }
+.dseg { display: flex; gap: 3px; }
+.dseg button { border: 0; background: transparent; cursor: pointer; font-family: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--ink-2); padding: 8px 15px; border-radius: 10px; display: flex; align-items: center; gap: 8px; transition: all .16s; }
+.dseg button svg { width: 17px; height: 17px; color: var(--ink-3); transition: color .16s; }
+.dseg button:hover { background: var(--rail); }
+.dseg button.on { background: var(--accent-soft); color: var(--accent-600); }
+.dseg button.on svg { color: var(--accent); }
+.top .right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.top .cmd { display: flex; align-items: center; gap: 9px; cursor: pointer; background: var(--base); border: 1px solid var(--line-2);
+  color: var(--ink-3); border-radius: 9px; padding: 8px 13px; font-size: 12.5px; width: 230px; }
+.top .cmd .kbd { margin-left: auto; font-size: 11px; background: var(--rail); padding: 2px 7px; border-radius: 6px; font-family:'JetBrains Mono',monospace; }
+.top .ibtn { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; color: var(--ink-3); cursor: pointer; transition: all .16s; }
+.top .ibtn:hover { background: var(--rail); color: var(--ink); }
+.top .av { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(135deg,#f59e0b,#ef4444); display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 13px; cursor: pointer; }
+
+.body { flex: 1; min-height: 0; display: flex; }
+
+/* ── 无边左导航 ── */
+.snav { width: 216px; flex-shrink: 0; padding: 12px 12px 14px; overflow: auto; }
+.snav .gl { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding: 12px 12px 6px; }
+.sni { position: relative; display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: 10px; cursor: pointer;
+  font-size: 13px; color: var(--ink-2); font-weight: 500; transition: all .15s; }
+.sni svg { width: 16px; height: 16px; color: var(--ink-3); transition: color .15s; }
+.sni:hover { background: rgba(120,113,108,0.07); color: var(--ink); }
+.sni.on { background: var(--accent-soft); color: var(--accent-600); font-weight: 600; }
+.sni.on svg { color: var(--accent); }
+/* ★ 移植自磨砂版：选中项左侧书签竖条 */
+.sni.on::before { content:''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--accent); box-shadow: 0 0 8px rgba(59,130,246,0.45); }
+.sni .badge { margin-left: auto; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+
+.content { flex: 1; overflow: auto; padding: 26px 36px 40px; }
+
+/* ── 内容件 ── */
+.page-head { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 22px; }
+.page-head h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-head .sub { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+.btn-primary { background: var(--accent); color: #fff; border: 0; border-radius: 9px; cursor: pointer; font-family: inherit;
+  font-weight: 600; font-size: 13px; padding: 9px 15px; display: inline-flex; align-items: center; gap: 7px; transition: filter .18s; }
+.btn-primary:hover { filter: brightness(1.06); }
+.btn-ghost { background: var(--paper); color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 9px; cursor: pointer;
+  font-family: inherit; font-weight: 600; font-size: 13px; padding: 8px 14px; display: inline-flex; align-items: center; gap: 7px; }
+.btn-ghost:hover { border-color: var(--ink-3); color: var(--ink); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px,1fr)); gap: 14px; }
+.wcard { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px; cursor: pointer; transition: all .2s; box-shadow: var(--shadow-soft); }
+.wcard:hover { box-shadow: var(--shadow-pop); border-color: var(--line-2); transform: translateY(-2px); }
+.wcard .ic { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 12px; }
+.wcard .ic svg { width: 19px; height: 19px; }
+.wcard h3 { font-size: 14.5px; font-weight: 600; }
+.wcard p { font-size: 12px; color: var(--ink-3); margin-top: 4px; line-height: 1.5; }
+.wcard .meta { display: flex; gap: 10px; margin-top: 13px; font-size: 11px; color: var(--ink-3); align-items: center; }
+.wcard .meta b { color: var(--ink-2); font-weight: 600; }
+.pill { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: var(--rail); color: var(--ink-2); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="dot"><i data-lucide="hexagon"></i></span> Chameleon</div>
+    <div class="divider"></div>
+    <div class="dseg">
+      <button class="on"><i data-lucide="boxes"></i> 工作台</button>
+      <button><i data-lucide="database"></i> 知识库</button>
+      <button><i data-lucide="telescope"></i> 观测</button>
+      <button><i data-lucide="settings"></i> 设置</button>
+    </div>
+    <div class="right">
+      <div class="cmd"><i data-lucide="search" style="width:15px;height:15px"></i> 搜索或跳转… <span class="kbd">⌘K</span></div>
+      <div class="ibtn"><i data-lucide="bell"></i></div>
+      <div class="av">A</div>
+    </div>
+  </header>
+  <div class="body">
+    <aside class="snav">
+      <div class="gl">创建</div>
+      <div class="sni on"><i data-lucide="boxes"></i> 应用</div>
+      <div class="sni"><i data-lucide="git-branch"></i> 工作流</div>
+      <div class="sni"><i data-lucide="message-square"></i> 对话 / Playground</div>
+      <div class="sni"><i data-lucide="cpu"></i> 嵌入式</div>
+      <div class="gl">接入</div>
+      <div class="sni"><i data-lucide="globe"></i> 模型与供应商</div>
+      <div class="sni"><i data-lucide="puzzle"></i> 插件</div>
+      <div class="sni"><i data-lucide="shopping-bag"></i> 插件市场</div>
+    </aside>
+    <main class="content">
+      <div class="page-head">
+        <div style="flex:1"><h1>应用</h1><div class="sub">12 个应用 · 已发布 8</div></div>
+        <button class="btn-ghost"><i data-lucide="upload" style="width:15px;height:15px"></i> 导入 DSL</button>
+        <button class="btn-primary"><i data-lucide="plus" style="width:15px;height:15px"></i> 新建应用</button>
+      </div>
+      <div class="card-grid" id="grid"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+  const cards = [
+    ['boxes','客服助手','多轮对话 + 知识库检索','API','4.2k 调用'],
+    ['git-branch','文档摘要流','批量解析 → 摘要工作流','工作流','312 运行'],
+    ['boxes','检索问答 Bot','产品手册问答','API','1.8k 调用'],
+    ['cpu','官网嵌入组件','落地页聊天气泡','嵌入式','560 会话'],
+    ['boxes','合同抽取助手','条款抽取 → 结构化输出','API','88 调用'],
+  ];
+  document.getElementById('grid').innerHTML = cards.map(c =>
+    `<div class="wcard"><div class="ic"><i data-lucide="${c[0]}"></i></div><h3>${c[1]}</h3><p>${c[2]}</p><div class="meta"><span class="pill">${c[3]}</span><span class="mono">${c[4]}</span></div></div>`
+  ).join('') + `<div class="wcard" style="display:grid;place-items:center;border-style:dashed;color:var(--ink-3);box-shadow:none"><div style="text-align:center"><i data-lucide="plus" style="width:24px;height:24px"></i><div style="margin-top:7px;font-size:13px;font-weight:600">新建应用</div></div></div>`;
+  lucide.createIcons();
+  function wire(sel) { document.querySelectorAll(sel).forEach(el => el.addEventListener('click', () => {
+    document.querySelectorAll(sel).forEach(x => x.classList.toggle('on', x===el)); })); }
+  wire('.dseg button'); wire('.sni');
+</script>
+</body>
+</html>

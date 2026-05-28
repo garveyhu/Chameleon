@@ -13,7 +13,15 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import hashlib
+
+import jwt
+from pydantic import ValidationError as PydanticValidationError
+
 from chameleon.api.embed import session as embed_session
+from chameleon.api.embed.schemas import CreateSessionRequest, SessionPolicy
+from chameleon.api.sessions import service as session_service
+from chameleon.api.sessions.schemas import AppendMessageDraft
 from chameleon.core.api.exceptions import (
     BusinessError,
     PermissionDeniedError,
@@ -28,7 +36,9 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.core.models import Agent, EmbedConfig
+from chameleon.core.models import Agent, ChatSession, EmbedConfig
+from chameleon.core.observe import TraceContext, set_trace_context
+from chameleon.core.utils.crypto import get_or_decrypt
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.errors import ProviderError
 from chameleon.providers.base.types import (
@@ -93,6 +103,77 @@ def _embed_app_label(embed: EmbedConfig) -> str:
     return f"embed:{embed.embed_key}"
 
 
+# ── S10：session_policy + 三种身份识别模式 ─────────────────
+
+
+def _resolve_session_policy(embed: EmbedConfig) -> SessionPolicy:
+    """从 embed.session_policy JSON 解析；老 embed 缺字段时返默认（匿名设备）。"""
+    raw = embed.session_policy or {}
+    try:
+        return SessionPolicy(**raw)
+    except PydanticValidationError:
+        logger.warning(
+            "embed session_policy 解析失败，回退默认 | embed_key={}", embed.embed_key
+        )
+        return SessionPolicy()
+
+
+def _hash_device_id(device_id: str) -> str:
+    """匿名设备模式：sha256 device_id 当 end_user_id（避免存原始浏览器指纹）"""
+    return "anon_" + hashlib.sha256(device_id.encode("utf-8")).hexdigest()[:24]
+
+
+def _verify_jwt_and_extract_sub(policy: SessionPolicy, token: str) -> str:
+    """signed_jwt 模式：用 policy 配置的 HS256 共享密钥验签，取 sub claim 作 end_user_id"""
+    if not policy.jwt_signing_secret_encrypted:
+        raise BusinessError(
+            ResultCode.JwtInvalid,
+            message="该 embed 未配置 jwt_signing_secret，无法 signed_jwt 模式",
+        )
+    secret = get_or_decrypt(policy.jwt_signing_secret_encrypted)
+    if not secret:
+        raise BusinessError(ResultCode.JwtInvalid, message="jwt 密钥解密失败")
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError as e:
+        raise BusinessError(ResultCode.JwtInvalid, message="jwt 已过期") from e
+    except jwt.InvalidTokenError as e:
+        raise BusinessError(ResultCode.JwtInvalid, message="jwt 无效") from e
+    sub = payload.get("sub")
+    if not sub:
+        raise BusinessError(ResultCode.JwtInvalid, message="jwt 缺 sub claim")
+    return str(sub)
+
+
+def resolve_end_user_from_request(
+    embed: EmbedConfig, req: CreateSessionRequest
+) -> str | None:
+    """按 embed 的 session_policy.identification_mode 解析终端用户 id
+
+    - anonymous_device → hash(device_id)
+    - external_user_id → req.external_user_id 直传
+    - signed_jwt       → 验签 jwt_token，取 sub
+    """
+    policy = _resolve_session_policy(embed)
+    mode = policy.identification_mode
+
+    if mode == "anonymous_device":
+        if not req.device_id:
+            raise ValidationError(message="anonymous_device 模式需 device_id")
+        return _hash_device_id(req.device_id)
+    if mode == "external_user_id":
+        if not req.external_user_id:
+            raise ValidationError(message="external_user_id 模式需 external_user_id")
+        return req.external_user_id
+    if mode == "signed_jwt":
+        if not req.jwt_token:
+            raise ValidationError(message="signed_jwt 模式需 jwt_token")
+        return _verify_jwt_and_extract_sub(policy, req.jwt_token)
+    raise BusinessError(
+        ResultCode.ValidationError, message=f"未知 identification_mode: {mode}"
+    )
+
+
 def _make_context(
     *,
     agent_key: str,
@@ -121,6 +202,143 @@ async def _ensure_session_matches(token: str, embed_id: int) -> None:
         )
 
 
+# ── S11：embed-scope 的会话管理（按 end_user_id 隔离）────────
+
+
+async def list_sessions_for_end_user(
+    db_session: AsyncSession,
+    *,
+    embed: EmbedConfig,
+    end_user_id: str | None,
+    max_history_days: int = 90,
+    limit: int = 50,
+) -> list[ChatSession]:
+    """列出某 embed 下某终端用户的历史会话（按活跃时间倒序）
+
+    无 end_user_id（老 widget / 匿名 token 未绑用户）→ 返空，避免串号。
+    """
+    from datetime import datetime, timedelta, timezone
+
+    if not end_user_id:
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_history_days)
+    app_id = _embed_app_label(embed)
+    agent = await _resolve_agent(db_session, embed)
+    stmt = (
+        select(ChatSession)
+        .where(
+            ChatSession.app_id == app_id,
+            ChatSession.agent_key == agent.agent_key,
+            ChatSession.end_user_id == end_user_id,
+            ChatSession.deleted_at.is_(None),
+            ChatSession.created_at >= cutoff,
+        )
+        .order_by(
+            ChatSession.last_message_at.desc().nullslast(),
+            ChatSession.created_at.desc(),
+        )
+        .limit(limit)
+    )
+    rows = (await db_session.execute(stmt)).scalars().all()
+    return list(rows)
+
+
+async def get_embed_session(
+    db_session: AsyncSession,
+    *,
+    embed: EmbedConfig,
+    session_id: str,
+    end_user_id: str | None,
+) -> ChatSession:
+    """取某 embed 下 session_id 对应的会话（强校验 end_user_id 一致，防越权）"""
+    app_id = _embed_app_label(embed)
+    row = (
+        await db_session.execute(
+            select(ChatSession).where(
+                ChatSession.session_id == session_id,
+                ChatSession.app_id == app_id,
+                ChatSession.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(
+            ResultCode.SessionNotFound,
+            message=f"session 不存在: {session_id}",
+        )
+    if end_user_id is not None and row.end_user_id and row.end_user_id != end_user_id:
+        # 越权 → 表现为 NotFound（不泄漏存在性）
+        raise BusinessError(
+            ResultCode.SessionNotFound,
+            message=f"session 不存在: {session_id}",
+        )
+    return row
+
+
+async def soft_delete_embed_session(
+    db_session: AsyncSession,
+    *,
+    embed: EmbedConfig,
+    session_id: str,
+    end_user_id: str | None,
+) -> None:
+    from datetime import datetime, timezone
+
+    row = await get_embed_session(
+        db_session, embed=embed, session_id=session_id, end_user_id=end_user_id
+    )
+    row.deleted_at = datetime.now(timezone.utc)
+    await db_session.flush()
+
+
+async def rename_embed_session(
+    db_session: AsyncSession,
+    *,
+    embed: EmbedConfig,
+    session_id: str,
+    end_user_id: str | None,
+    title: str,
+) -> ChatSession:
+    row = await get_embed_session(
+        db_session, embed=embed, session_id=session_id, end_user_id=end_user_id
+    )
+    row.title = title[:255]
+    await db_session.flush()
+    return row
+
+
+async def _ensure_session_row_for_embed(
+    db_session: AsyncSession,
+    *,
+    session_id: str,
+    embed: EmbedConfig,
+    agent_key: str,
+    end_user_id: str | None,
+) -> ChatSession:
+    """get-or-create —— 首次 embed 调用时往 sessions 表补一行，让 S11 列表端能查到。
+
+    后续同一 sid 调用直接返回已有行（不重复创建）。
+    """
+    row = (
+        await db_session.execute(
+            select(ChatSession).where(ChatSession.session_id == session_id)
+        )
+    ).scalar_one_or_none()
+    if row is not None:
+        return row
+    row = ChatSession(
+        session_id=session_id,
+        agent_key=agent_key,
+        app_id=_embed_app_label(embed),
+        api_key_id=embed.api_key_id,
+        end_user_id=end_user_id,
+    )
+    db_session.add(row)
+    await db_session.flush()
+    return row
+
+
 async def _write_log(
     session: AsyncSession,
     *,
@@ -137,8 +355,13 @@ async def _write_log(
     usage: dict | None,
     user_input: str,
     answer: str,
+    api_key_id: int | None = None,
+    end_user_id: str | None = None,
 ) -> None:
-    """call_logs 落表 —— embed 入口在 request_payload.source 标记，app_id 用 embed: 来源标签"""
+    """call_logs 落表 —— embed 入口在 request_payload.source 标记，app_id 用 embed: 来源标签
+
+    S10：归属冗余 api_key_id（embed 绑的 owner key）+ end_user_id（token 上绑的终端用户）
+    """
     try:
         await record_call(
             session,
@@ -161,6 +384,9 @@ async def _write_log(
                 "embed_key": embed_key,
             },
             response_payload={"answer": answer[:2000]} if answer else None,
+            observation_type="trace",
+            api_key_id=api_key_id,
+            end_user_id=end_user_id,
         )
         await session.commit()
     except Exception:  # noqa: BLE001
@@ -191,6 +417,19 @@ async def invoke_once(
     app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
     sid = await embed_session.resolve_session_id(session_token)
+    end_user_id = await embed_session.resolve_end_user_id(session_token)
+    # S10：set TraceContext —— provider 内的 LLM 调用经 BaseLLM 回调自动落 generation 行
+    set_trace_context(
+        TraceContext(
+            request_id=rid,
+            channel="embed",
+            app_id=app_key,
+            api_key_id=embed.api_key_id,
+            agent_key=agent.agent_key,
+            session_id=sid,
+            end_user_id=end_user_id,
+        )
+    )
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
@@ -200,6 +439,24 @@ async def invoke_once(
         session_id=sid,
     )
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
+
+    # S11 桥：往 sessions 表补行 + 落 user message，让历史 API 能查到
+    conv = await _ensure_session_row_for_embed(
+        session,
+        session_id=sid,
+        embed=embed,
+        agent_key=agent.agent_key,
+        end_user_id=end_user_id,
+    )
+    await session_service.append(
+        session,
+        sid,
+        AppendMessageDraft(
+            role="user",
+            content=user_input,
+            end_user_id=end_user_id,
+        ),
+    )
 
     start = time.monotonic()
     err: Exception | None = None
@@ -214,6 +471,20 @@ async def invoke_once(
         raise
     finally:
         duration_ms = int((time.monotonic() - start) * 1000)
+        # 成功 → 写 assistant message + touch（标题取首条 user 内容）
+        if err is None and result is not None:
+            await session_service.append(
+                session,
+                sid,
+                AppendMessageDraft(
+                    role="assistant",
+                    content=result.answer,
+                    usage=result.usage.model_dump() if result.usage else None,
+                    end_user_id=end_user_id,
+                ),
+            )
+            title = user_input if conv.title is None else None
+            await session_service.touch(session, sid, title=title)
         await _write_log(
             session,
             request_id=rid,
@@ -229,7 +500,13 @@ async def invoke_once(
             usage=result.usage.model_dump() if (result and result.usage) else None,
             user_input=user_input,
             answer=result.answer if result else "",
+            api_key_id=embed.api_key_id,
+            end_user_id=end_user_id,
         )
+        try:
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            await session.rollback()
     assert result is not None
     return result
 
@@ -258,6 +535,19 @@ async def stream_invoke(
     app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
     sid = await embed_session.resolve_session_id(session_token)
+    end_user_id = await embed_session.resolve_end_user_id(session_token)
+    # S10：set TraceContext —— provider 内的 LLM 调用经 BaseLLM 回调自动落 generation 行
+    set_trace_context(
+        TraceContext(
+            request_id=rid,
+            channel="embed",
+            app_id=app_key,
+            api_key_id=embed.api_key_id,
+            agent_key=agent.agent_key,
+            session_id=sid,
+            end_user_id=end_user_id,
+        )
+    )
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
@@ -267,6 +557,25 @@ async def stream_invoke(
         session_id=sid,
     )
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
+
+    # S11 桥：往 sessions 表补行 + 落 user message
+    conv = await _ensure_session_row_for_embed(
+        session,
+        session_id=sid,
+        embed=embed,
+        agent_key=agent.agent_key,
+        end_user_id=end_user_id,
+    )
+    await session_service.append(
+        session,
+        sid,
+        AppendMessageDraft(
+            role="user",
+            content=user_input,
+            end_user_id=end_user_id,
+        ),
+    )
+    await session.commit()  # 提交 user msg 防 stream 中断丢
 
     yield event_meta(
         agent=agent.agent_key,
@@ -314,6 +623,28 @@ async def stream_invoke(
                     total_tokens=pu.total_tokens or 0,
                 )
             yield event_end(usage=sse_usage, answer=agg_result.answer)
+            # 落 assistant message + touch（与非流路径对齐）
+            try:
+                await session_service.append(
+                    session,
+                    sid,
+                    AppendMessageDraft(
+                        role="assistant",
+                        content=agg_result.answer,
+                        usage=agg_result.usage.model_dump()
+                        if agg_result.usage
+                        else None,
+                        end_user_id=end_user_id,
+                    ),
+                )
+                title = user_input if conv.title is None else None
+                await session_service.touch(session, sid, title=title)
+                await session.commit()
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "embed stream assistant persist failed | sid={}", sid
+                )
+                await session.rollback()
         await _write_log(
             session,
             request_id=rid,
@@ -331,6 +662,8 @@ async def stream_invoke(
             usage=agg_result.usage.model_dump() if agg_result.usage else None,
             user_input=user_input,
             answer=agg_result.answer,
+            api_key_id=embed.api_key_id,
+            end_user_id=end_user_id,
         )
 
 

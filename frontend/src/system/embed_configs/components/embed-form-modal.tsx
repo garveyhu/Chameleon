@@ -16,6 +16,7 @@ import {
   HelpCircle,
   MessageCircle,
   MessageSquare,
+  MessagesSquare,
   Palette,
   Plus,
   Settings,
@@ -56,6 +57,8 @@ import type {
   CreateEmbedConfigRequest,
   EmbedConfigItem,
   FontSize,
+  IdentificationMode,
+  SessionPolicy,
   ShadowLevel,
   ThemeMode,
   UiConfig,
@@ -63,12 +66,14 @@ import type {
 } from '@/system/embed_configs/types/embed';
 import {
   DEFAULT_BEHAVIOR,
+  DEFAULT_SESSION_POLICY,
   DEFAULT_UI_CONFIG,
   mergeBehavior,
+  mergeSessionPolicy,
   mergeUiConfig,
 } from '@/system/embed_configs/types/embed';
 
-type TabKey = 'basic' | 'appearance' | 'behavior' | 'security' | 'access';
+type TabKey = 'basic' | 'appearance' | 'behavior' | 'session' | 'security' | 'access';
 
 interface TabDef {
   key: TabKey;
@@ -80,6 +85,7 @@ const TABS: TabDef[] = [
   { key: 'basic', label: '基本', Icon: Cog },
   { key: 'appearance', label: '外观', Icon: Palette },
   { key: 'behavior', label: '行为', Icon: Settings },
+  { key: 'session', label: '会话', Icon: MessagesSquare },
   { key: 'security', label: '安全', Icon: ShieldCheck },
   { key: 'access', label: '嵌入', Icon: Code2 },
 ];
@@ -88,6 +94,8 @@ interface EmbedFormModalProps {
   open: boolean;
   /** 传入即"编辑"模式；不传即"创建"模式 */
   initial?: EmbedConfigItem | null;
+  /** 创建模式下预选并锁定关联应用（从应用卡片「嵌入」操作进入时使用） */
+  presetAgentId?: EntityId | null;
   loading: boolean;
   onClose: () => void;
   onSubmitCreate: (req: CreateEmbedConfigRequest) => void;
@@ -97,6 +105,7 @@ interface EmbedFormModalProps {
 export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   open,
   initial,
+  presetAgentId,
   loading,
   onClose,
   onSubmitCreate,
@@ -113,6 +122,9 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
   const [ui, setUi] = useState<UiConfig>(DEFAULT_UI_CONFIG);
   // 行为
   const [behavior, setBehavior] = useState<Behavior>(DEFAULT_BEHAVIOR);
+  // 会话（S13）：身份模式 / 历史侧栏 / 用户自管 / 时间窗 + owner key
+  const [sessionPolicy, setSessionPolicy] = useState<SessionPolicy>(DEFAULT_SESSION_POLICY);
+  const [apiKeyId, setApiKeyId] = useState<EntityId | null>(null);
   // 安全
   const [origins, setOrigins] = useState('');
 
@@ -127,16 +139,20 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
       setAgentId(String(initial.agent_id));
       setUi(mergeUiConfig(initial.ui_config));
       setBehavior(mergeBehavior(initial.behavior));
+      setSessionPolicy(mergeSessionPolicy(initial.session_policy));
+      setApiKeyId(initial.api_key_id ?? null);
       setOrigins((initial.allowed_origins || []).join('\n'));
     } else {
       setName('');
       setDescription('');
-      setAgentId('');
+      setAgentId(presetAgentId != null ? String(presetAgentId) : '');
       setUi(DEFAULT_UI_CONFIG);
       setBehavior(DEFAULT_BEHAVIOR);
+      setSessionPolicy(DEFAULT_SESSION_POLICY);
+      setApiKeyId(null);
       setOrigins('');
     }
-  }, [open, initial]);
+  }, [open, initial, presetAgentId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const agentsQ = useQuery({ queryKey: ['agents', 'all'], queryFn: () => agentApi.list() });
@@ -158,18 +174,22 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
       onSubmitUpdate(initial.id, {
         name,
         description: description || undefined,
+        api_key_id: apiKeyId,
         allowed_origins: originList,
         ui_config: ui,
         behavior,
+        session_policy: sessionPolicy,
       });
     } else {
       onSubmitCreate({
         name,
         description: description || undefined,
         agent_id: agentId,
+        api_key_id: apiKeyId,
         allowed_origins: originList,
         ui_config: ui,
         behavior,
+        session_policy: sessionPolicy,
       });
     }
   };
@@ -214,7 +234,8 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {tab === 'basic' ? (
                 <BasicTab
-                  isEdit={isEdit}
+                  lockAgent={isEdit || presetAgentId != null}
+                  lockHint={isEdit ? '创建后不可改' : presetAgentId != null ? '已锁定为当前应用' : undefined}
                   name={name}
                   description={description}
                   agentId={agentId}
@@ -226,6 +247,15 @@ export const EmbedFormModal: React.FC<EmbedFormModalProps> = ({
               ) : null}
               {tab === 'appearance' ? <AppearanceTab ui={ui} onChange={setUi} /> : null}
               {tab === 'behavior' ? <BehaviorTab v={behavior} onChange={setBehavior} /> : null}
+              {tab === 'session' ? (
+                <SessionTab
+                  agentId={agentId}
+                  policy={sessionPolicy}
+                  apiKeyId={apiKeyId}
+                  onPolicy={setSessionPolicy}
+                  onApiKeyId={setApiKeyId}
+                />
+              ) : null}
               {tab === 'security' ? (
                 <SecurityTab
                   origins={origins}
@@ -264,7 +294,8 @@ interface AgentLite {
 }
 
 const BasicTab: React.FC<{
-  isEdit: boolean;
+  lockAgent: boolean;
+  lockHint?: string;
   name: string;
   description: string;
   agentId: string;
@@ -273,7 +304,8 @@ const BasicTab: React.FC<{
   onDescription: (v: string) => void;
   onAgentId: (v: string) => void;
 }> = ({
-  isEdit,
+  lockAgent,
+  lockHint,
   name,
   description,
   agentId,
@@ -294,8 +326,8 @@ const BasicTab: React.FC<{
         placeholder="例：官网首页右下角的售前咨询入口"
       />
     </Field>
-    <Field label="关联 Agent" required hint={isEdit ? '创建后不可改' : undefined}>
-      <Select value={agentId} onValueChange={onAgentId} disabled={isEdit}>
+    <Field label="关联 Agent" required hint={lockHint}>
+      <Select value={agentId} onValueChange={onAgentId} disabled={lockAgent}>
         <SelectTrigger>
           <SelectValue placeholder="选择 agent" />
         </SelectTrigger>
@@ -802,3 +834,182 @@ const SuggestedQuestionsEditor: React.FC<{
     </div>
   );
 };
+
+// ── S13b：会话策略 + owner key picker ────────────────────────
+
+const IDENTIFICATION_MODE_OPTIONS: { value: IdentificationMode; label: string; desc: string }[] = [
+  {
+    value: 'anonymous_device',
+    label: '匿名设备',
+    desc: '浏览器持久化 device_id；同设备同浏览器视作同终端用户。无需接入方维护。',
+  },
+  {
+    value: 'external_user_id',
+    label: '外部 user id',
+    desc: '接入方在颁 token 时直接传字符串 user_id（要保证前端无法篡改）。',
+  },
+  {
+    value: 'signed_jwt',
+    label: '签名 JWT（推荐生产）',
+    desc: '接入方后端 HS256 签名 JWT，后端用配置的密钥验签，sub claim 当 end_user_id。',
+  },
+];
+
+interface AgentApiKeyLite {
+  id: EntityId;
+  name: string;
+  key_prefix: string;
+  revoked_at: string | null;
+}
+
+const SessionTab: React.FC<{
+  agentId: string;
+  policy: SessionPolicy;
+  apiKeyId: EntityId | null;
+  onPolicy: (v: SessionPolicy) => void;
+  onApiKeyId: (v: EntityId | null) => void;
+}> = ({ agentId, policy, apiKeyId, onPolicy, onApiKeyId }) => {
+  const patch = <K extends keyof SessionPolicy>(key: K, value: SessionPolicy[K]) =>
+    onPolicy({ ...policy, [key]: value });
+
+  // owner key 候选：当前 agent 下未吊销的密钥
+  const keysQ = useQuery({
+    queryKey: ['agent-api-keys', agentId],
+    queryFn: () => agentApi.listApiKeys(agentId),
+    enabled: !!agentId,
+  });
+  const keyOptions = useMemo<AgentApiKeyLite[]>(
+    () => (keysQ.data || []).filter(k => !k.revoked_at) as AgentApiKeyLite[],
+    [keysQ.data],
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Owner key */}
+      <section className="space-y-1.5">
+        <Label>归属密钥（Owner Key）</Label>
+        <Select
+          value={apiKeyId != null ? String(apiKeyId) : '__none__'}
+          onValueChange={v => onApiKeyId(v === '__none__' ? null : v)}
+          disabled={!agentId}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={agentId ? '选一个该应用的 API 密钥' : '请先在「基本」选择关联应用'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">未绑定（流量归属仅靠 channel='embed'）</SelectItem>
+            {keyOptions.map(k => (
+              <SelectItem key={k.id} value={String(k.id)}>
+                {k.name}
+                <span className="ml-2 font-mono text-[10.5px] text-stone-500">{k.key_prefix}…</span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="text-[11px] text-stone-500">
+          嵌入式调用产生的 call_log 会冗余记录该 key，方便按 key 维度做计费/限流统计。
+        </div>
+      </section>
+
+      <hr className="border-stone-200/70" />
+
+      {/* Identification mode */}
+      <section className="space-y-1.5">
+        <Label>终端用户识别方式</Label>
+        <Select
+          value={policy.identification_mode}
+          onValueChange={v => patch('identification_mode', v as IdentificationMode)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {IDENTIFICATION_MODE_OPTIONS.map(o => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="text-[11px] text-stone-500">
+          {
+            IDENTIFICATION_MODE_OPTIONS.find(o => o.value === policy.identification_mode)?.desc
+          }
+        </div>
+      </section>
+
+      {policy.identification_mode === 'signed_jwt' ? (
+        <section className="space-y-1.5">
+          <Label>JWT 共享密钥（HS256）</Label>
+          <Input
+            type="password"
+            value={policy.jwt_signing_secret_encrypted ?? ''}
+            onChange={e =>
+              patch('jwt_signing_secret_encrypted', e.target.value || null)
+            }
+            placeholder="保存后会加密落库；空 = 该模式无法使用"
+          />
+        </section>
+      ) : null}
+
+      <hr className="border-stone-200/70" />
+
+      {/* widget 行为 */}
+      <section className="space-y-2.5">
+        <Label>widget 会话行为</Label>
+        <ToggleRow
+          label="显示历史会话侧栏"
+          desc="widget 左侧列出该终端用户的过往会话"
+          checked={policy.show_history_sidebar}
+          onChange={v => patch('show_history_sidebar', v)}
+        />
+        <ToggleRow
+          label="自动续接上次会话"
+          desc="加载 widget 时优先打开 localStorage 里的上次会话；关 = 永远新开"
+          checked={policy.auto_resume_last}
+          onChange={v => patch('auto_resume_last', v)}
+        />
+        <ToggleRow
+          label="允许用户自管理会话"
+          desc="允许终端用户删除 / 重命名自己的会话；关 = 删/改名端点拒绝"
+          checked={policy.allow_user_manage}
+          onChange={v => patch('allow_user_manage', v)}
+        />
+      </section>
+
+      <hr className="border-stone-200/70" />
+
+      <section className="space-y-1.5">
+        <Label>历史会话时间窗（天）</Label>
+        <Input
+          type="number"
+          min={1}
+          max={365}
+          value={policy.max_history_days}
+          onChange={e =>
+            patch('max_history_days', Math.max(1, Math.min(365, Number(e.target.value) || 90)))
+          }
+          className="max-w-[180px]"
+        />
+        <div className="text-[11px] text-stone-500">
+          列表只展示该时间窗内活跃的会话；不影响 DB 留存。
+        </div>
+      </section>
+    </div>
+  );
+};
+
+const ToggleRow: React.FC<{
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}> = ({ label, desc, checked, onChange }) => (
+  <div className="flex items-start justify-between gap-3 rounded-md border border-stone-200/70 bg-white px-3 py-2.5">
+    <div className="min-w-0 flex-1">
+      <div className="text-[12.5px] font-medium text-stone-800">{label}</div>
+      <div className="mt-0.5 text-[11px] text-stone-500">{desc}</div>
+    </div>
+    <Switch checked={checked} onCheckedChange={onChange} className="shrink-0 self-start" />
+  </div>
+);

@@ -60,6 +60,8 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # 头像：用户上传图片缩放后的 data URL（None 用默认按类型图标）
+    icon: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index("ix_agents_source", "source"),

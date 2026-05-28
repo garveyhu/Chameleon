@@ -16,8 +16,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Background,
   BackgroundVariant,
-  Controls,
   MiniMap,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   addEdge,
@@ -58,12 +58,12 @@ import type { EditorTab } from '@/system/graphs/components/app-shell/graph-app-r
 import { ChatDebugDialog } from '@/system/graphs/components/chat-debug-dialog';
 import { NodeInspector } from '@/system/graphs/components/node-inspector';
 import { NodePalette } from '@/system/graphs/components/node-palette';
+import { ZoomControl } from '@/system/graphs/components/zoom-control';
 import { GraphNode } from '@/system/graphs/components/nodes/graph-node';
 import type { GraphNodeData } from '@/system/graphs/components/nodes/graph-node';
 import { AgentApiDocView } from '@/api-docs/components/agent-api-doc-view';
 import { RunDialog } from '@/system/graphs/components/run-dialog';
-import { LogsView } from '@/system/graphs/components/views/logs-view';
-import { MonitorView } from '@/system/graphs/components/views/monitor-view';
+import { ObserveView } from '@/system/graphs/components/views/observe-view';
 import { useGraphHistory } from '@/system/graphs/hooks/use-graph-history';
 import { useGraphRunner } from '@/system/graphs/hooks/use-graph-runner';
 import { TYPE_META } from '@/system/graphs/lib/node-meta';
@@ -107,7 +107,7 @@ const EditorInner = () => {
     <EditorBody
       key={String(detailQ.data.id)}
       graph={detailQ.data}
-      onReturn={() => nav('/graphs')}
+      onReturn={() => nav('/agents')}
       onSaved={() => qc.invalidateQueries({ queryKey: ['graph', graphId] })}
     />
   );
@@ -551,12 +551,10 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
 
         <div className="flex min-w-0 flex-1 flex-col">
           {tab === 'orchestrate' && (
-            <div className="flex min-h-0 flex-1">
-              <NodePalette kind={kind} onAdd={t => setPendingType(t)} />
-
+            <div className="relative min-h-0 flex-1">
               <div
                 ref={rfWrapperRef}
-                className={cn('relative min-w-0 flex-1', pendingType && 'cursor-copy')}
+                className={cn('absolute inset-0', pendingType && 'cursor-copy')}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
                 onMouseMove={e => {
@@ -604,7 +602,6 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                   defaultEdgeOptions={{ type: 'smoothstep' }}
                 >
                   <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-                  <Controls showInteractive={false} />
                   <MiniMap
                     pannable
                     zoomable
@@ -612,9 +609,16 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                     position="bottom-right"
                     style={{
                       right: selectedSpec ? 340 : 12,
-                      bottom: 12,
+                      bottom: 50, // 留位置给下方自定义缩放栏
+                      margin: 0, // 覆盖默认 15px 边距，与 ZoomControl 右对齐
                     }}
                   />
+                  <Panel
+                    position="bottom-right"
+                    style={{ right: selectedSpec ? 340 : 12, bottom: 12, margin: 0 }}
+                  >
+                    <ZoomControl />
+                  </Panel>
                 </ReactFlow>
 
                 {/* 左上角运行事件状态（Dify 套路） */}
@@ -661,7 +665,7 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setTab('logs')}
+                    onClick={() => setTab('monitor')}
                     title="查看运行日志"
                   >
                     <History className="h-3 w-3" />
@@ -745,20 +749,22 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                     />
                   </div>
                 )}
+
+                {/* 浮动节点面板（Dify 风：「+」按钮悬浮卡片，点开滑出节点） */}
+                <NodePalette kind={kind} onAdd={t => setPendingType(t)} />
               </div>
             </div>
           )}
 
           {tab === 'api' && <AgentApiDocView graph={graph} />}
-          {tab === 'logs' && (
-            <LogsView
+          {tab === 'monitor' && (
+            <ObserveView
               graphId={graph.id}
               graphName={graph.name}
               openRunId={logRunId}
               onOpenRun={setLogRunId}
             />
           )}
-          {tab === 'monitor' && <MonitorView graphId={graph.id} />}
         </div>
 
         {runOpen && (

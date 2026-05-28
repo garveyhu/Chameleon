@@ -52,9 +52,13 @@ async def stream_client() -> AsyncIterator[AsyncClient]:
 
 async def test_echo_invoke_non_stream(client: AsyncClient, app_key: str) -> None:
     r = await client.post(
-        "/v1/agents/example-echo-langgraph/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hello", "stream": False},
+        json={
+            "input": "hello",
+            "stream": False,
+            "agent_key": "example-echo-langgraph",
+        },
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -68,12 +72,18 @@ async def test_echo_invoke_non_stream(client: AsyncClient, app_key: str) -> None
 
 
 async def test_echo_listed_in_agents(client: AsyncClient, app_key: str) -> None:
-    r = await client.get("/v1/agents", headers={"Authorization": f"Bearer {app_key}"})
-    items = r.json()["data"]
-    echo = next((a for a in items if a["key"] == "example-echo-langgraph"), None)
-    assert echo is not None
-    assert echo["provider"] == "local"
-    assert "example" in echo["tags"]
+    """GET /v1/agents 已删除；改用 GET /v1/info 验当前 key 的身份。
+
+    app_key fixture 是 scope_type='global' 的通吃 key，不绑定具体 agent，
+    所以 /info 返 scope_type='global'、agent=None；这里仅验响应结构能跑通。
+    """
+    r = await client.get("/v1/info", headers={"Authorization": f"Bearer {app_key}"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["success"]
+    data = body["data"]
+    assert data["scope_type"] == "global"
+    assert "name" in data
 
 
 # ── 流式 ───────────────────────────────────────────────
@@ -83,9 +93,13 @@ async def test_echo_invoke_stream(stream_client: AsyncClient, app_key: str) -> N
     """流式：应收到 delta（按 chunk）+ step + done"""
     async with stream_client.stream(
         "POST",
-        "/v1/agents/example-echo-langgraph/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hi there", "stream": True},
+        json={
+            "input": "hi there",
+            "stream": True,
+            "agent_key": "example-echo-langgraph",
+        },
     ) as r:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("text/event-stream")
@@ -144,11 +158,12 @@ async def test_echo_with_rag_doc_marker(client: AsyncClient, app_key: str) -> No
 
     # 调 echo agent，input 含 doc:e2e-echo-rag
     r = await client.post(
-        "/v1/agents/example-echo-langgraph/invoke",
+        "/v1/invoke",
         headers=headers,
         json={
             "input": "Chameleon 是什么？ doc:e2e-echo-rag",
             "stream": False,
+            "agent_key": "example-echo-langgraph",
         },
     )
     body = r.json()

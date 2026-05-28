@@ -94,4 +94,8 @@ export interface WidgetMessage {
 export interface WidgetOptions {
   embedKey: string;
   apiBase: string;
+  /** S12：终端用户外部标识（external_user_id 模式用） */
+  externalUserId?: string;
+  /** S12：接入方签名的 JWT（signed_jwt 模式用） */
+  jwtToken?: string;
 }

@@ -22,5 +22,7 @@ class OAChatRequest(BaseModel):
     stream: bool = False
     # 多轮会话：可选，缺省每次新建（无状态）
     session_id: str | None = None
+    # OpenAI 协议原生字段：终端用户外部标识；S3 起接入会话归属
+    user: str | None = None
 
     model_config = ConfigDict(extra="ignore")

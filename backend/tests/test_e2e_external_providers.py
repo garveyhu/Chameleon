@@ -89,9 +89,9 @@ async def test_dify_invoke_non_stream(
     )
 
     r = await client.post(
-        f"/v1/agents/{dify_agent_setup}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "你好", "stream": False},
+        json={"input": "你好", "stream": False, "agent_key": dify_agent_setup},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -110,9 +110,14 @@ async def test_dify_invoke_non_stream(
         )
     )
     r2 = await client.post(
-        f"/v1/agents/{dify_agent_setup}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "再说一遍", "session_id": sid, "stream": False},
+        json={
+            "input": "再说一遍",
+            "session_id": sid,
+            "stream": False,
+            "agent_key": dify_agent_setup,
+        },
     )
     assert r2.status_code == 200
     sent = route.calls[-1].request.read().decode()
@@ -137,9 +142,9 @@ async def test_dify_invoke_stream(
 
     async with stream_client.stream(
         "POST",
-        f"/v1/agents/{dify_agent_setup}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "test", "stream": True},
+        json={"input": "test", "stream": True, "agent_key": dify_agent_setup},
     ) as r:
         body = "".join([c async for c in r.aiter_text()])
     events = _parse_sse(body)
@@ -191,9 +196,9 @@ async def test_fastgpt_invoke_non_stream(
     )
 
     r = await client.post(
-        f"/v1/agents/{fastgpt_agent_setup}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "query", "stream": False},
+        json={"input": "query", "stream": False, "agent_key": fastgpt_agent_setup},
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -225,9 +230,9 @@ async def test_fastgpt_invoke_stream(
 
     async with stream_client.stream(
         "POST",
-        f"/v1/agents/{fastgpt_agent_setup}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "我的订单", "stream": True},
+        json={"input": "我的订单", "stream": True, "agent_key": fastgpt_agent_setup},
     ) as r:
         body = "".join([c async for c in r.aiter_text()])
     events = _parse_sse(body)
@@ -264,9 +269,9 @@ async def test_dify_missing_env_returns_provider_error(
     try:
         monkeypatch.delenv("MISSING_ENV_VAR_XYZ", raising=False)
         r = await client.post(
-            "/v1/agents/dify-noenv/invoke",
+            "/v1/invoke",
             headers={"Authorization": f"Bearer {app_key}"},
-            json={"input": "x", "stream": False},
+            json={"input": "x", "stream": False, "agent_key": "dify-noenv"},
         )
         body = r.json()
         assert body["success"] is False

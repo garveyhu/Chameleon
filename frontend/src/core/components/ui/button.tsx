@@ -54,17 +54,31 @@ export interface ButtonProps
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, loading, children, disabled, ...props }, ref) => {
-    const Comp = asChild ? Slot : 'button';
+    const styles = cn(buttonVariants({ variant, size, className }));
+    // asChild 走 Radix Slot —— Slot 要求**唯一** child；在外面再插 Loader2 会让 Slot 看到
+    // 两个 child（即便 loading=false 第一个是 null，React.Children.only 也会按 2 计）。
+    // 业务约定：asChild 模式不支持 loading（多半用于 Link/外链，本来也不需要 loading 态）。
+    if (asChild) {
+      return (
+        <Slot
+          ref={ref as React.Ref<HTMLElement>}
+          className={styles}
+          {...(props as React.HTMLAttributes<HTMLElement>)}
+        >
+          {children}
+        </Slot>
+      );
+    }
     return (
-      <Comp
+      <button
         ref={ref}
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={styles}
         disabled={disabled || loading}
         {...props}
       >
         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
         {children}
-      </Comp>
+      </button>
     );
   },
 );

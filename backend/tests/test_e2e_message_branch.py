@@ -7,10 +7,10 @@ import secrets
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from chameleon.api.conversation.schemas import AppendMessageDraft
-from chameleon.api.conversation.service import append, create
+from chameleon.api.sessions.schemas import AppendMessageDraft
+from chameleon.api.sessions.service import append, create
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Conversation, Message
+from chameleon.core.models import ChatSession, Message
 
 
 @pytest_asyncio.fixture
@@ -28,7 +28,7 @@ async def smoke_session():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(Message).where(Message.session_id == sess_id))
         await s.execute(
-            delete(Conversation).where(Conversation.session_id == sess_id)
+            delete(ChatSession).where(ChatSession.session_id == sess_id)
         )
         await s.commit()
 
@@ -83,7 +83,7 @@ async def test_append_message_stores_parent_message_id(smoke_session: dict):
 
 async def test_message_item_schema_exposes_parent_id(smoke_session: dict):
     """MessageItem schema 包含 parent_message_id 字段"""
-    from chameleon.api.conversation.schemas import MessageItem
+    from chameleon.api.sessions.schemas import MessageItem
 
     session_id = smoke_session["session_id"]
     async with AsyncSessionLocal() as s:

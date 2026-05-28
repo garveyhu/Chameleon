@@ -8,12 +8,12 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.api.conversation import service as conv_service
-from chameleon.api.conversation.schemas import AppendMessageDraft
+from chameleon.api.sessions import service as session_service
+from chameleon.api.sessions.schemas import AppendMessageDraft
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     ApiKey,
-    Conversation,
+    ChatSession,
     Message,
 )
 from chameleon.system.api_key.schemas import CreateApiKeyRequest
@@ -36,7 +36,7 @@ async def app_with_key():
     yield {"app_key": app_key, "api_key": rec.plain_key}
     async with AsyncSessionLocal() as s:
         await s.execute(delete(ApiKey).where(ApiKey.app_id == app_key))
-        await s.execute(delete(Conversation).where(Conversation.app_id == app_key))
+        await s.execute(delete(ChatSession).where(ChatSession.app_id == app_key))
         await s.commit()
 
 
@@ -45,23 +45,22 @@ async def seeded_session(app_with_key: dict):
     """造一个 mock-echo session + user msg + assistant msg"""
     async with AsyncSessionLocal() as s:
         app_id = app_with_key["app_key"]
-        conv = await conv_service.create(
+        conv = await session_service.create(
             s,
             agent_key="mock-echo",
-            provider="mock",
             app_id=app_id,
         )
         await s.commit()
         sid = conv.session_id
 
         # user msg
-        user_msg = await conv_service.append(
+        user_msg = await session_service.append(
             s,
             sid,
             AppendMessageDraft(role="user", content="hi", provider="mock"),
         )
         # assistant msg（手工填，模拟之前 invoke 结果）
-        assistant_msg = await conv_service.append(
+        assistant_msg = await session_service.append(
             s,
             sid,
             AppendMessageDraft(
@@ -80,7 +79,7 @@ async def seeded_session(app_with_key: dict):
     }
     async with AsyncSessionLocal() as s:
         await s.execute(delete(Message).where(Message.session_id == sid))
-        await s.execute(delete(Conversation).where(Conversation.session_id == sid))
+        await s.execute(delete(ChatSession).where(ChatSession.session_id == sid))
         await s.commit()
 
 
@@ -101,7 +100,7 @@ async def test_regenerate_creates_sibling_assistant(
     uid = seeded_session["user_msg_id"]
 
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/{aid}/regenerate",
+        f"/v1/sessions/{sid}/messages/{aid}/regenerate",
         headers=_hdr(seeded_session["api_key"]),
     )
     assert r.status_code == 200, r.text
@@ -144,7 +143,7 @@ async def test_regenerate_rejects_user_message(
     sid = seeded_session["session_id"]
     uid = seeded_session["user_msg_id"]
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/{uid}/regenerate",
+        f"/v1/sessions/{sid}/messages/{uid}/regenerate",
         headers=_hdr(seeded_session["api_key"]),
     )
     assert r.status_code in (400, 422)
@@ -155,7 +154,7 @@ async def test_regenerate_unknown_message_404(
 ):
     sid = seeded_session["session_id"]
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/999999999/regenerate",
+        f"/v1/sessions/{sid}/messages/999999999/regenerate",
         headers=_hdr(seeded_session["api_key"]),
     )
     assert r.status_code in (400, 404, 500)
@@ -173,7 +172,7 @@ async def test_edit_and_resend_creates_sibling_user_and_new_assistant(
     uid = seeded_session["user_msg_id"]
 
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/{uid}/edit-and-resend",
+        f"/v1/sessions/{sid}/messages/{uid}/edit-and-resend",
         headers=_hdr(seeded_session["api_key"]),
         json={"new_content": "what about now?"},
     )
@@ -208,7 +207,7 @@ async def test_edit_and_resend_rejects_assistant_message(
     sid = seeded_session["session_id"]
     aid = seeded_session["assistant_msg_id"]
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/{aid}/edit-and-resend",
+        f"/v1/sessions/{sid}/messages/{aid}/edit-and-resend",
         headers=_hdr(seeded_session["api_key"]),
         json={"new_content": "hello"},
     )
@@ -221,7 +220,7 @@ async def test_edit_and_resend_rejects_empty(
     sid = seeded_session["session_id"]
     uid = seeded_session["user_msg_id"]
     r = await client.post(
-        f"/v1/conversations/{sid}/messages/{uid}/edit-and-resend",
+        f"/v1/sessions/{sid}/messages/{uid}/edit-and-resend",
         headers=_hdr(seeded_session["api_key"]),
         json={"new_content": ""},
     )

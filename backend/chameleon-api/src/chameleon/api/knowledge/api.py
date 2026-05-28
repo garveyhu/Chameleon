@@ -1,10 +1,14 @@
-"""knowledge 对外公开 API（/v1/kbs）
+"""knowledge 对外公开 API（/v1/kb）—— Dify 风扁平契约
 
-业务方用 api_key 调用。鉴权按密钥作用域（[[api-key-scope-model]]）：
-- app 作用域密钥：通吃（可跨 KB 列表 / 创建 / 操作任意 KB）
-- kb 作用域密钥（kbs- 前缀）：仅能操作其绑定的 kb_key，跨 KB / 列表 / 创建一律拒绝
+**key 即知识库身份**——`Authorization: Bearer kbs-xxx` 已经唯一标识了这条 key 绑定的 KB，
+路径中**不再带** `kb_key` 占位。同一套路对齐 agent 的 `/v1/invoke` + `/v1/info`。
 
-admin 后台按 kb_id 走 /v1/admin/kbs/*（另一套）。
+鉴权按密钥作用域（[[api-key-scope-model]]）：
+- `kb` 作用域密钥（kbs- 前缀）：仅能操作 scope_ref 指向的那一个 KB
+- `global` 作用域密钥：可在 body / query 显式带 `kb_key` 指定目标 KB
+- `app` 作用域密钥：不支持 KB 操作
+
+KB 列表 / 创建 → 走 `/v1/admin/kbs/*`（JWT 鉴权的管理路径），公开 API 不再暴露。
 """
 
 import asyncio
@@ -15,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.api.knowledge import service
 from chameleon.api.knowledge.ingest import run_ingest_task
 from chameleon.api.knowledge.schemas import (
-    CreateKbRequest,
     DocumentItem,
     IngestQueued,
     IngestRequest,
@@ -25,80 +28,95 @@ from chameleon.api.knowledge.schemas import (
     UpdateDocumentRequest,
     UpdateKbRequest,
 )
-from chameleon.core.api.exceptions import PermissionDeniedError, ResultCode
+from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult, Result
-from chameleon.core.infra.auth import CurrentApp, assert_scope, current_app
+from chameleon.core.infra.auth import CurrentApp, current_app
 from chameleon.core.infra.db import get_session
 
-router = APIRouter(prefix="/v1/kbs", tags=["knowledge"])
+router = APIRouter(prefix="/v1/kb", tags=["knowledge"])
 
 
-def _require_app_scope(app: CurrentApp) -> None:
-    """跨 KB / 列表 / 创建：仅 app 作用域密钥可用（kb 作用域钥绑定单库，拒绝）。"""
-    if app.scope_type != "app":
-        raise PermissionDeniedError(
-            ResultCode.AgentNotInScope,
-            message="该密钥仅限单个知识库，无权列出 / 创建知识库",
-        )
+def _resolve_kb_key_from_key(app: CurrentApp, body_kb_key: str | None) -> str:
+    """从 key scope + body/query 解析目标 kb_key（Dify 套路：key 已隐含 KB 身份）
+
+    - scope_type='kb'：必须用 scope_ref（key 绑定的 KB）；body 若传需匹配
+    - scope_type='global'：body / query 必须带 kb_key
+    - scope_type='app' 等：禁止操作 KB
+    """
+    if app.scope_type == "kb":
+        target = app.scope_ref or ""
+        if not target:
+            raise BusinessError(
+                ResultCode.ValidationError, message="kb 作用域 key 缺 scope_ref"
+            )
+        if body_kb_key and body_kb_key != target:
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message=f"该密钥仅绑定 {target}，不可操作 {body_kb_key}",
+            )
+        return target
+    if app.scope_type == "global":
+        if not body_kb_key:
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message="全局 key 需在 body / query 指定 kb_key",
+            )
+        return body_kb_key
+    raise BusinessError(
+        ResultCode.ValidationError,
+        message=f"该 key 不支持 KB 操作（scope_type={app.scope_type}）",
+    )
 
 
-@router.get("", response_model=Result[PageResult[KbItem]])
-async def list_kbs(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    session: AsyncSession = Depends(get_session),
-    app: CurrentApp = Depends(current_app),
-) -> Result[PageResult[KbItem]]:
-    _require_app_scope(app)
-    result = await service.list_kbs(session, PageParams(page=page, page_size=page_size))
-    return Result.ok(result)
+# ── KB 元信息（GET /v1/kb 等价 agent 的 /v1/info）─────────────
 
 
-@router.post("", response_model=Result[KbItem])
-async def create_kb(
-    req: CreateKbRequest,
+@router.get("", response_model=Result[KbItem])
+async def get_kb_info(
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[KbItem]:
-    _require_app_scope(app)
-    return Result.ok(await service.create_kb(session, req))
+    """返当前 key 绑定的 KB 元信息（kb_key / name / description / 等）"""
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    return Result.ok(await service.get_kb(session, target_kb_key))
 
 
-@router.post("/{kb_key}/update", response_model=Result[KbItem])
+@router.post("/update", response_model=Result[KbItem])
 async def update_kb(
-    kb_key: str,
     req: UpdateKbRequest,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[KbItem]:
-    assert_scope(app, "kb", kb_key)
-    return Result.ok(await service.update_kb(session, kb_key, req))
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    return Result.ok(await service.update_kb(session, target_kb_key, req))
 
 
-@router.post("/{kb_key}/delete", response_model=Result[KbItem])
+@router.post("/delete", response_model=Result[KbItem])
 async def delete_kb(
-    kb_key: str,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[KbItem]:
-    assert_scope(app, "kb", kb_key)
-    return Result.ok(await service.delete_kb(session, kb_key))
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    return Result.ok(await service.delete_kb(session, target_kb_key))
 
 
 # ── Documents（增改删查） ─────────────────────────────────
 
 
-@router.post("/{kb_key}/documents", response_model=Result[IngestQueued])
+@router.post("/documents", response_model=Result[IngestQueued])
 async def ingest_document(
-    kb_key: str,
     req: IngestRequest,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[IngestQueued]:
-    assert_scope(app, "kb", kb_key)
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
     queued, doc, kb = await service.ingest_document(
         session,
-        kb_key,
+        target_kb_key,
         req,
         app_id=app.app_id,
     )
@@ -116,63 +134,56 @@ async def ingest_document(
     return Result.ok(queued)
 
 
-@router.get("/{kb_key}/documents", response_model=Result[PageResult[DocumentItem]])
+@router.get("/documents", response_model=Result[PageResult[DocumentItem]])
 async def list_documents(
-    kb_key: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[PageResult[DocumentItem]]:
-    assert_scope(app, "kb", kb_key)
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
     return Result.ok(
         await service.list_documents(
-            session, kb_key, PageParams(page=page, page_size=page_size)
+            session, target_kb_key, PageParams(page=page, page_size=page_size)
         )
     )
 
 
-@router.get(
-    "/{kb_key}/documents/{doc_id}", response_model=Result[DocumentItem]
-)
+@router.get("/documents/{doc_id}", response_model=Result[DocumentItem])
 async def get_document(
-    kb_key: str,
     doc_id: int,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[DocumentItem]:
-    assert_scope(app, "kb", kb_key)
-    return Result.ok(await service.get_document(session, kb_key, doc_id))
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    return Result.ok(await service.get_document(session, target_kb_key, doc_id))
 
 
-@router.post(
-    "/{kb_key}/documents/{doc_id}/update", response_model=Result[DocumentItem]
-)
+@router.post("/documents/{doc_id}/update", response_model=Result[DocumentItem])
 async def update_document(
-    kb_key: str,
     doc_id: int,
     req: UpdateDocumentRequest,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[DocumentItem]:
-    assert_scope(app, "kb", kb_key)
-    item = await service.update_document(session, kb_key, doc_id, req)
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    item = await service.update_document(session, target_kb_key, doc_id, req)
     await session.commit()
     return Result.ok(item)
 
 
-@router.post(
-    "/{kb_key}/documents/{doc_id}/delete",
-    response_model=Result[DocumentItem],
-)
+@router.post("/documents/{doc_id}/delete", response_model=Result[DocumentItem])
 async def delete_document(
-    kb_key: str,
     doc_id: int,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[DocumentItem]:
-    assert_scope(app, "kb", kb_key)
-    item = await service.delete_document(session, kb_key, doc_id)
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    item = await service.delete_document(session, target_kb_key, doc_id)
     await session.commit()
     return Result.ok(item)
 
@@ -180,12 +191,12 @@ async def delete_document(
 # ── Search / 检索 ────────────────────────────────────────
 
 
-@router.post("/{kb_key}/search", response_model=Result[list[SearchHitItem]])
+@router.post("/search", response_model=Result[list[SearchHitItem]])
 async def search(
-    kb_key: str,
     req: SearchRequest,
+    kb_key: str | None = Query(None, description="仅 global 作用域 key 需要"),
     session: AsyncSession = Depends(get_session),
     app: CurrentApp = Depends(current_app),
 ) -> Result[list[SearchHitItem]]:
-    assert_scope(app, "kb", kb_key)
-    return Result.ok(await service.search(session, kb_key, req))
+    target_kb_key = _resolve_kb_key_from_key(app, kb_key)
+    return Result.ok(await service.search(session, target_kb_key, req))

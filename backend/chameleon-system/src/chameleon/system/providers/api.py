@@ -259,7 +259,3 @@ async def delete_provider(
     await session.commit()
     await reload_llm_cache()
     return Result.ok(None)
-
-
-# provider test 已迁移到 model 级 —— 见 chameleon.system.models.api.test_model
-# provider 只是凭证容器，是否真正可用要看具体模型能不能调起来。

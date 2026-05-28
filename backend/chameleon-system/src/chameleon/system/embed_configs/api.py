@@ -38,9 +38,13 @@ class EmbedConfigItem(BaseModel):
     name: str
     description: str | None = None
     agent_id: int
+    # S13 重构：owner api_key（嵌入流量归属到这个 key，复用 key 的限流 / 计费）
+    api_key_id: int | None = None
     allowed_origins: list | None = None
     ui_config: dict | None = None
     behavior: dict | None = None
+    # S13 重构：会话策略（识别模式 / 历史侧栏 / 用户自管理）
+    session_policy: dict | None = None
     enabled: bool
     created_by_user_id: int | None = None
     created_at: datetime
@@ -51,20 +55,24 @@ class CreateEmbedConfigRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
     agent_id: int
+    api_key_id: int | None = None
     allowed_origins: list[str] = Field(
         default_factory=list,
         description="域名白名单，如 ['https://example.com']；为空表示拒绝所有跨域",
     )
     ui_config: dict | None = None
     behavior: dict | None = None
+    session_policy: dict | None = None
 
 
 class UpdateEmbedConfigRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    api_key_id: int | None = None
     allowed_origins: list[str] | None = None
     ui_config: dict | None = None
     behavior: dict | None = None
+    session_policy: dict | None = None
     enabled: bool | None = None
 
 
@@ -185,9 +193,11 @@ async def create_embed_config(
         name=req.name,
         description=req.description,
         agent_id=req.agent_id,
+        api_key_id=req.api_key_id,
         allowed_origins=req.allowed_origins or None,
         ui_config=req.ui_config,
         behavior=req.behavior,
+        session_policy=req.session_policy,
         enabled=True,
         created_by_user_id=user.id,
     )
@@ -231,12 +241,16 @@ async def update_embed_config(
         e.name = req.name
     if req.description is not None:
         e.description = req.description
+    if req.api_key_id is not None:
+        e.api_key_id = req.api_key_id
     if req.allowed_origins is not None:
         e.allowed_origins = req.allowed_origins or None
     if req.ui_config is not None:
         e.ui_config = req.ui_config
     if req.behavior is not None:
         e.behavior = req.behavior
+    if req.session_policy is not None:
+        e.session_policy = req.session_policy
     if req.enabled is not None:
         e.enabled = req.enabled
     item = await _flush_refresh(session, e)

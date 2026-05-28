@@ -7,10 +7,10 @@ import secrets
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from chameleon.api.conversation.schemas import AppendMessageDraft
-from chameleon.api.conversation.service import append, create, load_messages
+from chameleon.api.sessions.schemas import AppendMessageDraft
+from chameleon.api.sessions.service import append, create, load_messages
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Conversation, Message
+from chameleon.core.models import ChatSession, Message
 
 
 @pytest_asyncio.fixture
@@ -28,7 +28,7 @@ async def mm_session():
     async with AsyncSessionLocal() as s:
         await s.execute(delete(Message).where(Message.session_id == sess_id))
         await s.execute(
-            delete(Conversation).where(Conversation.session_id == sess_id)
+            delete(ChatSession).where(ChatSession.session_id == sess_id)
         )
         await s.commit()
 

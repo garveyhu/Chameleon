@@ -24,6 +24,7 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import LLMModel, Provider
+from chameleon.core.observe.llm_recorder import GenerationRecorder
 from chameleon.core.utils.crypto import get_or_decrypt
 
 # 进程内 cache（启动期一次性 load）
@@ -76,12 +77,16 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
             api_key = get_or_decrypt(provider.api_key_encrypted) or ""
             api_base = provider.base_url or ""
             defaults = model.defaults or {}
+            # S6：每个 cache 实例烧进 GenerationRecorder —— 任何路径
+            # 拿到这个实例调 .ainvoke()/.astream() 都会自动记一条 generation
+            # call_log（归属字段从 TraceContext / ContextVar 读，无 scope 兜底）
             instance = BaseLLM(
                 model=model.code,
                 api_key=api_key,
                 api_base=api_base,
                 temperature=defaults.get("temperature", 0.7),
                 max_tokens=defaults.get("max_tokens"),
+                callbacks=[GenerationRecorder(model_code=model.code)],
             )
             new_cache[model.code] = instance
         except Exception as e:

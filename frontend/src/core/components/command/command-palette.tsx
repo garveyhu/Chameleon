@@ -8,7 +8,6 @@ import {
   Code2,
   Cpu,
   Download,
-  FileText,
   History,
   Key,
   KeyRound,
@@ -60,13 +59,12 @@ const NAV_ITEMS: NavItem[] = [
   { label: '仪表盘', path: '/dashboard', icon: LayoutDashboard, keywords: 'dashboard' },
   { label: '用户管理', path: '/users', icon: Users, keywords: 'user 用户' },
   { label: '角色管理', path: '/roles', icon: Shield, keywords: 'role 角色' },
-  { label: '应用 API Key', path: '/apps', icon: Key, keywords: 'app 应用' },
+  { label: '应用 API Key', path: '/api-keys', icon: Key, keywords: 'app 应用' },
   { label: 'Providers', path: '/providers', icon: Cloud, keywords: 'provider 厂商' },
   { label: 'Models', path: '/models', icon: Cpu, keywords: 'model 模型' },
   { label: 'Agents', path: '/agents', icon: Bot, keywords: 'agent' },
   { label: '知识库', path: '/kbs', icon: Library, keywords: 'kb knowledge' },
   { label: '嵌入配置', path: '/embed-configs', icon: Puzzle, keywords: 'embed widget' },
-  { label: '调用日志', path: '/call-logs', icon: FileText, keywords: 'call log' },
   { label: '审计日志', path: '/audit-logs', icon: History, keywords: 'audit log' },
   { label: '系统设置', path: '/settings', icon: Settings, keywords: 'settings 设置' },
 ];
@@ -124,7 +122,7 @@ const ACTIONS: Action[] = [
   {
     label: '创建应用',
     icon: Plus,
-    onSelect: nav => nav('/apps?create=1'),
+    onSelect: nav => nav('/api-keys?create=1'),
     keywords: 'create app',
   },
   {

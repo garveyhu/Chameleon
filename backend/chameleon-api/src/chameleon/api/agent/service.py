@@ -25,8 +25,8 @@ from chameleon.api.agent.schemas import (
     InvokeRequest,
     InvokeResponse,
 )
-from chameleon.api.conversation import service as conv_service
-from chameleon.api.conversation.schemas import AppendMessageDraft
+from chameleon.api.sessions import service as session_service
+from chameleon.api.sessions.schemas import AppendMessageDraft
 from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
@@ -35,6 +35,11 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.infra.auth import CurrentApp
 from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.core.observe import (
+    TraceContext,
+    reset_trace_context,
+    set_trace_context,
+)
 from chameleon.core.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
@@ -82,7 +87,7 @@ def get_agent(key: str) -> AgentItem:
 def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
     """智能体级密钥只能调用其绑定的 agent；global 作用域密钥放行。
 
-    invoke / stream_invoke 共用入口，覆盖 /agents/{key}/invoke 与 /chat/completions。
+    invoke / stream_invoke 共用入口，覆盖 /v1/invoke 与 /v1/chat/completions。
     作用域域名为 "app"（智能体已升格为「应用」），scope_ref = agent_key。
     """
     from chameleon.core.infra.auth import assert_scope
@@ -116,18 +121,36 @@ async def invoke(
                 message=f"provider 未注册: {agent_def.provider}",
             )
 
-    # ② 会话处理
+    # ② 会话处理（带终端用户身份）
     with rec.span("conversation_setup"):
-        conv = await _ensure_conversation(
+        conv = await _ensure_session(
             session,
             agent_def,
             req.session_id,
             current_app=current_app,
+            end_user_id=req.user,
         )
+
+    # S8：set TraceContext —— 其后所有 LLM 调用经 BaseLLM 回调自动落 generation 行。
+    # 不用 try/finally：ContextVar 随 asyncio task 生命周期自然回收（一请求一 task）。
+    _api_key_id_trace = (
+        current_app.id if "admin" not in current_app.scopes else None
+    )
+    set_trace_context(
+        TraceContext(
+            request_id=request_id,
+            channel=channel,
+            app_id=current_app.app_id,
+            api_key_id=_api_key_id_trace,
+            agent_key=agent_key,
+            session_id=conv.session_id,
+            end_user_id=conv.end_user_id,
+        )
+    )
 
     # ③ 历史装载（A10 裁决）
     if isinstance(req.input, str):
-        history = await conv_service.load_messages(session, conv.session_id)
+        history = await session_service.load_messages(session, conv.session_id)
         current_input_text = req.input
         current_input_obj = req.input  # provider 端用 str
     else:
@@ -155,13 +178,14 @@ async def invoke(
 
     # ④ 落库 user msg（先写防丢；list 模式只落 last user，不落 client 自管历史）
     with rec.span("history_persist"):
-        await conv_service.append(
+        await session_service.append(
             session,
             conv.session_id,
             AppendMessageDraft(
                 role="user",
                 content=current_input_text,
                 provider=agent_def.provider,
+                end_user_id=conv.end_user_id,
             ),
         )
 
@@ -205,6 +229,9 @@ async def invoke(
             spans=rec.dump(),
             request_payload=request_payload,
             channel=channel,
+            observation_type="trace",
+            api_key_id=_api_key_id_trace,
+            end_user_id=conv.end_user_id,
         )
         raise
     except Exception:
@@ -222,12 +249,15 @@ async def invoke(
             spans=rec.dump(),
             request_payload=request_payload,
             channel=channel,
+            observation_type="trace",
+            api_key_id=_api_key_id_trace,
+            end_user_id=conv.end_user_id,
         )
         raise
 
     # ⑦ 落库 assistant msg + ⑧ touch
     with rec.span("response_persist"):
-        await conv_service.append(
+        await session_service.append(
             session,
             conv.session_id,
             AppendMessageDraft(
@@ -238,17 +268,31 @@ async def invoke(
                 tool_calls=[tc.model_dump() for tc in result.tool_calls] or None,
                 usage=result.usage.model_dump() if result.usage else None,
                 provider=agent_def.provider,
+                end_user_id=conv.end_user_id,
             ),
         )
         title = current_input_text if conv.title is None else None
-        await conv_service.touch(
+        await session_service.touch(
             session,
             conv.session_id,
             title=title,
             provider_conv_id=result.provider_conv_id,
         )
 
-    # ⑨ 审计
+    # 兜底填 usage：provider 自身没透出（如图引擎下多 LLM 节点）时，从
+    # BaseLLM 回调写下的 generation 子行聚合补回；不影响 provider 已给 usage 的情况。
+    if result.usage is None:
+        from chameleon.providers.base.types import Usage
+
+        p, c, t = await api_key_service.aggregate_generation_usage(
+            session, request_id
+        )
+        if any(v is not None for v in (p, c, t)):
+            result.usage = Usage(
+                prompt_tokens=p, completion_tokens=c, total_tokens=t
+            )
+
+    # ⑨ 审计（root trace 行 —— generation 子行由 BaseLLM 回调自动落）
     usage = result.usage
     response_payload = _build_response_payload(result)
     await _record_call(
@@ -269,6 +313,9 @@ async def invoke(
         request_payload=request_payload,
         response_payload=response_payload,
         channel=channel,
+        observation_type="trace",
+        api_key_id=_api_key_id_trace,
+        end_user_id=conv.end_user_id,
     )
 
     return InvokeResponse(
@@ -285,23 +332,32 @@ async def invoke(
 # ── helpers ─────────────────────────────────────────────
 
 
-async def _ensure_conversation(
+async def _ensure_session(
     session: AsyncSession,
     agent_def: AgentDef,
     given_session_id: str | None,
     *,
     current_app: CurrentApp,
+    end_user_id: str | None = None,
 ):
-    """缺省 → 新建；否则取并校验权限 + agent 一致性"""
+    """缺省 → 新建；否则取并校验权限 + agent + 终端用户一致性
+
+    S3 重构：新建会话时盖章 owner api_key_id（admin 走 JWT 时为 None）+ end_user_id；
+    续接已有会话时校验终端用户一致性（防止跨用户访问同 session_id）。
+    """
+    # admin JWT 路径 id=0（哨兵），不是真实 api_key FK；置 None 避免 FK 失败
+    api_key_id = current_app.id if "admin" not in current_app.scopes else None
+
     if not given_session_id:
-        return await conv_service.create(
+        return await session_service.create(
             session,
             agent_key=agent_def.key,
-            provider=agent_def.provider,
             app_id=current_app.app_id,
+            end_user_id=end_user_id,
+            api_key_id=api_key_id,
         )
 
-    conv = await conv_service.get(session, given_session_id, current_app=current_app)
+    conv = await session_service.get(session, given_session_id, current_app=current_app)
     # agent 一致性：同一 session 不允许切换 agent
     if conv.agent_key != agent_def.key:
         raise BusinessError(
@@ -310,6 +366,16 @@ async def _ensure_conversation(
                 f"session_id 已绑定 agent={conv.agent_key}，"
                 f"不可用于调用 agent={agent_def.key}"
             ),
+        )
+    # 终端用户一致性：会话已绑定终端用户时，必须匹配（防越权）
+    if (
+        end_user_id is not None
+        and conv.end_user_id is not None
+        and conv.end_user_id != end_user_id
+    ):
+        raise BusinessError(
+            ResultCode.SessionIdInvalid,
+            message="session_id 已绑定其他终端用户，不可跨用户访问",
         )
     return conv
 
@@ -392,6 +458,22 @@ async def stream_invoke(
     agent_def, provider, conv, ctx, current_input_text = prep
     request_payload = _build_request_payload(req, agent_def, current_input_text)
 
+    # S8：set TraceContext —— 流期间任何 LLM 调用走 BaseLLM 回调自动落 generation
+    _api_key_id_trace = (
+        current_app.id if "admin" not in current_app.scopes else None
+    )
+    set_trace_context(
+        TraceContext(
+            request_id=request_id,
+            channel=channel,
+            app_id=current_app.app_id,
+            api_key_id=_api_key_id_trace,
+            agent_key=agent_key,
+            session_id=conv.session_id,
+            end_user_id=conv.end_user_id,
+        )
+    )
+
     # 流式调用 + 聚合器
     aggregator = _StreamAggregator(session_id=ctx.session_id, request_id=request_id)
     failed = False
@@ -464,6 +546,7 @@ async def stream_invoke(
             agent_def=agent_def,
             conv_session_id=ctx.session_id,
             conv_had_title=conv.title is not None,
+            conv_end_user_id=conv.end_user_id,
             current_input_text=current_input_text,
             aggregator=aggregator,
             current_app=current_app,
@@ -497,15 +580,16 @@ async def _prepare_invocation(
             message=f"provider 未注册: {agent_def.provider}",
         )
 
-    conv = await _ensure_conversation(
+    conv = await _ensure_session(
         session,
         agent_def,
         req.session_id,
         current_app=current_app,
+        end_user_id=req.user,
     )
 
     if isinstance(req.input, str):
-        history = await conv_service.load_messages(session, conv.session_id)
+        history = await session_service.load_messages(session, conv.session_id)
         current_input_text = req.input
         current_input_obj = req.input
     else:
@@ -530,13 +614,14 @@ async def _prepare_invocation(
             for m in req.input
         ]
 
-    await conv_service.append(
+    await session_service.append(
         session,
         conv.session_id,
         AppendMessageDraft(
             role="user",
             content=current_input_text,
             provider=agent_def.provider,
+            end_user_id=conv.end_user_id,
         ),
     )
 
@@ -563,6 +648,7 @@ async def _stream_finalize(
     agent_def: AgentDef,
     conv_session_id: str,
     conv_had_title: bool,
+    conv_end_user_id: str | None,
     current_input_text: str,
     aggregator: _StreamAggregator,
     current_app: CurrentApp,
@@ -582,7 +668,7 @@ async def _stream_finalize(
         try:
             if not failed and result.answer:
                 with spans.span("response_persist"):
-                    await conv_service.append(
+                    await session_service.append(
                         session,
                         conv_session_id,
                         AppendMessageDraft(
@@ -594,22 +680,37 @@ async def _stream_finalize(
                             tool_calls=[tc.model_dump() for tc in result.tool_calls]
                             or None,
                             usage=result.usage.model_dump() if result.usage else None,
+                            end_user_id=conv_end_user_id,
                             provider=agent_def.provider,
                         ),
                     )
                     title = current_input_text if not conv_had_title else None
-                    await conv_service.touch(
+                    await session_service.touch(
                         session,
                         conv_session_id,
                         title=title,
                         provider_conv_id=result.provider_conv_id,
                     )
 
+            # 兜底填 usage：provider 没透出 usage 时，从 generation 子行聚合
+            if result.usage is None and not failed:
+                from chameleon.providers.base.types import Usage
+
+                p, c, t = await api_key_service.aggregate_generation_usage(
+                    session, request_id
+                )
+                if any(v is not None for v in (p, c, t)):
+                    result.usage = Usage(
+                        prompt_tokens=p, completion_tokens=c, total_tokens=t
+                    )
             usage = result.usage
             response_payload = (
                 _build_response_payload(result)
                 if (not failed and result.answer)
                 else None
+            )
+            _api_key_id_finalize = (
+                current_app.id if "admin" not in current_app.scopes else None
             )
             await _record_call(
                 session,
@@ -629,6 +730,9 @@ async def _stream_finalize(
                 spans=spans.dump(),
                 request_payload=request_payload,
                 response_payload=response_payload,
+                observation_type="trace",
+                api_key_id=_api_key_id_finalize,
+                end_user_id=conv_end_user_id,
             )
             await session.commit()
         except Exception:  # noqa: BLE001

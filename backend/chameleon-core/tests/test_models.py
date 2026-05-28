@@ -14,7 +14,7 @@ from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     Agent,
     ApiKey,
-    Conversation,
+    ChatSession,
     LLMModel,
     Message,
     Permission,
@@ -33,7 +33,7 @@ async def _cleanup_after_test():
     async with AsyncSessionLocal() as s:
         # 按 FK 依赖倒序清
         await s.execute(delete(Message))
-        await s.execute(delete(Conversation).where(Conversation.app_id.like("test-%")))
+        await s.execute(delete(ChatSession).where(ChatSession.app_id.like("test-%")))
         await s.execute(delete(ApiKey).where(ApiKey.app_id.like("test-%")))
         await s.execute(delete(Agent).where(Agent.agent_key.like("test-%")))
         await s.execute(delete(LLMModel).where(LLMModel.code.like("test-%")))
@@ -78,7 +78,7 @@ async def test_conversation_with_messages() -> None:
         s.add(agent)
         await s.flush()
 
-        conv = Conversation(
+        conv = ChatSession(
             session_id=sid,
             agent_key=f"test-agent-{rand}",
             app_id=f"test-{rand}",

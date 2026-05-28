@@ -2,7 +2,7 @@
 
 把 OpenAI chat.completions 请求适配到内部 agent invoke（model = agent_key），
 让任意 OpenAI 客户端/SDK 直接调用本平台的智能体（含 graph 编排出来的）。
-鉴权同 /v1/agents：api_key → App。复用 service.invoke / stream_invoke。
+鉴权同 /v1/invoke：api_key → App。复用 service.invoke / stream_invoke。
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ def _to_invoke_request(req: OAChatRequest) -> InvokeRequest:
     return InvokeRequest(
         input=[MessageInput(role=m.role, content=m.content) for m in req.messages],
         session_id=req.session_id,
+        user=req.user,
         stream=req.stream,
     )
 

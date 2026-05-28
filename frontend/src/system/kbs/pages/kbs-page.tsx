@@ -35,6 +35,7 @@ import {
 import { Textarea } from '@/core/components/ui/textarea';
 import { confirm } from '@/core/lib/confirm';
 import { formatRelativeReadable } from '@/core/lib/format';
+import { fileToIconDataUrl } from '@/core/lib/image';
 import { toast } from '@/core/lib/toast';
 import { documentApi } from '@/system/kbs/services/document';
 import { kbApi } from '@/system/kbs/services/kb';
@@ -79,13 +80,6 @@ export const KbsPage = () => {
 
   return (
     <div className="px-1">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-[16px] font-semibold text-stone-900">知识库</h1>
-        <span className="text-[12px] text-stone-400">
-          {listQ.data ? `共 ${listQ.data.total} 个` : ''}
-        </span>
-      </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {/* 创建入口卡 */}
         <button
@@ -198,33 +192,6 @@ export const KbsPage = () => {
     </div>
   );
 };
-
-/** 图片文件 → 居中裁剪缩放到 128px 方图的 PNG data URL（保证图标小、不撑大数据行） */
-async function fileToIconDataUrl(file: File): Promise<string> {
-  const raw = await new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = () => rej(new Error('read failed'));
-    r.readAsDataURL(file);
-  });
-  const img = new Image();
-  await new Promise<void>((res, rej) => {
-    img.onload = () => res();
-    img.onerror = () => rej(new Error('decode failed'));
-    img.src = raw;
-  });
-  const size = 128;
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return raw;
-  const scale = Math.max(size / img.width, size / img.height);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-  return canvas.toDataURL('image/png');
-}
 
 const EditKbModal = ({ kb, onClose }: { kb: KbItem | null; onClose: () => void }) => {
   const qc = useQueryClient();

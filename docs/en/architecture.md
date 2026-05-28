@@ -39,7 +39,7 @@ graph TB
 
     UI ==>|/v1/admin/*| SYS
     Widget ==>|/v1/embed/*| EMBED
-    SDK ==>|/v1/agents/{key}/invoke| API
+    SDK ==>|/v1/invoke| API
 
     API --> Auth --> PG
     SYS --> Auth

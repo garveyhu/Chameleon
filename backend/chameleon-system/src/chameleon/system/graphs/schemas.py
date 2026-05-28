@@ -17,6 +17,8 @@ class GraphItem(BaseModel):
     graph_key: str
     name: str
     description: str | None = None
+    # 头像 data URL（None 用默认按类型图标）
+    icon: str | None = None
     # chatflow（对话型）/ workflow（流程型）
     kind: str = "chatflow"
     schema_version: int = 1
@@ -51,6 +53,8 @@ class CreateGraphRequest(BaseModel):
 class UpdateGraphRequest(BaseModel):
     name: str | None = Field(default=None, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    # 头像 data URL；传空串 = 清除回默认图标
+    icon: str | None = Field(default=None, max_length=2_000_000)
     kind: str | None = Field(default=None, pattern=r"^(chatflow|workflow)$")
     spec: dict[str, Any] | None = None
     enabled: bool | None = None

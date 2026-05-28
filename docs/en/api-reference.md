@@ -32,7 +32,7 @@ Business exceptions set `success: false`; `code` is a business error code (not H
 | Endpoint type | Auth method |
 |---|---|
 | `/v1/admin/*` | `Authorization: Bearer <jwt-access-token>` |
-| `/v1/agents/{key}/invoke` | `Authorization: Bearer <app-api-key>` |
+| `/v1/invoke` | `Authorization: Bearer <app-api-key>` |
 | `/v1/embed/{embed_key}/*` | None (public; checks Origin + session_token) |
 | `/v1/auth/refresh` | HTTP-only Cookie `refresh_token` |
 

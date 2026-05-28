@@ -103,9 +103,9 @@ async def test_disable_agent_then_invoke_returns_404(
     assert target not in AGENTS
 
     r = await client.post(
-        f"/v1/agents/{target}/invoke",
+        "/v1/invoke",
         headers={"Authorization": f"Bearer {app_key}"},
-        json={"input": "hi", "stream": False},
+        json={"input": "hi", "stream": False, "agent_key": target},
     )
     assert r.status_code == 404
     body = r.json()

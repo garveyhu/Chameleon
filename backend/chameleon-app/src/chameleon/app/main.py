@@ -18,8 +18,8 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy import text
 
-from chameleon.api.agent import agents_router
-from chameleon.api.conversation import conversations_router
+from chameleon.api.agent import flat_api_router
+from chameleon.api.sessions import sessions_router
 from chameleon.api.embed import embed_router
 from chameleon.api.files import files_router
 from chameleon.api.knowledge import knowledge_router
@@ -188,8 +188,8 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(embed_router)
     app.include_router(otel_router)
     # 业务接口
-    app.include_router(conversations_router)
-    app.include_router(agents_router)
+    app.include_router(sessions_router)
+    app.include_router(flat_api_router)  # Dify 风唯一入口：/v1/invoke + /v1/info（key 即应用身份）
     app.include_router(openai_router)
     app.include_router(knowledge_router)
     app.include_router(files_router)

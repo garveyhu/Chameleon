@@ -93,12 +93,14 @@ class CallLog(Base):
     )
     session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # P23.C1 计费多维：user / model / channel 三维（全 NULLABLE，老数据零迁移）
-    # user_id：发起调用的用户（API-key 调用可能为 NULL，admin/playground 有值）
+    # user_id：后台操作者（admin / playground）；与 end_user_id（终端用户）区分
     user_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
+    # S5 重构：终端用户外部 id（接入方维护；冗余落库以免按用户聚合时回去 join sessions）
+    end_user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # model_code：实际命中的模型编码，cost dashboard 按模型聚合
     model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # channel：调用来源渠道（api/openai/embed/playground/internal），入口处盖章；

@@ -28,11 +28,17 @@ export class EmbedApi {
     );
   }
 
-  async createSession(): Promise<CreateSessionResponse> {
+  /** 颁 session_token；按 embed 的 session_policy.identification_mode 传不同身份字段 */
+  async createSession(identity?: {
+    device_id?: string;
+    external_user_id?: string;
+    jwt_token?: string;
+  }): Promise<CreateSessionResponse> {
     return this.unwrap(
       await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/session`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        body: identity ? JSON.stringify(identity) : undefined,
       })
     );
   }

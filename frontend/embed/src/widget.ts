@@ -94,7 +94,10 @@ export class ChameleonWidget {
   constructor(opts: WidgetOptions) {
     this.opts = opts;
     this.api = new EmbedApi(opts.apiBase, opts.embedKey);
-    this.session = new SessionManager(this.api);
+    this.session = new SessionManager(this.api, opts.embedKey, {
+      externalUserId: opts.externalUserId,
+      jwtToken: opts.jwtToken,
+    });
   }
 
   async mount(): Promise<void> {

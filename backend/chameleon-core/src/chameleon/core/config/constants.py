@@ -12,7 +12,7 @@ if _root_env:
 else:
     # constants.py 位于:
     #   chameleon-core/src/chameleon/core/config/constants.py
-    # 向上 5 层到 workspace 根
+    # 向上 5 层到 monorepo root（UV workspace 配置）
     CHAMELEON_ROOT = Path(__file__).resolve().parents[5]
 
 CONFIG_PATH = CHAMELEON_ROOT / "config"

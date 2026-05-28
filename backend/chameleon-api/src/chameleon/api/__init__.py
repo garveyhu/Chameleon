@@ -4,7 +4,7 @@
    业务方读完这里的 router 就知道 Chameleon 提供什么 AI 能力。
 
 四类业务能力：
-- agent/        —— 调用智能体（POST /v1/agents/{key}/invoke 流式 / 非流式）
+- agent/        —— 调用智能体（POST /v1/invoke 流式 / 非流式）
 - knowledge/    —— 知识库 CRUD + 文档 ingest
 - conversation/ —— 会话历史与消息读取
 - task/         —— 异步任务状态查询

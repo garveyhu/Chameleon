@@ -11,19 +11,19 @@ export const conversationApi = {
     page_size?: number;
     agent_key?: string;
   }) =>
-    get<PageResult<ConversationItem>>('/v1/conversations', { params }),
+    get<PageResult<ConversationItem>>('/v1/sessions', { params }),
   get: (sessionId: string) =>
-    get<ConversationItem>(`/v1/conversations/${sessionId}`),
+    get<ConversationItem>(`/v1/sessions/${sessionId}`),
   listMessages: (sessionId: string, params?: { page?: number; page_size?: number }) =>
     get<PageResult<MessageItem>>(
-      `/v1/conversations/${sessionId}/messages`,
+      `/v1/sessions/${sessionId}/messages`,
       { params: { page_size: 500, ...params } },
     ),
 
   // P21.4 PR #68：分支
   regenerate: (sessionId: string, messageId: EntityId) =>
     post<MessageItem>(
-      `/v1/conversations/${sessionId}/messages/${messageId}/regenerate`,
+      `/v1/sessions/${sessionId}/messages/${messageId}/regenerate`,
     ),
   editAndResend: (
     sessionId: string,
@@ -31,7 +31,7 @@ export const conversationApi = {
     newContent: string,
   ) =>
     post<MessageItem>(
-      `/v1/conversations/${sessionId}/messages/${messageId}/edit-and-resend`,
+      `/v1/sessions/${sessionId}/messages/${messageId}/edit-and-resend`,
       { new_content: newContent },
     ),
 };

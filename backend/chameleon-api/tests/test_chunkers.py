@@ -34,13 +34,13 @@ def test_faq_parses_qa_pairs():
     text = """## Q: 如何重置密码？
 点击右上角头像 → 设置 → 修改密码。
 
-## Q: 能跨 workspace 共享 agent 吗？
-不能。Agent 归属当前 workspace。"""
+## Q: 我能跨应用复用知识库吗？
+能。在应用详情『关联 KB』tab 选这个知识库。"""
     out = chunk_faq(text)
     assert len(out) == 2
     assert out[0].qa_question == "如何重置密码？"
     assert "重置密码" in out[0].content
-    assert "Agent" in out[1].content
+    assert "知识库" in out[1].content
     assert all(p.index_name == "chunk" for p in out)
 
 

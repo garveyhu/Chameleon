@@ -7,6 +7,7 @@ import {
   Cog,
   Download,
   FileText,
+  Globe,
   Hourglass,
   MessagesSquare,
   Palette,
@@ -17,6 +18,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+
+import { setLanguage } from '@/core/i18n';
 
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
@@ -172,33 +175,78 @@ const SystemSettingsTab = ({ group }: { group: SettingGroup }) => {
   }
 
   return (
-    <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[14px] font-semibold text-stone-900">{groupTitle}</h3>
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={dirtyKeys.length === 0 || saveMut.isPending}
-          onClick={() => saveMut.mutate()}
-        >
-          <Save className="h-3.5 w-3.5" />
-          {saveMut.isPending ? '保存中...' : `保存${dirtyKeys.length ? ` (${dirtyKeys.length})` : ''}`}
-        </Button>
+    <div className="space-y-4">
+      {/* 客户端偏好（不入 DB，浏览器本地持久化）—— 仅「通用」tab 显示 */}
+      {group === 'general' ? <ClientPreferencesBlock /> : null}
+
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-[14px] font-semibold text-stone-900">{groupTitle}</h3>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={dirtyKeys.length === 0 || saveMut.isPending}
+            onClick={() => saveMut.mutate()}
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saveMut.isPending ? '保存中...' : `保存${dirtyKeys.length ? ` (${dirtyKeys.length})` : ''}`}
+          </Button>
+        </div>
+        <div className="rounded-lg border border-stone-200/60 bg-paper px-4">
+          {items.length === 0 ? (
+            <div className="py-6 text-center text-[12.5px] text-stone-400">本组暂无配置项</div>
+          ) : (
+            items.map(item => (
+              <SettingsField
+                key={item.key}
+                item={item}
+                draftValue={liveValues[item.key]}
+                onChange={(k, v) => setDraft(prev => ({ ...prev, [k]: v }))}
+                onReset={handleReset}
+              />
+            ))
+          )}
+        </div>
       </div>
-      <div className="rounded-lg border border-stone-200/60 bg-paper px-4">
-        {items.length === 0 ? (
-          <div className="py-6 text-center text-[12.5px] text-stone-400">本组暂无配置项</div>
-        ) : (
-          items.map(item => (
-            <SettingsField
-              key={item.key}
-              item={item}
-              draftValue={liveValues[item.key]}
-              onChange={(k, v) => setDraft(prev => ({ ...prev, [k]: v }))}
-              onReset={handleReset}
-            />
-          ))
-        )}
+    </div>
+  );
+};
+
+// ── 客户端偏好（语言等浏览器本地状态，不入 DB） ─────────────────
+
+const ClientPreferencesBlock = () => {
+  const { t, i18n } = useTranslation();
+  return (
+    <div>
+      <h3 className="mb-3 text-[14px] font-semibold text-stone-900">
+        {t('settings.client.title', '客户端偏好')}
+      </h3>
+      <div className="rounded-lg border border-stone-200/60 bg-paper">
+        <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3 last:border-b-0">
+          <div className="flex items-center gap-2">
+            <Globe className="h-3.5 w-3.5 text-stone-400" />
+            <div>
+              <div className="text-[13px] font-medium text-stone-800">
+                {t('settings.client.language', '界面语言')}
+              </div>
+              <div className="text-[11px] text-stone-500">
+                {t('settings.client.languageHint', '仅当前浏览器持久；切换立即生效')}
+              </div>
+            </div>
+          </div>
+          <Select
+            value={i18n.language}
+            onValueChange={v => setLanguage(v as 'zh-CN' | 'en-US')}
+          >
+            <SelectTrigger className="max-w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="zh-CN">简体中文</SelectItem>
+              <SelectItem value="en-US">English</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
