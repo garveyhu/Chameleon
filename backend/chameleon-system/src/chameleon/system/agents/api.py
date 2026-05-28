@@ -3,10 +3,14 @@
 操作：
 - list / get（本地 + 外部一起列）
 - create（仅 source != 'local'；local 由 namespace 扫描自动入表）
-- update（本地仅能改 config / default_model_code / tags）
+- update（所有 source 都可改 name/description/config/default_model_code/tags/icon）
 - delete（local 拒绝；外部软删）
 - enable / disable
 - test：一次性 invoke 看返回（不入 call_logs）
+
+字段语义说明
+- default_model_code：「应用辅助调用模型」。对 local 既是业务也是辅助；对 graph
+  仅作 followup / 自动标题 / 摘要等系统侧调用（业务调用走节点各自绑定的模型）。
 """
 
 from __future__ import annotations

@@ -54,8 +54,12 @@ class Agent(Base, TimestampMixin, SoftDeleteMixin):
     # agentkit 多具名模型槽绑定：{槽名: 已配置模型 code}，如 {"chat": "qwen-plus"}。
     # 仅 source='local' 的 @agent 智能体使用；web "关联模型" tab 写入，运行时 ctx.llm(slot) 读。
     model_bindings: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # 默认模型用 code（"qwen-plus" 这种品牌名 key）而非 FK id：跨环境稳定 /
-    # 跟 model_bindings JSON 内的 key 风格一致 / 避免 trace 路径多查一跳 model 表
+    # 应用辅助调用模型（model.code 字符串 key，如 "qwen-plus"）：
+    # - source='local'：既是业务调用模型，也是辅助调用模型（一致）
+    # - source='graph'：业务调用走 graph 节点各自绑定的模型；followup / 自动标题 /
+    #   摘要这类「系统侧辅助调用」走 default_model_code
+    # 用 code 而非 FK id：跨环境稳定 / 跟 model_bindings JSON 内的 key 风格一致 /
+    # 避免 trace 路径多查一跳 model 表
     default_model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

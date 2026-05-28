@@ -21,8 +21,14 @@ export const agentApi = {
     get<AgentItem[]>('/v1/admin/agents', { params }),
   get: (id: EntityId) => get<AgentItem>(`/v1/admin/agents/${id}`),
   create: (req: CreateAgentRequest) => post<AgentItem>('/v1/admin/agents', req),
-  update: (id: EntityId, req: Partial<CreateAgentRequest> & { icon?: string | null }) =>
-    post<AgentItem>(`/v1/admin/agents/${id}/update`, req),
+  update: (
+    id: EntityId,
+    req: Partial<CreateAgentRequest> & {
+      icon?: string | null;
+      /** 应用辅助调用模型（local 同时也是业务调用模型） */
+      default_model_code?: string | null;
+    },
+  ) => post<AgentItem>(`/v1/admin/agents/${id}/update`, req),
   delete: (id: EntityId) => post<void>(`/v1/admin/agents/${id}/delete`),
   enable: (id: EntityId) => post<AgentItem>(`/v1/admin/agents/${id}/enable`),
   disable: (id: EntityId) => post<AgentItem>(`/v1/admin/agents/${id}/disable`),
