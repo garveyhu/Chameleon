@@ -184,13 +184,13 @@ async def test_provider_model_agent_chain() -> None:
             source="local",
             local_class_path="x.Y",
             provider_id=prov.id,
-            default_model_id=model.id,
+            default_model_code=model.code,
         )
         s.add(agent)
         await s.commit()
         await s.refresh(agent)
         assert agent.provider_id == prov.id
-        assert agent.default_model_id == model.id
+        assert agent.default_model_code == model.code
 
 
 async def test_agent_key_unique() -> None:

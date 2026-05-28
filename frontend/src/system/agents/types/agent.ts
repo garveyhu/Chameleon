@@ -12,7 +12,7 @@ export interface AgentItem {
   /** 关联工作流形态：chatflow / workflow（仅 source='graph' 有值），用于推导编排方式 */
   graph_kind: 'chatflow' | 'workflow' | null;
   config: Record<string, unknown> | null;
-  default_model_id: EntityId | null;
+  default_model_code: string | null;
   tags: string[] | null;
   enabled: boolean;
   version: string | null;

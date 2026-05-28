@@ -36,7 +36,7 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.core.models import Agent, ChatSession, EmbedConfig, Model
+from chameleon.core.models import Agent, ChatSession, EmbedConfig
 from chameleon.core.observe import TraceContext, reset_trace_context, set_trace_context
 from chameleon.core.utils.crypto import get_or_decrypt
 from chameleon.providers.base import AGENTS, PROVIDERS
@@ -840,15 +840,12 @@ async def suggest_followups_for_embed(
     """
     from chameleon.system.graphs import generator as graph_generator
 
-    # 1. 推 model_code：embed.agent_id → Agent.default_model_id → Model.code
-    model_code: str | None = None
+    # 1. 推 model_code：embed.agent_id → Agent.default_model_code（字符串 key，
+    #    跟 model_bindings JSON 内的 key 风格一致；不再做 Model FK 跳转）
     agent: Agent | None = (
         await session.get(Agent, embed.agent_id) if embed.agent_id else None
     )
-    if agent and agent.default_model_id:
-        m = await session.get(Model, agent.default_model_id)
-        if m:
-            model_code = m.code
+    model_code: str | None = agent.default_model_code if agent else None
 
     # 2. set TraceContext，让 GenerationRecorder 把这次 followups 的 generation
     #    行归到 embed 应用 而不是兜底的 internal

@@ -3,7 +3,7 @@
 操作：
 - list / get（本地 + 外部一起列）
 - create（仅 source != 'local'；local 由 namespace 扫描自动入表）
-- update（本地仅能改 config / default_model_id / tags）
+- update（本地仅能改 config / default_model_code / tags）
 - delete（local 拒绝；外部软删）
 - enable / disable
 - test：一次性 invoke 看返回（不入 call_logs）
@@ -57,7 +57,7 @@ class AgentItem(BaseModel):
     # 供前端「应用目录」推导编排方式（对话编排 / 流程编排）。
     graph_kind: str | None = None
     config: dict | None = None
-    default_model_id: int | None = None
+    default_model_code: str | None = None
     tags: list | None = None
     enabled: bool
     version: str | None = None
@@ -80,7 +80,7 @@ class UpdateAgentRequest(BaseModel):
     name: str | None = None
     description: str | None = None
     config: dict | None = None
-    default_model_id: int | None = None
+    default_model_code: str | None = None
     tags: list | None = None
     version: str | None = None
     # 头像 data URL；传空串 = 清除回默认图标
@@ -243,8 +243,8 @@ async def update_agent(
         a.description = req.description
     if req.config is not None:
         a.config = req.config
-    if req.default_model_id is not None:
-        a.default_model_id = req.default_model_id
+    if req.default_model_code is not None:
+        a.default_model_code = req.default_model_code or None
     if req.tags is not None:
         a.tags = req.tags
     if req.version is not None:

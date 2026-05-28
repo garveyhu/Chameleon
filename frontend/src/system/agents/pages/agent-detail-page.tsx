@@ -159,7 +159,7 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
         <Kv label="provider_id" value={String(agent.provider_id ?? '—')} mono />
         <Kv label="local_class_path" value={agent.local_class_path ?? '—'} mono />
         <Kv label="version" value={agent.version ?? '—'} mono />
-        <Kv label="default_model_id" value={String(agent.default_model_id ?? '—')} mono />
+        <Kv label="default_model_code" value={agent.default_model_code ?? '—'} mono />
         <Kv label="tags" value={(agent.tags ?? []).join(', ') || '—'} />
         <Kv label="config" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
         <Kv label="description" value={agent.description ?? '—'} full />
