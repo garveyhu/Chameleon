@@ -56,8 +56,8 @@ interface EmbedPreviewProps {
 }
 
 export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, className }) => {
-  // 默认气泡态（关闭面板），让用户能看到 bubble 图片 / 招呼语 / 透明背景效果
-  const [bubbleOpen, setBubbleOpen] = useState(false);
+  // 默认面板态（主场景）；点击面板右上角的 − 按钮可收起到气泡态预览 bubble + tooltip 效果
+  const [bubbleOpen, setBubbleOpen] = useState(true);
   const BubbleIconCmp = BUBBLE_ICON_MAP[ui.bubble_icon] ?? MessageSquare;
   const fontSize = FONT_SIZE_MAP[ui.font_size];
 
