@@ -161,6 +161,10 @@ class InvokeContext(BaseModel):
     app_id: str
     stream: bool = False
     request_id: str | None = None
+    # Phase C：本次调用附带的附件原始 dict（同 attachments 入参形态），
+    # 给本地 agent / Provider 透传；图/音已经由 service 层翻进 input 的 ContentBlock，
+    # 这里给 agentkit 作者拿到 raw metadata（filename / mime / object_url）
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

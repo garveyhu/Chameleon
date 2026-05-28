@@ -85,6 +85,10 @@ class GraphChatRequest(BaseModel):
     conversation_vars: dict[str, Any] = Field(default_factory=dict)
     # 调试会话标识（前端一次对话一个 sess_*，多轮共用；运行日志按此归类）
     session_id: str | None = Field(default=None, max_length=64)
+    # Phase C：附件元数据（{object_url, filename, mime, size}）。
+    # 透到 graph runtime 后挂在 sys.attachments 变量上，节点（LLM/Code/HTTP）可消费；
+    # Phase C 阶段仅打通数据通道；节点真正消费 file 待 Phase D 完善。
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class GenerateGraphRequest(BaseModel):

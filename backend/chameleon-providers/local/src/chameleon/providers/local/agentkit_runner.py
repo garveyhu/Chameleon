@@ -162,6 +162,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         history=ctx.history,
         session_id=ctx.session_id,
         config=cfg.get("opts") or {},
+        attachments=ctx.attachments,
     )
 
     # 类式 @agent（BaseAgent 子类）：暂走其 astream（高级路径，后续 phase 细化）

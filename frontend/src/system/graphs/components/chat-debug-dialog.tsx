@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 
-import { Eraser, Send } from 'lucide-react';
+import { Eraser, Paperclip, Send, X } from 'lucide-react';
 
 import { Markdown } from '@/core/components/chat/markdown';
 import { Button } from '@/core/components/ui/button';
@@ -19,8 +19,17 @@ import {
 import { StatusBadge } from '@/core/components/ui/status-badge';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
+import { toast } from '@/core/lib/toast';
+import { uploadFile } from '@/system/files/services/file-upload';
 import { graphApi } from '@/system/graphs/services/graph';
 import type { GraphChatTurn } from '@/system/graphs/services/graph';
+
+interface DebugAttachment {
+  object_url: string;
+  filename: string;
+  mime: string;
+  size: number;
+}
 
 interface StepLine {
   name: string;
@@ -68,6 +77,9 @@ export const ChatDebugDialog = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [attachments, setAttachments] = useState<DebugAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // P5-2：跨轮会话变量（客户端携带；assign 节点经 done 回传后更新）
@@ -86,6 +98,36 @@ export const ChatDebugDialog = ({
 
   const patchLast = (fn: (m: ChatMessage) => ChatMessage) =>
     setMessages(ms => ms.map((m, i) => (i === ms.length - 1 ? fn(m) : m)));
+
+  const handleFilesPicked = async (files: File[]) => {
+    if (!files.length) return;
+    const MAX_BYTES = 20 * 1024 * 1024;
+    const oversize = files.filter(f => f.size > MAX_BYTES);
+    if (oversize.length) {
+      toast.error(`超过 20MB：${oversize.map(f => f.name).join(', ')}`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const uploaded = await Promise.all(
+        files.map(async f => {
+          const res = await uploadFile(f, { namespace: 'graph-debug' });
+          return {
+            object_url: res.object_url,
+            filename: f.name,
+            mime: f.type || res.content_type || 'application/octet-stream',
+            size: f.size,
+          } as DebugAttachment;
+        }),
+      );
+      setAttachments(a => [...a, ...uploaded]);
+    } catch (err) {
+      toast.error(`上传失败：${(err as Error).message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const send = async (textArg?: string) => {
     const text = (textArg ?? input).trim();
@@ -109,6 +151,7 @@ export const ChatDebugDialog = ({
       { role: 'assistant', content: '', steps: [], streaming: true },
     ]);
     setInput('');
+    setAttachments([]);
     setBusy(true);
 
     const ctrl = new AbortController();
@@ -123,6 +166,7 @@ export const ChatDebugDialog = ({
           history,
           conversation_vars: convVarsRef.current,
           session_id: sessionRef.current,
+          attachments: attachments.length ? [...attachments] : undefined,
         },
         {
           signal: ctrl.signal,
@@ -253,7 +297,49 @@ export const ChatDebugDialog = ({
               ))
             )}
           </div>
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 border-t border-stone-200/70 px-3 pt-2">
+              {attachments.map((a, i) => (
+                <span
+                  key={i}
+                  className="inline-flex max-w-[200px] items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] text-stone-700"
+                  title={a.filename}
+                >
+                  <Paperclip className="h-3 w-3 text-stone-400" />
+                  <span className="truncate">{a.filename}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAttachments(arr => arr.filter((_, j) => j !== i))}
+                    className="rounded-full p-0.5 text-stone-400 hover:bg-stone-200/70 hover:text-stone-700"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2 border-t border-stone-200/70 p-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              accept="image/*,audio/*,application/pdf,text/plain,text/markdown,.md,.docx,.csv,.xlsx"
+              onChange={e => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void handleFilesPicked(files);
+              }}
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy || uploading}
+              title="添加附件（Phase C：透传到 graph runtime sys.attachments；Phase D 节点消费）"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </Button>
             <Textarea
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -264,12 +350,16 @@ export const ChatDebugDialog = ({
                 }
               }}
               rows={2}
-              placeholder="输入消息，Enter 发送（Shift+Enter 换行）"
+              placeholder={uploading ? '附件上传中…' : '输入消息，Enter 发送（Shift+Enter 换行）'}
               className="flex-1 resize-none text-[12.5px]"
               disabled={busy}
             />
             <div className="flex flex-col gap-1.5">
-              <Button size="sm" onClick={() => void send()} disabled={busy || !input.trim()}>
+              <Button
+                size="sm"
+                onClick={() => void send()}
+                disabled={busy || uploading || (!input.trim() && attachments.length === 0)}
+              >
                 <Send className="mr-1 h-3 w-3" />
                 发送
               </Button>
@@ -278,6 +368,7 @@ export const ChatDebugDialog = ({
                 variant="ghost"
                 onClick={() => {
                   setMessages([]);
+                  setAttachments([]);
                   convVarsRef.current = {};
                   sessionRef.current = newSession();
                 }}

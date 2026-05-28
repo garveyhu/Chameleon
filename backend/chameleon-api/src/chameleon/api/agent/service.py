@@ -314,6 +314,7 @@ async def invoke(
         app_id=current_app.app_id,
         stream=False,
         request_id=request_id,
+        attachments=attachments_dump,
     )
 
     # ⑥ 调 provider（非流式聚合）
@@ -777,11 +778,12 @@ async def _prepare_invocation(
         history=history,
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
-        context_vars=req.context,
+        context_vars={**req.context, "ephemeral_citations": rag_hits},
         options=req.options,
         app_id=current_app.app_id,
         stream=stream,
         request_id=request_id,
+        attachments=attachments_dump,
     )
     return agent_def, provider, conv, ctx, current_input_text
 

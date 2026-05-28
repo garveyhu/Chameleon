@@ -500,6 +500,7 @@ async def chat_stream(
         app_id="__graph_debug__",
         request_id=f"graphdebug-{row.id}-{datetime.now(timezone.utc).timestamp():.0f}",
         stream=True,
+        attachments=req.attachments or [],
     )
     async for ev in prov.stream(ctx):
         yield {"type": ev.type.value, "data": ev.data}

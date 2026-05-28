@@ -89,6 +89,7 @@ class AgentRun:
         history: list[Message],
         session_id: str | None,
         config: dict[str, Any],
+        attachments: list[dict[str, Any]] | None = None,
     ) -> None:
         self._t = transport
         self.agent_key = agent_key
@@ -97,6 +98,11 @@ class AgentRun:
         self.history = history
         self.session_id = session_id
         self.config = config
+        #: 本次调用附带的附件原始 dict（{object_url, filename, mime, size}）。
+        #: 图/音已由 service 翻进 messages 多模态 ContentBlock，作者主要拿这里
+        #: 的元信息做条件分支；文档/数据类异步入临时 KB，通过 ctx.kb.search()
+        #: 也能拿到检索结果。
+        self.attachments: list[dict[str, Any]] = attachments or []
 
     # —— 模型（slot=走绑定链；model=点名已配置 code，二选一）——
 

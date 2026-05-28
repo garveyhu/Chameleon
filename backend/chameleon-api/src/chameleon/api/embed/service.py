@@ -480,6 +480,8 @@ async def invoke_once(
             *ctx.history,
         ]
         ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits}
+    if attachments:
+        ctx.attachments = list(attachments)
 
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
@@ -634,6 +636,8 @@ async def stream_invoke(
             *ctx.history,
         ]
         ctx.context_vars = {**ctx.context_vars, "ephemeral_citations": rag_hits_s}
+    if attachments:
+        ctx.attachments = list(attachments)
 
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
