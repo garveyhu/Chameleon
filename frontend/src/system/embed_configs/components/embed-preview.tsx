@@ -6,15 +6,18 @@
 
 import {
   Bot,
+  Copy,
   HelpCircle,
   MessageCircle,
   MessageSquare,
   Minus,
   Paperclip,
+  RotateCw,
   Send,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
+  Trash2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
@@ -47,6 +50,17 @@ const SHADOW_MAP: Record<ShadowLevel, string> = {
   sm: 'shadow-sm',
   md: 'shadow-md',
   lg: 'shadow-lg',
+};
+
+/** YIQ 亮度判断：浅底（如白）的 header / 元素文字应该用深色，否则白字 */
+const isLightHex = (hex: string): boolean => {
+  const m = (hex || '').replace('#', '');
+  if (m.length !== 3 && m.length !== 6) return false;
+  const full = m.length === 3 ? m.split('').map(c => c + c).join('') : m;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 175;
 };
 
 interface EmbedPreviewProps {
@@ -134,40 +148,57 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
               color: paneText,
             }}
           >
-            {/* header */}
-            <div
-              className="flex items-center justify-between px-3 py-2.5"
-              style={{
-                backgroundColor: ui.header_bg,
-                color: '#fff',
-                borderTopLeftRadius: corner,
-                borderTopRightRadius: corner,
-              }}
-            >
-              <div className="flex items-center gap-2">
-                {ui.icon_url ? (
-                  <img
-                    src={ui.icon_url}
-                    alt=""
-                    className="h-[20px] w-[20px] rounded object-cover"
-                  />
-                ) : (
-                  <span className="text-[18px] leading-none">{ui.icon_emoji}</span>
-                )}
-                <div className="leading-tight">
-                  <div className={cn('font-medium', fontSize.bubble)}>{ui.title}</div>
-                  <div className={cn(fontSize.meta, 'opacity-80')}>{ui.subtitle}</div>
+            {/* header —— 文字色按 header_bg 亮度自适应（白底 → 深字） */}
+            {(() => {
+              const headerLight = isLightHex(ui.header_bg);
+              const headerText = headerLight ? paneText : '#FFFFFF';
+              const closeHover = headerLight ? 'hover:bg-stone-100' : 'hover:bg-white/10';
+              const headerBorderBottom = headerLight
+                ? `1px solid ${dividerBorder}`
+                : 'none';
+              return (
+                <div
+                  className="flex items-center justify-between px-3 py-2.5"
+                  style={{
+                    backgroundColor: ui.header_bg,
+                    color: headerText,
+                    borderTopLeftRadius: corner,
+                    borderTopRightRadius: corner,
+                    borderBottom: headerBorderBottom,
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    {ui.icon_url ? (
+                      <img
+                        src={ui.icon_url}
+                        alt=""
+                        className="h-[20px] w-[20px] rounded object-cover"
+                      />
+                    ) : (
+                      <span className="text-[18px] leading-none">{ui.icon_emoji}</span>
+                    )}
+                    <div className="leading-tight">
+                      <div className={cn('font-medium', fontSize.bubble)}>{ui.title}</div>
+                      <div
+                        className={cn(fontSize.meta)}
+                        style={{ opacity: headerLight ? 0.6 : 0.8 }}
+                      >
+                        {ui.subtitle}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={cn('rounded p-0.5 transition', closeHover)}
+                    style={{ color: headerText, opacity: 0.8 }}
+                    onClick={() => setBubbleOpen(false)}
+                    title="收起预览"
+                  >
+                    <Minus className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
-              <button
-                type="button"
-                className="rounded p-0.5 text-white/80 transition hover:bg-white/10"
-                onClick={() => setBubbleOpen(false)}
-                title="收起预览"
-              >
-                <Minus className="h-3.5 w-3.5" />
-              </button>
-            </div>
+              );
+            })()}
 
             {/* message list */}
             <div className="flex-1 space-y-2 overflow-y-auto px-3 py-2.5">
@@ -211,36 +242,51 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
               ) : null}
             </div>
 
-            {/* input bar */}
+            {/* input bar —— 跟 widget 对齐：去顶线 / textarea 方形圆角 + shadow / 方形 send */}
             <div
-              className="flex items-center gap-2 border-t px-3 py-2.5"
-              style={{ borderColor: dividerBorder, backgroundColor: inputBg }}
+              className="flex items-center gap-1.5 px-3 py-2.5"
+              style={{ backgroundColor: paneBg }}
             >
               {behavior.allow_file_upload ? (
                 <button
                   type="button"
-                  className="rounded p-1 transition"
+                  className="flex h-7 w-7 items-center justify-center rounded-md transition"
                   style={{ color: subtleText }}
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
               ) : null}
               <div
-                className={cn('flex-1', fontSize.meta)}
+                className={cn('flex-1 rounded-lg border px-2.5 py-1.5', fontSize.meta)}
                 style={{
+                  borderColor: dividerBorder,
+                  backgroundColor: inputBg,
                   color: subtleText,
+                  boxShadow: '0 1px 2px rgba(15,23,42,.04), 0 4px 12px rgba(15,23,42,.04)',
                 }}
               >
                 {ui.placeholder || '请输入…'}
               </div>
               <button
                 type="button"
-                className="flex h-6 w-6 items-center justify-center rounded text-white"
-                style={{ backgroundColor: ui.theme_color }}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-white"
+                style={{
+                  backgroundColor: ui.theme_color,
+                  boxShadow: `0 2px 6px ${ui.theme_color}40`,
+                }}
               >
                 <Send className="h-3 w-3" />
               </button>
             </div>
+            {/* powered-by 水印 */}
+            {ui.show_powered_by !== false ? (
+              <div
+                className={cn('text-center py-1', fontSize.meta)}
+                style={{ color: subtleText, opacity: 0.7 }}
+              >
+                {ui.powered_by_text || 'powered by Chameleon'}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -324,24 +370,28 @@ const BubbleMsg: React.FC<BubbleMsgProps> = ({
             </span>
           </div>
         ) : null}
-        {showFeedback ? (
-          <div className="flex items-center gap-1 pt-0.5">
-            <button
-              type="button"
-              className="rounded p-0.5 transition hover:bg-stone-200/50"
-              style={{ color: subtleText }}
-            >
-              <ThumbsUp className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              className="rounded p-0.5 transition hover:bg-stone-200/50"
-              style={{ color: subtleText }}
-            >
-              <ThumbsDown className="h-3 w-3" />
-            </button>
-          </div>
-        ) : null}
+        {/* actions：copy / regen / [thumbs up / down 受配置] / trash —— 跟 widget 对齐 */}
+        <div className="flex items-center gap-1 pt-0.5" style={{ color: subtleText }}>
+          <button type="button" className="rounded p-0.5 transition hover:bg-stone-200/50">
+            <Copy className="h-3 w-3" />
+          </button>
+          <button type="button" className="rounded p-0.5 transition hover:bg-stone-200/50">
+            <RotateCw className="h-3 w-3" />
+          </button>
+          {showFeedback ? (
+            <>
+              <button type="button" className="rounded p-0.5 transition hover:bg-stone-200/50">
+                <ThumbsUp className="h-3 w-3" />
+              </button>
+              <button type="button" className="rounded p-0.5 transition hover:bg-stone-200/50">
+                <ThumbsDown className="h-3 w-3" />
+              </button>
+            </>
+          ) : null}
+          <button type="button" className="rounded p-0.5 transition hover:bg-stone-200/50">
+            <Trash2 className="h-3 w-3" />
+          </button>
+        </div>
       </div>
     </div>
   );
