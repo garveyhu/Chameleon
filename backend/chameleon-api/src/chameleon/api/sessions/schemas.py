@@ -40,6 +40,8 @@ class MessageItem(BaseModel):
     provider: str | None
     # P18.5 PR #27：分支起点（regenerate/edit-and-resend fork 时填）
     parent_message_id: int | None = None
+    # 本条消息所属调用的 trace_id（= request_id），widget 反馈按钮按此落 score 表
+    request_id: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -61,3 +63,5 @@ class AppendMessageDraft(BaseModel):
     parent_message_id: int | None = None
     # S3 重构：消息冗余 end_user_id（避免按用户分析时回去 join sessions 表）
     end_user_id: str | None = None
+    # 本条消息所属调用的 trace_id（= request_id）；assistant 消息必填，user 可填
+    request_id: str | None = None

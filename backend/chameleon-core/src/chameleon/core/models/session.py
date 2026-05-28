@@ -91,6 +91,8 @@ class Message(Base):
     )
     # S2 重构：冗余 end_user_id（避免按用户分析时回去 join sessions）
     end_user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # 本条消息所属调用的 trace_id（= request_id），用于反馈按钮关联 score 表
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -100,4 +102,5 @@ class Message(Base):
         Index("ix_messages_session_seq", "session_id", "seq", unique=True),
         Index("ix_messages_parent", "parent_message_id"),
         Index("ix_messages_end_user_id", "end_user_id"),
+        Index("ix_messages_request_id", "request_id"),
     )

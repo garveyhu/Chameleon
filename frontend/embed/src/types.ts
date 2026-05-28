@@ -117,6 +117,8 @@ export interface EmbedMessageItem {
   citations?: { title?: string; source?: string; snippet?: string }[];
   /** 用户消息的多模态 content blocks（attachments 历史回放用） */
   content_blocks?: { type: string; [k: string]: unknown }[];
+  /** 本条消息所属调用的 trace_id —— widget 反馈按钮历史回放时按它落 score */
+  request_id?: string | null;
 }
 
 export interface InvokeResponse {

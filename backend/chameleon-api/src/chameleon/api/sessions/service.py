@@ -196,6 +196,7 @@ async def append(
         provider=draft.provider,
         parent_message_id=draft.parent_message_id,
         end_user_id=draft.end_user_id,
+        request_id=draft.request_id,
         created_at=datetime.now(timezone.utc),
     )
     session.add(msg)

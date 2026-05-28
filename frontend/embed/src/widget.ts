@@ -307,6 +307,8 @@ export class ChameleonWidget {
       content: m.content,
       citations: m.citations,
       attachments,
+      // 回填 trace_id（后端 messages 端点透出），让反馈按钮落到原始调用链
+      requestId: m.request_id || undefined,
     };
   }
 

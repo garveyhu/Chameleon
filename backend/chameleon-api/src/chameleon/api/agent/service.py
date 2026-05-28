@@ -307,6 +307,7 @@ async def invoke(
                 content_blocks=persist_blocks,
                 provider=agent_def.provider,
                 end_user_id=conv.end_user_id,
+                request_id=request_id,
             ),
         )
 
@@ -402,6 +403,7 @@ async def invoke(
                 usage=result.usage.model_dump() if result.usage else None,
                 provider=agent_def.provider,
                 end_user_id=conv.end_user_id,
+                request_id=request_id,
             ),
         )
         title = current_input_text if conv.title is None else None
@@ -777,6 +779,7 @@ async def _prepare_invocation(
             content_blocks=persist_blocks,
             provider=agent_def.provider,
             end_user_id=conv.end_user_id,
+            request_id=request_id,
         ),
     )
 
@@ -849,6 +852,7 @@ async def _stream_finalize(
                             usage=result.usage.model_dump() if result.usage else None,
                             end_user_id=conv_end_user_id,
                             provider=agent_def.provider,
+                            request_id=request_id,
                         ),
                     )
                     title = current_input_text if not conv_had_title else None

@@ -520,6 +520,7 @@ async def invoke_once(
             content=user_input,
             content_blocks=persist_blocks,
             end_user_id=end_user_id,
+            request_id=rid,
         ),
     )
 
@@ -558,6 +559,7 @@ async def invoke_once(
                     citations=non_stream_citations or None,
                     usage=result.usage.model_dump() if result.usage else None,
                     end_user_id=end_user_id,
+                    request_id=rid,
                 ),
             )
             title = user_input if conv.title is None else None
@@ -707,6 +709,7 @@ async def stream_invoke(
             content=user_input,
             content_blocks=persist_blocks_s,
             end_user_id=end_user_id,
+            request_id=rid,
         ),
     )
     await session.commit()  # 提交 user msg 防 stream 中断丢
@@ -789,6 +792,7 @@ async def stream_invoke(
                         if agg_result.usage
                         else None,
                         end_user_id=end_user_id,
+                        request_id=rid,
                     ),
                 )
                 title = user_input if conv.title is None else None
