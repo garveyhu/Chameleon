@@ -93,6 +93,12 @@ const ENDPOINTS: EndpointSpec[] = [
     bodyParams: [
       { name: 'session_token', type: 'string', required: true, desc: '颁发接口返回的短期 token' },
       { name: 'input', type: 'string', required: true, desc: '用户输入（1-8000 字符）' },
+      {
+        name: 'attachments',
+        type: 'Attachment[]',
+        required: false,
+        desc: '附件（Phase A 仅图/音走多模态进 LLM；先用 /v1/files/presigned-upload 拿 object_url）',
+      },
     ],
     responses: [
       {
@@ -125,6 +131,12 @@ const ENDPOINTS: EndpointSpec[] = [
     bodyParams: [
       { name: 'session_token', type: 'string', required: true, desc: 'session_token' },
       { name: 'input', type: 'string', required: true, desc: '用户输入' },
+      {
+        name: 'attachments',
+        type: 'Attachment[]',
+        required: false,
+        desc: '同非流式：Phase A 图/音走多模态',
+      },
     ],
     responses: [
       {

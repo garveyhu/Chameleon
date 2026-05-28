@@ -2,7 +2,7 @@
 
 import type { EmbedApi } from './api';
 import { EmbedError } from './api';
-import type { InvokeResponse, StreamChunk } from './types';
+import type { InvokeResponse, StreamChunk, WidgetAttachment } from './types';
 
 interface SessionState {
   token: string;
@@ -93,14 +93,17 @@ export class SessionManager {
     return this.getToken();
   }
 
-  async invokeWithRetry(input: string): Promise<InvokeResponse> {
+  async invokeWithRetry(
+    input: string,
+    attachments?: WidgetAttachment[],
+  ): Promise<InvokeResponse> {
     const token = await this.getToken();
     try {
-      return await this.api.invoke(token, input);
+      return await this.api.invoke(token, input, attachments);
     } catch (e) {
       if (isTokenInvalidError(e)) {
         const newToken = await this.refresh();
-        return this.api.invoke(newToken, input);
+        return this.api.invoke(newToken, input, attachments);
       }
       throw e;
     }
@@ -110,14 +113,15 @@ export class SessionManager {
     input: string,
     onChunk: (c: StreamChunk) => void,
     signal?: AbortSignal,
+    attachments?: WidgetAttachment[],
   ): Promise<void> {
     const token = await this.getToken();
     try {
-      await this.api.invokeStream(token, input, onChunk, signal);
+      await this.api.invokeStream(token, input, onChunk, signal, attachments);
     } catch (e) {
       if (isTokenInvalidError(e)) {
         const newToken = await this.refresh();
-        await this.api.invokeStream(newToken, input, onChunk, signal);
+        await this.api.invokeStream(newToken, input, onChunk, signal, attachments);
         return;
       }
       throw e;

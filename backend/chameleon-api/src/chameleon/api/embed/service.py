@@ -408,6 +408,7 @@ async def invoke_once(
     embed: EmbedConfig,
     session_token: str,
     user_input: str,
+    attachments: list[dict] | None = None,
     request_id: str | None,
 ) -> InvokeResult:
     """非流式调用 + 写 call_log"""
@@ -430,6 +431,17 @@ async def invoke_once(
             end_user_id=end_user_id,
         )
     )
+    # Phase A 附件 → ContentBlock（仅图/音；其他类型 raise NotImplemented）
+    from chameleon.api.agent.service import blocks_from_attachments
+    from chameleon.providers.base.types import Message as ProviderMessage
+
+    blocks = blocks_from_attachments(user_input, attachments)
+    ctx_input: object = user_input
+    persist_blocks: list[dict] | None = None
+    if blocks:
+        ctx_input = [ProviderMessage(role="user", content=blocks)]
+        persist_blocks = [b.model_dump() for b in blocks]
+
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
@@ -438,6 +450,8 @@ async def invoke_once(
         stream=False,
         session_id=sid,
     )
+    if blocks:
+        ctx.input = ctx_input  # 替换为多模态 Message 列表
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
     # S11 桥：往 sessions 表补行 + 落 user message，让历史 API 能查到
@@ -454,6 +468,7 @@ async def invoke_once(
         AppendMessageDraft(
             role="user",
             content=user_input,
+            content_blocks=persist_blocks,
             end_user_id=end_user_id,
         ),
     )
@@ -517,6 +532,7 @@ async def stream_invoke(
     embed: EmbedConfig,
     session_token: str,
     user_input: str,
+    attachments: list[dict] | None = None,
     request_id: str | None,
     show_citations: bool = True,
 ) -> AsyncIterator[dict]:
@@ -548,6 +564,15 @@ async def stream_invoke(
             end_user_id=end_user_id,
         )
     )
+    # Phase A 附件 → ContentBlock
+    from chameleon.api.agent.service import blocks_from_attachments
+    from chameleon.providers.base.types import Message as ProviderMessage
+
+    blocks_s = blocks_from_attachments(user_input, attachments)
+    persist_blocks_s: list[dict] | None = None
+    if blocks_s:
+        persist_blocks_s = [b.model_dump() for b in blocks_s]
+
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
@@ -556,6 +581,8 @@ async def stream_invoke(
         stream=True,
         session_id=sid,
     )
+    if blocks_s:
+        ctx.input = [ProviderMessage(role="user", content=blocks_s)]
     provider = PROVIDERS[AGENTS[agent.agent_key].provider]
 
     # S11 桥：往 sessions 表补行 + 落 user message
@@ -572,6 +599,7 @@ async def stream_invoke(
         AppendMessageDraft(
             role="user",
             content=user_input,
+            content_blocks=persist_blocks_s,
             end_user_id=end_user_id,
         ),
     )

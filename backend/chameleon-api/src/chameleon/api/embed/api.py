@@ -58,9 +58,20 @@ class CreateSessionResponse(BaseModel):
     expires_in: int  # 秒
 
 
+class _EmbedAttachment(BaseModel):
+    object_url: str
+    filename: str | None = Field(None, max_length=255)
+    mime: str
+    size: int | None = Field(None, ge=0)
+
+
 class InvokeRequest(BaseModel):
     session_token: str
     input: str = Field(min_length=1, max_length=8000)
+    attachments: list[_EmbedAttachment] | None = Field(
+        None,
+        description="本次调用附带的文件（图片走多模态；其他类型 Phase B 起走临时 RAG）",
+    )
 
 
 class InvokeResponse(BaseModel):
@@ -141,6 +152,7 @@ async def invoke(
         embed=e,
         session_token=req.session_token,
         user_input=req.input,
+        attachments=[a.model_dump() for a in (req.attachments or [])],
         request_id=request.headers.get("X-Request-Id"),
     )
     return Result.ok(
@@ -412,6 +424,7 @@ async def invoke_stream(
             embed=e,
             session_token=req.session_token,
             user_input=req.input,
+            attachments=[a.model_dump() for a in (req.attachments or [])],
             request_id=request.headers.get("X-Request-Id"),
             show_citations=show_citations,
         ),

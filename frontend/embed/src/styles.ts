@@ -321,6 +321,56 @@ export const buildStyles = (ui: UiConfig): string => {
 .sidebar-item-confirm button.danger { color: #dc2626; }
 .sidebar-item-confirm button.danger:hover { background: rgba(220,38,38,.1); color: #dc2626; }
 
+/* ─── 附件 chips（composer 上方） + 用户消息附件 ───────────── */
+.attachment-chips {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  padding: 8px 12px 0;
+  border-top: 1px solid ${theme.borderColor};
+}
+.att-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border: 1px solid ${theme.borderColor};
+  border-radius: 999px;
+  background: ${theme.paneBg};
+  font-size: 12px; max-width: 220px;
+}
+.att-chip img {
+  width: 20px; height: 20px; border-radius: 4px; object-fit: cover; display: block;
+}
+.att-chip-icon { width: 20px; text-align: center; }
+.att-chip-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.att-chip-remove {
+  width: 18px; height: 18px;
+  background: transparent; border: none; cursor: pointer;
+  color: ${theme.subtleText}; font-size: 14px; line-height: 1;
+  border-radius: 999px;
+}
+.att-chip-remove:hover { background: rgba(127,127,127,.14); color: ${theme.paneText}; }
+
+.msg-attachments {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-bottom: 6px;
+  max-width: 100%;
+}
+.msg-att {
+  border-radius: 8px; overflow: hidden;
+  border: 1px solid ${theme.borderColor};
+  background: ${theme.paneBg};
+}
+.msg-att img {
+  display: block;
+  max-width: 220px; max-height: 220px;
+  object-fit: cover;
+}
+.msg-att .msg-att-icon, .msg-att .msg-att-name {
+  display: inline-block; padding: 6px 10px;
+  font-size: 12px; color: ${theme.paneText};
+}
+
 .sidebar-toggle {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; padding: 0;

@@ -9,7 +9,16 @@ import type {
   EmbedSessionItem,
   InvokeResponse,
   StreamChunk,
+  WidgetAttachment,
 } from './types';
+
+/** invoke 请求时只下发后端要的最小字段（kind 是 widget 本地分类，不发） */
+const toWireAttachment = (a: WidgetAttachment) => ({
+  object_url: a.object_url,
+  filename: a.filename,
+  mime: a.mime,
+  size: a.size,
+});
 
 const DONE_MARKER = '[DONE]';
 
@@ -103,12 +112,20 @@ export class EmbedApi {
     );
   }
 
-  async invoke(sessionToken: string, input: string): Promise<InvokeResponse> {
+  async invoke(
+    sessionToken: string,
+    input: string,
+    attachments?: WidgetAttachment[],
+  ): Promise<InvokeResponse> {
+    const body: Record<string, unknown> = { session_token: sessionToken, input };
+    if (attachments && attachments.length) {
+      body.attachments = attachments.map(toWireAttachment);
+    }
     return this.unwrap(
       await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/invoke`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ session_token: sessionToken, input }),
+        body: JSON.stringify(body),
       })
     );
   }
@@ -126,6 +143,51 @@ export class EmbedApi {
         body: JSON.stringify({ session_token: sessionToken, question, answer }),
       }),
     );
+  }
+
+  /** 三步上传到 MinIO：presign → PUT → finalize（返回 long-lived object_url） */
+  async uploadFile(file: File): Promise<WidgetAttachment> {
+    // 1. presign
+    const presign = (await this.unwrap(
+      await fetch(`${this.apiBase}/v1/files/presigned-upload`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+          namespace: 'embed-attach',
+        }),
+      }),
+    )) as { object_id: string; upload_url: string; object_url: string };
+    // 2. PUT MinIO（不带 Authorization；MinIO presigned 自验签）
+    const putResp = await fetch(presign.upload_url, {
+      method: 'PUT',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    });
+    if (!putResp.ok) {
+      throw new EmbedError(putResp.status, `直传 MinIO 失败: ${putResp.status}`);
+    }
+    // 3. finalize
+    const fin = (await this.unwrap(
+      await fetch(
+        `${this.apiBase}/v1/files/${encodeURIComponent(presign.object_id)}/finalize`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content_type: file.type }),
+        },
+      ),
+    )) as { object_url: string; content_type: string | null };
+    const mime = fin.content_type || file.type || 'application/octet-stream';
+    return {
+      object_url: fin.object_url,
+      filename: file.name,
+      mime,
+      size: file.size,
+      kind: classifyKind(mime),
+    };
   }
 
   /** 反馈：write-only，不接 ApiResult，失败仅 console.warn（不打断会话） */
@@ -152,14 +214,19 @@ export class EmbedApi {
     input: string,
     onChunk: (chunk: StreamChunk) => void,
     signal?: AbortSignal,
+    attachments?: WidgetAttachment[],
   ): Promise<void> {
+    const body: Record<string, unknown> = { session_token: sessionToken, input };
+    if (attachments && attachments.length) {
+      body.attachments = attachments.map(toWireAttachment);
+    }
     const resp = await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/invoke/stream`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         accept: 'text/event-stream',
       },
-      body: JSON.stringify({ session_token: sessionToken, input }),
+      body: JSON.stringify(body),
       signal,
     });
     if (!resp.ok) {
@@ -217,6 +284,28 @@ export class EmbedApi {
     return body.data;
   }
 }
+
+/** 把 MIME 分到 widget 用的 kind 标签 */
+const classifyKind = (mime: string): WidgetAttachment['kind'] => {
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (
+    mime === 'application/pdf' ||
+    mime.startsWith('text/') ||
+    mime === 'application/msword' ||
+    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  ) {
+    return 'document';
+  }
+  if (
+    mime === 'text/csv' ||
+    mime === 'application/vnd.ms-excel' ||
+    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  ) {
+    return 'data';
+  }
+  return 'other';
+};
 
 export class EmbedError extends Error {
   code: number;

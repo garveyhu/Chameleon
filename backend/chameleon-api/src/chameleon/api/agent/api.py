@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.api.agent import service
 from chameleon.api.agent.schemas import (
     AgentItem,
+    AttachmentInput,
     InvokeRequest,
     InvokeResponse,
     MessageInput,
@@ -67,6 +68,10 @@ class FlatInvokeRequest(BaseModel):
 
     input: str | list[MessageInput] = Field(
         ..., description="str → 取 session 历史；list → 客户端自管历史"
+    )
+    attachments: list[AttachmentInput] | None = Field(
+        None,
+        description="本次调用附带的文件（图片走多模态；文档/数据 Phase B 起走临时 RAG）",
     )
     session_id: str | None = Field(
         None, description="缺省 → 新建会话；传入续接（同 agent + 同 end_user 才行）"
@@ -125,6 +130,7 @@ async def flat_invoke(
     agent_key = _resolve_agent_key_from_key(app, req.agent_key)
     inner_req = InvokeRequest(
         input=req.input,
+        attachments=req.attachments,
         session_id=req.session_id,
         user=req.user,
         stream=req.stream,

@@ -23,9 +23,24 @@ class MessageInput(BaseModel):
     tool_call_id: str | None = None
 
 
+class AttachmentInput(BaseModel):
+    """单次调用附带的附件（Phase A：仅图片走 multimodal；Phase B 起其他类型走临时 RAG）"""
+
+    object_url: str = Field(..., description="presigned long-lived URL，可由 /v1/files/presigned-upload + finalize 拿到")
+    filename: str | None = Field(None, max_length=255)
+    mime: str = Field(..., description="MIME 类型，按此分流到 vision / KB / sandbox")
+    size: int | None = Field(None, ge=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class InvokeRequest(BaseModel):
     input: str | list[MessageInput] = Field(
         ..., description="str → 取 session 历史；list → 客户端自管历史"
+    )
+    attachments: list[AttachmentInput] | None = Field(
+        None,
+        description="本次调用附带的文件（图片走多模态；文档/数据走临时 RAG，Phase B）",
     )
     session_id: str | None = Field(None, description="缺省 → 新建会话，响应回显新 ID")
     user: str | None = Field(

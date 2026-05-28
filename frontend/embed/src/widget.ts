@@ -31,6 +31,7 @@ import type {
   EmbedSessionItem,
   StreamChunk,
   UiConfig,
+  WidgetAttachment,
   WidgetMessage,
   WidgetOptions,
 } from './types';
@@ -103,6 +104,10 @@ export class ChameleonWidget {
   private sessions: EmbedSessionItem[] = [];
   private currentSessionId: string | null = null;
   private sidebarOpen = false;
+  // Phase A 附件：等待发送的已上传文件
+  private pendingAttachments: WidgetAttachment[] = [];
+  private fileInputEl: HTMLInputElement | null = null;
+  private attachmentChipsEl: HTMLDivElement | null = null;
 
   constructor(opts: WidgetOptions) {
     this.opts = opts;
@@ -220,11 +225,43 @@ export class ChameleonWidget {
 
   /** 历史消息 → widget 消息格式 */
   private adaptHistoryMessage(m: EmbedMessageItem): WidgetMessage {
+    // 从 content_blocks 提取 image/audio_url block → WidgetAttachment[]
+    let attachments: WidgetAttachment[] | undefined;
+    if (m.content_blocks && m.content_blocks.length) {
+      const atts: WidgetAttachment[] = [];
+      for (const b of m.content_blocks) {
+        if (b.type === 'image_url') {
+          const url = (b as { image_url?: { url?: string } }).image_url?.url;
+          if (url) {
+            atts.push({
+              object_url: url,
+              filename: '',
+              mime: 'image/*',
+              size: 0,
+              kind: 'image',
+            });
+          }
+        } else if (b.type === 'audio_url') {
+          const url = (b as { audio_url?: { url?: string } }).audio_url?.url;
+          if (url) {
+            atts.push({
+              object_url: url,
+              filename: '',
+              mime: 'audio/*',
+              size: 0,
+              kind: 'audio',
+            });
+          }
+        }
+      }
+      if (atts.length) attachments = atts;
+    }
     return {
       id: String(m.id ?? this.nextId()),
       role: m.role,
       content: m.content,
       citations: m.citations,
+      attachments,
     };
   }
 
@@ -343,8 +380,10 @@ export class ChameleonWidget {
           <button class="close-btn" type="button" aria-label="关闭">${closeIcon}</button>
         </div>
         <div class="messages"></div>
+        ${this.behavior.allow_file_upload ? '<div class="attachment-chips" hidden></div>' : ''}
         <div class="composer">
           ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
+          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*"/>' : ''}
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>
@@ -361,6 +400,10 @@ export class ChameleonWidget {
     this.sendBtn = this.shadow.querySelector('.send-btn') as HTMLButtonElement;
     if (showSidebar) {
       this.sidebarListEl = this.shadow.querySelector('.sidebar-list') as HTMLDivElement;
+    }
+    if (this.behavior.allow_file_upload) {
+      this.attachmentChipsEl = this.shadow.querySelector('.attachment-chips') as HTMLDivElement;
+      this.fileInputEl = this.shadow.querySelector('.file-input') as HTMLInputElement;
     }
   }
 
@@ -390,6 +433,106 @@ export class ChameleonWidget {
     newBtn?.addEventListener('click', () => {
       void this.openNewSession();
       this.toggleSidebar(false);
+    });
+
+    // 附件上传（受 allow_file_upload 控制）
+    const uploadBtn = this.shadow.querySelector('.upload-btn') as HTMLButtonElement | null;
+    uploadBtn?.addEventListener('click', () => this.fileInputEl?.click());
+    this.fileInputEl?.addEventListener('change', () => {
+      const files = Array.from(this.fileInputEl?.files ?? []);
+      if (this.fileInputEl) this.fileInputEl.value = ''; // 允许再选同名
+      if (files.length) void this.handleFilesPicked(files);
+    });
+  }
+
+  // ─── 附件上传 ───────────────────────────────────────────
+
+  private async handleFilesPicked(files: File[]): Promise<void> {
+    // 单次上传上限：5 个 / 单文件 ≤ 20MB
+    const MAX_FILES = 5;
+    const MAX_BYTES = 20 * 1024 * 1024;
+    const picked = files.slice(0, MAX_FILES);
+    const oversize = picked.filter(f => f.size > MAX_BYTES);
+    if (oversize.length) {
+      this.pushTransientNotice(
+        `文件超过 20MB 限制：${oversize.map(f => f.name).join(', ')}`,
+        true,
+      );
+      return;
+    }
+    // 给每个文件先插占位 chip（status=uploading）
+    const placeholders = picked.map(f => {
+      const att: WidgetAttachment = {
+        object_url: '',
+        filename: f.name,
+        mime: f.type || 'application/octet-stream',
+        size: f.size,
+        kind: 'other',
+      };
+      return { file: f, att };
+    });
+    for (const { att } of placeholders) {
+      this.pendingAttachments.push(att);
+    }
+    this.renderAttachmentChips();
+
+    // 并发上传
+    await Promise.all(
+      placeholders.map(async ({ file, att }) => {
+        try {
+          const uploaded = await this.api.uploadFile(file);
+          // 用真实 attachment 替换占位
+          Object.assign(att, uploaded);
+        } catch (e) {
+          console.warn('[ChameleonWidget] upload failed', e);
+          this.pendingAttachments = this.pendingAttachments.filter(a => a !== att);
+          this.pushTransientNotice(`上传失败：${file.name}`, true);
+        }
+      }),
+    );
+    this.renderAttachmentChips();
+  }
+
+  private removeAttachment(att: WidgetAttachment): void {
+    this.pendingAttachments = this.pendingAttachments.filter(a => a !== att);
+    this.renderAttachmentChips();
+  }
+
+  private renderAttachmentChips(): void {
+    const el = this.attachmentChipsEl;
+    if (!el) return;
+    el.innerHTML = '';
+    if (!this.pendingAttachments.length) {
+      el.setAttribute('hidden', '');
+      return;
+    }
+    el.removeAttribute('hidden');
+    for (const att of this.pendingAttachments) {
+      const chip = document.createElement('div');
+      chip.className = 'att-chip';
+      const isImage = att.mime.startsWith('image/');
+      const uploading = !att.object_url;
+      chip.innerHTML = `
+        ${
+          isImage && att.object_url
+            ? `<img src="${escapeAttr(att.object_url)}" alt="">`
+            : `<span class="att-chip-icon">${uploading ? '⏳' : '📎'}</span>`
+        }
+        <span class="att-chip-name" title="${escapeAttr(att.filename)}">${escapeText(att.filename)}</span>
+        <button type="button" class="att-chip-remove" aria-label="移除">×</button>
+      `;
+      const removeBtn = chip.querySelector('.att-chip-remove') as HTMLButtonElement;
+      removeBtn.addEventListener('click', () => this.removeAttachment(att));
+      el.appendChild(chip);
+    }
+  }
+
+  private pushTransientNotice(text: string, error = false): void {
+    this.pushMessage({
+      id: this.nextId(),
+      role: 'assistant',
+      content: text,
+      error,
     });
   }
 
@@ -667,6 +810,26 @@ export class ChameleonWidget {
     inner.style.minWidth = '0';
     inner.style.maxWidth = '100%';
 
+    // user 消息上的附件先于文本气泡渲染
+    if (msg.role === 'user' && msg.attachments && msg.attachments.length) {
+      const attsEl = document.createElement('div');
+      attsEl.className = 'msg-attachments';
+      for (const att of msg.attachments) {
+        const item = document.createElement('div');
+        item.className = 'msg-att';
+        if (att.mime.startsWith('image/')) {
+          item.innerHTML = `<img src="${escapeAttr(att.object_url)}" alt="${escapeAttr(att.filename)}">`;
+        } else {
+          item.innerHTML = `
+            <span class="msg-att-icon">📎</span>
+            <span class="msg-att-name">${escapeText(att.filename)}</span>
+          `;
+        }
+        attsEl.appendChild(item);
+      }
+      inner.appendChild(attsEl);
+    }
+
     const bubble = document.createElement('div');
     bubble.className = 'bubble-text';
     if (msg.pending && !msg.content) {
@@ -677,7 +840,10 @@ export class ChameleonWidget {
       // user 不解析 markdown，避免误识别
       bubble.textContent = msg.content;
     }
-    inner.appendChild(bubble);
+    // user 消息没有正文（只有附件）时不渲空气泡
+    if (msg.role !== 'user' || msg.content || !msg.attachments?.length) {
+      inner.appendChild(bubble);
+    }
 
     if (msg.role === 'user' && !msg.streaming) {
       // user 消息也加 Actions（copy / delete）
@@ -828,7 +994,13 @@ export class ChameleonWidget {
   private async handleSend(input: string): Promise<void> {
     if (this.isSending) return;
     const trimmed = input.trim();
-    if (!trimmed) return;
+    // 至少要有文本或附件
+    const ready = this.pendingAttachments.filter(a => a.object_url);
+    if (!trimmed && !ready.length) return;
+    if (this.pendingAttachments.length !== ready.length) {
+      this.pushTransientNotice('还有附件在上传中，请等待完成', true);
+      return;
+    }
     if (!this.isOpen) this.toggle(true);
 
     this.isSending = true;
@@ -839,7 +1011,17 @@ export class ChameleonWidget {
     // 清掉首屏的推荐问题面板（点击后已发，留着没意义）
     this.messagesEl.querySelector('.suggested-questions[data-role="suggested"]')?.remove();
 
-    this.pushMessage({ id: this.nextId(), role: 'user', content: trimmed });
+    // 把附件挂在 user message 上；发送 / 落库后清空 pending
+    const sendingAttachments = ready.slice();
+    this.pushMessage({
+      id: this.nextId(),
+      role: 'user',
+      content: trimmed,
+      attachments: sendingAttachments.length ? sendingAttachments : undefined,
+    });
+    this.pendingAttachments = [];
+    this.renderAttachmentChips();
+
     const pendingId = this.nextId();
     this.pushMessage({
       id: pendingId,
@@ -851,9 +1033,9 @@ export class ChameleonWidget {
 
     try {
       if (this.behavior.streaming) {
-        await this.runStream(pendingId, trimmed);
+        await this.runStream(pendingId, trimmed, sendingAttachments);
       } else {
-        await this.runOneShot(pendingId, trimmed);
+        await this.runOneShot(pendingId, trimmed, sendingAttachments);
       }
     } catch (e) {
       const msg = e instanceof EmbedError ? e.message : '调用失败，请稍后重试';
@@ -910,8 +1092,12 @@ export class ChameleonWidget {
     this.scrollToBottom();
   }
 
-  private async runOneShot(pendingId: string, input: string): Promise<void> {
-    const res = await this.session.invokeWithRetry(input);
+  private async runOneShot(
+    pendingId: string,
+    input: string,
+    attachments?: WidgetAttachment[],
+  ): Promise<void> {
+    const res = await this.session.invokeWithRetry(input, attachments);
     if (res.session_id && res.session_id !== this.currentSessionId) {
       this.currentSessionId = res.session_id;
       this.rememberSid(res.session_id);
@@ -924,7 +1110,11 @@ export class ChameleonWidget {
     });
   }
 
-  private async runStream(pendingId: string, input: string): Promise<void> {
+  private async runStream(
+    pendingId: string,
+    input: string,
+    attachments?: WidgetAttachment[],
+  ): Promise<void> {
     const ctrl = new AbortController();
     this.currentAbort = ctrl;
     let buf = '';
@@ -974,6 +1164,7 @@ export class ChameleonWidget {
           }
         },
         ctrl.signal,
+        attachments,
       );
     } finally {
       this.currentAbort = null;

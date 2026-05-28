@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator
+from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,9 +45,13 @@ from chameleon.core.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
     AgentDef,
+    AudioUrlBlock,
+    ContentBlock,
+    ImageUrlBlock,
     InvokeContext,
     StreamEvent,
     StreamEventType,
+    TextBlock,
     _StreamAggregator,
 )
 from chameleon.providers.base.types import Message as ProviderMessage
@@ -82,6 +87,81 @@ def get_agent(key: str) -> AgentItem:
 
 
 # ── 非流式 invoke 主流程 ────────────────────────────────
+
+
+# ── Attachments (Phase A) ─────────────────────────────────
+# 把 attachments 翻译成 ContentBlock 列表。仅图/音走多模态；其他类型 Phase A
+# 暂未实现（PDF/CSV 等会随 Phase B 临时 RAG 上线）。
+
+
+def blocks_from_attachments(
+    user_text: str,
+    attachments: list[dict[str, Any]] | None,
+) -> list[ContentBlock] | None:
+    """attachments + text → ContentBlock 列表。无附件返 None（调用方走 str 流程）。
+
+    Raises:
+        BusinessError(NotImplemented): 出现 Phase A 尚未支持的 mime 类型
+    """
+    if not attachments:
+        return None
+    blocks: list[ContentBlock] = [TextBlock(text=user_text)] if user_text else []
+    for att in attachments:
+        url = att.get("object_url")
+        mime = (att.get("mime") or "").lower()
+        if not url:
+            continue
+        if mime.startswith("image/"):
+            blocks.append(ImageUrlBlock(image_url={"url": url}))
+        elif mime.startswith("audio/"):
+            blocks.append(AudioUrlBlock(audio_url={"url": url}))
+        else:
+            # PDF / CSV / DOCX 等：Phase B 临时 RAG 才接，Phase A 显式不静默丢
+            raise BusinessError(
+                ResultCode.NotImplemented,
+                message=f"暂不支持文件类型 {mime}（仅图片 / 音频）—— 文档与数据文件将随 Phase B 上线",
+            )
+    return blocks or None
+
+
+def _apply_attachments(
+    req: InvokeRequest,
+    current_input_text: str,
+    current_input_obj,
+) -> tuple[object, list[dict[str, Any]] | None]:
+    """合并 attachments 到 current_input：
+
+    - 没附件 → 原样
+    - input 是 str 且有附件 → 转 list[ProviderMessage] 单元素，content 是 ContentBlock 列表
+    - input 是 list[ProviderMessage] 且有附件 → 把附件 blocks merge 到最后一条 user 上
+    返回 (new_input_obj, blocks_for_persistence)
+    """
+    attachments = (
+        [a.model_dump() if hasattr(a, "model_dump") else a for a in req.attachments]
+        if req.attachments
+        else None
+    )
+    if not attachments:
+        return current_input_obj, None
+
+    blocks = blocks_from_attachments(current_input_text, attachments)
+    if blocks is None:
+        return current_input_obj, None
+
+    if isinstance(current_input_obj, str):
+        new_obj = [ProviderMessage(role="user", content=blocks)]
+    else:
+        # list[ProviderMessage]：把 blocks 设到最后一条
+        last = current_input_obj[-1]
+        new_obj = list(current_input_obj[:-1]) + [
+            ProviderMessage(
+                role=last.role,
+                content=blocks,
+                name=last.name,
+                tool_call_id=last.tool_call_id,
+            )
+        ]
+    return new_obj, [b.model_dump() for b in blocks]
 
 
 def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
@@ -176,6 +256,11 @@ async def invoke(
             for m in req.input
         ]
 
+    # 附件 → ContentBlock（Phase A 仅图/音；其他类型 raise NotImplemented）
+    current_input_obj, persist_blocks = _apply_attachments(
+        req, current_input_text, current_input_obj
+    )
+
     # ④ 落库 user msg（先写防丢；list 模式只落 last user，不落 client 自管历史）
     with rec.span("history_persist"):
         await session_service.append(
@@ -184,6 +269,7 @@ async def invoke(
             AppendMessageDraft(
                 role="user",
                 content=current_input_text,
+                content_blocks=persist_blocks,
                 provider=agent_def.provider,
                 end_user_id=conv.end_user_id,
             ),
@@ -614,12 +700,18 @@ async def _prepare_invocation(
             for m in req.input
         ]
 
+    # 附件 → ContentBlock（Phase A 仅图/音；其他类型 raise NotImplemented）
+    current_input_obj, persist_blocks = _apply_attachments(
+        req, current_input_text, current_input_obj
+    )
+
     await session_service.append(
         session,
         conv.session_id,
         AppendMessageDraft(
             role="user",
             content=current_input_text,
+            content_blocks=persist_blocks,
             provider=agent_def.provider,
             end_user_id=conv.end_user_id,
         ),

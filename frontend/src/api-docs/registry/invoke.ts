@@ -24,6 +24,13 @@ const ENDPOINTS: EndpointSpec[] = [
         example: '你好',
       },
       {
+        name: 'attachments',
+        type: 'Attachment[] | null',
+        required: false,
+        default: null,
+        desc: '本次调用附带的文件。Phase A 仅图片 / 音频走多模态进 LLM（其他类型暂不支持，将随 Phase B 临时 RAG 上线）。先用 /v1/files/presigned-upload 三步拿到 object_url 再传入。每条 Attachment：{ object_url, filename?, mime, size? }',
+      },
+      {
         name: 'session_id',
         type: 'string | null',
         required: false,

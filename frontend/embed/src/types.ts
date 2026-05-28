@@ -86,6 +86,8 @@ export interface EmbedMessageItem {
   created_at?: string;
   /** 后端可能透出的引用列表（assistant 行） */
   citations?: { title?: string; source?: string; snippet?: string }[];
+  /** 用户消息的多模态 content blocks（attachments 历史回放用） */
+  content_blocks?: { type: string; [k: string]: unknown }[];
 }
 
 export interface InvokeResponse {
@@ -116,12 +118,24 @@ export interface StreamChunk {
   error?: { type: string; message: string };
 }
 
+/** widget 持有的附件元信息（已上传到 MinIO，拿到 object_url 后挂在消息上） */
+export interface WidgetAttachment {
+  object_url: string;
+  filename: string;
+  mime: string;
+  size: number;
+  /** Phase A 仅 image/audio 真正发送给后端；其他类型上传成功也只本地显示，提示用户切到长文档 */
+  kind: 'image' | 'audio' | 'document' | 'data' | 'other';
+}
+
 export interface WidgetMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   /** assistant 的内联引用列表（show_citations=true 时渲染） */
   citations?: { title?: string; source?: string; snippet?: string }[];
+  /** 用户消息上传的附件（用户气泡内渲缩略 / 卡片） */
+  attachments?: WidgetAttachment[];
   /** 后端 SSE meta 透出的 request_id（= trace_id），用于反馈定位 */
   requestId?: string;
   /** 用户当前反馈：1 = 👍，-1 = 👎，null/undefined = 未点 */
