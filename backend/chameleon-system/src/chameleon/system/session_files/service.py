@@ -34,25 +34,40 @@ from chameleon.system.kbs import document_service as kb_doc_service
 # ── kind 分类（widget 端 classifyKind 的镜像，后端兜底） ─────────
 
 
+_DOC_MIMES = {
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/epub+zip",
+    "application/rtf",
+    "application/xml",
+    "application/xhtml+xml",
+    "application/json",
+    "message/rfc822",
+    "application/vnd.ms-outlook",
+}
+_DATA_MIMES = {
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+}
+
+
 def classify_kind(mime: str) -> str:
     m = (mime or "").lower()
     if m.startswith("image/"):
         return "image"
     if m.startswith("audio/"):
         return "audio"
-    if m == "application/pdf" or m.startswith("text/"):
-        return "document"
-    if m in (
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ):
-        return "document"
-    if m in (
-        "text/csv",
-        "application/vnd.ms-excel",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ):
+    if m.startswith("video/"):
+        return "other"  # 视频暂不参与多模态 / RAG（仅保留 URL）
+    if m in _DATA_MIMES:
         return "data"
+    if m.startswith("text/") or m in _DOC_MIMES:
+        return "document"
     return "other"
 
 

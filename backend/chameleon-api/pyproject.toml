@@ -8,9 +8,11 @@ dependencies = [
     "chameleon-providers-base",
     "fastapi>=0.115",
     "pydantic>=2.7",
-    # KB Dify-grade parsers (P16-C)
+    # KB Dify-grade parsers (P16-C + Phase E：PPTX / XLSX 扩文档族)
     "pypdf>=4.0",
     "python-docx>=1.1",
+    "python-pptx>=1.0",
+    "openpyxl>=3.1",
     "selectolax>=0.3",
 ]
 

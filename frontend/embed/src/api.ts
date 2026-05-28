@@ -147,6 +147,8 @@ export class EmbedApi {
 
   /** 三步上传到 MinIO：presign → PUT → finalize（返回 long-lived object_url） */
   async uploadFile(file: File): Promise<WidgetAttachment> {
+    // 浏览器对 .md / .svg / .epub 经常给空 file.type → 按扩展名兜底
+    const effectiveMime = normalizeMime(file.name, file.type);
     // 1. presign
     const presign = (await this.unwrap(
       await fetch(`${this.apiBase}/v1/files/presigned-upload`, {
@@ -154,7 +156,7 @@ export class EmbedApi {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           filename: file.name,
-          content_type: file.type || 'application/octet-stream',
+          content_type: effectiveMime,
           size: file.size,
           namespace: 'embed-attach',
         }),
@@ -163,7 +165,7 @@ export class EmbedApi {
     // 2. PUT MinIO（不带 Authorization；MinIO presigned 自验签）
     const putResp = await fetch(presign.upload_url, {
       method: 'PUT',
-      headers: { 'content-type': file.type || 'application/octet-stream' },
+      headers: { 'content-type': effectiveMime },
       body: file,
     });
     if (!putResp.ok) {
@@ -285,22 +287,69 @@ export class EmbedApi {
   }
 }
 
+/** 浏览器对 .md / .svg / .epub 经常给空 mime —— 按扩展名兜底 */
+const EXT_TO_MIME: Record<string, string> = {
+  md: 'text/markdown',
+  markdown: 'text/markdown',
+  mdx: 'text/markdown',
+  txt: 'text/plain',
+  log: 'text/plain',
+  csv: 'text/csv',
+  html: 'text/html',
+  htm: 'text/html',
+  xml: 'application/xml',
+  json: 'application/json',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  epub: 'application/epub+zip',
+  rtf: 'application/rtf',
+  zip: 'application/zip',
+  eml: 'message/rfc822',
+  msg: 'application/vnd.ms-outlook',
+  svg: 'image/svg+xml',
+};
+
+export const normalizeMime = (filename: string, mime: string): string => {
+  const m = (mime || '').toLowerCase();
+  if (m && m !== 'application/octet-stream') return m;
+  const ext = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : '';
+  return EXT_TO_MIME[ext] || m || 'application/octet-stream';
+};
+
 /** 把 MIME 分到 widget 用的 kind 标签 */
 const classifyKind = (mime: string): WidgetAttachment['kind'] => {
-  if (mime.startsWith('image/')) return 'image';
-  if (mime.startsWith('audio/')) return 'audio';
+  const m = mime.toLowerCase();
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('audio/')) return 'audio';
+  // 文档族（含 Markdown / TXT / HTML / PDF / Word / PPT / EPUB / RTF / XML / EML）
   if (
-    mime === 'application/pdf' ||
-    mime.startsWith('text/') ||
-    mime === 'application/msword' ||
-    mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    m === 'application/pdf' ||
+    m === 'application/msword' ||
+    m === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    m === 'application/vnd.ms-powerpoint' ||
+    m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    m === 'application/epub+zip' ||
+    m === 'application/rtf' ||
+    m === 'application/xml' ||
+    m === 'application/xhtml+xml' ||
+    m === 'application/json' ||
+    m === 'message/rfc822' ||
+    m === 'application/vnd.ms-outlook' ||
+    m.startsWith('text/')
   ) {
     return 'document';
   }
+  // 数据表
   if (
-    mime === 'text/csv' ||
-    mime === 'application/vnd.ms-excel' ||
-    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    m === 'text/csv' ||
+    m === 'application/csv' ||
+    m === 'application/vnd.ms-excel' ||
+    m === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ) {
     return 'data';
   }

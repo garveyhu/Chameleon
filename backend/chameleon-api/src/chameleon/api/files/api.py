@@ -46,7 +46,11 @@ async def presigned_upload(
     _: CurrentApp = Depends(current_app_or_admin),
 ) -> Result[PresignedUploadResult]:
     """生成直传 MinIO 的 presigned PUT URL"""
-    _validate_mime(req.content_type)
+    # 浏览器对 .md / .svg / .epub 等的 file.type 经常为空 → 按文件名扩展名兜底
+    from chameleon.api.files.schemas import normalize_mime
+
+    normalized_mime = normalize_mime(req.filename, req.content_type)
+    _validate_mime(normalized_mime)
 
     # 内部 object key：{namespace}/{random_id}{.ext}
     ext = _safe_extension(req.filename)

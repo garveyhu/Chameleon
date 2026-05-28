@@ -383,7 +383,7 @@ export class ChameleonWidget {
         ${this.behavior.allow_file_upload ? '<div class="attachment-chips" hidden></div>' : ''}
         <div class="composer">
           ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
-          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*,application/pdf,text/plain,text/markdown,.md,.docx,.csv,.xlsx"/>' : ''}
+          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/epub+zip,application/rtf,application/xml,application/zip,application/json,text/plain,text/markdown,text/html,text/csv,text/xml,message/rfc822,.md,.markdown,.mdx,.txt,.log,.csv,.html,.htm,.xml,.json,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.rtf,.zip,.eml,.msg,.svg"/>' : ''}
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>

@@ -15,7 +15,9 @@ from chameleon.api.knowledge.parsers import docx as docx_parser
 from chameleon.api.knowledge.parsers import html as html_parser
 from chameleon.api.knowledge.parsers import markdown as md_parser
 from chameleon.api.knowledge.parsers import pdf as pdf_parser
+from chameleon.api.knowledge.parsers import pptx as pptx_parser
 from chameleon.api.knowledge.parsers import text as text_parser
+from chameleon.api.knowledge.parsers import xlsx as xlsx_parser
 
 
 @dataclass
@@ -34,6 +36,14 @@ _REGISTRY: dict[str, ParseFn] = {
         docx_parser.parse
     ),
     "application/msword": docx_parser.parse,
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": (
+        pptx_parser.parse
+    ),
+    "application/vnd.ms-powerpoint": pptx_parser.parse,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (
+        xlsx_parser.parse
+    ),
+    "application/vnd.ms-excel": xlsx_parser.parse,
     "text/csv": csv_parser.parse,
     "application/csv": csv_parser.parse,
     "text/html": html_parser.parse,
@@ -41,6 +51,9 @@ _REGISTRY: dict[str, ParseFn] = {
     "text/markdown": md_parser.parse,
     "text/x-markdown": md_parser.parse,
     "text/plain": text_parser.parse,
+    "application/json": text_parser.parse,
+    "application/xml": text_parser.parse,
+    "text/xml": text_parser.parse,
 }
 
 

@@ -324,7 +324,7 @@ export const ChatDebugDialog = ({
               type="file"
               multiple
               hidden
-              accept="image/*,audio/*,application/pdf,text/plain,text/markdown,.md,.docx,.csv,.xlsx"
+              accept="image/*,audio/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/epub+zip,application/rtf,application/xml,application/zip,application/json,text/plain,text/markdown,text/html,text/csv,text/xml,message/rfc822,.md,.markdown,.mdx,.txt,.log,.csv,.html,.htm,.xml,.json,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.rtf,.zip,.eml,.msg,.svg"
               onChange={e => {
                 const files = Array.from(e.target.files ?? []);
                 if (files.length) void handleFilesPicked(files);
