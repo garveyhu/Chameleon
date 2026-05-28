@@ -7,7 +7,7 @@
  *   - 嵌入：从卡片操作进入，复用 embed_configs 的表单弹窗（不在主导航）
  *   - 新建应用：Dify 式编排方式选择器（对话/流程 → 建 graph 跳编辑器；代码 → 指引）
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
