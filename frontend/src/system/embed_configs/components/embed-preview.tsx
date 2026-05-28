@@ -357,35 +357,58 @@ const BubbleWithTooltip: React.FC<{
   };
   const isOrbit = tipPos === 'orbit';
 
-  const bubble = (
+  // bubble 实际尺寸（受 bubble_size 控制，admin 端 40–96px）
+  const bs = Math.max(40, Math.min(96, ui.bubble_size ?? 56));
+  const iconPx = Math.round(bs * 0.47);
+
+  const bubbleButton = (
     <button
       type="button"
       onClick={onToggle}
       className={cn(
-        'relative flex h-12 w-12 items-center justify-center text-white transition hover:scale-105',
-        !ui.bubble_transparent && shadowClass,
+        'relative flex items-center justify-center text-white transition hover:scale-105',
+        !ui.bubble_transparent && !ui.bubble_image_url && shadowClass,
       )}
       style={{
+        width: bs,
+        height: bs,
         backgroundColor:
           ui.bubble_transparent || ui.bubble_image_url ? 'transparent' : ui.bubble_color,
         borderRadius: '50%',
-        overflow: 'hidden',
         color: ui.bubble_transparent ? ui.bubble_color : '#fff',
       }}
       title="预览气泡（点击切换面板）"
     >
       {ui.bubble_image_url ? (
-        <img src={ui.bubble_image_url} alt="" className="h-full w-full object-cover" />
+        <img
+          src={ui.bubble_image_url}
+          alt=""
+          className="h-full w-full rounded-full object-cover"
+        />
       ) : (
-        <BubbleIconCmp className="h-5 w-5" strokeWidth={1.75} />
+        <BubbleIconCmp style={{ width: iconPx, height: iconPx }} strokeWidth={1.75} />
       )}
-      {/* orbit 模式 tooltip 绝对定位在气泡上方 */}
-      {tip && isOrbit && !hidden ? <OrbitTip text={tip} style={tipStyle} /> : null}
     </button>
   );
 
-  if (!tip || isOrbit || hidden) {
-    return tip && isOrbit && hidden ? <div className="opacity-0 transition">{bubble}</div> : bubble;
+  // orbit：SVG 绝对定位在 wrap 上方（不放进 button，避免 overflow:hidden 截断）
+  if (tip && isOrbit) {
+    return (
+      <div
+        className={cn('relative inline-block transition-opacity', hidden && 'opacity-0')}
+      >
+        <OrbitTip text={tip} style={tipStyle} bubbleSize={bs} />
+        {bubbleButton}
+      </div>
+    );
+  }
+
+  if (!tip || hidden) {
+    return (
+      <div className={cn('inline-block transition-opacity', hidden && 'opacity-0')}>
+        {bubbleButton}
+      </div>
+    );
   }
 
   // 直线方向：四向 flex 布局
@@ -398,7 +421,7 @@ const BubbleWithTooltip: React.FC<{
           ? 'flex flex-col-reverse items-center gap-2'
           : 'flex flex-col items-center gap-2';
   return (
-    <div className={cn(wrapClass, 'transition-opacity', hidden && 'opacity-0')}>
+    <div className={cn(wrapClass)}>
       <div
         style={tipStyle}
         className={cn(
@@ -407,24 +430,30 @@ const BubbleWithTooltip: React.FC<{
       >
         {tip}
       </div>
-      {bubble}
+      {bubbleButton}
     </div>
   );
 };
 
-const OrbitTip: React.FC<{ text: string; style: React.CSSProperties }> = ({ text, style }) => {
-  const r = 38;
-  const cx = 24;
-  const cy = 24;
+const OrbitTip: React.FC<{
+  text: string;
+  style: React.CSSProperties;
+  bubbleSize: number;
+}> = ({ text, style, bubbleSize }) => {
+  const r = bubbleSize / 2 + 10;
+  const cx = bubbleSize / 2;
+  const cy = bubbleSize / 2;
+  const w = cx * 2 + 16;
+  const h = r + 16;
   const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
   return (
     <svg
-      width={cx * 2 + 8}
-      height={r + 8}
-      viewBox={`0 0 ${cx * 2 + 8} ${r + 8}`}
+      width={w}
+      height={h}
+      viewBox={`-8 0 ${w} ${h}`}
       aria-hidden="true"
       className="pointer-events-none absolute left-1/2 -translate-x-1/2"
-      style={{ bottom: '100%' }}
+      style={{ bottom: '100%', marginBottom: -8 }}
     >
       <defs>
         <path id="preview-orbit-path" d={path} />

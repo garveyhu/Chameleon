@@ -30,6 +30,8 @@ export interface UiConfig {
   bubble_icon: BubbleIcon;
   /** 浮窗自定义图片 URL（非空时整个 bubble 用图片代替纯色 + 内置 icon） */
   bubble_image_url: string | null;
+  /** 浮窗大小（直径 px，默认 56） */
+  bubble_size: number;
   /** 浮窗背景透明：仅显 icon / 图片本体，无纯色圆形背景 */
   bubble_transparent: boolean;
   /** 浮窗旁招呼语（如 "hi, 让我帮助你～"，空字符串关闭） */
@@ -44,8 +46,10 @@ export interface UiConfig {
   bubble_tooltip_position: 'left' | 'right' | 'top' | 'bottom' | 'orbit';
   /** 面板打开后自动隐藏招呼语（默认 true） */
   bubble_tooltip_dismiss_on_open: boolean;
-  /** 面板底部 "powered by Chameleon" 水印（默认 true） */
+  /** 面板底部水印是否显示（默认 true） */
   show_powered_by: boolean;
+  /** 水印文字（默认 "powered by Chameleon"，可改成 "Powered by Acme" 等） */
+  powered_by_text: string;
   /** 主题模式 */
   mode: ThemeMode;
   /** 圆角 px */
@@ -102,6 +106,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
   bubble_image_url: null,
+  bubble_size: 56,
   bubble_transparent: false,
   bubble_tooltip_text: '',
   bubble_tooltip_color: '#1f2937',
@@ -110,6 +115,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   bubble_tooltip_position: 'left',
   bubble_tooltip_dismiss_on_open: true,
   show_powered_by: true,
+  powered_by_text: 'powered by Chameleon',
   mode: 'light',
   border_radius: 12,
   font_size: 'md',

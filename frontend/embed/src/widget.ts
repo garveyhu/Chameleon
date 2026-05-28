@@ -52,6 +52,7 @@ const DEFAULT_UI: Required<UiConfig> = {
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
   bubble_image_url: null,
+  bubble_size: 56,
   bubble_transparent: false,
   bubble_tooltip_text: '',
   bubble_tooltip_color: '#1f2937',
@@ -60,6 +61,7 @@ const DEFAULT_UI: Required<UiConfig> = {
   bubble_tooltip_position: 'left',
   bubble_tooltip_dismiss_on_open: true,
   show_powered_by: true,
+  powered_by_text: 'powered by Chameleon',
   mode: 'light',
   border_radius: 12,
   font_size: 'md',
@@ -444,7 +446,7 @@ export class ChameleonWidget {
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>
-        ${ui.show_powered_by !== false ? '<div class="brand">powered by <a href="https://github.com/" target="_blank" rel="noopener">Chameleon</a></div>' : ''}
+        ${ui.show_powered_by !== false ? `<div class="brand">${escapeText(ui.powered_by_text || 'powered by Chameleon')}</div>` : ''}
         ${sidebarHtml}
       </div>
     `;
@@ -1465,15 +1467,16 @@ function renderTooltip(ui: Required<UiConfig>): string {
   const baseStyle = `color:${escapeAttr(color)};font-size:${fontSize}px;font-weight:${weight}`;
 
   if (ui.bubble_tooltip_position === 'orbit') {
-    // 在 bubble 上方圆弧排字（半径 38px = bubble 28r + 10 留白）
-    // path A 写法：M(x1 y1) A rx ry 0 0 1 x2 y2
-    const r = 40;
-    const cx = 28; // bubble 中心（bubble 56x56，相对 wrap）
-    const cy = 28;
-    // 顶部半圆，从左到右
+    // 沿 bubble 上方圆弧排字，半径 = bubble 半径 + 10 留白
+    const bs = Math.max(40, Math.min(96, ui.bubble_size ?? 56));
+    const r = bs / 2 + 10;
+    const cx = bs / 2;
+    const cy = bs / 2;
+    const w = cx * 2 + 16;
+    const h = r + 16;
     const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
     return `
-      <svg class="bubble-tip orbit" width="${cx * 2 + 8}" height="${r + 8}" viewBox="0 0 ${cx * 2 + 8} ${r + 8}" aria-hidden="true">
+      <svg class="bubble-tip orbit" width="${w}" height="${h}" viewBox="${-8} 0 ${w} ${h}" aria-hidden="true">
         <defs><path id="orbit-path" d="${path}"/></defs>
         <text style="${baseStyle}">
           <textPath href="#orbit-path" startOffset="50%" text-anchor="middle">${escapeText(text)}</textPath>

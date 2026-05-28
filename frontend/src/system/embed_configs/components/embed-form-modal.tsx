@@ -680,7 +680,19 @@ const AppearanceTab: React.FC<{
         </div>
       </Section>
 
-      <Section title="浮窗自定义" hint="图片 / 透明背景 / 旁边招呼语 都可选">
+      <Section title="浮窗自定义" hint="大小 / 图片 / 透明背景 / 旁边招呼语 都可选">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="浮窗大小">
+            <NumberWithUnit
+              value={ui.bubble_size}
+              onChange={v => patch('bubble_size', Math.max(40, Math.min(96, v)))}
+              unit="px"
+              min={40}
+              max={96}
+              step={4}
+            />
+          </Field>
+        </div>
         <Field label="自定义图片" hint="圆形显示，建议正方形 PNG/JPG，≤ 2MB">
           <BubbleImagePicker
             value={ui.bubble_image_url}
@@ -767,11 +779,21 @@ const AppearanceTab: React.FC<{
 
       <Section title="水印">
         <ToggleField
-          label="显示 powered by"
-          hint="面板底部「powered by Chameleon」"
+          label="显示水印"
+          hint="面板底部一行小字（默认「powered by Chameleon」）"
           checked={ui.show_powered_by}
           onChange={c => patch('show_powered_by', c)}
         />
+        {ui.show_powered_by ? (
+          <Field label="水印文字" hint="纯文本；自由替换品牌名">
+            <Input
+              value={ui.powered_by_text}
+              onChange={e => patch('powered_by_text', e.target.value)}
+              placeholder="powered by Chameleon"
+              maxLength={64}
+            />
+          </Field>
+        ) : null}
       </Section>
     </div>
   );

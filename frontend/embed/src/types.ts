@@ -20,6 +20,8 @@ export interface UiConfig {
   bubble_icon?: BubbleIcon;
   /** 浮窗图片（圆形 cover；非空时整个 bubble 用图片替代纯色 + 内置 icon） */
   bubble_image_url?: string | null;
+  /** 浮窗大小（直径 px，默认 56） */
+  bubble_size?: number;
   /** 浮窗背景透明：仅显 icon / 图片本体，无纯色圆背景 */
   bubble_transparent?: boolean;
   /** 浮窗旁招呼语 ——「hi, 让我帮助你～」 */
@@ -31,8 +33,10 @@ export interface UiConfig {
   bubble_tooltip_position?: 'left' | 'right' | 'top' | 'bottom' | 'orbit';
   /** 面板打开后 tooltip 自动隐藏（默认 true） */
   bubble_tooltip_dismiss_on_open?: boolean;
-  /** 面板底部 "powered by Chameleon" 水印（默认 true） */
+  /** 面板底部水印是否显示（默认 true） */
   show_powered_by?: boolean;
+  /** 水印文字（默认 "powered by Chameleon"） */
+  powered_by_text?: string;
   mode?: ThemeMode;
   border_radius?: number;
   font_size?: FontSize;

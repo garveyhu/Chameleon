@@ -95,6 +95,9 @@ export const buildStyles = (ui: UiConfig): string => {
   const font = FONT_PX[ui.font_size ?? 'md'];
   const shadow = SHADOW_CSS[ui.shadow ?? 'lg'];
   const panelW = Math.max(280, Math.min(520, ui.panel_width ?? 400));
+  const bubbleSize = Math.max(40, Math.min(96, ui.bubble_size ?? 56));
+  // 图标尺寸跟随 bubble，约 47%
+  const bubbleIconSize = Math.round(bubbleSize * 0.47);
   const panelH = Math.max(360, Math.min(800, ui.panel_height ?? 600));
 
   return `
@@ -136,8 +139,8 @@ export const buildStyles = (ui: UiConfig): string => {
 
 .bubble {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: ${bubbleSize}px;
+  height: ${bubbleSize}px;
   border-radius: 50%;
   background: ${theme.bubbleColor};
   color: #fff;
@@ -163,7 +166,7 @@ export const buildStyles = (ui: UiConfig): string => {
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25));
 }
 .bubble-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
-.bubble svg { width: 26px; height: 26px; }
+.bubble svg { width: ${bubbleIconSize}px; height: ${bubbleIconSize}px; }
 
 /* bubble 旁招呼文字（FastGPT 风格）—— 浅气泡，淡入；面板打开淡出 */
 .bubble-tip.line {
