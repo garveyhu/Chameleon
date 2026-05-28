@@ -1150,28 +1150,24 @@ export class ChameleonWidget {
       down.innerHTML = thumbsDownIcon;
       if (msg.feedback === 1) up.classList.add('active');
       if (msg.feedback === -1) down.classList.add('active');
-      if (!msg.requestId) {
-        up.disabled = true;
-        down.disabled = true;
-      } else {
-        const submit = (positive: boolean, btn: HTMLButtonElement) => {
-          const other = positive ? down : up;
-          const willActive = !btn.classList.contains('active');
-          btn.classList.toggle('active', willActive);
-          other.classList.remove('active');
-          const value: 1 | -1 | null = willActive ? (positive ? 1 : -1) : null;
-          this.updateMessage(msg.id, { feedback: value });
-          if (willActive && msg.requestId) {
-            void this.api.feedback({
-              trace_id: msg.requestId,
-              name: 'thumbs',
-              value: positive ? 1 : -1,
-            });
-          }
-        };
-        up.addEventListener('click', () => submit(true, up));
-        down.addEventListener('click', () => submit(false, down));
-      }
+      // 按钮始终可点；本地 toggle 立刻给视觉反馈，requestId 存在才把反馈推给后端（落 trace）
+      const submit = (positive: boolean, btn: HTMLButtonElement) => {
+        const other = positive ? down : up;
+        const willActive = !btn.classList.contains('active');
+        btn.classList.toggle('active', willActive);
+        other.classList.remove('active');
+        const value: 1 | -1 | null = willActive ? (positive ? 1 : -1) : null;
+        this.updateMessage(msg.id, { feedback: value });
+        if (willActive && msg.requestId) {
+          void this.api.feedback({
+            trace_id: msg.requestId,
+            name: 'thumbs',
+            value: positive ? 1 : -1,
+          });
+        }
+      };
+      up.addEventListener('click', () => submit(true, up));
+      down.addEventListener('click', () => submit(false, down));
       tools.appendChild(up);
       tools.appendChild(down);
     }
