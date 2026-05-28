@@ -23,7 +23,6 @@ import {
   MessageSquare,
   Rocket,
   Server,
-  Settings,
   Sliders,
   Workflow,
 } from 'lucide-react';
@@ -38,10 +37,9 @@ import { EmbedFormModal } from '@/system/embed_configs/components/embed-form-mod
 import { embedConfigApi } from '@/system/embed_configs/services/embed';
 import type { EmbedConfigItem, UpdateEmbedConfigRequest } from '@/system/embed_configs/types/embed';
 import { AgentKeysModal } from '@/system/graphs/components/app-shell/agent-keys-modal';
-import { WebAppDialog, type WebAppTab } from '@/system/graphs/components/app-shell/web-app-dialogs';
 import { EnumSelect } from '@/system/graphs/components/spec-fields';
 import { graphApi } from '@/system/graphs/services/graph';
-import type { GraphDetail, GraphKind, WebAppInfo } from '@/system/graphs/types/graph';
+import type { GraphDetail, GraphKind } from '@/system/graphs/types/graph';
 
 export type EditorTab = 'orchestrate' | 'api' | 'monitor';
 
@@ -78,10 +76,8 @@ export const GraphAppRail = ({
   const apiBase = `${window.location.origin}/v1`;
 
   const [collapsed, setCollapsed] = useState(false);
-  const [dialogTab, setDialogTab] = useState<WebAppTab | null>(null);
   const [embedCfg, setEmbedCfg] = useState<EmbedConfigItem | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
-  const [webApp, setWebApp] = useState<WebAppInfo | null>(null);
 
   // 反查该 graph 对应的 agent —— graph 应用编辑器没经过应用详情页，
   // 这里把 agent.default_model_code 拉过来直接 inline 编辑，避免用户跳转
@@ -107,30 +103,13 @@ export const GraphAppRail = ({
     mutationFn: () => graphApi.ensureWebApp(graph.id),
     onError: e => toast.error(`Web App 初始化失败：${(e as Error).message}`),
   });
-  const saveMut = useMutation({
-    mutationFn: (payload: Parameters<typeof graphApi.updateWebApp>[1]) =>
-      graphApi.updateWebApp(graph.id, payload),
-    onSuccess: info => {
-      setWebApp(info);
-      setDialogTab(null);
-      toast.success('已保存 Web App 设置');
-    },
-    onError: e => toast.error(`保存失败：${(e as Error).message}`),
-  });
 
   const openPublicChat = async () => {
     const info = await ensureMut.mutateAsync();
-    setWebApp(info);
     window.open(`${window.location.origin}/embed/${info.embed_key}`, '_blank');
-  };
-  const openDialog = async (tab: WebAppTab) => {
-    const info = await ensureMut.mutateAsync();
-    setWebApp(info);
-    setDialogTab(tab);
   };
   const openEmbedApp = async () => {
     const info = await ensureMut.mutateAsync();
-    setWebApp(info);
     try {
       const cfg = await embedConfigApi.get(info.id);
       setEmbedCfg(cfg);
@@ -181,16 +160,6 @@ export const GraphAppRail = ({
             </button>
           ))}
         </aside>
-        {dialogTab && webApp && (
-          <WebAppDialog
-            open
-            initialTab={dialogTab}
-            onClose={() => setDialogTab(null)}
-            info={webApp}
-            onSave={p => saveMut.mutate(p)}
-            saving={saveMut.isPending}
-          />
-        )}
         {embedCfg && (
           <EmbedFormModal
             open
@@ -326,22 +295,9 @@ export const GraphAppRail = ({
 
         {/* 应用卡片 */}
         <div className="flex-1 space-y-2.5 overflow-y-auto border-t border-stone-200/70 p-2.5">
-          {/* Web App / 嵌入 —— 公开聊天页 /embed/{key}，都在编辑器内完成 */}
-          <Card
-            icon={Globe}
-            title="Web App"
-            tone={isChat ? 'on' : 'off'}
-            action={
-              <button
-                type="button"
-                onClick={() => void openDialog('appearance')}
-                title="Web App 配置"
-                className="rounded p-0.5 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </button>
-            }
-          >
+          {/* Web App / 嵌入 —— 公开聊天页 /embed/{key}，外观 / 行为 / 安全
+              统一在「嵌入式应用」弹窗里配（含 appearance tab），不再单开齿轮入口 */}
+          <Card icon={Globe} title="Web App" tone={isChat ? 'on' : 'off'}>
             <div className="flex gap-1.5">
               <RailAction label="对话页打开" icon={ExternalLink} onClick={openPublicChat} />
               <RailAction label="嵌入式应用" icon={Code2} onClick={openEmbedApp} />
@@ -367,16 +323,6 @@ export const GraphAppRail = ({
         </div>
       </aside>
 
-      {dialogTab && webApp && (
-        <WebAppDialog
-          open
-          initialTab={dialogTab}
-          onClose={() => setDialogTab(null)}
-          info={webApp}
-          onSave={p => saveMut.mutate(p)}
-          saving={saveMut.isPending}
-        />
-      )}
       {embedCfg && (
         <EmbedFormModal
           open

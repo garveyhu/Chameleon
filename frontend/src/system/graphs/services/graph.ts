@@ -88,18 +88,6 @@ export const graphApi = {
   /** 确保工作流有公开 Web App（embed），返回 embed_key（公开页 /embed/{key}） */
   ensureWebApp: (id: EntityId) => post<WebAppInfo>(`/v1/admin/graphs/${id}/web-app`, {}),
 
-  /** Web App 设置：写回展示 / 行为配置 */
-  updateWebApp: (
-    id: EntityId,
-    payload: {
-      name?: string;
-      description?: string | null;
-      ui_config?: Record<string, unknown>;
-      behavior?: Record<string, unknown>;
-      enabled?: boolean;
-    },
-  ) => post<WebAppInfo>(`/v1/admin/graphs/${id}/web-app/update`, payload),
-
   /** 对话式调试当前 draft（把 graph 当可对话 agent 多轮跑，临时会话不落库） */
   chatStream: (
     id: EntityId,
