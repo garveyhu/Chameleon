@@ -116,14 +116,20 @@ async def generate_graph_spec(description: str) -> dict[str, Any]:
     )
 
 
-async def suggest_followups(question: str, answer: str) -> list[str]:
-    """A2：基于刚才的问答，让 LLM 给 3 个建议追问（每行一个）。失败返空列表。"""
+async def suggest_followups(
+    question: str, answer: str, *, model_code: str | None = None
+) -> list[str]:
+    """A2：基于刚才的问答，让 LLM 给 3 个建议追问（每行一个）。失败返空列表。
+
+    model_code: 调用方按业务上下文（如嵌入式应用关联智能体的 default_model）
+                传入；None 时走系统默认 LLM。
+    """
     from langchain_core.messages import HumanMessage, SystemMessage
 
     from chameleon.core.components.llms.factory import resolve_llm
 
     try:
-        client = await resolve_llm(None)
+        client = await resolve_llm(model_code)
         ai = await client.ainvoke(
             [
                 SystemMessage(

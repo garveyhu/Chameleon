@@ -29,6 +29,12 @@ from pydantic import ValidationError
 from chameleon.core.api.exceptions import ProviderInternalError, RegistryError
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
+from chameleon.core.observe import (
+    TraceContext,
+    current_trace_context,
+    reset_trace_context,
+    set_trace_context,
+)
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
     InvokeContext,
@@ -112,6 +118,25 @@ class GraphProvider(Provider):
         node_recs: dict[str, dict[str, Any]] = {}
         run_status = "running"
         run_error: dict[str, Any] | None = None
+
+        # 把 graph 内部 LLM 节点的 generation 行挂到外层 trace 上：合并外层
+        # TraceContext + 用 ctx.agent_def.key 强制覆盖 agent_key（避免被外层
+        # 之前已 set 的「internal」兜底污染）。invoke 顶层 call_log 由 service
+        # 层写；这里 set 主要给 LLMFactory.create() 注入的 GenerationRecorder
+        # 拿到正确归属字段。
+        outer_tc = current_trace_context()
+        merged_tc = TraceContext(
+            request_id=(ctx.request_id or (outer_tc.request_id if outer_tc else "")) or "",
+            channel=outer_tc.channel if outer_tc else "internal",
+            app_id=ctx.app_id or (outer_tc.app_id if outer_tc else None),
+            api_key_id=outer_tc.api_key_id if outer_tc else None,
+            agent_key=ctx.agent_def.key,
+            session_id=ctx.session_id or (outer_tc.session_id if outer_tc else None),
+            end_user_id=outer_tc.end_user_id if outer_tc else None,
+            user_id=outer_tc.user_id if outer_tc else None,
+            meta=dict(outer_tc.meta) if outer_tc else {},
+        )
+        trace_token = set_trace_context(merged_tc)
 
         orch = Orchestrator(spec)
         try:
@@ -209,6 +234,7 @@ class GraphProvider(Provider):
             if run_status == "running":  # drained 未见 graph.finished（兜底）
                 run_status = "success"
         finally:
+            reset_trace_context(trace_token)
             if gid:
                 await persist_provider_run(
                     graph_id=gid,

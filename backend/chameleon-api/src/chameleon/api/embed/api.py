@@ -667,11 +667,55 @@ async def suggest_followups(
     session: AsyncSession = Depends(get_session),
 ) -> Result[list[str]]:
     """基于刚才的问答生成 3 个建议追问 —— widget 在 SSE end 后调用，按
-    behavior.show_followups 渲染气泡。鉴权同 invoke（origin + session_token）。"""
-    await _resolve_token_context(embed_key, req.session_token, origin, session)
+    behavior.show_followups 渲染气泡。鉴权同 invoke（origin + session_token）。
+
+    模型按嵌入式应用关联智能体的 default_model 推断（兜底走系统默认）；
+    trace 挂到 embed 的 agent_key 上，调用记录可观测到（不再算到 internal）。
+    """
+    import uuid
+
+    from chameleon.core.models import Agent, Model
+    from chameleon.core.observe import (
+        TraceContext,
+        reset_trace_context,
+        set_trace_context,
+    )
     from chameleon.system.graphs import generator as graph_generator
 
-    return Result.ok(await graph_generator.suggest_followups(req.question, req.answer))
+    e, end_user_id = await _resolve_token_context(
+        embed_key, req.session_token, origin, session
+    )
+
+    # 推 model_code：embed.agent_id → agents.default_model_id → models.code
+    model_code: str | None = None
+    agent = await session.get(Agent, e.agent_id) if e.agent_id else None
+    if agent and agent.default_model_id:
+        m = await session.get(Model, agent.default_model_id)
+        if m:
+            model_code = m.code
+
+    # set trace 让 GenerationRecorder 落 generation 行时归属到 embed 应用
+    rid = uuid.uuid4().hex
+    sid = await embed_session.resolve_session_id(req.session_token)
+    token = set_trace_context(
+        TraceContext(
+            request_id=rid,
+            channel="embed",
+            app_id=getattr(e, "app_id", None),
+            api_key_id=e.api_key_id,
+            agent_key=agent.agent_key if agent else None,
+            session_id=sid,
+            end_user_id=end_user_id,
+        )
+    )
+    try:
+        return Result.ok(
+            await graph_generator.suggest_followups(
+                req.question, req.answer, model_code=model_code
+            )
+        )
+    finally:
+        reset_trace_context(token)
 
 
 @router.post("/{embed_key}/feedback", response_model=Result[ScoreItem])
