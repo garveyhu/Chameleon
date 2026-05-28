@@ -184,15 +184,46 @@ export class EmbedApi {
           body: JSON.stringify({ session_token: sessionToken }),
         },
       ),
-    )) as { object_url: string; content_type: string | null };
+    )) as {
+      object_url: string;
+      content_type: string | null;
+      session_file_id?: number | null;
+      status?: string;
+    };
     const mime = fin.content_type || file.type || 'application/octet-stream';
+    const kind = classifyKind(mime);
+    // 图片 / 音频 finalize 后立即可用（status='ready'）；文档/数据走异步解析
+    const fileStatus =
+      kind === 'image' || kind === 'audio'
+        ? 'ready'
+        : ((fin.status as 'parsing' | 'indexing' | 'ready') ?? 'parsing');
     return {
       object_url: fin.object_url,
       filename: file.name,
       mime,
       size: file.size,
-      kind: classifyKind(mime),
+      kind,
+      sessionFileId: fin.session_file_id ?? null,
+      status: fileStatus,
     };
+  }
+
+  /** 拉单个 SessionFile 的最新解析状态（widget 短轮询用） */
+  async fetchFileStatus(
+    sessionFileId: number,
+    sessionToken: string,
+  ): Promise<{ status: string; error: string | null }> {
+    const resp = (await this.unwrap(
+      await fetch(
+        `${this.apiBase}/v1/embed/${this.embedKey}/files/${sessionFileId}/status`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ session_token: sessionToken }),
+        },
+      ),
+    )) as { status: string; error: string | null };
+    return resp;
   }
 
   /** 反馈：write-only，不接 ApiResult，失败仅 console.warn（不打断会话） */
@@ -325,7 +356,7 @@ export const normalizeMime = (filename: string, mime: string): string => {
 };
 
 /** 把 MIME 分到 widget 用的 kind 标签 */
-const classifyKind = (mime: string): WidgetAttachment['kind'] => {
+export const classifyKind = (mime: string): WidgetAttachment['kind'] => {
   const m = mime.toLowerCase();
   if (m.startsWith('image/')) return 'image';
   if (m.startsWith('audio/')) return 'audio';

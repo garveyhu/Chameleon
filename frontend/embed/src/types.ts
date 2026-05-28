@@ -37,6 +37,12 @@ export interface BehaviorConfig {
   streaming?: boolean;
   /** 回复后让 widget 调 /suggest-followups 拿 3 个动态追问气泡 */
   show_followups?: boolean;
+  /** 单文件大小上限（MB）；默认 10 */
+  max_file_size_mb?: number;
+  /** 单条消息最多附件数；默认 5 */
+  max_files_per_message?: number;
+  /** 允许的附件 kind 白名单；默认 ['image','audio','document','data'] */
+  allowed_file_kinds?: Array<'image' | 'audio' | 'document' | 'data'>;
 }
 
 /** /config 端点透出的 session_policy（密钥已剥） */
@@ -126,6 +132,20 @@ export interface WidgetAttachment {
   size: number;
   /** Phase A 仅 image/audio 真正发送给后端；其他类型上传成功也只本地显示，提示用户切到长文档 */
   kind: 'image' | 'audio' | 'document' | 'data' | 'other';
+  /** 后端 SessionFile 行 id（finalize 返回后填入；用于 polling status） */
+  sessionFileId?: number | null;
+  /**
+   * 端侧 chip 状态机：
+   *   uploading: 直传 MinIO 中
+   *   parsing:   finalize 完成，后端异步解析（小文件全文 / 大文件 chunk）中
+   *   indexing:  大文件正在切块 + embedding（仅大文件出现）
+   *   ready:     可用于发送
+   *   failed:    上传或解析失败
+   * 未显式标注（undefined）= 图片 / 音频，finalize 后立即可用
+   */
+  status?: 'uploading' | 'parsing' | 'indexing' | 'ready' | 'failed';
+  /** failed 时的错误说明 */
+  error?: string | null;
 }
 
 export interface WidgetMessage {

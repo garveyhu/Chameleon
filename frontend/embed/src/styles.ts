@@ -327,6 +327,8 @@ export const buildStyles = (ui: UiConfig): string => {
   padding: 8px 12px;
   border-top: 1px solid ${theme.borderColor};
 }
+/* hidden 属性被 display:flex 覆盖了；显式 !important 保住 */
+.attachment-chips[hidden] { display: none !important; }
 /* chips 显示时它已经有顶边线；下面的 composer 不再加 border-top 避免双线 */
 .panel:has(.attachment-chips:not([hidden])) .composer { border-top: none; }
 .att-chip {
@@ -352,6 +354,35 @@ export const buildStyles = (ui: UiConfig): string => {
   border-radius: 999px;
 }
 .att-chip-remove:hover { background: rgba(127,127,127,.14); color: ${theme.paneText}; }
+.att-chip.busy {
+  background: rgba(127,127,127,.06);
+  border-color: ${theme.borderColor};
+}
+.att-chip.failed {
+  background: rgba(244, 63, 94, 0.08);
+  border-color: rgba(244, 63, 94, 0.45);
+  color: rgb(190, 18, 60);
+}
+.att-chip-status {
+  font-size: 11px;
+  color: ${theme.subtleText};
+  padding-right: 2px;
+}
+.att-chip.failed .att-chip-status { color: rgb(190, 18, 60); }
+.att-chip-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  display: inline-block;
+  opacity: 0.6;
+  animation: att-spin 0.7s linear infinite;
+  flex-shrink: 0;
+  margin: 0 3px 0 1px;
+}
+@keyframes att-spin {
+  to { transform: rotate(360deg); }
+}
 
 .msg-attachments {
   display: flex; flex-wrap: wrap; gap: 6px;

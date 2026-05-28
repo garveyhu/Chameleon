@@ -3,7 +3,7 @@
  * 视觉 / 行为完全由 admin 端 ui_config + behavior 驱动；本类只负责把字段渲染出来。
  */
 
-import { EmbedApi, EmbedError } from './api';
+import { classifyKind, EmbedApi, EmbedError, normalizeMime } from './api';
 import {
   checkIcon,
   closeIcon,
@@ -69,6 +69,9 @@ const DEFAULT_BEHAVIOR: Required<BehaviorConfig> = {
   allow_file_upload: false,
   streaming: true,
   show_followups: false,
+  max_file_size_mb: 10,
+  max_files_per_message: 5,
+  allowed_file_kinds: ['image', 'audio', 'document', 'data'],
 };
 
 function mergeUi(raw: UiConfig | null | undefined): Required<UiConfig> {
@@ -250,6 +253,28 @@ export class ChameleonWidget {
               mime: 'audio/*',
               size: 0,
               kind: 'audio',
+            });
+          }
+        } else if (b.type === 'file_ref') {
+          // Phase B：文档 / 数据类附件元数据（不进 LLM ContentBlock，仅历史回放）
+          const ref = b as {
+            object_url?: string;
+            filename?: string;
+            mime?: string;
+            size?: number;
+          };
+          if (ref.object_url) {
+            const mime = ref.mime || 'application/octet-stream';
+            atts.push({
+              object_url: ref.object_url,
+              filename: ref.filename || '',
+              mime,
+              size: ref.size || 0,
+              kind: mime.startsWith('image/')
+                ? 'image'
+                : mime.startsWith('audio/')
+                  ? 'audio'
+                  : 'document',
             });
           }
         }
@@ -448,26 +473,70 @@ export class ChameleonWidget {
   // ─── 附件上传 ───────────────────────────────────────────
 
   private async handleFilesPicked(files: File[]): Promise<void> {
-    // 单次上传上限：5 个 / 单文件 ≤ 20MB
-    const MAX_FILES = 5;
-    const MAX_BYTES = 20 * 1024 * 1024;
-    const picked = files.slice(0, MAX_FILES);
-    const oversize = picked.filter(f => f.size > MAX_BYTES);
-    if (oversize.length) {
-      this.pushTransientNotice(
-        `文件超过 20MB 限制：${oversize.map(f => f.name).join(', ')}`,
-        true,
-      );
+    // 阈值来自 admin 端 EmbedConfig.behavior（已 merged 到 this.behavior）
+    const maxFiles = Math.max(1, Number(this.behavior.max_files_per_message ?? 5));
+    const maxBytes =
+      Math.max(1, Number(this.behavior.max_file_size_mb ?? 10)) * 1024 * 1024;
+    const allowedKinds = new Set(
+      this.behavior.allowed_file_kinds && this.behavior.allowed_file_kinds.length
+        ? this.behavior.allowed_file_kinds
+        : ['image', 'audio', 'document', 'data'],
+    );
+
+    // 已 staged + 新选数量 不能超过单消息上限
+    const remaining = Math.max(0, maxFiles - this.pendingAttachments.length);
+    if (remaining <= 0) {
+      this.pushTransientNotice(`单条消息最多 ${maxFiles} 个附件`, true);
       return;
     }
+    let picked = files.slice(0, remaining);
+    if (files.length > remaining) {
+      this.pushTransientNotice(
+        `单条消息最多 ${maxFiles} 个附件，已截断到前 ${remaining} 个`,
+        true,
+      );
+    }
+
+    // 大小校验
+    const oversize = picked.filter(f => f.size > maxBytes);
+    if (oversize.length) {
+      this.pushTransientNotice(
+        `文件超过 ${(maxBytes / 1024 / 1024).toFixed(0)}MB 限制：${oversize
+          .map(f => f.name)
+          .join(', ')}`,
+        true,
+      );
+      picked = picked.filter(f => f.size <= maxBytes);
+    }
+
+    // 类型校验（按文件名扩展名兜底，浏览器 file.type 可能为空）
+    const disallowed: File[] = [];
+    const accepted: File[] = [];
+    for (const f of picked) {
+      const k = guessKindFromFile(f);
+      if (k === 'other' || !allowedKinds.has(k as 'image' | 'audio' | 'document' | 'data')) {
+        disallowed.push(f);
+      } else {
+        accepted.push(f);
+      }
+    }
+    if (disallowed.length) {
+      this.pushTransientNotice(
+        `不允许该类型：${disallowed.map(f => f.name).join(', ')}`,
+        true,
+      );
+    }
+    if (!accepted.length) return;
+
     // 给每个文件先插占位 chip（status=uploading）
-    const placeholders = picked.map(f => {
+    const placeholders = accepted.map(f => {
       const att: WidgetAttachment = {
         object_url: '',
         filename: f.name,
         mime: f.type || 'application/octet-stream',
         size: f.size,
         kind: 'other',
+        status: 'uploading',
       };
       return { file: f, att };
     });
@@ -476,22 +545,57 @@ export class ChameleonWidget {
     }
     this.renderAttachmentChips();
 
-    // 并发上传
+    // 并发上传 + 启动文档/数据类 polling
     await Promise.all(
       placeholders.map(async ({ file, att }) => {
         try {
           const token = await this.session.getToken();
           const uploaded = await this.api.uploadFile(file, token);
-          // 用真实 attachment 替换占位
           Object.assign(att, uploaded);
+          this.renderAttachmentChips();
+          // 文档 / 数据类：finalize 返 'parsing'，启动 polling 直到 ready / failed
+          if (att.status && att.status !== 'ready' && att.sessionFileId) {
+            void this.pollAttachmentStatus(att);
+          }
         } catch (e) {
           console.warn('[ChameleonWidget] upload failed', e);
-          this.pendingAttachments = this.pendingAttachments.filter(a => a !== att);
+          att.status = 'failed';
+          att.error = (e as Error)?.message || '上传失败';
+          this.renderAttachmentChips();
           this.pushTransientNotice(`上传失败：${file.name}`, true);
         }
       }),
     );
     this.renderAttachmentChips();
+  }
+
+  /** 短轮询 SessionFile 状态：800ms 一次，最多 60s（小文件几秒就成 ready） */
+  private async pollAttachmentStatus(att: WidgetAttachment): Promise<void> {
+    if (!att.sessionFileId) return;
+    const sfId = att.sessionFileId;
+    const started = Date.now();
+    const MAX_MS = 60_000;
+    while (Date.now() - started < MAX_MS) {
+      // 用户可能已经点 × 移除了 chip
+      if (!this.pendingAttachments.includes(att)) return;
+      await new Promise(r => setTimeout(r, 800));
+      try {
+        const token = await this.session.getToken();
+        const { status, error } = await this.api.fetchFileStatus(sfId, token);
+        att.status = status as WidgetAttachment['status'];
+        att.error = error;
+        this.renderAttachmentChips();
+        if (status === 'ready' || status === 'failed') return;
+      } catch (e) {
+        console.warn('[ChameleonWidget] status poll error', e);
+      }
+    }
+    // 超时仍未 ready：标 failed，给用户感知
+    if (att.status !== 'ready') {
+      att.status = 'failed';
+      att.error = '解析超时';
+      this.renderAttachmentChips();
+    }
   }
 
   private removeAttachment(att: WidgetAttachment): void {
@@ -512,14 +616,32 @@ export class ChameleonWidget {
       const chip = document.createElement('div');
       chip.className = 'att-chip';
       const isImage = att.mime.startsWith('image/');
-      const uploading = !att.object_url;
-      chip.innerHTML = `
-        ${
-          isImage && att.object_url
+      const status = att.status;
+      // chip 状态机：uploading / parsing / indexing → spinner；failed → ⚠；ready → 📎 或缩略图
+      const busy = status === 'uploading' || status === 'parsing' || status === 'indexing';
+      const failed = status === 'failed';
+      if (busy) chip.classList.add('busy');
+      if (failed) chip.classList.add('failed');
+      const tip = failed
+        ? att.error || '失败'
+        : status === 'uploading'
+          ? '上传中…'
+          : status === 'parsing'
+            ? '解析中…'
+            : status === 'indexing'
+              ? '建索引…'
+              : '';
+      const iconHtml = busy
+        ? '<span class="att-chip-spinner" aria-hidden="true"></span>'
+        : failed
+          ? '<span class="att-chip-icon">⚠</span>'
+          : isImage && att.object_url
             ? `<img src="${escapeAttr(att.object_url)}" alt="">`
-            : `<span class="att-chip-icon">${uploading ? '⏳' : '📎'}</span>`
-        }
-        <span class="att-chip-name" title="${escapeAttr(att.filename)}">${escapeText(att.filename)}</span>
+            : '<span class="att-chip-icon">📎</span>';
+      chip.innerHTML = `
+        ${iconHtml}
+        <span class="att-chip-name" title="${escapeAttr(att.filename)}${tip ? ' · ' + escapeAttr(tip) : ''}">${escapeText(att.filename)}</span>
+        ${tip ? `<span class="att-chip-status">${escapeText(tip)}</span>` : ''}
         <button type="button" class="att-chip-remove" aria-label="移除">×</button>
       `;
       const removeBtn = chip.querySelector('.att-chip-remove') as HTMLButtonElement;
@@ -1000,11 +1122,16 @@ export class ChameleonWidget {
   private async handleSend(input: string): Promise<void> {
     if (this.isSending) return;
     const trimmed = input.trim();
-    // 至少要有文本或附件
-    const ready = this.pendingAttachments.filter(a => a.object_url);
+    // ready = 上传完 + 已解析就绪（图/音 finalize 后 status='ready'；doc/data 等 polling 完）
+    const ready = this.pendingAttachments.filter(
+      a => a.object_url && (!a.status || a.status === 'ready'),
+    );
+    const stillBusy = this.pendingAttachments.filter(
+      a => a.status === 'uploading' || a.status === 'parsing' || a.status === 'indexing',
+    );
     if (!trimmed && !ready.length) return;
-    if (this.pendingAttachments.length !== ready.length) {
-      this.pushTransientNotice('还有附件在上传中，请等待完成', true);
+    if (stillBusy.length) {
+      this.pushTransientNotice('还有附件在解析中，请等待完成', true);
       return;
     }
     if (!this.isOpen) this.toggle(true);
@@ -1207,6 +1334,12 @@ export class ChameleonWidget {
 }
 
 // ─── helpers ─────────────────────────────────────────────────
+
+/** 用 normalizeMime 兜底（浏览器 .md 这类常返空 file.type），再 classifyKind 推 image/audio/document/data/other */
+function guessKindFromFile(f: File): WidgetAttachment['kind'] {
+  const mime = normalizeMime(f.name, f.type);
+  return classifyKind(mime);
+}
 
 function escapeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
