@@ -28,6 +28,16 @@ export interface UiConfig {
   bubble_color: string;
   /** 浮窗气泡图标 */
   bubble_icon: BubbleIcon;
+  /** 浮窗自定义图片 URL（非空时整个 bubble 用图片代替纯色 + 内置 icon） */
+  bubble_image_url: string | null;
+  /** 浮窗旁招呼语（如 "hi, 让我帮助你～"，空字符串关闭） */
+  bubble_tooltip_text: string;
+  /** 招呼语文字颜色 hex */
+  bubble_tooltip_color: string;
+  /** 面板打开后自动隐藏招呼语（默认 true） */
+  bubble_tooltip_dismiss_on_open: boolean;
+  /** 面板底部 "powered by Chameleon" 水印（默认 true） */
+  show_powered_by: boolean;
   /** 主题模式 */
   mode: ThemeMode;
   /** 圆角 px */
@@ -83,6 +93,11 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   bubble_position: 'right-bottom',
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
+  bubble_image_url: null,
+  bubble_tooltip_text: '',
+  bubble_tooltip_color: '#1f2937',
+  bubble_tooltip_dismiss_on_open: true,
+  show_powered_by: true,
   mode: 'light',
   border_radius: 12,
   font_size: 'md',

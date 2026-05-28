@@ -8,7 +8,7 @@ export type ShadowLevel = 'none' | 'sm' | 'md' | 'lg';
 
 export interface UiConfig {
   theme_color?: string;
-  /** 自定义头像图片 URL；优先级高于 icon_emoji */
+  /** 助手头像图片 URL；优先级高于 icon_emoji，渲在面板内消息气泡前 */
   icon_url?: string | null;
   icon_emoji?: string;
   title?: string;
@@ -18,6 +18,15 @@ export interface UiConfig {
   bubble_position?: BubblePosition;
   bubble_color?: string;
   bubble_icon?: BubbleIcon;
+  /** 浮窗图片（圆形 cover；非空时整个 bubble 用图片替代纯色 + 内置 icon） */
+  bubble_image_url?: string | null;
+  /** 浮窗旁招呼语 ——「hi, 让我帮助你～」 */
+  bubble_tooltip_text?: string;
+  bubble_tooltip_color?: string;
+  /** 面板打开后 tooltip 自动隐藏（默认 true） */
+  bubble_tooltip_dismiss_on_open?: boolean;
+  /** 面板底部 "powered by Chameleon" 水印（默认 true） */
+  show_powered_by?: boolean;
   mode?: ThemeMode;
   border_radius?: number;
   font_size?: FontSize;

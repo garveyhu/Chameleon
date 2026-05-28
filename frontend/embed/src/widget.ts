@@ -51,6 +51,11 @@ const DEFAULT_UI: Required<UiConfig> = {
   bubble_position: 'right-bottom',
   bubble_color: '#2563EB',
   bubble_icon: 'chat',
+  bubble_image_url: null,
+  bubble_tooltip_text: '',
+  bubble_tooltip_color: '#1f2937',
+  bubble_tooltip_dismiss_on_open: true,
+  show_powered_by: true,
   mode: 'light',
   border_radius: 12,
   font_size: 'md',
@@ -384,11 +389,25 @@ export class ChameleonWidget {
       `
       : '';
 
+    // bubble 图片优先 → 内置 icon 兜底（图片时整圆 cover，去掉纯色 bg）
+    const bubbleInner = ui.bubble_image_url
+      ? `<img class="bubble-img" src="${escapeAttr(ui.bubble_image_url)}" alt=""/>`
+      : getBubbleIcon(ui.bubble_icon);
+    const tooltipHtml = ui.bubble_tooltip_text
+      ? `<div class="bubble-tip pos-${pos}"
+            style="color:${escapeAttr(ui.bubble_tooltip_color || '#1f2937')}">
+           ${escapeText(ui.bubble_tooltip_text)}
+         </div>`
+      : '';
+
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <button class="bubble pos-${pos}" type="button" aria-label="${escapeAttr(title)}">
-        ${getBubbleIcon(ui.bubble_icon)}
-      </button>
+      <div class="bubble-wrap pos-${pos}">
+        ${tooltipHtml}
+        <button class="bubble pos-${pos}${ui.bubble_image_url ? ' has-img' : ''}" type="button" aria-label="${escapeAttr(title)}">
+          ${bubbleInner}
+        </button>
+      </div>
       <div class="panel pos-${pos}${showSidebar ? ' has-sidebar' : ''}" role="dialog" aria-label="${escapeAttr(title)}">
         <div class="header">
           <div class="header-main">
@@ -419,7 +438,7 @@ export class ChameleonWidget {
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>
-        <div class="brand">powered by <a href="https://github.com/" target="_blank" rel="noopener">Chameleon</a></div>
+        ${ui.show_powered_by !== false ? '<div class="brand">powered by <a href="https://github.com/" target="_blank" rel="noopener">Chameleon</a></div>' : ''}
         ${sidebarHtml}
       </div>
     `;
@@ -908,6 +927,11 @@ export class ChameleonWidget {
   private toggle(open?: boolean): void {
     this.isOpen = open ?? !this.isOpen;
     this.panel.classList.toggle('open', this.isOpen);
+    // 面板打开后隐藏 tooltip（受 ui.bubble_tooltip_dismiss_on_open 控制）
+    if (this.ui.bubble_tooltip_dismiss_on_open !== false) {
+      const tip = this.shadow.querySelector('.bubble-tip') as HTMLDivElement | null;
+      if (tip) tip.classList.toggle('hidden', this.isOpen);
+    }
     if (this.isOpen) {
       setTimeout(() => this.textarea.focus(), 200);
       this.scrollToBottom();

@@ -668,6 +668,129 @@ const AppearanceTab: React.FC<{
           </Field>
         </div>
       </Section>
+
+      <Section title="浮窗自定义" hint="图片优先于内置 icon；旁边招呼语可选">
+        <Field label="自定义图片" hint="圆形显示，建议正方形 PNG/JPG，≤ 2MB">
+          <BubbleImagePicker
+            value={ui.bubble_image_url}
+            onChange={v => patch('bubble_image_url', v)}
+          />
+        </Field>
+        <Field label="招呼语" hint="空字符串关闭；浮在浮窗旁边的文字（如 hi, 让我帮助你～）">
+          <Input
+            value={ui.bubble_tooltip_text}
+            onChange={e => patch('bubble_tooltip_text', e.target.value)}
+            placeholder="hi, 让我帮助你～"
+            maxLength={40}
+          />
+        </Field>
+        {ui.bubble_tooltip_text ? (
+          <>
+            <Field label="文字颜色">
+              <ColorInput
+                value={ui.bubble_tooltip_color}
+                onChange={v => patch('bubble_tooltip_color', v)}
+              />
+            </Field>
+            <ToggleField
+              label="打开会话后隐藏"
+              hint="点开面板时招呼语淡出"
+              checked={ui.bubble_tooltip_dismiss_on_open}
+              onChange={c => patch('bubble_tooltip_dismiss_on_open', c)}
+            />
+          </>
+        ) : null}
+      </Section>
+
+      <Section title="水印">
+        <ToggleField
+          label="显示 powered by"
+          hint="面板底部「powered by Chameleon」"
+          checked={ui.show_powered_by}
+          onChange={c => patch('show_powered_by', c)}
+        />
+      </Section>
+    </div>
+  );
+};
+
+const BubbleImagePicker: React.FC<{
+  value: string | null;
+  onChange: (next: string | null) => void;
+}> = ({ value, onChange }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleSelect = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('图片不能超过 2MB');
+      return;
+    }
+    setUploading(true);
+    try {
+      const res = await uploadFile(file, { namespace: 'embed-bubble' });
+      onChange(res.object_url);
+    } catch (e) {
+      toast.error(`上传失败：${(e as Error).message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-full border border-stone-200 bg-stone-50">
+        {value ? (
+          <img src={value} alt="浮窗" className="h-full w-full object-cover" />
+        ) : (
+          <span className="text-[10px] text-stone-400">未上传</span>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) void handleSelect(f);
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+          >
+            {uploading ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="mr-1 h-3.5 w-3.5" />
+            )}
+            {value ? '更换图片' : '上传图片'}
+          </Button>
+          {value && (
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              onClick={() => onChange(null)}
+              title="移除，回退到纯色 + 内置 icon"
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+        <span className="text-[11px] text-stone-400">PNG / JPG / SVG，≤ 2MB；不传则用纯色 + icon</span>
+      </div>
     </div>
   );
 };

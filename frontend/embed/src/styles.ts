@@ -105,8 +105,21 @@ export const buildStyles = (ui: UiConfig): string => {
 
 * { box-sizing: border-box; }
 
-.bubble {
+/* bubble-wrap 包裹气泡 + tooltip，方便相对定位 */
+.bubble-wrap {
   position: fixed;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bubble-wrap.pos-right-bottom { right: 24px; bottom: 24px; flex-direction: row-reverse; }
+.bubble-wrap.pos-left-bottom  { left: 24px;  bottom: 24px; flex-direction: row; }
+.bubble-wrap.pos-right-top    { right: 24px; top: 24px; flex-direction: row-reverse; }
+.bubble-wrap.pos-left-top     { left: 24px;  top: 24px; flex-direction: row; }
+
+.bubble {
+  position: relative;
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -117,16 +130,35 @@ export const buildStyles = (ui: UiConfig): string => {
   justify-content: center;
   cursor: pointer;
   box-shadow: ${shadow};
-  z-index: 2147483647;
   border: none;
   transition: transform .15s ease, box-shadow .15s ease;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 .bubble:hover { transform: scale(1.06); }
-.bubble.pos-right-bottom { right: 24px; bottom: 24px; }
-.bubble.pos-left-bottom  { left: 24px;  bottom: 24px; }
-.bubble.pos-right-top    { right: 24px; top: 24px; }
-.bubble.pos-left-top     { left: 24px;  top: 24px; }
+.bubble.has-img { background: transparent; padding: 0; }
+.bubble-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
 .bubble svg { width: 26px; height: 26px; }
+
+/* bubble 旁招呼文字（FastGPT 风格）—— 浅气泡，淡入；面板打开淡出 */
+.bubble-tip {
+  background: ${theme.paneBg};
+  border: 1px solid ${theme.borderColor};
+  border-radius: 14px;
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 220px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  transition: opacity .25s ease, transform .25s ease;
+  animation: bubble-tip-in .35s ease both;
+}
+.bubble-tip.hidden { opacity: 0; pointer-events: none; transform: translateY(4px); }
+@keyframes bubble-tip-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 
 .panel {
   position: fixed;
