@@ -44,8 +44,12 @@ export interface UiConfig {
   bubble_tooltip_font_weight: 'normal' | 'bold';
   /** 招呼语位置：left/right/top/bottom 直线；orbit 沿气泡顶部圆弧环绕（FastGPT 风） */
   bubble_tooltip_position: 'left' | 'right' | 'top' | 'bottom' | 'orbit';
+  /** 招呼语透明背景（去掉背景 / 边框 / 阴影，只保留文字） */
+  bubble_tooltip_transparent: boolean;
   /** 面板打开后自动隐藏招呼语（默认 true） */
   bubble_tooltip_dismiss_on_open: boolean;
+  /** 打开会话后浮窗按钮是否仍可见（默认 true 保留；false 时面板打开后浮窗消失） */
+  bubble_persist_when_open: boolean;
   /** 面板底部水印是否显示（默认 true） */
   show_powered_by: boolean;
   /** 水印文字（默认 "powered by Chameleon"，可改成 "Powered by Acme" 等） */
@@ -113,7 +117,9 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   bubble_tooltip_font_size: 13,
   bubble_tooltip_font_weight: 'normal',
   bubble_tooltip_position: 'left',
+  bubble_tooltip_transparent: false,
   bubble_tooltip_dismiss_on_open: true,
+  bubble_persist_when_open: true,
   show_powered_by: true,
   powered_by_text: 'powered by Chameleon',
   mode: 'light',

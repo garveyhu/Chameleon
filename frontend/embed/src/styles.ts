@@ -121,11 +121,16 @@ export const buildStyles = (ui: UiConfig): string => {
 .bubble-wrap.pos-right-top    { right: 24px; top: 24px; }
 .bubble-wrap.pos-left-top     { left: 24px;  top: 24px; }
 
-/* tooltip 位置：直线方向取决于 tip-* class，不再受 bubble 位置反推 */
-.bubble-wrap.tip-left   { flex-direction: row-reverse; }
-.bubble-wrap.tip-right  { flex-direction: row; }
-.bubble-wrap.tip-top    { flex-direction: column-reverse; align-items: center; }
-.bubble-wrap.tip-bottom { flex-direction: column; align-items: center; }
+/* tooltip 位置：DOM 顺序是 {tooltip}{bubble}
+ *   tip-left   → row             tooltip 在 bubble 左
+ *   tip-right  → row-reverse     tooltip 在 bubble 右
+ *   tip-top    → column          tooltip 在 bubble 上
+ *   tip-bottom → column-reverse  tooltip 在 bubble 下
+ */
+.bubble-wrap.tip-left   { flex-direction: row; }
+.bubble-wrap.tip-right  { flex-direction: row-reverse; }
+.bubble-wrap.tip-top    { flex-direction: column; align-items: center; }
+.bubble-wrap.tip-bottom { flex-direction: column-reverse; align-items: center; }
 .bubble-wrap.tip-orbit  { display: block; }
 .bubble-wrap.tip-orbit .bubble { position: relative; }
 .bubble-wrap.tip-orbit .bubble-tip.orbit {
@@ -181,12 +186,26 @@ export const buildStyles = (ui: UiConfig): string => {
   transition: opacity .25s ease, transform .25s ease;
   animation: bubble-tip-in .35s ease both;
 }
+/* 透明背景模式：去掉气泡白底 + 边框 + 阴影，只留文字 */
+.bubble-tip.line.transparent {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 4px 0;
+}
 .bubble-tip.orbit {
   transition: opacity .25s ease;
   animation: bubble-tip-in .35s ease both;
 }
 .bubble-tip.orbit text { font-family: inherit; }
 .bubble-tip.hidden { opacity: 0; pointer-events: none; transform: translateY(4px); }
+/* 面板打开后 bubble 是否隐藏（默认不隐藏） */
+.bubble-wrap.hidden-when-open {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.6);
+  transition: opacity .2s ease, transform .2s ease;
+}
 @keyframes bubble-tip-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }

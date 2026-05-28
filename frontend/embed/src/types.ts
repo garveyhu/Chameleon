@@ -31,8 +31,12 @@ export interface UiConfig {
   bubble_tooltip_font_weight?: 'normal' | 'bold';
   /** 招呼语位置 —— left/right/top/bottom 直线；orbit 沿气泡顶部圆弧环绕 */
   bubble_tooltip_position?: 'left' | 'right' | 'top' | 'bottom' | 'orbit';
+  /** 招呼语透明背景：去掉气泡白底 / 边框 / 阴影，只保留文字 */
+  bubble_tooltip_transparent?: boolean;
   /** 面板打开后 tooltip 自动隐藏（默认 true） */
   bubble_tooltip_dismiss_on_open?: boolean;
+  /** 面板打开后浮窗是否仍显示（默认 true） */
+  bubble_persist_when_open?: boolean;
   /** 面板底部水印是否显示（默认 true） */
   show_powered_by?: boolean;
   /** 水印文字（默认 "powered by Chameleon"） */

@@ -92,7 +92,14 @@ export const EmbedPreview: React.FC<EmbedPreviewProps> = ({ ui, behavior, classN
       </div>
 
       {/* 浮窗气泡 + 招呼语 tooltip */}
-      <div className={cn('absolute', positionAnchor, positionVAnchor, 'z-10')}>
+      <div
+        className={cn(
+          'absolute z-10 transition-opacity',
+          positionAnchor,
+          positionVAnchor,
+          bubbleOpen && !ui.bubble_persist_when_open && 'opacity-0',
+        )}
+      >
         <BubbleWithTooltip
           ui={ui}
           BubbleIconCmp={BubbleIconCmp}
@@ -411,21 +418,25 @@ const BubbleWithTooltip: React.FC<{
     );
   }
 
-  // 直线方向：四向 flex 布局
+  // 直线方向：DOM 顺序是 {tooltip}{bubble}，所以 row=tooltip 在左、col=tooltip 在上
   const wrapClass =
     tipPos === 'left'
-      ? 'flex flex-row-reverse items-center gap-2.5'
+      ? 'flex flex-row items-center gap-2.5'
       : tipPos === 'right'
-        ? 'flex flex-row items-center gap-2.5'
+        ? 'flex flex-row-reverse items-center gap-2.5'
         : tipPos === 'top'
-          ? 'flex flex-col-reverse items-center gap-2'
-          : 'flex flex-col items-center gap-2';
+          ? 'flex flex-col items-center gap-2'
+          : 'flex flex-col-reverse items-center gap-2';
+  const transparentTip = ui.bubble_tooltip_transparent;
   return (
     <div className={cn(wrapClass)}>
       <div
         style={tipStyle}
         className={cn(
-          'whitespace-nowrap rounded-2xl border border-stone-200 bg-white px-3 py-1.5 shadow-md',
+          'whitespace-nowrap',
+          transparentTip
+            ? 'px-1 py-0.5'
+            : 'rounded-2xl border border-stone-200 bg-white px-3 py-1.5 shadow-md',
         )}
       >
         {tip}
@@ -440,25 +451,26 @@ const OrbitTip: React.FC<{
   style: React.CSSProperties;
   bubbleSize: number;
 }> = ({ text, style, bubbleSize }) => {
+  // path 走"从右到左 + sweepFlag=0"上半圆，让 textPath 文字头朝上
   const r = bubbleSize / 2 + 10;
   const cx = bubbleSize / 2;
-  const cy = bubbleSize / 2;
-  const w = cx * 2 + 16;
-  const h = r + 16;
-  const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+  const cy = r + 8;
+  const w = cx * 2 + 24;
+  const h = r + 28;
+  const path = `M ${cx + r} ${cy} A ${r} ${r} 0 0 0 ${cx - r} ${cy}`;
   return (
     <svg
       width={w}
       height={h}
-      viewBox={`-8 0 ${w} ${h}`}
+      viewBox={`-12 0 ${w} ${h}`}
       aria-hidden="true"
       className="pointer-events-none absolute left-1/2 -translate-x-1/2"
-      style={{ bottom: '100%', marginBottom: -8 }}
+      style={{ bottom: '100%', marginBottom: -6 }}
     >
       <defs>
-        <path id="preview-orbit-path" d={path} />
+        <path id="preview-orbit-path" d={path} fill="none" />
       </defs>
-      <text style={style}>
+      <text style={style} dy={-6}>
         <textPath href="#preview-orbit-path" startOffset="50%" textAnchor="middle">
           {text}
         </textPath>

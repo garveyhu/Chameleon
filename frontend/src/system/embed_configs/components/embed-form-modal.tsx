@@ -768,6 +768,12 @@ const AppearanceTab: React.FC<{
               </Field>
             </div>
             <ToggleField
+              label="透明背景"
+              hint="去掉招呼语的白底 / 边框 / 阴影，只留文字"
+              checked={ui.bubble_tooltip_transparent}
+              onChange={c => patch('bubble_tooltip_transparent', c)}
+            />
+            <ToggleField
               label="打开会话后隐藏"
               hint="点开面板时招呼语淡出"
               checked={ui.bubble_tooltip_dismiss_on_open}
@@ -775,6 +781,12 @@ const AppearanceTab: React.FC<{
             />
           </>
         ) : null}
+        <ToggleField
+          label="打开会话后保留浮窗"
+          hint="默认保留；关闭后面板打开时浮窗按钮淡出"
+          checked={ui.bubble_persist_when_open}
+          onChange={c => patch('bubble_persist_when_open', c)}
+        />
       </Section>
 
       <Section title="水印">

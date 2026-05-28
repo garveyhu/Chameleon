@@ -59,7 +59,9 @@ const DEFAULT_UI: Required<UiConfig> = {
   bubble_tooltip_font_size: 13,
   bubble_tooltip_font_weight: 'normal',
   bubble_tooltip_position: 'left',
+  bubble_tooltip_transparent: false,
   bubble_tooltip_dismiss_on_open: true,
+  bubble_persist_when_open: true,
   show_powered_by: true,
   powered_by_text: 'powered by Chameleon',
   mode: 'light',
@@ -940,6 +942,14 @@ export class ChameleonWidget {
       const tip = this.shadow.querySelector('.bubble-tip') as HTMLDivElement | null;
       if (tip) tip.classList.toggle('hidden', this.isOpen);
     }
+    // 面板打开后浮窗是否消失（默认 true 不消失；false 时面板打开 bubble fade out）
+    const wrap = this.shadow.querySelector('.bubble-wrap') as HTMLDivElement | null;
+    if (wrap) {
+      wrap.classList.toggle(
+        'hidden-when-open',
+        this.isOpen && this.ui.bubble_persist_when_open === false,
+      );
+    }
     if (this.isOpen) {
       setTimeout(() => this.textarea.focus(), 200);
       this.scrollToBottom();
@@ -1467,24 +1477,26 @@ function renderTooltip(ui: Required<UiConfig>): string {
   const baseStyle = `color:${escapeAttr(color)};font-size:${fontSize}px;font-weight:${weight}`;
 
   if (ui.bubble_tooltip_position === 'orbit') {
-    // 沿 bubble 上方圆弧排字，半径 = bubble 半径 + 10 留白
+    // 沿 bubble 上方圆弧排字。让字头朝上：path 从右到左 + sweepFlag=0 走上半圆，
+    // textPath 沿路径前进方向时，baseline 在弧外侧（朝上），文字正常朝上可读。
     const bs = Math.max(40, Math.min(96, ui.bubble_size ?? 56));
     const r = bs / 2 + 10;
     const cx = bs / 2;
-    const cy = bs / 2;
-    const w = cx * 2 + 16;
-    const h = r + 16;
-    const path = `M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`;
+    const cy = r + 8; // SVG 内部 y 坐标：让弧顶在 8px，避免文字超出 SVG 上沿
+    const w = cx * 2 + 24;
+    const h = r + 28; // 留出 padding 给字
+    const path = `M ${cx + r} ${cy} A ${r} ${r} 0 0 0 ${cx - r} ${cy}`;
     return `
-      <svg class="bubble-tip orbit" width="${w}" height="${h}" viewBox="${-8} 0 ${w} ${h}" aria-hidden="true">
-        <defs><path id="orbit-path" d="${path}"/></defs>
-        <text style="${baseStyle}">
+      <svg class="bubble-tip orbit" width="${w}" height="${h}" viewBox="${-12} 0 ${w} ${h}" aria-hidden="true">
+        <defs><path id="orbit-path" d="${path}" fill="none"/></defs>
+        <text style="${baseStyle}" dy="-6">
           <textPath href="#orbit-path" startOffset="50%" text-anchor="middle">${escapeText(text)}</textPath>
         </text>
       </svg>`;
   }
 
-  return `<div class="bubble-tip line" style="${baseStyle}">${escapeText(text)}</div>`;
+  const transparentCls = ui.bubble_tooltip_transparent ? 'transparent' : '';
+  return `<div class="bubble-tip line ${transparentCls}" style="${baseStyle}">${escapeText(text)}</div>`;
 }
 
 /** 用 normalizeMime 兜底（浏览器 .md 这类常返空 file.type），再 classifyKind 推 image/audio/document/data/other */
