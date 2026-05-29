@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.eval import (
+from chameleon.engine.eval import (
     get_algorithm,
     list_algorithms,
 )
-from chameleon.core.eval.algorithms.judge_helpers import (
+from chameleon.engine.eval.algorithms.judge_helpers import (
     jaccard_similarity,
     parse_yes_no,
 )

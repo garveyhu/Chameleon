@@ -64,7 +64,7 @@ REGISTRY = _REGISTRY
 
 
 # 启动期注册 builtin（import 时副作用，仿 graph nodes 模式）
-from chameleon.core.eval.algorithms import (  # noqa: E402,F401
+from chameleon.engine.eval.algorithms import (  # noqa: E402,F401
     ragas_answer_relevance,
     ragas_context_precision,
     ragas_context_recall,

@@ -1,4 +1,4 @@
-"""chameleon.core.eval —— 评判算子（RAGAS 内置 + 注册表）
+"""chameleon.engine.eval —— 评判算子（RAGAS 内置 + 注册表）
 
 红线（plan §2 P21）：
 - ⛔ RAGAS builtin 算子不允许用户改 weight / metric definition；要 customize
@@ -17,7 +17,7 @@
     ) -> float    # [0.0, 1.0]
 """
 
-from chameleon.core.eval.algorithms import (
+from chameleon.engine.eval.algorithms import (
     REGISTRY,
     AlgorithmFn,
     JudgeFn,

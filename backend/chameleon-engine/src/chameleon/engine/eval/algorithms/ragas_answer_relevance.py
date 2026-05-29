@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import asyncio
 
-from chameleon.core.eval.algorithms import register_algorithm
-from chameleon.core.eval.algorithms.judge_helpers import (
+from chameleon.engine.eval.algorithms import register_algorithm
+from chameleon.engine.eval.algorithms.judge_helpers import (
     default_judge_fn,
     jaccard_similarity,
 )

@@ -16,12 +16,12 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.eval import get_algorithm
 from chameleon.data.models import (
     DatasetItem,
     DatasetRunItem,
     EvalTemplate,
 )
+from chameleon.engine.eval import get_algorithm
 
 
 async def score_run_with_template(
