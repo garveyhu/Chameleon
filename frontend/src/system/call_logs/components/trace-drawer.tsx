@@ -16,6 +16,8 @@ import {
   ChevronsRight,
   ChevronsUpDown,
   ChevronUp,
+  Check,
+  Copy,
   FileText,
   Maximize,
   Minimize,
@@ -441,6 +443,29 @@ const Stat = ({
   </div>
 );
 
+/** 悬浮复制按钮：贴消息框右上角，hover 显现，点后短暂打勾 */
+const CopyBtn = ({ text }: { text: string }) => {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      title="复制"
+      onClick={() => {
+        void navigator.clipboard.writeText(text);
+        setDone(true);
+        setTimeout(() => setDone(false), 1200);
+      }}
+      className="absolute top-0.5 right-0.5 z-10 rounded p-1 text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-stone-700 group-hover/msg:opacity-100"
+    >
+      {done ? (
+        <Check className="h-3.5 w-3.5 text-emerald-500" />
+      ) : (
+        <Copy className="h-3.5 w-3.5" />
+      )}
+    </button>
+  );
+};
+
 /** 输入/输出：有「主文本」时默认 Markdown 渲染（保留换行），可切原始 JSON */
 const PayloadView = ({
   title,
@@ -503,9 +528,10 @@ const PayloadView = ({
       ) : !raw && messages ? (
         <div className="max-h-[460px] space-y-3 overflow-y-auto">
           {messages.map((m, i) => (
-            <div key={i} className="relative pl-3.5">
+            <div key={i} className="group/msg relative pl-3.5">
               {/* 轻量左色条替代描边卡片：系统=灰 / 用户=蓝 / 助手=紫 / 工具=琥珀 */}
               <span className={cn('absolute top-1 bottom-1 left-0 w-[3px] rounded', ROLE_BAR[m.role] ?? 'bg-stone-300')} />
+              <CopyBtn text={m.content} />
               <div className="mb-1 text-[10.5px] font-medium text-stone-400">
                 {ROLE_LABEL[m.role] ?? m.role}
               </div>
@@ -516,8 +542,11 @@ const PayloadView = ({
           ))}
         </div>
       ) : !raw && text ? (
-        <div className="max-h-[420px] overflow-y-auto border-l border-stone-200 pl-3.5 text-[13px] leading-relaxed text-stone-800">
-          <Markdown content={text} />
+        <div className="group/msg relative">
+          <CopyBtn text={text} />
+          <div className="max-h-[420px] overflow-y-auto border-l border-stone-200 pl-3.5 text-[13px] leading-relaxed text-stone-800">
+            <Markdown content={text} />
+          </div>
         </div>
       ) : (
         <JsonViewer value={(payload as object) ?? {}} />
