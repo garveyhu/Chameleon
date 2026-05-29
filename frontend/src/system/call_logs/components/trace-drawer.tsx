@@ -277,7 +277,9 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
         {detailQ.isLoading || !detailQ.data ? (
           <div className="py-10 text-center text-sm text-stone-400">加载详情…</div>
         ) : (
-          <NodeDetail node={detailQ.data} />
+          // 按节点 remount：让 PayloadView 的 raw/open state 随节点重新初始化，
+          // 否则先看无文本节点(raw=true) 再切到有文本节点会卡在原始 JSON
+          <NodeDetail key={String(detailQ.data.id)} node={detailQ.data} />
         )}
       </div>
     </div>
@@ -382,8 +384,8 @@ const NodeDetail = ({
         </div>
       </div>
 
-      {/* stat bar：指标平铺一行，竖线分隔，零卡格 */}
-      <div className="flex flex-wrap gap-y-2 border-y border-stone-200 py-2.5">
+      {/* stat bar：指标平铺，淡色圆角带承托，无分隔线（去线条感） */}
+      <div className="flex flex-wrap gap-x-7 gap-y-3 rounded-lg bg-stone-50 px-4 py-3">
         <Stat k="状态" v={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
         <Stat k="耗时" v={formatDurationMs(node.duration_ms)} />
         <Stat k="模型" v={node.model_code || '—'} mono />
@@ -422,7 +424,7 @@ const Stat = ({
   mono?: boolean;
   tone?: 'ok' | 'err';
 }) => (
-  <div className="mr-5 border-r border-stone-200 pr-5">
+  <div>
     <div className="text-[10.5px] text-stone-400">{k}</div>
     <div className="mt-0.5 flex items-baseline gap-1.5">
       <span
