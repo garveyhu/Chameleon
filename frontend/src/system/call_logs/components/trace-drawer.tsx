@@ -10,6 +10,7 @@ import { useState } from 'react';
 import {
   Braces,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronsDownUp,
   ChevronsRight,
@@ -33,7 +34,7 @@ import {
 } from '@/core/components/ui/sheet';
 import { cn } from '@/core/lib/cn';
 import { formatCost, formatDateTime, formatDurationMs, formatTokens } from '@/core/lib/format';
-import { ObservationTree } from '@/system/call_logs/components/observation-tree';
+import { ObservationIconRail, ObservationTree } from '@/system/call_logs/components/observation-tree';
 import { callLogApi } from '@/system/call_logs/services/call-log';
 import type { CallLogItem, TraceTreeNode } from '@/system/call_logs/types/call-log';
 
@@ -191,6 +192,8 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
   const [picked, setPicked] = useState<string | null>(null);
   // 折叠/展开全树：切换时 remount ObservationTree 让每行按此初始化，避开 effect
   const [treeCollapsed, setTreeCollapsed] = useState(false);
+  // 收起整列链路树（详情铺满）
+  const [treeHidden, setTreeHidden] = useState(false);
 
   const treeQ = useQuery({
     queryKey: ['call-log-tree', requestId],
@@ -207,37 +210,67 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
 
   return (
     <div className="flex h-full min-h-0">
-      {/* 左：observation 树 */}
-      <div className="w-[440px] shrink-0 overflow-y-auto border-r border-stone-200/70 p-3">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-[11px] font-medium text-stone-500">调用链路</span>
+      {/* 左：observation 树（可整列收起） */}
+      {treeHidden ? (
+        <div className="flex w-11 shrink-0 flex-col items-center gap-1 overflow-y-auto border-r border-stone-200/70 py-3">
           <button
             type="button"
-            title={treeCollapsed ? '展开全部' : '折叠全部'}
-            onClick={() => setTreeCollapsed(c => !c)}
+            title="展开链路树"
+            onClick={() => setTreeHidden(false)}
             className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
           >
-            {treeCollapsed ? (
-              <ChevronsUpDown className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronsDownUp className="h-3.5 w-3.5" />
-            )}
+            <ChevronRight className="h-4 w-4" />
           </button>
+          {treeQ.data && (
+            <ObservationIconRail
+              root={treeQ.data}
+              selectedId={effectiveId ?? undefined}
+              onSelect={(n: TraceTreeNode) => setPicked(String(n.id))}
+            />
+          )}
         </div>
-        {treeQ.isLoading ? (
-          <div className="py-10 text-center text-sm text-stone-400">加载链路…</div>
-        ) : treeQ.data ? (
-          <ObservationTree
-            key={treeCollapsed ? 'collapsed' : 'expanded'}
-            root={treeQ.data}
-            selectedId={effectiveId}
-            defaultCollapsed={treeCollapsed}
-            onSelect={(n: TraceTreeNode) => setPicked(String(n.id))}
-          />
-        ) : (
-          <div className="py-10 text-center text-sm text-stone-400">无法加载链路</div>
-        )}
-      </div>
+      ) : (
+        <div className="w-[440px] shrink-0 overflow-y-auto border-r border-stone-200/70 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-medium text-stone-500">调用链路</span>
+            <div className="flex items-center gap-0.5">
+              <button
+                type="button"
+                title={treeCollapsed ? '展开全部节点' : '折叠全部节点'}
+                onClick={() => setTreeCollapsed(c => !c)}
+                className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+              >
+                {treeCollapsed ? (
+                  <ChevronsUpDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronsDownUp className="h-3.5 w-3.5" />
+                )}
+              </button>
+              <button
+                type="button"
+                title="收起链路树"
+                onClick={() => setTreeHidden(true)}
+                className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          {treeQ.isLoading ? (
+            <div className="py-10 text-center text-sm text-stone-400">加载链路…</div>
+          ) : treeQ.data ? (
+            <ObservationTree
+              key={treeCollapsed ? 'collapsed' : 'expanded'}
+              root={treeQ.data}
+              selectedId={effectiveId}
+              defaultCollapsed={treeCollapsed}
+              onSelect={(n: TraceTreeNode) => setPicked(String(n.id))}
+            />
+          ) : (
+            <div className="py-10 text-center text-sm text-stone-400">无法加载链路</div>
+          )}
+        </div>
+      )}
 
       {/* 右：选中节点详情 */}
       <div className="min-w-0 flex-1 overflow-y-auto p-4">

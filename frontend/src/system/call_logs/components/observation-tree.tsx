@@ -60,6 +60,40 @@ const TYPE_COLOR: Record<ObservationType, string> = {
   guardrail: 'text-rose-600',
 };
 
+/** 把嵌套树拍平成前序列表（收起态 icon 轨用） */
+const flattenTree = (node: TraceTreeNode, acc: TraceTreeNode[] = []): TraceTreeNode[] => {
+  acc.push(node);
+  node.children.forEach(c => flattenTree(c, acc));
+  return acc;
+};
+
+/** 收起态纵向 icon 轨：保留各节点类型 icon，点击仍可选中 */
+export const ObservationIconRail: React.FC<{
+  root: TraceTreeNode;
+  selectedId?: string;
+  onSelect?: (node: TraceTreeNode) => void;
+}> = ({ root, selectedId, onSelect }) => (
+  <div className="flex flex-col items-center gap-0.5">
+    {flattenTree(root).map(n => {
+      const otype = (n.observation_type as ObservationType) || 'generation';
+      const Icon = TYPE_ICON[otype] ?? CircleDashed;
+      const colorCls = TYPE_COLOR[otype] ?? 'text-stone-500';
+      const isSelected = selectedId === n.request_id;
+      return (
+        <button
+          key={String(n.id)}
+          type="button"
+          title={n.request_id.includes('.') ? n.request_id.slice(n.request_id.indexOf('.') + 1) : otype}
+          onClick={() => onSelect?.(n)}
+          className={cn('rounded p-1 transition hover:bg-stone-100', isSelected && 'bg-stone-100')}
+        >
+          <Icon className={cn('h-4 w-4', n.success ? colorCls : 'text-rose-500')} />
+        </button>
+      );
+    })}
+  </div>
+);
+
 interface ObservationTreeProps {
   root: TraceTreeNode;
   /** 选中节点的 request_id；点击节点回调 */
