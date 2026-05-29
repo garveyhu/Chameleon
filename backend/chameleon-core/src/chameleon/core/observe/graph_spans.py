@@ -14,7 +14,8 @@ trace 树长成 LangSmith 形状：
 归属（app_id/agent_key/channel/...）从 current_trace_context() 取；**没开 trace scope
 就直接跳过**（纯 orchestrator 单测不碰 DB / 不需要 system 层）。
 
-沿用 GenerationRecorder 的 core→system lazy import 模式（record_call 在 system 层）。
+落库经 core.observe.sink.record_observation（可注入 sink，由上层 app 注册具体写库实现），
+core 不再 import chameleon.system —— 消除 core→system 上行依赖。
 """
 
 from __future__ import annotations
@@ -59,8 +60,8 @@ async def persist_node_spans(*, root_request_id: str, node_runs: list[Any]) -> N
     if tc is None or not node_runs:
         return
 
+    from chameleon.core.observe.sink import record_observation
     from chameleon.data.infra.db import AsyncSessionLocal
-    from chameleon.system.api_key.service import record_call
 
     try:
         async with AsyncSessionLocal() as session:
@@ -77,7 +78,7 @@ async def persist_node_spans(*, root_request_id: str, node_runs: list[Any]) -> N
                 req_payload = _payload(getattr(nr, "input", None), "input") or {}
                 req_payload["node_id"] = node_id
                 req_payload["node_type"] = node_type
-                await record_call(
+                await record_observation(
                     session,
                     request_id=f"{root_request_id}.{node_id}",
                     app_id=tc.app_id or "internal",

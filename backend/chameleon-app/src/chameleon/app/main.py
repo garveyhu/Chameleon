@@ -136,8 +136,20 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await redis_infra.aclose()
 
 
+def _register_observation_sink() -> None:
+    """注册观测落库后端：core 的 observe 切面（llm_recorder / graph_spans）经
+    core.observe.record_observation 落 call_logs，具体写库实现（含 pricing 计费）在
+    system 层。app 在此注入，core 不再 import chameleon.system（消除 core→system 上行）。
+    """
+    from chameleon.core.observe import set_observation_sink
+    from chameleon.system.api_key.service import record_call
+
+    set_observation_sink(record_call)
+
+
 def create_app() -> FastAPI:
     setup_logger()
+    _register_observation_sink()
 
     app = FastAPI(
         title="Chameleon",

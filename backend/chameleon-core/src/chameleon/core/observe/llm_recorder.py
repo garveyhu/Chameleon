@@ -236,8 +236,8 @@ class GenerationRecorder(AsyncCallbackHandler):
     ) -> None:
         """落一条 generation call_log；归属字段从 TraceContext 拿，无 scope 兜底"""
         # 延迟 import 避免循环依赖（infra/db 反过来依赖 models → observe）
+        from chameleon.core.observe.sink import record_observation
         from chameleon.data.infra.db import AsyncSessionLocal
-        from chameleon.system.api_key.service import record_call
 
         tc = current_trace_context()
         parent_id = current_observation_id() or (tc.request_id if tc else None)
@@ -255,7 +255,7 @@ class GenerationRecorder(AsyncCallbackHandler):
 
         try:
             async with AsyncSessionLocal() as session:
-                await record_call(
+                await record_observation(
                     session,
                     request_id=gen_request_id,
                     app_id=app_id or "internal",

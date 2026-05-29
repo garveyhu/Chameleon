@@ -40,17 +40,27 @@ from chameleon.core.observe.context import (
     reset_trace_context,
     set_trace_context,
 )
+from chameleon.core.observe.sink import (
+    ObservationSink,
+    get_observation_sink,
+    record_observation,
+    set_observation_sink,
+)
 
 __all__ = [
     "ObservationContext",
     "ObservationRollup",
+    "ObservationSink",
     "ObservationType",
     "TraceContext",
     "aggregate_rollups",
     "current_observation_id",
     "current_trace_context",
+    "get_observation_sink",
     "observe",
     "open_trace_scope",
+    "record_observation",
     "reset_trace_context",
+    "set_observation_sink",
     "set_trace_context",
 ]
