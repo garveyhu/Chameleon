@@ -1,0 +1,27 @@
+[project]
+name = "chameleon-engine"
+version = "1.0.0"
+description = "Chameleon 编排引擎层（graph 工作流引擎+节点 / retrieval 检索管线 / eval 评测 / a2a / jobs）"
+requires-python = ">=3.12"
+dependencies = [
+    "chameleon-core",
+    "chameleon-data",
+    "chameleon-integrations",
+    "pydantic>=2.7",
+    "sqlalchemy[asyncio]>=2.0",
+    "langchain-core>=0.3",
+    "httpx>=0.27",
+    "loguru>=0.7",
+]
+
+[tool.uv.sources]
+chameleon-core = { workspace = true }
+chameleon-data = { workspace = true }
+chameleon-integrations = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chameleon"]
