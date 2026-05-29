@@ -501,7 +501,7 @@ const PayloadView = ({
           无内容
         </div>
       ) : !raw && messages ? (
-        <div className="max-h-[460px] space-y-3 overflow-y-auto rounded-lg bg-stone-50 px-3.5 py-3">
+        <div className="max-h-[460px] space-y-3 overflow-y-auto">
           {messages.map((m, i) => (
             <div key={i} className="relative pl-3.5">
               {/* 轻量左色条替代描边卡片：系统=灰 / 用户=蓝 / 助手=紫 / 工具=琥珀 */}
@@ -516,7 +516,7 @@ const PayloadView = ({
           ))}
         </div>
       ) : !raw && text ? (
-        <div className="max-h-[420px] overflow-y-auto rounded-lg bg-stone-50 px-3.5 py-3 text-[13px] leading-relaxed text-stone-800">
+        <div className="max-h-[420px] overflow-y-auto border-l border-stone-200 pl-3.5 text-[13px] leading-relaxed text-stone-800">
           <Markdown content={text} />
         </div>
       ) : (
