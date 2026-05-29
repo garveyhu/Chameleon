@@ -99,7 +99,7 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
             )}
           />
         )}
-        <SheetHeader>
+        <SheetHeader className="!px-4 !py-2.5">
           <div className="flex items-center gap-2">
             {/* LangSmith 式功能 icon 栏：收起 / 全屏 / 上一条 / 下一条 / 刷新 */}
             <div className="flex items-center gap-0.5">
@@ -129,8 +129,8 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
               {callLog ? (
                 <div className="flex items-center gap-2">
                   <span>{callLog.agent_key}</span>
-                  <span className="font-mono text-[11.5px] text-stone-500">
-                    {callLog.request_id.slice(0, 16)}…
+                  <span className="truncate font-mono text-[11.5px] text-stone-500">
+                    {callLog.request_id}
                   </span>
                   <Badge
                     variant="outline"
@@ -311,6 +311,15 @@ const ROLE_LABEL: Record<string, string> = {
   tool: '工具',
   function: '工具',
 };
+const ROLE_BAR: Record<string, string> = {
+  system: 'bg-stone-400',
+  human: 'bg-blue-500',
+  user: 'bg-blue-500',
+  ai: 'bg-violet-400',
+  assistant: 'bg-violet-400',
+  tool: 'bg-amber-400',
+  function: 'bg-amber-400',
+};
 
 interface RoleMsg {
   role: string;
@@ -340,30 +349,51 @@ const NodeDetail = ({
     : node.agent_key;
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-600">
-          {node.observation_type}
-        </span>
-        <span className="text-[13px] font-medium text-stone-900">{nodeName}</span>
+      {/* 标题 + 身份 mono 行（开始时间 / 请求 / 会话 置顶并排） */}
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[11px] text-violet-600">
+            {node.observation_type}
+          </span>
+          <span className="text-[14px] font-semibold text-stone-900">{nodeName}</span>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]">
+          <span>
+            <span className="text-stone-400">开始</span>{' '}
+            <span className="font-mono text-stone-600">{formatDateTime(node.created_at)}</span>
+          </span>
+          <span className="min-w-0">
+            <span className="text-stone-400">请求</span>{' '}
+            <button
+              type="button"
+              title="点击复制"
+              onClick={() => void navigator.clipboard.writeText(node.request_id)}
+              className="font-mono text-stone-600 hover:text-blue-600"
+            >
+              {node.request_id}
+            </button>
+          </span>
+          {node.session_id && (
+            <span>
+              <span className="text-stone-400">会话</span>{' '}
+              <span className="font-mono text-stone-600">{node.session_id}</span>
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* 元信息卡片 */}
-      <div className="grid grid-cols-2 gap-2">
-        <Meta label="状态" value={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
-        <Meta label="耗时" value={formatDurationMs(node.duration_ms)} />
-        <Meta label="模型" value={node.model_code || '—'} mono />
-        <Meta
-          label="Token"
-          value={
-            node.total_tokens != null
-              ? `${formatTokens(node.total_tokens)} (↑${node.prompt_tokens ?? 0} ↓${node.completion_tokens ?? 0})`
-              : '—'
-          }
+      {/* stat bar：指标平铺一行，竖线分隔，零卡格 */}
+      <div className="flex flex-wrap gap-y-2 border-y border-stone-200 py-2.5">
+        <Stat k="状态" v={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
+        <Stat k="耗时" v={formatDurationMs(node.duration_ms)} />
+        <Stat k="模型" v={node.model_code || '—'} mono />
+        <Stat
+          k="Token"
+          v={node.total_tokens != null ? formatTokens(node.total_tokens) : '—'}
+          sub={node.total_tokens != null ? `↑${node.prompt_tokens ?? 0} ↓${node.completion_tokens ?? 0}` : undefined}
         />
-        <Meta label="成本" value={node.cost_usd != null ? formatCost(node.cost_usd) : '—'} />
-        <Meta label="渠道" value={node.channel || '—'} />
-        <Meta label="开始时间" value={formatDateTime(node.created_at)} mono />
-        <Meta label="请求 ID" value={node.request_id} mono copyable />
+        <Stat k="成本" v={node.cost_usd != null ? formatCost(node.cost_usd) : '—'} />
+        <Stat k="渠道" v={node.channel || '—'} />
       </div>
 
       {node.error_message && (
@@ -374,13 +404,40 @@ const NodeDetail = ({
 
       <PayloadView title="输入" payload={node.request_payload} textKeys={INPUT_TEXT_KEYS} />
       <PayloadView title="输出" payload={node.response_payload} textKeys={OUTPUT_TEXT_KEYS} />
-
-      <div className="border-t border-stone-200 pt-2 text-[11px] text-stone-500">
-        会话 <span className="font-mono">{node.session_id ?? '—'}</span>
-      </div>
     </div>
   );
 };
+
+/** stat bar 单项：label 小灰 + value 粗，右侧竖线分隔 */
+const Stat = ({
+  k,
+  v,
+  sub,
+  mono,
+  tone,
+}: {
+  k: string;
+  v: string;
+  sub?: string;
+  mono?: boolean;
+  tone?: 'ok' | 'err';
+}) => (
+  <div className="mr-5 border-r border-stone-200 pr-5">
+    <div className="text-[10.5px] text-stone-400">{k}</div>
+    <div className="mt-0.5 flex items-baseline gap-1.5">
+      <span
+        className={cn(
+          'tnum text-[13.5px] font-semibold',
+          tone === 'ok' ? 'text-emerald-600' : tone === 'err' ? 'text-rose-600' : 'text-stone-800',
+          mono && 'font-mono text-[12.5px]',
+        )}
+      >
+        {v}
+      </span>
+      {sub && <span className="tnum text-[11px] font-normal text-stone-400">{sub}</span>}
+    </div>
+  </div>
+);
 
 /** 输入/输出：有「主文本」时默认 Markdown 渲染（保留换行），可切原始 JSON */
 const PayloadView = ({
@@ -442,22 +499,22 @@ const PayloadView = ({
           无内容
         </div>
       ) : !raw && messages ? (
-        <div className="max-h-[460px] space-y-2 overflow-y-auto">
+        <div className="max-h-[460px] space-y-3 overflow-y-auto">
           {messages.map((m, i) => (
-            <div key={i} className="rounded-md border border-stone-200/70 bg-white">
-              <div className="border-b border-stone-100 px-3 py-1">
-                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-medium text-stone-600">
-                  {ROLE_LABEL[m.role] ?? m.role}
-                </span>
+            <div key={i} className="relative pl-3.5">
+              {/* 轻量左色条替代描边卡片：系统=灰 / 用户=蓝 / 助手=紫 / 工具=琥珀 */}
+              <span className={cn('absolute top-1 bottom-1 left-0 w-[3px] rounded', ROLE_BAR[m.role] ?? 'bg-stone-300')} />
+              <div className="mb-1 text-[10.5px] font-medium text-stone-400">
+                {ROLE_LABEL[m.role] ?? m.role}
               </div>
-              <div className="px-3 py-2 text-[13px] leading-relaxed">
+              <div className="text-[13px] leading-relaxed text-stone-800">
                 <Markdown content={m.content} />
               </div>
             </div>
           ))}
         </div>
       ) : !raw && text ? (
-        <div className="max-h-[420px] overflow-y-auto rounded-md border border-stone-200/70 bg-white px-3 py-2 text-[13px] leading-relaxed">
+        <div className="max-h-[420px] overflow-y-auto text-[13px] leading-relaxed text-stone-800">
           <Markdown content={text} />
         </div>
       ) : (
@@ -467,32 +524,3 @@ const PayloadView = ({
   );
 };
 
-const Meta = ({
-  label,
-  value,
-  mono,
-  tone,
-  copyable,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  tone?: 'ok' | 'err';
-  copyable?: boolean;
-}) => (
-  <div className="rounded-md border border-stone-200/70 bg-white px-2.5 py-1.5">
-    <div className="text-[10.5px] text-stone-500">{label}</div>
-    <div
-      className={cn(
-        'mt-0.5 truncate text-[12px]',
-        mono && 'font-mono',
-        tone === 'ok' ? 'text-emerald-700' : tone === 'err' ? 'text-rose-600' : 'text-stone-800',
-        copyable && 'cursor-pointer hover:text-blue-600',
-      )}
-      title={copyable ? '点击复制' : value}
-      onClick={copyable ? () => void navigator.clipboard.writeText(value) : undefined}
-    >
-      {value}
-    </div>
-  </div>
-);
