@@ -6,6 +6,7 @@ import type {
   ScoreDataType,
   ScoreItem,
   ScoreSource,
+  SessionItem,
   TraceTreeNode,
 } from '@/system/call_logs/types/call-log';
 
@@ -39,6 +40,15 @@ export const callLogApi = {
   /** P17.C1：按 request_id 取嵌套 observation 树（含 scores） */
   tree: (requestId: string) =>
     get<TraceTreeNode>(`/v1/admin/call-logs/${encodeURIComponent(requestId)}/tree`),
+
+  /** 会话（thread）列表 —— 按 ChatSession 维度（多轮对话一条），区别于 trace */
+  listSessions: (params?: {
+    page?: number;
+    page_size?: number;
+    agent_key?: string;
+    end_user_id?: string;
+    since?: string;
+  }) => get<PageResult<SessionItem>>('/v1/admin/sessions', { params }),
 };
 
 export const scoreApi = {

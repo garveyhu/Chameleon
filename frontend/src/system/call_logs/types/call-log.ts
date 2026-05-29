@@ -18,6 +18,19 @@ export type GraphKind = 'chatflow' | 'workflow' | string;
 /** 调用渠道 */
 export type CallChannel = 'api' | 'openai' | 'embed' | 'playground' | 'internal' | string;
 
+/** 会话（thread）列表项 —— 按 ChatSession 维度（多轮一条），区别于 trace（单次运行） */
+export interface SessionItem {
+  id: EntityId;
+  session_id: string;
+  agent_key: string;
+  app_id: string;
+  end_user_id: string | null;
+  title: string | null;
+  turn_count: number;
+  last_message_at: string | null;
+  created_at: string;
+}
+
 export interface CallLogItem {
   id: EntityId;
   request_id: string;

@@ -13,13 +13,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.models import Agent, ApiKey, CallLog, Graph, Score
+from chameleon.core.models import (
+    Agent,
+    ApiKey,
+    CallLog,
+    ChatSession,
+    Graph,
+    Message,
+    Score,
+)
 from chameleon.core.observe import aggregate_rollups
 from chameleon.providers.base import PROVIDERS
 from chameleon.system.admin.schemas import (
     CallLogDetailItem,
     CallLogItem,
     ProviderStatusItem,
+    SessionItem,
     TraceTreeNode,
 )
 from chameleon.system.scores.schemas import ScoreItem
@@ -210,6 +219,67 @@ async def get_trace_tree(
         n.children.sort(key=lambda x: x.created_at)
 
     return nodes[root.request_id]
+
+
+async def list_sessions(
+    session: AsyncSession,
+    page: PageParams,
+    *,
+    agent_key: str | None = None,
+    end_user_id: str | None = None,
+    since: datetime | None = None,
+) -> PageResult[SessionItem]:
+    """会话（thread）列表 —— 按 ChatSession 维度（多轮对话一条），区别于 trace 列表。
+
+    turn_count 子查询 SUM messages；按 last_message_at（无则 created_at）倒序。
+    """
+    turn_sq = (
+        select(Message.session_id, func.count(Message.id).label("cnt"))
+        .group_by(Message.session_id)
+        .subquery()
+    )
+    base = (
+        select(ChatSession, turn_sq.c.cnt)
+        .outerjoin(turn_sq, turn_sq.c.session_id == ChatSession.session_id)
+        .where(ChatSession.deleted_at.is_(None))
+    )
+    if agent_key:
+        base = base.where(ChatSession.agent_key == agent_key)
+    if end_user_id:
+        base = base.where(ChatSession.end_user_id == end_user_id)
+    if since:
+        base = base.where(ChatSession.created_at >= since)
+
+    total = (
+        await session.execute(
+            select(func.count()).select_from(base.subquery())
+        )
+    ).scalar_one()
+
+    order_col = func.coalesce(ChatSession.last_message_at, ChatSession.created_at)
+    rows = (
+        await session.execute(
+            base.order_by(order_col.desc())
+            .offset((page.page - 1) * page.page_size)
+            .limit(page.page_size)
+        )
+    ).all()
+
+    items = [
+        SessionItem(
+            id=cs.id,
+            session_id=cs.session_id,
+            agent_key=cs.agent_key,
+            app_id=cs.app_id,
+            end_user_id=cs.end_user_id,
+            title=cs.title,
+            turn_count=cnt or 0,
+            last_message_at=cs.last_message_at,
+            created_at=cs.created_at,
+        )
+        for cs, cnt in rows
+    ]
+    return PageResult(items=items, total=total, page=page.page, page_size=page.page_size)
 
 
 async def providers_status() -> list[ProviderStatusItem]:

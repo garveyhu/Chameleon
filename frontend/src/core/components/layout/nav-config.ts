@@ -18,9 +18,9 @@ import {
   KeySquare,
   LayoutDashboard,
   MessageSquare,
+  MessagesSquare,
   Newspaper,
   Puzzle,
-  ScrollText,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -109,8 +109,8 @@ export const DOMAINS: NavDomain[] = [
         i18nKey: 'menu.group.runs',
         fallbackTitle: '运行记录',
         children: [
-          { to: '/sessions', icon: ScrollText, i18nKey: 'menu.sessions', fallbackTitle: '会话 & 运行', perm: 'call_logs:read' },
-          { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: 'Trace', perm: 'call_logs:read' },
+          { to: '/traces', icon: Activity, i18nKey: 'menu.trace', fallbackTitle: '运行记录 / Trace', perm: 'call_logs:read' },
+          { to: '/sessions', icon: MessagesSquare, i18nKey: 'menu.sessions', fallbackTitle: '会话', perm: 'call_logs:read' },
           { to: '/session-files', icon: FileText, i18nKey: 'menu.session_files', fallbackTitle: '会话文件', perm: 'call_logs:read' },
           {
             to: '/playground',

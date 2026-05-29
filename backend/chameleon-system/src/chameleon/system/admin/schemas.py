@@ -90,3 +90,19 @@ class ProviderStatusItem(BaseModel):
     name: str
     ok: bool
     error: str | None = None
+
+
+class SessionItem(BaseModel):
+    """会话（thread）列表项 —— 按 ChatSession 维度（多轮对话一条），区别于 trace（单次运行）"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    session_id: str
+    agent_key: str
+    app_id: str
+    end_user_id: str | None = None
+    title: str | None = None
+    turn_count: int = 0  # 该会话的消息条数
+    last_message_at: datetime | None = None
+    created_at: datetime

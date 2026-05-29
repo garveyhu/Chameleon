@@ -18,6 +18,7 @@ from chameleon.system.admin.schemas import (
     CallLogDetailItem,
     CallLogItem,
     ProviderStatusItem,
+    SessionItem,
     TraceTreeNode,
 )
 from chameleon.system.auth.dependencies import require_permission
@@ -78,6 +79,27 @@ async def get_call_log_tree(
     """以 request_id 为根，返完整嵌套 observation 树（含所有后代节点）"""
     tree = await service.get_trace_tree(session, request_id)
     return Result.ok(tree)
+
+
+@router.get("/sessions", response_model=Result[PageResult[SessionItem]])
+async def list_sessions(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    agent_key: str | None = Query(None),
+    end_user_id: str | None = Query(None),
+    since: datetime | None = Query(None, description="ISO8601 起始（含）"),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("call_logs:read")),
+) -> Result[PageResult[SessionItem]]:
+    """会话（thread）列表：按 ChatSession 维度，区别于 /call-logs 的 trace（单次运行）"""
+    result = await service.list_sessions(
+        session,
+        PageParams(page=page, page_size=page_size),
+        agent_key=agent_key,
+        end_user_id=end_user_id,
+        since=since,
+    )
+    return Result.ok(result)
 
 
 @router.get("/providers/status", response_model=Result[list[ProviderStatusItem]])
