@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 from loguru import logger
 from sqlalchemy import func, select
@@ -136,21 +137,35 @@ async def revoke_api_key(session: AsyncSession, key_id: int) -> ApiKeyItem:
 # ── call_log helpers（被 agent 模块使用） ─────────────────
 
 
-async def aggregate_generation_usage(
+async def aggregate_generation_rollup(
     session: AsyncSession, parent_request_id: str
-) -> tuple[int | None, int | None, int | None]:
-    """汇总某 trace 下所有 generation 子行的 token 用量。
+) -> tuple[int | None, int | None, int | None, Any, str | None]:
+    """汇总某 trace 下所有 generation 子行的 token / cost / model。
 
-    用于 provider 自身没透出 usage（比如图引擎下的多个 LLMNode）时，从
-    BaseLLM 回调写下的 generation call_log 行反向聚合，填回 InvokeResult.usage。
+    用于 provider 自身没透出 usage（比如图引擎下的多个 LLMNode）时，从 BaseLLM
+    回调写下的 generation call_log 行反向聚合，回填根 trace 行的 usage/cost/model。
+
+    匹配范围（两层）：generation 行的 parent_id 可能是
+    - 根 request_id（代码型 agent：generation 直挂根），或
+    - 节点 span id `f"{root}.{node_id}"`（图引擎：generation 挂在节点 span 下）
+    所以同时收「直挂根」+「挂在根的直接子节点（即 parent_id LIKE 'root.%'）」的
+    generation。cost 直接 SUM 子行已算好的 cost_usd（各按各自模型价目，多模型也正确）。
 
     Returns:
-        (prompt_tokens, completion_tokens, total_tokens)；零结果或全 NULL 时
-        各项为 None（保持 InvokeResult.usage=None 的语义而非给 0）。
+        (prompt_tokens, completion_tokens, total_tokens, cost_usd, model_code)；
+        无 generation 时 token/cost 为 None、model 为 None。model 单一取之、多模型
+        标 'multi'。
     """
     from sqlalchemy import func, select
 
     from chameleon.core.models import CallLog
+
+    # generation 子行：直挂根 OR 挂在「根的直接子节点 span」下
+    span_match = CallLog.parent_id.like(f"{parent_request_id}.%")
+    gen_where = (
+        CallLog.observation_type == "generation",
+        (CallLog.parent_id == parent_request_id) | span_match,
+    )
 
     row = (
         await session.execute(
@@ -158,21 +173,40 @@ async def aggregate_generation_usage(
                 func.sum(CallLog.prompt_tokens),
                 func.sum(CallLog.completion_tokens),
                 func.sum(CallLog.total_tokens),
-            ).where(
-                CallLog.parent_id == parent_request_id,
-                CallLog.observation_type == "generation",
-            )
+                func.sum(CallLog.cost_usd),
+            ).where(*gen_where)
         )
     ).one()
-    p, c, t = row
+    p, c, t, cost = row
+
+    # 代表模型：distinct model_code（NULL 除外）；单一取之，多个标 multi
+    models = (
+        (
+            await session.execute(
+                select(CallLog.model_code)
+                .where(*gen_where, CallLog.model_code.isnot(None))
+                .distinct()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    model_code = (
+        None if not models else (models[0] if len(models) == 1 else "multi")
+    )
+
     if p is None and c is None and t is None:
-        return None, None, None
+        return None, None, None, cost, model_code
     # 缺 total 用 p+c 兜底（流式 usage_metadata 偶尔不带 total）
     if t is None and (p is not None or c is not None):
         t = (p or 0) + (c or 0)
-    return (int(p) if p is not None else None,
-            int(c) if c is not None else None,
-            int(t) if t is not None else None)
+    return (
+        int(p) if p is not None else None,
+        int(c) if c is not None else None,
+        int(t) if t is not None else None,
+        cost,
+        model_code,
+    )
 
 
 async def record_call(
@@ -207,6 +241,9 @@ async def record_call(
     # S5 重构：归属冗余（每条 call_log 都能直接按 key / 终端用户聚合，免 join）
     api_key_id: int | None = None,
     end_user_id: str | None = None,
+    # 显式 cost 覆盖：调用方已经算好 cost（如图引擎根行从子行 SUM 而来，可能多模型，
+    # 无法用单一 model_code 价目重算）时直接传入，跳过下方按 model_code 重算。
+    cost_usd: Any = None,
 ) -> None:
     """写一条 call_log（不阻塞响应——调用方可放 BackgroundTasks）
 
@@ -216,10 +253,12 @@ async def record_call(
 
     parent_id 由调用方显式传入 —— 推荐用 chameleon.core.observe.observe()
     context manager 拿到 ObservationContext.parent_id 后传过来，明确且可测。
+
+    cost_usd 显式传入时直接落库（不按 model_code 重算）；否则按 model_code + token
+    查当时生效价目算（model_code 缺失 / 价目缺失则保持 NULL）。
     """
-    # P22.1：按当时生效价目算 cost（model_code 缺失 / 价目缺失则保持 NULL）
-    cost_usd = None
-    if model_code and (prompt_tokens or completion_tokens):
+    # P22.1：按当时生效价目算 cost；调用方已给 cost_usd 则尊重之、跳过重算
+    if cost_usd is None and model_code and (prompt_tokens or completion_tokens):
         try:
             from chameleon.system.pricing import calc_cost
 

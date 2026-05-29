@@ -47,6 +47,7 @@ from chameleon.core.graph.node_base import (
     Node,
     NodeStatus,
 )
+from chameleon.core.observe.context import ObservationType, observe
 from chameleon.core.graph.registry import default_factory as _registry_default_factory
 from chameleon.core.graph.results import NodeRunResult, RunResult
 from chameleon.core.graph.results import duration_ms as _ms
@@ -184,6 +185,14 @@ class Orchestrator:
 
             # 收尾：聚合结果
             node_runs = await state.runs_snapshot()
+            # 节点轨迹落 call_logs span 行（嵌在根 trace 下；无 trace scope 自动跳过）。
+            # generation 行已在节点 execute 期间由 GenerationRecorder 按同一确定性 id
+            # 挂到对应 span 下 —— 这里补落 span 壳，trace 树即成 LangSmith 层级。
+            from chameleon.core.observe.graph_spans import persist_node_spans
+
+            await persist_node_spans(
+                root_request_id=ctx.request_id, node_runs=node_runs
+            )
             # 找 end 节点的 output（最后聚合）
             for n in self.spec.nodes:
                 if n.type == "end":
@@ -341,13 +350,22 @@ class Orchestrator:
                 await events.emit(event_graph_node_delta(_nid, text))
 
         try:
-            coro = node.execute_stream(node_ctx, input_val, emit)
-            if self.config.node_timeout_seconds:
-                output = await asyncio.wait_for(
-                    coro, timeout=self.config.node_timeout_seconds
-                )
-            else:
-                output = await coro
+            # 节点执行期间开 span observe：_CURRENT_OBS_ID = f"{root}.{node_id}"，
+            # 期间 LLM 节点 .ainvoke() 触发的 GenerationRecorder 落 generation 时
+            # 自动认这个 span 当 parent（span 行本身由 run() finally 的
+            # persist_node_spans 用同一确定性 id 补落）。
+            async with observe(
+                observation_type=ObservationType.SPAN,
+                name=node.name or node_id,
+                request_id=f"{ctx.request_id}.{node_id}",
+            ):
+                coro = node.execute_stream(node_ctx, input_val, emit)
+                if self.config.node_timeout_seconds:
+                    output = await asyncio.wait_for(
+                        coro, timeout=self.config.node_timeout_seconds
+                    )
+                else:
+                    output = await coro
         except HumanInputRequired as hir:
             # A6 暂停：记 pending，不 mark_done（不传播给下游），整图置 PAUSED
             node_finished = datetime.now(timezone.utc)

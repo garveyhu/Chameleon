@@ -414,13 +414,15 @@ async def invoke(
             provider_conv_id=result.provider_conv_id,
         )
 
-    # 兜底填 usage：provider 自身没透出（如图引擎下多 LLM 节点）时，从
-    # BaseLLM 回调写下的 generation 子行聚合补回；不影响 provider 已给 usage 的情况。
+    # 兜底填 usage/cost/model：provider 自身没透出（如图引擎下多 LLM 节点）时，从
+    # BaseLLM 回调写下的 generation 子行聚合补回根行；不影响 provider 已给 usage 的情况。
+    rollup_cost = None
+    rollup_model = None
     if result.usage is None:
         from chameleon.providers.base.types import Usage
 
-        p, c, t = await api_key_service.aggregate_generation_usage(
-            session, request_id
+        p, c, t, rollup_cost, rollup_model = (
+            await api_key_service.aggregate_generation_rollup(session, request_id)
         )
         if any(v is not None for v in (p, c, t)):
             result.usage = Usage(
@@ -451,6 +453,8 @@ async def invoke(
         observation_type="trace",
         api_key_id=_api_key_id_trace,
         end_user_id=conv.end_user_id,
+        model_code=rollup_model,
+        cost_usd=rollup_cost,
     )
 
     return InvokeResponse(
@@ -863,12 +867,16 @@ async def _stream_finalize(
                         provider_conv_id=result.provider_conv_id,
                     )
 
-            # 兜底填 usage：provider 没透出 usage 时，从 generation 子行聚合
+            # 兜底填 usage/cost/model：provider 没透出时从 generation 子行聚合补根行
+            rollup_cost = None
+            rollup_model = None
             if result.usage is None and not failed:
                 from chameleon.providers.base.types import Usage
 
-                p, c, t = await api_key_service.aggregate_generation_usage(
-                    session, request_id
+                p, c, t, rollup_cost, rollup_model = (
+                    await api_key_service.aggregate_generation_rollup(
+                        session, request_id
+                    )
                 )
                 if any(v is not None for v in (p, c, t)):
                     result.usage = Usage(
@@ -904,6 +912,8 @@ async def _stream_finalize(
                 observation_type="trace",
                 api_key_id=_api_key_id_finalize,
                 end_user_id=conv_end_user_id,
+                model_code=rollup_model,
+                cost_usd=rollup_cost,
             )
             await session.commit()
         except Exception:  # noqa: BLE001

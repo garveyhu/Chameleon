@@ -367,6 +367,21 @@ async def _write_log(
     S10：归属冗余 api_key_id（embed 绑的 owner key）+ end_user_id（token 上绑的终端用户）
     """
     try:
+        # 兜底填 usage/cost/model：provider 没透出（如图引擎下多 LLM 节点）时，从
+        # generation 子行（含挂在节点 span 下的）聚合补回根行。
+        from chameleon.system.api_key.service import aggregate_generation_rollup
+
+        prompt_tokens = (usage or {}).get("prompt_tokens")
+        completion_tokens = (usage or {}).get("completion_tokens")
+        total_tokens = (usage or {}).get("total_tokens")
+        rollup_cost = None
+        rollup_model = None
+        if not usage:
+            p, c, t, rollup_cost, rollup_model = await aggregate_generation_rollup(
+                session, request_id
+            )
+            prompt_tokens, completion_tokens, total_tokens = p, c, t
+
         await record_call(
             session,
             request_id=request_id,
@@ -379,9 +394,9 @@ async def _write_log(
             code=code,
             error_message=error_message,
             duration_ms=duration_ms,
-            prompt_tokens=(usage or {}).get("prompt_tokens"),
-            completion_tokens=(usage or {}).get("completion_tokens"),
-            total_tokens=(usage or {}).get("total_tokens"),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
             request_payload={
                 "input": user_input[:2000],
                 "source": "embed",
@@ -391,6 +406,8 @@ async def _write_log(
             observation_type="trace",
             api_key_id=api_key_id,
             end_user_id=end_user_id,
+            model_code=rollup_model,
+            cost_usd=rollup_cost,
         )
         await session.commit()
     except Exception:  # noqa: BLE001
