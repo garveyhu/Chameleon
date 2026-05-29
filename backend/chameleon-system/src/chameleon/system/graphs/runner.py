@@ -3,19 +3,16 @@
 跟 test_run 的区别：
 - test_run：仅 in-memory 跑 + 返结果，不写 graph_runs / graph_node_runs / call_logs（debug）
 - run_graph：完整持久化链路：
-    1. 建 graph_runs（pending → running）
-    2. 对每节点产 graph_node_runs + call_logs（observation_type 按节点类型映射）
-    3. call_logs 的 parent_id 串到 graph 根 request_id，实现 trace tree
-    4. 终态更新 graph_runs（status / output / duration / node_count）
+    1. 建 graph_runs（pending → running）—— 运行头 + human-input resume 锚
+    2. open_trace_scope 跑引擎：节点 span + LLM generation 由引擎统一落 call_logs
+       （persist_node_spans + GenerationRecorder），节点明细唯一真相源是 call_logs
+    3. 补 tool / branch 子观测到 call_logs
+    4. 终态更新 graph_runs + 写根 trace call_log（token/cost/model 从 generation SUM）
 
-trace 串联约定：
+trace 串联约定（graph_node_runs 已删，节点明细全在 call_logs）：
 - GraphRun.request_id = 根 trace id（observation_type='trace'）
-- 每个节点的 call_log.request_id = f"{root_rid}.{node_id}"，parent_id = root_rid
-- observation_type 按节点类型映射：
-    llm   → generation
-    kb    → retriever
-    tool  → tool
-    if_else / start / end / noop → span
+- 节点 span call_log.request_id = f"{root_rid}.{node_id}"，parent_id = root_rid
+- LLM generation 挂在节点 span 下（parent_id = f"{root_rid}.{node_id}"）
 """
 
 from __future__ import annotations
@@ -33,22 +30,14 @@ from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     Graph,
-    GraphNodeRun,
     GraphRun,
     HumanInputPending,
 )
-from chameleon.system.api_key.service import record_call
-
-_NODE_TO_OBSERVATION_TYPE: dict[str, str] = {
-    "llm": "generation",
-    "kb": "retriever",
-    "tool": "tool",
-    "if_else": "span",
-    "start": "span",
-    "end": "span",
-    "noop": "span",
-}
-
+from chameleon.core.observe.context import TraceContext, open_trace_scope
+from chameleon.system.api_key.service import (
+    aggregate_generation_rollup,
+    record_call,
+)
 
 # call_logs.app_id 是自由「调用方/来源标签」（无 FK）；admin 控制台触发的
 # graph run 用这个占位标签兜底（keyless 调用无法锚到 key）。
@@ -128,12 +117,22 @@ async def run_graph(
         await session.commit()
         return run
 
-    result = await orch.run(input=input or {}, ctx=ctx)
+    # 开 trace scope —— 让引擎的 persist_node_spans（节点 span）+ GenerationRecorder
+    # （LLM generation）按归属落 call_logs；节点 span 即 trace 树的中间层。
+    async with open_trace_scope(
+        TraceContext(
+            request_id=root_rid,
+            channel="playground",
+            app_id=app_id,
+            agent_key=f"graph:{g.graph_key}",
+        )
+    ):
+        result = await orch.run(input=input or {}, ctx=ctx)
 
-    await _persist_node_runs(
+    # 节点 span / generation 已由引擎落库；这里只补 tool / branch 子观测
+    await _record_node_subobservations(
         session,
         node_runs=result.node_runs,
-        run_id=run_id,
         root_rid=root_rid,
         app_id=app_id,
         graph_key=g.graph_key,
@@ -216,20 +215,27 @@ async def resume_run(
         depth=0,
         started_at=run.started_at or datetime.now(timezone.utc),
     )
-    result = await Orchestrator(spec).run(
-        input=run.input, ctx=ctx, seed_outputs=seed
-    )
+    async with open_trace_scope(
+        TraceContext(
+            request_id=run.request_id,
+            channel="playground",
+            app_id=app_id,
+            agent_key=f"graph:{g.graph_key}",
+        )
+    ):
+        result = await Orchestrator(spec).run(
+            input=run.input, ctx=ctx, seed_outputs=seed
+        )
 
     # 标记断点已回填
     pending.status = "resolved"
     pending.value = value
     pending.resolved_at = datetime.now(timezone.utc)
 
-    # 只落新跑的节点（seed 命中的已在之前 run 落过，跳过避免重复）
-    await _persist_node_runs(
+    # 只补新跑节点的 tool/branch 子观测（节点 span / generation 引擎已落）
+    await _record_node_subobservations(
         session,
         node_runs=result.node_runs,
-        run_id=run.id,
         root_rid=run.request_id,
         app_id=app_id,
         graph_key=g.graph_key,
@@ -259,17 +265,20 @@ async def resume_run(
 # ── helpers ───────────────────────────────────────────────
 
 
-async def _persist_node_runs(
+async def _record_node_subobservations(
     session: AsyncSession,
     *,
     node_runs: list,
-    run_id: int,
     root_rid: str,
     app_id: str,
     graph_key: str,
     skip: set[str] = frozenset(),  # type: ignore[assignment]
 ) -> None:
-    """落每节点 graph_node_runs + call_logs + tool/branch 子观测
+    """补落节点的 tool / branch 子观测到 call_logs
+
+    节点 span 行 + LLM generation 行已由引擎（persist_node_spans + GenerationRecorder）
+    落库；这里只补「LLM 节点的工具调用」「parallel 节点的并发分支」两类子观测，
+    parent_id 挂到节点 span（f"{root}.{node_id}"）下。
 
     skip 里的 node_id 跳过（resume 时已在之前 run 落过，避免重复）。
     """
@@ -277,38 +286,6 @@ async def _persist_node_runs(
         if nr.node_id in skip:
             continue
         node_rid = f"{root_rid}.{nr.node_id}"
-        session.add(
-            GraphNodeRun(
-                graph_run_id=run_id,
-                node_id=nr.node_id,
-                node_type=nr.node_type,
-                status=nr.status.value,
-                input=_jsonable(nr.input),
-                output=_jsonable(nr.output),
-                error=nr.error,
-                request_id=node_rid,
-                started_at=nr.started_at,
-                finished_at=nr.finished_at,
-                duration_ms=nr.duration_ms,
-            )
-        )
-        obs_type = _NODE_TO_OBSERVATION_TYPE.get(nr.node_type, "span")
-        await record_call(
-            session,
-            request_id=node_rid,
-            app_id=app_id,
-            agent_key=f"graph:{graph_key}",
-            session_id=None,
-            stream=False,
-            success=nr.status.value == "success",
-            code=200 if nr.status.value == "success" else 500,
-            error_message=(nr.error or {}).get("message") if nr.error else None,
-            duration_ms=nr.duration_ms,
-            request_payload=_to_payload(nr.input),
-            response_payload=_to_payload(nr.output),
-            parent_id=root_rid,
-            observation_type=obs_type,
-        )
         await _record_tool_rounds(
             session,
             node_output=nr.output,
@@ -344,6 +321,8 @@ async def _finalize_run(
         return
 
     # 终态（success / failed）：写根 call_log（trace 根）+ 更新 graph_run
+    # 根行 token/cost/model 从 generation 子行聚合补回（引擎已落 generation）
+    p, c, t, cost, model = await aggregate_generation_rollup(session, root_rid)
     await record_call(
         session,
         request_id=root_rid,
@@ -355,10 +334,15 @@ async def _finalize_run(
         code=200 if result.status.value == "success" else 500,
         error_message=(result.error or {}).get("message") if result.error else None,
         duration_ms=result.duration_ms,
+        prompt_tokens=p,
+        completion_tokens=c,
+        total_tokens=t,
         request_payload=_to_payload(request_input),
         response_payload=_to_payload(result.output),
         parent_id=None,
         observation_type="trace",
+        model_code=model,
+        cost_usd=cost,
     )
     run.status = result.status.value
     run.output = _jsonable(result.output)

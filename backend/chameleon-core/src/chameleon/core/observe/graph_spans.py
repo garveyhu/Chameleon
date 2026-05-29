@@ -72,6 +72,11 @@ async def persist_node_spans(*, root_request_id: str, node_runs: list[Any]) -> N
                 status = getattr(nr, "status", None)
                 success = getattr(status, "value", str(status)) == "success"
                 err = getattr(nr, "error", None)
+                # request_payload 带上 node_id/node_type —— 编辑器「日志」详情从
+                # call_logs span 反查节点时用（graph_node_runs 删除后唯一来源）。
+                req_payload = _payload(getattr(nr, "input", None), "input") or {}
+                req_payload["node_id"] = node_id
+                req_payload["node_type"] = node_type
                 await record_call(
                     session,
                     request_id=f"{root_request_id}.{node_id}",
@@ -87,7 +92,7 @@ async def persist_node_spans(*, root_request_id: str, node_runs: list[Any]) -> N
                         else None
                     ),
                     duration_ms=getattr(nr, "duration_ms", 0) or 0,
-                    request_payload=_payload(getattr(nr, "input", None), "input"),
+                    request_payload=req_payload,
                     response_payload=_payload(getattr(nr, "output", None), "output"),
                     parent_id=root_request_id,
                     observation_type=_NODE_TO_OBSERVATION_TYPE.get(

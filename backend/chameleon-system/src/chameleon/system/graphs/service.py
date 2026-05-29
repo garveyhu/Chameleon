@@ -27,9 +27,9 @@ from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.models import (
     Agent,
     ApiKey,
+    CallLog,
     EmbedConfig,
     Graph,
-    GraphNodeRun,
     GraphRun,
 )
 from chameleon.system.api_key import service as api_key_service
@@ -571,12 +571,18 @@ async def get_run(session: AsyncSession, run_id: int) -> GraphRunDetail:
         raise BusinessError(
             ResultCode.Fail, message=f"graph_run 不存在: {run_id}"
         )
-    node_rows = (
+    # 节点明细从 call_logs span 行还原（graph_node_runs 已删 —— call_logs 是唯一真相源）：
+    # 节点 span = root trace 的直接子（parent_id == run.request_id 且非 generation）。
+    # node_id / node_type 由 persist_node_spans 写在 request_payload 里。
+    span_rows = (
         (
             await session.execute(
-                select(GraphNodeRun)
-                .where(GraphNodeRun.graph_run_id == run_id)
-                .order_by(GraphNodeRun.started_at.asc(), GraphNodeRun.id.asc())
+                select(CallLog)
+                .where(
+                    CallLog.parent_id == row.request_id,
+                    CallLog.observation_type != "generation",
+                )
+                .order_by(CallLog.created_at.asc(), CallLog.id.asc())
             )
         )
         .scalars()
@@ -585,15 +591,16 @@ async def get_run(session: AsyncSession, run_id: int) -> GraphRunDetail:
     detail = GraphRunDetail.model_validate(row)
     detail.node_runs = [
         NodeRunItem(
-            node_id=n.node_id,
-            node_type=n.node_type,
-            status=n.status,
-            input=n.input,
-            output=n.output,
-            error=n.error,
-            duration_ms=n.duration_ms or 0,
+            node_id=(s.request_payload or {}).get("node_id")
+            or s.request_id.split(".", 1)[-1],
+            node_type=(s.request_payload or {}).get("node_type") or "",
+            status="success" if s.success else "failed",
+            input=(s.request_payload or {}).get("input"),
+            output=(s.response_payload or {}).get("output"),
+            error={"message": s.error_message} if s.error_message else None,
+            duration_ms=s.duration_ms or 0,
         )
-        for n in node_rows
+        for s in span_rows
     ]
     return detail
 

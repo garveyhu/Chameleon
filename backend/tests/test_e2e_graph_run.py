@@ -20,7 +20,6 @@ from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.models import (
     CallLog,
     Graph,
-    GraphNodeRun,
     GraphRun,
     Role,
     User,
@@ -106,7 +105,6 @@ async def smoke_graph():
                     CallLog.parent_id.in_(rids) | CallLog.request_id.in_(rids)
                 )
             )
-        await s.execute(delete(GraphNodeRun))
         await s.execute(delete(GraphRun).where(GraphRun.graph_id == gid))
         await s.execute(delete(Graph).where(Graph.id == gid))
         await s.commit()
@@ -115,7 +113,7 @@ async def smoke_graph():
 # ── /run 持久化 ───────────────────────────────────────────
 
 
-async def test_run_persists_graph_run_and_node_runs(
+async def test_run_persists_graph_run_and_node_spans(
     client: AsyncClient, admin_token: str, smoke_graph: dict
 ):
     r = await client.post(
@@ -131,24 +129,24 @@ async def test_run_persists_graph_run_and_node_runs(
     root_rid = body["request_id"]
     assert root_rid.startswith(f"graph-{smoke_graph['id']}-")
 
-    # DB 验证：3 个 graph_node_runs
+    # graph_node_runs 已删 —— 节点明细落在 call_logs span 行（根 trace 的直接子、
+    # 非 generation），request_id = f"{root}.{node_id}"。
     async with AsyncSessionLocal() as s:
-        rows = (
+        spans = (
             (
                 await s.execute(
-                    select(GraphNodeRun).where(
-                        GraphNodeRun.graph_run_id == body["id"]
+                    select(CallLog).where(
+                        CallLog.parent_id == root_rid,
+                        CallLog.observation_type != "generation",
                     )
                 )
             )
             .scalars()
             .all()
         )
-        assert len(rows) == 3
-        # 每个 node_run 都带 request_id（用于 trace 串联）
-        assert all(r.request_id for r in rows)
-        # 都成功
-        assert all(r.status == "success" for r in rows)
+        assert len(spans) == 3
+        assert all(sp.request_id.startswith(f"{root_rid}.") for sp in spans)
+        assert all(sp.success for sp in spans)
 
 
 async def test_run_creates_call_logs_with_trace_chain(

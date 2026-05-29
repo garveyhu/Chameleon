@@ -18,7 +18,7 @@ from typing import Any
 from loguru import logger
 
 from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import GraphNodeRun, GraphRun
+from chameleon.core.models import GraphRun
 
 
 def _as_json_obj(v: Any) -> dict | None:
@@ -43,7 +43,10 @@ async def persist_provider_run(
     error: dict[str, Any] | None,
     node_records: list[dict[str, Any]],
 ) -> None:
-    """把一次 provider 执行落成 GraphRun + 若干 GraphNodeRun（独立事务、吞异常）。"""
+    """把一次 provider 执行落成 GraphRun 运行头（独立事务、吞异常）。
+
+    节点明细（span + LLM generation）由引擎统一落 call_logs，不在这里重复。
+    """
     try:
         async with AsyncSessionLocal() as session:
             run = GraphRun(
@@ -60,23 +63,8 @@ async def persist_provider_run(
                 node_count=len(node_records),
             )
             session.add(run)
-            await session.flush()
-            for rec in node_records:
-                nid = rec["node_id"]
-                session.add(
-                    GraphNodeRun(
-                        graph_run_id=run.id,
-                        node_id=nid,
-                        node_type=rec.get("node_type") or "unknown",
-                        status=rec.get("status") or "success",
-                        output=_as_json_obj(rec.get("output")),
-                        error=rec.get("error"),
-                        request_id=f"{request_id}.{nid}",
-                        started_at=rec.get("started_at"),
-                        finished_at=rec.get("finished_at"),
-                        duration_ms=rec.get("duration_ms"),
-                    )
-                )
+            # 节点明细（span + generation）由引擎统一落 call_logs（persist_node_spans
+            # + GenerationRecorder），不再单独落 graph_node_runs —— call_logs 是唯一真相源。
             await session.commit()
     except Exception:  # noqa: BLE001
         logger.exception("persist provider graph run failed | graph_id={}", graph_id)

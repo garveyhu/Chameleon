@@ -21,7 +21,7 @@ from chameleon.core.models.dataset import (
 from chameleon.core.models.embed_config import EmbedConfig
 from chameleon.core.models.eval_job import EvalJob, EvalJobRun
 from chameleon.core.models.eval_template import EvalTemplate
-from chameleon.core.models.graph import Graph, GraphNodeRun, GraphRun
+from chameleon.core.models.graph import Graph, GraphRun
 from chameleon.core.models.human_input import HumanInputPending
 from chameleon.core.models.kb_collection import KbCollection
 from chameleon.core.models.kb_consistency import KbConsistencyReport
@@ -81,7 +81,6 @@ __all__ = [
     # 工作流
     "Graph",
     "GraphRun",
-    "GraphNodeRun",
     "HumanInputPending",
     # 工具
     "ToolInstance",

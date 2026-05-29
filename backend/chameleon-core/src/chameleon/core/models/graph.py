@@ -106,44 +106,6 @@ class GraphRun(Base):
 
     __table_args__ = (Index("ix_graph_runs_graph", "graph_id", "created_at"),)
 
-
-class GraphNodeRun(Base):
-    """单节点执行记录"""
-
-    __tablename__ = "graph_node_runs"
-
-    id: Mapped[int] = snowflake_pk()
-    graph_run_id: Mapped[int] = mapped_column(
-        BigInteger,
-        ForeignKey("graph_runs.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    node_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    node_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
-    input: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    error: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # 写入 call_logs.parent_id 实现 trace 串联（PR #21 起填充）
-    request_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        Index("ix_graph_node_runs_run", "graph_run_id"),
-        Index("ix_graph_node_runs_rid", "request_id"),
-    )
+# 节点明细不再单独建表 —— call_logs 的 span / generation 行（observation_type +
+# parent_id 自引树）是节点执行的唯一真相源。graph_runs 只留运行头 + human-input
+# resume 锚（HumanInputPending.graph_run_id FK 仍在）。
