@@ -7,19 +7,19 @@ from typing import Any
 
 import pytest
 
-from chameleon.core.agent import (
-    MAX_DEPTH,
-    A2ACallSpec,
-    A2AResult,
-    AgentRunner,
-    call_agent,
-)
 from chameleon.core.api.exceptions import (
     AgentNotFoundError,
     BusinessError,
     ResultCode,
 )
 from chameleon.core.observe.context import current_observation_id
+from chameleon.engine.agent import (
+    MAX_DEPTH,
+    A2ACallSpec,
+    A2AResult,
+    AgentRunner,
+    call_agent,
+)
 from chameleon.providers.base import (
     AGENTS,
     PROVIDERS,

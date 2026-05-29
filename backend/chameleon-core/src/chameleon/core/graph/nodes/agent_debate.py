@@ -44,10 +44,10 @@ from typing import Any
 
 from loguru import logger
 
-from chameleon.core.agent import A2ACallSpec, AgentRunner
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.node_base import Node
 from chameleon.core.graph.registry import register_node_type
+from chameleon.engine.agent import A2ACallSpec, AgentRunner
 
 #: max_rounds 硬上限（防红线绕过）
 MAX_ROUNDS_HARD_CAP = 10

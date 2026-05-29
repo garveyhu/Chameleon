@@ -1,4 +1,4 @@
-"""chameleon.core.agent —— A2A 协议 + AgentRunner
+"""chameleon.engine.agent —— A2A 协议 + AgentRunner
 
 跨 agent 调用底座，给 graph 的 agent_debate 节点 / 业务自写编排提供统一入口。
 
@@ -8,7 +8,7 @@
 - ⛔ depth < MAX_DEPTH (=3) —— 防递归爆栈
 """
 
-from chameleon.core.agent.a2a import (
+from chameleon.engine.agent.a2a import (
     MAX_DEPTH,
     A2ACallSpec,
     A2AResult,
