@@ -22,8 +22,6 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageResult
-from chameleon.core.graph import GraphSpec, NodeContext
-from chameleon.core.graph.engine import Orchestrator
 from chameleon.data.models import (
     Agent,
     ApiKey,
@@ -32,6 +30,8 @@ from chameleon.data.models import (
     Graph,
     GraphRun,
 )
+from chameleon.engine.graph import GraphSpec, NodeContext
+from chameleon.engine.graph.engine import Orchestrator
 from chameleon.system.api_key import service as api_key_service
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,

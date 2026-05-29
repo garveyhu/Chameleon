@@ -13,8 +13,8 @@ from typing import Any
 from loguru import logger
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.graph import GraphSpec
-from chameleon.core.graph.engine import Orchestrator
+from chameleon.engine.graph import GraphSpec
+from chameleon.engine.graph.engine import Orchestrator
 
 _SYSTEM_PROMPT = """\
 你是工作流编排生成器。根据用户的自然语言描述，输出一张工作流图的 JSON。

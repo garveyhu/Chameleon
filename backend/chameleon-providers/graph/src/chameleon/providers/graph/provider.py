@@ -27,14 +27,14 @@ from loguru import logger
 from pydantic import ValidationError
 
 from chameleon.core.api.exceptions import ProviderInternalError, RegistryError
-from chameleon.core.graph import GraphSpec, NodeContext
-from chameleon.core.graph.engine import Orchestrator
 from chameleon.core.observe import (
     TraceContext,
     current_trace_context,
     reset_trace_context,
     set_trace_context,
 )
+from chameleon.engine.graph import GraphSpec, NodeContext
+from chameleon.engine.graph.engine import Orchestrator
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (
     InvokeContext,

@@ -7,15 +7,15 @@ from datetime import datetime, timezone
 import pytest_asyncio
 from sqlalchemy import delete
 
-from chameleon.core.graph import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import ToolInstance
+from chameleon.engine.graph import (
     EdgeSpec,
     GraphSpec,
     NodeContext,
     NodeSpec,
 )
-from chameleon.core.graph.engine import Orchestrator
-from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import ToolInstance
+from chameleon.engine.graph.engine import Orchestrator
 
 
 @pytest_asyncio.fixture

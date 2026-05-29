@@ -127,9 +127,9 @@ async def test_tool_node_dispatches_code_runner():
     """通过 GraphExecutor 路径调 CodeRunnerTool，验证 ctx 串得通"""
     from datetime import datetime, timezone
 
-    from chameleon.core.graph.context import NodeContext
-    from chameleon.core.graph.engine import Orchestrator
-    from chameleon.core.graph.types import EdgeSpec, GraphSpec, NodeSpec
+    from chameleon.engine.graph.context import NodeContext
+    from chameleon.engine.graph.engine import Orchestrator
+    from chameleon.engine.graph.types import EdgeSpec, GraphSpec, NodeSpec
 
     spec = GraphSpec(
         nodes=[

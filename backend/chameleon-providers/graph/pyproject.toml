@@ -6,12 +6,14 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-data",
+    "chameleon-engine",
     "chameleon-providers-base",
 ]
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
 chameleon-data = { workspace = true }
+chameleon-engine = { workspace = true }
 chameleon-providers-base = { workspace = true }
 
 [build-system]

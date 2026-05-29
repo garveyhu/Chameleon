@@ -580,6 +580,7 @@ source = { editable = "chameleon-providers/graph" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-data" },
+    { name = "chameleon-engine" },
     { name = "chameleon-providers-base" },
 ]
 
@@ -587,6 +588,7 @@ dependencies = [
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
+    { name = "chameleon-engine", editable = "chameleon-engine" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
 ]
 
