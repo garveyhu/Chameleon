@@ -4,8 +4,20 @@
  * 默认选中根 trace。无顶部 tab。
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+
+import {
+  Braces,
+  ChevronDown,
+  ChevronRight,
+  ChevronsRight,
+  ChevronUp,
+  FileText,
+  Maximize2,
+  Minimize2,
+  RotateCw,
+} from 'lucide-react';
 
 import { Markdown } from '@/core/components/chat/markdown';
 import { JsonViewer } from '@/core/components/common/json-viewer';
@@ -26,45 +38,137 @@ import type { CallLogItem, TraceTreeNode } from '@/system/call_logs/types/call-l
 interface Props {
   callLog: CallLogItem | null;
   onClose: () => void;
+  /** 上/下一条（列表上下文）；不传则隐藏对应按钮 */
+  onPrev?: () => void;
+  onNext?: () => void;
+  hasPrev?: boolean;
+  hasNext?: boolean;
 }
 
-export const TraceDrawer = ({ callLog, onClose }: Props) => (
-  <Sheet open={callLog != null} onOpenChange={o => !o && onClose()}>
-    <SheetContent width="w-[1100px]">
-      <SheetHeader>
-        <SheetTitle>
-          {callLog ? (
-            <div className="flex items-center gap-2">
-              <span>{callLog.agent_key}</span>
-              <span className="font-mono text-[11.5px] text-stone-500">
-                {callLog.request_id.slice(0, 16)}…
-              </span>
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[10.5px]',
-                  callLog.success
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-rose-50 text-rose-700',
-                )}
-              >
-                {callLog.success ? '成功' : `失败 ${callLog.code}`}
-              </Badge>
-              <span className="tnum font-mono text-[11.5px] text-stone-500">
-                {formatDurationMs(callLog.duration_ms)}
-              </span>
+export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext }: Props) => {
+  const qc = useQueryClient();
+  const [full, setFull] = useState(false);
+  const [widthPx, setWidthPx] = useState(1100);
+
+  const refresh = () => {
+    if (!callLog) return;
+    qc.invalidateQueries({ queryKey: ['call-log-tree', callLog.request_id] });
+    qc.invalidateQueries({ queryKey: ['call-log-detail'] });
+  };
+
+  // 左边缘拖拽调宽：面板右贴边，宽度 = 视口宽 - 鼠标 x，clamp [560, 视口-80]
+  const startResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMove = (ev: MouseEvent) => {
+      const w = Math.max(560, Math.min(window.innerWidth - 80, window.innerWidth - ev.clientX));
+      setWidthPx(w);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+    };
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  return (
+    <Sheet open={callLog != null} onOpenChange={o => !o && onClose()}>
+      <SheetContent
+        width={full ? 'w-screen' : ''}
+        style={full ? undefined : { width: widthPx }}
+      >
+        {/* 左边缘拖拽手柄（全屏时禁用） */}
+        {!full && (
+          <div
+            onMouseDown={startResize}
+            title="拖拽调整宽度"
+            className="absolute top-0 bottom-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-blue-300/60"
+          />
+        )}
+        <SheetHeader>
+          <div className="flex items-center gap-2">
+            {/* LangSmith 式功能 icon 栏：收起 / 全屏 / 上一条 / 下一条 / 刷新 */}
+            <div className="flex items-center gap-0.5">
+              <IconBtn title="收起" onClick={onClose}>
+                <ChevronsRight className="h-4 w-4" />
+              </IconBtn>
+              <IconBtn title={full ? '退出全屏' : '全屏'} onClick={() => setFull(f => !f)}>
+                {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              </IconBtn>
+              <span className="mx-0.5 h-4 w-px bg-stone-200" />
+              <IconBtn title="上一条" onClick={onPrev} disabled={!onPrev || !hasPrev}>
+                <ChevronUp className="h-4 w-4" />
+              </IconBtn>
+              <IconBtn title="下一条" onClick={onNext} disabled={!onNext || !hasNext}>
+                <ChevronDown className="h-4 w-4" />
+              </IconBtn>
+              <IconBtn title="刷新" onClick={refresh}>
+                <RotateCw className="h-4 w-4" />
+              </IconBtn>
             </div>
-          ) : (
-            '加载中…'
-          )}
-        </SheetTitle>
-      </SheetHeader>
-      <SheetBody className="!p-0">
-        {/* 按 request_id remount → 切到新 trace 时选中态自动重置回根（避开 effect setState） */}
-        {callLog && <TraceBody key={callLog.request_id} requestId={callLog.request_id} />}
-      </SheetBody>
-    </SheetContent>
-  </Sheet>
+            <span className="h-4 w-px bg-stone-200" />
+            <SheetTitle className="!m-0">
+              {callLog ? (
+                <div className="flex items-center gap-2">
+                  <span>{callLog.agent_key}</span>
+                  <span className="font-mono text-[11.5px] text-stone-500">
+                    {callLog.request_id.slice(0, 16)}…
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-[10.5px]',
+                      callLog.success
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-rose-50 text-rose-700',
+                    )}
+                  >
+                    {callLog.success ? '成功' : `失败 ${callLog.code}`}
+                  </Badge>
+                  <span className="tnum font-mono text-[11.5px] text-stone-500">
+                    {formatDurationMs(callLog.duration_ms)}
+                  </span>
+                </div>
+              ) : (
+                '加载中…'
+              )}
+            </SheetTitle>
+          </div>
+        </SheetHeader>
+        <SheetBody className="!p-0">
+          {/* 按 request_id remount → 切到新 trace 时选中态自动重置回根（避开 effect setState） */}
+          {callLog && <TraceBody key={callLog.request_id} requestId={callLog.request_id} />}
+        </SheetBody>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+const IconBtn = ({
+  title,
+  onClick,
+  disabled,
+  children,
+}: {
+  title: string;
+  onClick?: () => void;
+  disabled?: boolean;
+  children: React.ReactNode;
+}) => (
+  <button
+    type="button"
+    title={title}
+    onClick={onClick}
+    disabled={disabled}
+    className={cn(
+      'rounded-md p-1.5 text-stone-500 transition',
+      disabled ? 'cursor-not-allowed opacity-30' : 'hover:bg-stone-100 hover:text-stone-800',
+    )}
+  >
+    {children}
+  </button>
 );
 
 const TraceBody = ({ requestId }: { requestId: string }) => {
@@ -225,32 +329,42 @@ const PayloadView = ({
   const text = pickText(payload, textKeys);
   const messages = text ? parseMessages(text) : null;
   const [raw, setRaw] = useState(!text); // 无主文本时直接看原始
+  const [open, setOpen] = useState(true); // 默认展开，可折叠
   const empty = !payload || Object.keys(payload).length === 0;
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] font-medium text-stone-700">{title}</span>
-        {text && (
-          <div className="flex overflow-hidden rounded-md border border-stone-200 text-[11px]">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1 text-[12px] font-medium text-stone-700 hover:text-stone-900"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          {title}
+        </button>
+        {open && text && (
+          <div className="flex overflow-hidden rounded-md border border-stone-200">
             <button
               type="button"
+              title="Markdown 渲染"
               onClick={() => setRaw(false)}
-              className={cn('px-2 py-0.5', !raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+              className={cn('px-1.5 py-1', !raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
             >
-              Markdown
+              <FileText className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
+              title="原始 JSON"
               onClick={() => setRaw(true)}
-              className={cn('px-2 py-0.5', raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+              className={cn('px-1.5 py-1', raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
             >
-              原始
+              <Braces className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
       </div>
-      {empty ? (
+      {!open ? null : empty ? (
         <div className="rounded-md border border-dashed border-stone-200 px-3 py-4 text-center text-[11.5px] text-stone-400">
           无内容
         </div>

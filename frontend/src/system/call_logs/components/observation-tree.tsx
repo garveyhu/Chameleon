@@ -8,9 +8,13 @@
  *   - 失败节点用红字 + 错误 message tooltip
  */
 
+import { useState } from 'react';
+
 import {
   AlertCircle,
   Bot,
+  ChevronDown,
+  ChevronRight,
   CircleDashed,
   Cpu,
   Database,
@@ -103,6 +107,8 @@ const TreeRow: React.FC<TreeRowProps> = ({
 
   const widthPct = Math.max(2, Math.min(100, (node.duration_ms / totalDuration) * 100));
   const isSelected = selectedId === node.request_id;
+  const hasChildren = node.children.length > 0;
+  const [collapsed, setCollapsed] = useState(false);
 
   return (
     <>
@@ -123,6 +129,28 @@ const TreeRow: React.FC<TreeRowProps> = ({
             style={{ left: (depth - 1) * 14 + 10 }}
           />
         ) : null}
+
+        {/* 折叠箭头（有子节点时）；点它只折叠不选中 */}
+        {hasChildren ? (
+          <span
+            role="button"
+            tabIndex={-1}
+            title={collapsed ? '展开' : '折叠'}
+            className="-mr-1 shrink-0 rounded p-0.5 text-stone-400 hover:bg-stone-200/70 hover:text-stone-700"
+            onClick={e => {
+              e.stopPropagation();
+              setCollapsed(c => !c);
+            }}
+          >
+            {collapsed ? (
+              <ChevronRight className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+          </span>
+        ) : (
+          <span className="-mr-1 w-4 shrink-0" />
+        )}
 
         <Icon className={cn('h-3.5 w-3.5 shrink-0', colorCls)} />
         <span className={cn('w-16 shrink-0 font-medium', colorCls)}>{otype}</span>
@@ -179,7 +207,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
         </div>
       </button>
 
-      {node.children.length > 0
+      {hasChildren && !collapsed
         ? node.children.map(child => (
             <TreeRow
               key={String(child.id)}

@@ -371,7 +371,24 @@ export const SessionLedgerPage = () => {
           }}
         />
       </SectionCard>
-      <TraceDrawer callLog={traceLog} onClose={() => setTraceLog(null)} />
+      <TraceDrawer
+        callLog={traceLog}
+        onClose={() => setTraceLog(null)}
+        onPrev={() => {
+          const i = rows.findIndex(r => r.id === traceLog?.id);
+          if (i > 0) setTraceLog(rows[i - 1]);
+        }}
+        onNext={() => {
+          const i = rows.findIndex(r => r.id === traceLog?.id);
+          if (i >= 0 && i < rows.length - 1) setTraceLog(rows[i + 1]);
+        }}
+        hasPrev={!!traceLog && rows.findIndex(r => r.id === traceLog.id) > 0}
+        hasNext={
+          !!traceLog &&
+          rows.findIndex(r => r.id === traceLog.id) < rows.length - 1 &&
+          rows.some(r => r.id === traceLog.id)
+        }
+      />
     </div>
   );
 };
