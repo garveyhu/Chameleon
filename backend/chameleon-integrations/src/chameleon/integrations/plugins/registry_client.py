@@ -40,7 +40,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.core.plugins.signing import (
+from chameleon.integrations.plugins.signing import (
     InvalidSignatureError,
     verify_manifest,
 )

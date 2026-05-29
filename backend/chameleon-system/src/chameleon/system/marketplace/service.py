@@ -20,14 +20,15 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.plugins import PluginManifest, plugin_registry
-from chameleon.core.plugins.registry_client import (
+from chameleon.core.plugins import PluginManifest
+from chameleon.data.models import PluginInstance, PluginRegistryEntry
+from chameleon.integrations.plugins import plugin_registry
+from chameleon.integrations.plugins.registry_client import (
     RegistryClientError,
     RemotePluginEntry,
     fetch_and_verify_manifest,
     fetch_index,
 )
-from chameleon.data.models import PluginInstance, PluginRegistryEntry
 from chameleon.system.marketplace.schemas import (
     AddRegistryRequest,
     InstallFromRemoteRequest,

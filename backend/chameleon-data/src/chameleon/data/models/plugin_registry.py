@@ -3,7 +3,7 @@
 业务：admin 配置的远端 Plugin Registry（marketplace）。
 
 注意区分两个 PluginRegistry：
-- `chameleon.core.plugins.registry.PluginRegistry`：进程内单例，管已安装插件
+- `chameleon.integrations.plugins.registry.PluginRegistry`：进程内单例，管已安装插件
 - `chameleon.data.models.plugin_registry.PluginRegistryEntry`：DB 行，
   存远端 marketplace 的 URL + 凭据 + 同步时间戳
 """

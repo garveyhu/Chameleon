@@ -9,7 +9,6 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.core.plugins.signing import generate_keypair, sign_manifest
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import (
     PluginInstance,
@@ -19,6 +18,7 @@ from chameleon.data.models import (
     UserRole,
 )
 from chameleon.data.utils.passwords import hash_password
+from chameleon.integrations.plugins.signing import generate_keypair, sign_manifest
 from chameleon.system.seed.runner import run_seed_if_empty
 
 

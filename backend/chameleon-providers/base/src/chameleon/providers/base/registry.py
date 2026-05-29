@@ -447,9 +447,11 @@ async def init_registry() -> None:
     # Plugin bootstrap：seed builtin manifest + 获取 provider 维度禁用集
     disabled_provider_keys: set[str] = set()
     try:
-        from chameleon.core.plugins import plugin_registry
-        from chameleon.core.plugins.builtins import BUILTIN_PROVIDERS
         from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.integrations.plugins import (
+            BUILTIN_PROVIDERS,
+            plugin_registry,
+        )
 
         async with AsyncSessionLocal() as s:
             await plugin_registry.bootstrap_builtin(s, BUILTIN_PROVIDERS)

@@ -6,7 +6,7 @@ import base64
 
 import pytest
 
-from chameleon.core.plugins.signing import (
+from chameleon.integrations.plugins.signing import (
     InvalidSignatureError,
     generate_keypair,
     sign_manifest,

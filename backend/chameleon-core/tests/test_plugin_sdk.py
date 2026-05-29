@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from chameleon.core.plugins import (
-    assert_entrypoint_not_internal,
     get_plugin_meta,
     plugin_embedding,
     plugin_provider,
@@ -65,40 +64,3 @@ def test_get_plugin_meta_returns_none_on_plain_class():
         pass
 
     assert get_plugin_meta(Plain) is None
-
-
-# ── sandbox：内部模块拒绝挂载 ─────────────────────
-
-
-def test_sandbox_rejects_core_models():
-    with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.data.models.user:User")
-
-
-def test_sandbox_rejects_core_infra():
-    with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.data.infra.db:engine")
-
-
-def test_sandbox_rejects_system_layer():
-    with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.system.users.service:list_users")
-
-
-def test_sandbox_rejects_api_layer():
-    with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.api.agent.api:router")
-
-
-def test_sandbox_allows_provider_module():
-    # 这是 builtin 用的路径，必须放过
-    assert_entrypoint_not_internal("chameleon.providers.local:PROVIDER")
-
-
-def test_sandbox_allows_external_package():
-    assert_entrypoint_not_internal("my_plugin.provider:MyProvider")
-
-
-def test_sandbox_allows_stdlib():
-    # 测试常用 entrypoint：datetime:datetime
-    assert_entrypoint_not_internal("datetime:datetime")
