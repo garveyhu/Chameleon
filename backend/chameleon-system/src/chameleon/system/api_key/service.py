@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.infra.auth import SCOPE_PREFIX, generate_api_key
-from chameleon.core.models import ApiKey, CallLog
+from chameleon.data.infra.auth import SCOPE_PREFIX, generate_api_key
+from chameleon.data.models import ApiKey, CallLog
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
     ApiKeyItem,
@@ -158,7 +158,7 @@ async def aggregate_generation_rollup(
     """
     from sqlalchemy import func, select
 
-    from chameleon.core.models import CallLog
+    from chameleon.data.models import CallLog
 
     # generation 子行：直挂根 OR 挂在「根的直接子节点 span」下
     span_match = CallLog.parent_id.like(f"{parent_request_id}.%")

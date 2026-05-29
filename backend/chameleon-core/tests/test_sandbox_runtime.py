@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 
 import pytest
@@ -17,7 +16,6 @@ from chameleon.core.sandbox import (
 )
 from chameleon.core.sandbox.mock import MockSandboxRuntime
 from chameleon.core.sandbox.runtime import is_production
-
 
 # ── config 上下界校验 ────────────────────────────────────
 

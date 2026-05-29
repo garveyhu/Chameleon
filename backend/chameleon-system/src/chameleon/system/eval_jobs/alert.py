@@ -20,8 +20,8 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.components.notifier import get_notifier
-from chameleon.core.infra import redis as redis_infra
-from chameleon.core.models import EvalJob, EvalJobRun
+from chameleon.data.infra import redis as redis_infra
+from chameleon.data.models import EvalJob, EvalJobRun
 
 _DEFAULT_THRESHOLD = Decimal("0.0")  # 不配则不触发
 _DEFAULT_SILENCE_SEC = 3600  # 1 小时

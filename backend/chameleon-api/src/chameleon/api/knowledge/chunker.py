@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from chameleon.core.utils import tokenizer
+from chameleon.data.utils import tokenizer
 
 _SENTENCE_SEP = re.compile(r"(?<=[。！？!?\.])\s*")
 _DEFAULT_CHUNK_SIZE = 800

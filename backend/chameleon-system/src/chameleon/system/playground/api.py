@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import ValidationError
 from chameleon.core.api.sse import sse_response
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.auth.dependencies import CurrentUser, require_permission
 from chameleon.system.playground import service
 

@@ -2,24 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import patch
-
 import pytest
-import respx
 from httpx import Response
 
 from chameleon.core.tools import (
-    Tool,
     ToolContext,
-    ToolResult,
     get_tool_class,
     list_tool_keys,
 )
 from chameleon.core.tools.base import _validate_args
 from chameleon.core.tools.builtins.http import HTTPTool
 from chameleon.core.tools.builtins.sql import SQLTool
-
 
 # ── registry ─────────────────────────────────────────────
 

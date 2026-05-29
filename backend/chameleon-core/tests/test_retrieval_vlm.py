@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import pytest
-
 from chameleon.core.retrieval import (
-    CaptionResult,
     Hit,
     HybridConfig,
     generate_caption,
     generate_captions_batch,
     metadata_filter,
 )
-
 
 # ── VLM caption（PR #81） ──────────────────────────────
 

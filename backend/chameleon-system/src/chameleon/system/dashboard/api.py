@@ -19,8 +19,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
-from chameleon.core.infra.db import get_session
-from chameleon.core.models import CallLog
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import CallLog
 from chameleon.system.auth.dependencies import require_permission
 
 

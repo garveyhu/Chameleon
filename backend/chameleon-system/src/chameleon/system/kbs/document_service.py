@@ -24,9 +24,9 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
-from chameleon.core.utils.snowflake import next_id
 from chameleon.core.vector import get_store
+from chameleon.data.models import Chunk, Document, KnowledgeBase, Task
+from chameleon.data.utils.snowflake import next_id
 
 # ── KB 创建（复用业务层 create_kb：kb_key 唯一 + embedding 维度校验） ──
 
@@ -611,7 +611,7 @@ async def update_chunk(
     chunk = await _get_chunk(session, kb_id=kb_id, doc_id=doc_id, chunk_id=chunk_id)
     if content is not None and content.strip() and content != chunk.content:
         from chameleon.core.embedding import get_embedding_client
-        from chameleon.core.utils.tokenizer import approx_tokens
+        from chameleon.data.utils.tokenizer import approx_tokens
 
         kb = await _get_kb(session, kb_id)
         embedder = get_embedding_client(kb.embedding_model)

@@ -7,12 +7,11 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.sandbox import SandboxConfig, SandboxRuntimeError
+from chameleon.core.sandbox import SandboxConfig
 
 
 def _docker_available() -> bool:
     try:
-        import docker
         from chameleon.core.sandbox.docker import DockerSandboxRuntime
 
         rt = DockerSandboxRuntime()
@@ -124,7 +123,6 @@ def test_docker_module_import_doesnt_blow_up_when_docker_missing(
 ):
     """构造一个找不到 docker 包的场景，验证模块 import 行为可控"""
     import importlib
-    import sys
 
     # 真实流程：DockerSandboxRuntime() 抛 SandboxRuntimeError
     # 但 module 本身 import 不应该崩

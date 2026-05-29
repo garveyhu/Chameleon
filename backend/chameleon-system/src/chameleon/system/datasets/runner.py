@@ -6,7 +6,7 @@
 3. judge(expected, actual) → score → 写一条 dataset_run_items + score 行
 4. 终态 aggregate summary 写回 dataset_runs
 
-scores 表打通：每 item 评分同时写 chameleon.core.models.Score 行（source='eval'）
+scores 表打通：每 item 评分同时写 chameleon.data.models.Score 行（source='eval'）
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import (
+from chameleon.data.models import (
     Dataset,
     DatasetItem,
     DatasetRun,

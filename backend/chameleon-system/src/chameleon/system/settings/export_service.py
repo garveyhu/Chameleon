@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from chameleon.core.config.system_settings_schema import schema_dict
-from chameleon.core.models import (
+from chameleon.data.models import (
     Agent,
     ApiKey,
     EmbedConfig,
@@ -35,7 +35,7 @@ from chameleon.core.models import (
     Setting,
     User,
 )
-from chameleon.core.utils.crypto import get_or_decrypt
+from chameleon.data.utils.crypto import get_or_decrypt
 
 # ── 各域 → dict ────────────────────────────────────────────
 

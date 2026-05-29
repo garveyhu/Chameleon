@@ -21,24 +21,23 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import delete
 
 from chameleon.core.api.response import Result
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.infra.redis import get_redis
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.infra.redis import get_redis
+from chameleon.data.models import (
     Permission,
     Role,
     RolePermission,
     User,
     UserRole,
 )
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.auth.dependencies import (
     CurrentUser,
     get_current_user,
     require_permission,
     require_role,
 )
-from chameleon.system.auth.rate_limit import MAX_ATTEMPTS, _key as rate_key
-
+from chameleon.system.auth.rate_limit import MAX_ATTEMPTS
 
 # ── fixture：建测试用户 + 角色 + 权限 ───────────────────────
 

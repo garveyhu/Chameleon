@@ -22,10 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.components.llms.base import BaseLLM
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import LLMModel, Provider
 from chameleon.core.observe.llm_recorder import GenerationRecorder
-from chameleon.core.utils.crypto import get_or_decrypt
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import LLMModel, Provider
+from chameleon.data.utils.crypto import get_or_decrypt
 
 # 进程内 cache（启动期一次性 load）
 _CACHE: dict[str, BaseLLM] = {}

@@ -19,16 +19,16 @@ from chameleon.api.sessions.schemas import (
     ChatSessionItem,
     MessageItem,
 )
-from chameleon.core.infra.auth import CurrentApp
-from chameleon.core.config import inventory
 from chameleon.core.api.exceptions import (
     BusinessError,
     ChatSessionNotFoundError,
     ResultCode,
 )
-from chameleon.core.models import ChatSession, Message
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.utils.snowflake import next_session_id
+from chameleon.core.config import inventory
+from chameleon.data.infra.auth import CurrentApp
+from chameleon.data.models import ChatSession, Message
+from chameleon.data.utils.snowflake import next_session_id
 from chameleon.providers.base.types import Message as ProviderMessage
 
 # ── 创建 / 取 / 软删 ──────────────────────────────────────

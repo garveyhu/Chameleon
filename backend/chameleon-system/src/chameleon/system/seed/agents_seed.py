@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.config.constants import CONFIG_PATH
-from chameleon.core.models import Agent
+from chameleon.data.models import Agent
 
 
 async def seed_agents(

@@ -14,8 +14,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import KbMetadataField, KnowledgeBase
-from chameleon.core.models.kb_metadata_field import METADATA_FIELD_TYPES
+from chameleon.data.models import KbMetadataField, KnowledgeBase
+from chameleon.data.models.kb_metadata_field import METADATA_FIELD_TYPES
 
 FieldType = Literal["string", "number", "select", "time"]
 _KEY_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]*$")

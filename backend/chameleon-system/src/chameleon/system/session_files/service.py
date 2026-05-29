@@ -30,10 +30,10 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.config import inventory
 from chameleon.core.embedding.factory import get_embedding_client
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.infra.object_store import get_object_store
-from chameleon.core.models import SessionFile, SessionFileChunk
-from chameleon.core.utils.snowflake import next_id
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.infra.object_store import get_object_store
+from chameleon.data.models import SessionFile, SessionFileChunk
+from chameleon.data.utils.snowflake import next_id
 
 # ── 配置 ────────────────────────────────────────────────────
 

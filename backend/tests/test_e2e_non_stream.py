@@ -171,9 +171,9 @@ async def test_cross_app_session_isolation(client: AsyncClient) -> None:
     """app A 的 session app B 看不到（表现为 NotFound，不泄漏存在性）"""
     import secrets
 
+    from chameleon.data.infra.db import AsyncSessionLocal
     from chameleon.system.api_key.schemas import CreateApiKeyRequest
     from chameleon.system.api_key.service import create_api_key
-    from chameleon.core.infra.db import AsyncSessionLocal
 
     rand = secrets.token_hex(3)
     async with AsyncSessionLocal() as s:

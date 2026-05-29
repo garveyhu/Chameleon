@@ -23,7 +23,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # 共享 ORM 的 MetaData object（autogenerate 用）
-from chameleon.core.models import Base  # noqa: E402
+from chameleon.data.models import Base  # noqa: E402
 
 target_metadata = Base.metadata
 

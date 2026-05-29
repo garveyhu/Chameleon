@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ModelPricing
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import ModelPricing
 from chameleon.system.pricing import (
     calc_cost,
     get_active_pricing,

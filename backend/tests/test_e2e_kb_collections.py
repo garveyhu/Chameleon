@@ -8,15 +8,15 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import (
     KbCollection,
     KnowledgeBase,
     Role,
     User,
     UserRole,
 )
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.seed.runner import run_seed_if_empty
 
 

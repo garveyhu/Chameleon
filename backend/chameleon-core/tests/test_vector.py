@@ -5,10 +5,10 @@ import secrets
 import pytest
 from sqlalchemy import delete
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Chunk, Document, KnowledgeBase
 from chameleon.core.vector.base import ChunkPayload
 from chameleon.core.vector.pgvector import PgVectorStore
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Chunk, Document, KnowledgeBase
 
 
 def _vec(values: list[float], dim: int = 1536) -> list[float]:

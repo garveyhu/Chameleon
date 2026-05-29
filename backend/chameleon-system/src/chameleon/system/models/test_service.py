@@ -26,8 +26,8 @@ from chameleon.core.api.sse_events import (
 )
 from chameleon.core.components.llms.base import BaseLLM
 from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
-from chameleon.core.models import LLMModel, Provider
-from chameleon.core.utils.crypto import get_or_decrypt
+from chameleon.data.models import LLMModel, Provider
+from chameleon.data.utils.crypto import get_or_decrypt
 
 PING_PROMPT = "请用一句话简短自我介绍。"
 DEFAULT_STREAM_MAX_TOKENS = 128

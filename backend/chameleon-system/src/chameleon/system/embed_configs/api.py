@@ -17,8 +17,8 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageResult, Result
-from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent, EmbedConfig
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import Agent, EmbedConfig
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import (

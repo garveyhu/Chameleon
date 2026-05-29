@@ -20,7 +20,7 @@ from chameleon.core.api.exceptions import (
     LoginFailedError,
     RefreshTokenInvalidError,
 )
-from chameleon.core.infra.jwt import (
+from chameleon.data.infra.jwt import (
     ACCESS_TTL_SECONDS,
     REFRESH_TTL_SECONDS,
     decode_token,
@@ -29,8 +29,8 @@ from chameleon.core.infra.jwt import (
     encode_refresh_token,
     revoke_token,
 )
-from chameleon.core.models import Permission, Role, User
-from chameleon.core.utils.passwords import (
+from chameleon.data.models import Role, User
+from chameleon.data.utils.passwords import (
     hash_password,
     needs_rehash,
     verify_password,

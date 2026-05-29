@@ -15,8 +15,8 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.models import Role, User, UserRole
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.models import Role, User, UserRole
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.users.schemas import (
     CreateUserRequest,
     ResetPasswordRequest,

@@ -47,11 +47,11 @@ from chameleon.core.graph.node_base import (
     Node,
     NodeStatus,
 )
-from chameleon.core.observe.context import ObservationType, observe
 from chameleon.core.graph.registry import default_factory as _registry_default_factory
 from chameleon.core.graph.results import NodeRunResult, RunResult
 from chameleon.core.graph.results import duration_ms as _ms
 from chameleon.core.graph.types import GraphSpec, NodeSpec
+from chameleon.core.observe.context import ObservationType, observe
 
 
 class OrchestratorConfig(BaseModel):

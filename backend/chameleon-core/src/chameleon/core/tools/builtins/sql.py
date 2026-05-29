@@ -40,7 +40,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from chameleon.core.tools.base import Tool, ToolContext, ToolResult
 from chameleon.core.tools.registry import register_tool
 
-
 # 严格白名单：只允许这些 SQL 起始关键字
 _ALLOWED_PREFIX = re.compile(r"^\s*(SELECT|WITH)\b", re.IGNORECASE)
 

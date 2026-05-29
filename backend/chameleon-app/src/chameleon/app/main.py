@@ -19,12 +19,12 @@ from loguru import logger
 from sqlalchemy import text
 
 from chameleon.api.agent import flat_api_router
-from chameleon.api.sessions import sessions_router
 from chameleon.api.embed import embed_router
 from chameleon.api.files import files_router
 from chameleon.api.knowledge import knowledge_router
 from chameleon.api.openai import openai_router
 from chameleon.api.otel import otel_router
+from chameleon.api.sessions import sessions_router
 from chameleon.api.task import tasks_router
 from chameleon.core.api.exceptions import (
     BusinessError,
@@ -33,12 +33,12 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result, SafeIntJSONResponse
 from chameleon.core.components.llms.factory import reload_llm_cache
-from chameleon.core.infra import redis as redis_infra
-from chameleon.core.infra.db import engine
-from chameleon.core.infra.jwt import init_jwt
-from chameleon.core.infra.logger import setup_logger
-from chameleon.core.infra.object_store import get_object_store
-from chameleon.core.utils.crypto import init_crypto
+from chameleon.data.infra import redis as redis_infra
+from chameleon.data.infra.db import engine
+from chameleon.data.infra.jwt import init_jwt
+from chameleon.data.infra.logger import setup_logger
+from chameleon.data.infra.object_store import get_object_store
+from chameleon.data.utils.crypto import init_crypto
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
@@ -49,7 +49,6 @@ from chameleon.system.auth import auth_router
 from chameleon.system.dashboard import dashboard_router
 from chameleon.system.datasets import datasets_router
 from chameleon.system.embed_configs import embed_configs_router
-from chameleon.system.session_files import session_files_router
 from chameleon.system.eval_jobs import eval_jobs_router
 from chameleon.system.eval_jobs import scheduler as eval_scheduler
 from chameleon.system.eval_templates import eval_templates_router
@@ -66,6 +65,7 @@ from chameleon.system.schemas import schemas_router
 from chameleon.system.scores import scores_router
 from chameleon.system.search import search_router
 from chameleon.system.seed import run_seed_if_empty
+from chameleon.system.session_files import session_files_router
 from chameleon.system.settings import settings_router
 from chameleon.system.tools import tools_router
 from chameleon.system.users import users_router
@@ -119,7 +119,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # P22.1：model_pricing seed（幂等，已存在 model_code 跳过）
     try:
-        from chameleon.core.infra.db import AsyncSessionLocal
+        from chameleon.data.infra.db import AsyncSessionLocal
         from chameleon.system.pricing import seed_default_pricing
 
         async with AsyncSessionLocal() as _s:

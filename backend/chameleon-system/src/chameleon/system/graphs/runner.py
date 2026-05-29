@@ -28,12 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
-from chameleon.core.models import (
+from chameleon.core.observe.context import TraceContext, open_trace_scope
+from chameleon.data.models import (
     Graph,
     GraphRun,
     HumanInputPending,
 )
-from chameleon.core.observe.context import TraceContext, open_trace_scope
 from chameleon.system.api_key.service import (
     aggregate_generation_rollup,
     record_call,

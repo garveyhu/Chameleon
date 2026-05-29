@@ -24,7 +24,7 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import PageResult
 from chameleon.core.graph import GraphSpec, NodeContext
 from chameleon.core.graph.engine import Orchestrator
-from chameleon.core.models import (
+from chameleon.data.models import (
     Agent,
     ApiKey,
     CallLog,

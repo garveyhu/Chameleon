@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import ApiKey, KnowledgeBase
+from chameleon.data.models import ApiKey, KnowledgeBase
 from chameleon.system.api_key import service as api_key_service
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,

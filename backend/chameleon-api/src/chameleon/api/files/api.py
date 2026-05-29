@@ -28,9 +28,8 @@ from chameleon.api.files.schemas import (
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import Result
-from chameleon.core.infra.auth import CurrentApp, current_app_or_admin
-from chameleon.core.infra.object_store import get_object_store
-
+from chameleon.data.infra.auth import CurrentApp, current_app_or_admin
+from chameleon.data.infra.object_store import get_object_store
 
 router = APIRouter(prefix="/v1/files", tags=["files"])
 

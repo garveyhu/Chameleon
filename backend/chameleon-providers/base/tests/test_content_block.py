@@ -14,7 +14,6 @@ from chameleon.providers.base.types import (
     normalize_content,
 )
 
-
 # ── normalize 兼容多种形态 ───────────────────────────────
 
 

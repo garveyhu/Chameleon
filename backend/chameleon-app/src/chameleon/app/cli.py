@@ -15,11 +15,11 @@ import sys
 import click
 from sqlalchemy import select
 
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.infra.logger import setup_logger
+from chameleon.data.models import ApiKey
 from chameleon.system.api_key.schemas import CreateApiKeyRequest
 from chameleon.system.api_key.service import create_api_key
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.infra.logger import setup_logger
-from chameleon.core.models import ApiKey
 
 
 @click.group()

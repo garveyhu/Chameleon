@@ -236,7 +236,7 @@ class GenerationRecorder(AsyncCallbackHandler):
     ) -> None:
         """落一条 generation call_log；归属字段从 TraceContext 拿，无 scope 兜底"""
         # 延迟 import 避免循环依赖（infra/db 反过来依赖 models → observe）
-        from chameleon.core.infra.db import AsyncSessionLocal
+        from chameleon.data.infra.db import AsyncSessionLocal
         from chameleon.system.api_key.service import record_call
 
         tc = current_trace_context()

@@ -5,14 +5,13 @@ from __future__ import annotations
 import pytest
 
 from chameleon.core.retrieval import (
-    HybridConfig,
     Hit,
+    HybridConfig,
     HybridPipeline,
     dedupe_by_chunk_id,
     fuse_rrf,
     metadata_filter,
 )
-
 
 # ── dedupe ──────────────────────────────────────────────
 

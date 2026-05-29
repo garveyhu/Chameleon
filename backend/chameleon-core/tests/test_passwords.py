@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.utils.passwords import (
+from chameleon.data.utils.passwords import (
     hash_password,
     needs_rehash,
     verify_password,

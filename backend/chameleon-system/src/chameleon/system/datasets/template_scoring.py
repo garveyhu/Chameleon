@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.eval import get_algorithm
-from chameleon.core.models import (
+from chameleon.data.models import (
     DatasetItem,
     DatasetRunItem,
     EvalTemplate,

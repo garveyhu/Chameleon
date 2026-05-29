@@ -6,7 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ── SessionPolicy（落 embed_configs.session_policy JSON）─────────────
 
 

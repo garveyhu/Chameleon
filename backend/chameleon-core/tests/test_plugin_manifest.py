@@ -11,7 +11,6 @@ from chameleon.core.plugins.manifest import (
     PluginManifest,
 )
 
-
 # ── 基本接受 ────────────────────────────────────────
 
 

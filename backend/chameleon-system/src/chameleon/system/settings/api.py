@@ -23,8 +23,8 @@ from chameleon.core.config.system_settings_schema import (
     SYSTEM_SETTINGS_SCHEMA,
     schema_dict,
 )
-from chameleon.core.infra.db import get_session
-from chameleon.core.models import LLMModel, ModelDefault, Setting
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import LLMModel, ModelDefault, Setting
 from chameleon.system.auth.dependencies import (
     CurrentUser,
     require_permission,

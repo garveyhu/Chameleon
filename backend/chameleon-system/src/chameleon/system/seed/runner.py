@@ -24,8 +24,8 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import (
     Permission,
     Role,
     RolePermission,

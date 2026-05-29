@@ -45,7 +45,6 @@ from chameleon.core.plugins.signing import (
     verify_manifest,
 )
 
-
 _HTTP_TIMEOUT = 10.0
 _MAX_INDEX_BYTES = 2 * 1024 * 1024  # 2MB
 _MAX_MANIFEST_BYTES = 64 * 1024  # 64KB

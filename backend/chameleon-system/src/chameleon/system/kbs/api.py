@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageParams, PageResult, Result
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.api_key.schemas import ApiKeyCreated, ApiKeyItem
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context

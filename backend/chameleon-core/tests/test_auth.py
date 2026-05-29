@@ -9,15 +9,15 @@ from chameleon.core.api.exceptions import (
     PermissionDeniedError,
     ResultCode,
 )
-from chameleon.core.infra.auth import (
+from chameleon.data.infra.auth import (
     CurrentApp,
     current_app,
     generate_api_key,
     hash_api_key,
     require_scope,
 )
-from chameleon.core.infra.db import AsyncSessionLocal, get_session
-from chameleon.core.models import ApiKey
+from chameleon.data.infra.db import AsyncSessionLocal, get_session
+from chameleon.data.models import ApiKey
 
 
 @pytest.fixture(autouse=True)

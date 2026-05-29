@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from chameleon.core.models import CallLog
+from chameleon.data.models import CallLog
 
 
 @dataclass(slots=True)

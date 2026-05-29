@@ -24,7 +24,6 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "p26_a01_session_files_v2"
 down_revision: Union[str, Sequence[str], None] = "p25_b01_session_files"
 branch_labels: Union[str, Sequence[str], None] = None

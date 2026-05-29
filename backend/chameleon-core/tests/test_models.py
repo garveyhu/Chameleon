@@ -10,8 +10,8 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import (
     Agent,
     ApiKey,
     ChatSession,
@@ -24,7 +24,7 @@ from chameleon.core.models import (
     User,
     UserRole,
 )
-from chameleon.core.utils.snowflake import next_id
+from chameleon.data.utils.snowflake import next_id
 
 
 @pytest.fixture(autouse=True)

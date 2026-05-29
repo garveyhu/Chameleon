@@ -16,6 +16,7 @@ members = [
     "chameleon-api",
     "chameleon-app",
     "chameleon-core",
+    "chameleon-data",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
     "chameleon-provider-graph",
@@ -306,6 +307,7 @@ version = "1.0.0"
 source = { editable = "chameleon-api" }
 dependencies = [
     { name = "chameleon-core" },
+    { name = "chameleon-data" },
     { name = "chameleon-providers-base" },
     { name = "fastapi" },
     { name = "openpyxl" },
@@ -319,6 +321,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "openpyxl", specifier = ">=3.1" },
@@ -340,6 +343,7 @@ dependencies = [
     { name = "chameleon-agent-qwen-chat" },
     { name = "chameleon-api" },
     { name = "chameleon-core" },
+    { name = "chameleon-data" },
     { name = "chameleon-provider-dify" },
     { name = "chameleon-provider-fastgpt" },
     { name = "chameleon-provider-local" },
@@ -360,6 +364,7 @@ requires-dist = [
     { name = "chameleon-agent-qwen-chat", editable = "chameleon-agents/qwen_chat" },
     { name = "chameleon-api", editable = "chameleon-api" },
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-provider-dify", editable = "chameleon-providers/dify" },
     { name = "chameleon-provider-fastgpt", editable = "chameleon-providers/fastgpt" },
     { name = "chameleon-provider-local", editable = "chameleon-providers/local" },
@@ -424,6 +429,47 @@ requires-dist = [
 ]
 
 [[package]]
+name = "chameleon-data"
+version = "1.0.0"
+source = { editable = "chameleon-data" }
+dependencies = [
+    { name = "argon2-cffi" },
+    { name = "asyncpg" },
+    { name = "chameleon-core" },
+    { name = "cryptography" },
+    { name = "jieba" },
+    { name = "loguru" },
+    { name = "minio" },
+    { name = "pgvector" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyjwt", extra = ["crypto"] },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "redis" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "argon2-cffi", specifier = ">=23" },
+    { name = "asyncpg", specifier = ">=0.29" },
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "cryptography", specifier = ">=43" },
+    { name = "jieba", specifier = ">=0.42" },
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "minio", specifier = ">=7.2" },
+    { name = "pgvector", specifier = ">=0.3" },
+    { name = "pydantic", specifier = ">=2.7" },
+    { name = "pydantic-settings", specifier = ">=2.4" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
+    { name = "python-dotenv", specifier = ">=1.0" },
+    { name = "pyyaml", specifier = ">=6" },
+    { name = "redis", specifier = ">=5.0" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+]
+
+[[package]]
 name = "chameleon-provider-dify"
 version = "0.1.0"
 source = { editable = "chameleon-providers/dify" }
@@ -463,12 +509,14 @@ version = "0.1.0"
 source = { editable = "chameleon-providers/graph" }
 dependencies = [
     { name = "chameleon-core" },
+    { name = "chameleon-data" },
     { name = "chameleon-providers-base" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
 ]
 
@@ -497,6 +545,7 @@ version = "0.1.0"
 source = { editable = "chameleon-providers/base" }
 dependencies = [
     { name = "chameleon-core" },
+    { name = "chameleon-data" },
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
@@ -504,6 +553,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pyyaml", specifier = ">=6" },
 ]
@@ -515,6 +565,7 @@ source = { editable = "chameleon-system" }
 dependencies = [
     { name = "apscheduler" },
     { name = "chameleon-core" },
+    { name = "chameleon-data" },
     { name = "chameleon-providers-base" },
     { name = "fastapi" },
     { name = "pydantic", extra = ["email"] },
@@ -524,6 +575,7 @@ dependencies = [
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.10,<4" },
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "pydantic", extras = ["email"], specifier = ">=2.7" },

@@ -92,7 +92,6 @@ class KBNode(Node[Any, dict]):
             )
             # session_id 也可能直接在 ctx；fallback 没有时落空 hits
             if not session_id:
-                from chameleon.core.graph.context import NodeContext as _NC
 
                 session_id = getattr(ctx, "session_id", None)
             eph_kb_key = await _resolve_ephemeral_kb_key(session_id) if session_id else None
@@ -141,8 +140,8 @@ async def _resolve_ephemeral_kb_key(session_id: str) -> str | None:
     """按 session_id 找 ephemeral KB 的 kb_key（独立 AsyncSession 短查询）"""
     from sqlalchemy import select
 
-    from chameleon.core.infra.db import AsyncSessionLocal
-    from chameleon.core.models import KnowledgeBase, SessionFile
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import KnowledgeBase, SessionFile
 
     async with AsyncSessionLocal() as db:
         kb_id = (

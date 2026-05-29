@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from chameleon.core.retrieval import (
     Hit,
     make_dedupe_reranker,
@@ -11,7 +9,6 @@ from chameleon.core.retrieval import (
     make_llm_judge_reranker,
     pass_through,
 )
-
 
 # ── pass_through ───────────────────────────────────────
 

@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chameleon.api.agent import service
 from chameleon.api.agent.schemas import InvokeRequest, MessageInput
 from chameleon.api.openai.schemas import OAChatRequest
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.auth import CurrentApp, current_app
+from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1", tags=["openai-compat"])
 

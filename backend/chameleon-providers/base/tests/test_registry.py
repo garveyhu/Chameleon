@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlalchemy import delete
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Agent
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Agent
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.registry import (
     AGENTS,

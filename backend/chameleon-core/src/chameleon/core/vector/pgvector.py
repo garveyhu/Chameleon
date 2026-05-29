@@ -13,10 +13,10 @@ from __future__ import annotations
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Chunk
-from chameleon.core.utils import tokenizer
 from chameleon.core.vector.base import ChunkHit, ChunkPayload, VectorStore
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Chunk
+from chameleon.data.utils import tokenizer
 
 
 class PgVectorStore(VectorStore):

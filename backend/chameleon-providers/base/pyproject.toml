@@ -5,12 +5,14 @@ description = "Chameleon Provider 协议 + AgentDef + StreamEvent + registry"
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
+    "chameleon-data",
     "pydantic>=2.7",
     "pyyaml>=6",
 ]
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
+chameleon-data = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

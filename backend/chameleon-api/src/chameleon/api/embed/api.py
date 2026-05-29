@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.embed import service as embed_service
@@ -21,18 +22,15 @@ from chameleon.api.embed.schemas import (
     CreateNewSessionResponse,
     CreateSessionRequest,
     EmbedSessionItem,
-    RenameSessionRequest,
 )
 from chameleon.api.sessions.schemas import MessageItem
-from chameleon.core.models import Message
-from chameleon.core.utils.snowflake import next_session_id
-from sqlalchemy import select
 from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import Message
+from chameleon.data.utils.snowflake import next_session_id
 from chameleon.system.scores import service as score_service
 from chameleon.system.scores.schemas import FeedbackRequest, ScoreItem
-
 
 # ── DTO ────────────────────────────────────────────────────
 
@@ -266,7 +264,7 @@ async def list_my_session_messages(
         .all()
     )
     # 一次性查 scores 表把 thumbs 反馈合到 message 上（widget 历史回放高亮 👍/👎）
-    from chameleon.core.models import Score
+    from chameleon.data.models import Score
 
     rids = [r.request_id for r in rows if r.request_id]
     feedback_map: dict[str, int] = {}
@@ -486,9 +484,9 @@ async def embed_files_finalize(
     e, end_user_id = await _resolve_token_context(
         embed_key, body.session_token, origin, session
     )
+    from chameleon.api.embed import session as embed_session_mod
     from chameleon.api.files.api import finalize_uploaded_object
     from chameleon.api.files.schemas import FinalizeRequest
-    from chameleon.api.embed import session as embed_session_mod
     from chameleon.system.session_files import service as sf_svc
 
     inner = FinalizeRequest(expected_size=body.expected_size)

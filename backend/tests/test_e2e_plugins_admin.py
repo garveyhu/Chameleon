@@ -8,9 +8,9 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import PluginInstance, Role, User, UserRole
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import PluginInstance, Role, User, UserRole
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.seed.runner import run_seed_if_empty
 
 
@@ -122,7 +122,7 @@ async def test_install_rejects_internal_entrypoint(
     client: AsyncClient, admin_token: str
 ):
     manifest = _valid_manifest()
-    manifest["entrypoint"] = "chameleon.core.models.user:User"
+    manifest["entrypoint"] = "chameleon.data.models.user:User"
     r = await client.post(
         "/v1/admin/plugins/install",
         headers=_hdr(admin_token),

@@ -14,9 +14,9 @@ from chameleon.api.sessions.schemas import (
     ChatSessionItem,
     MessageItem,
 )
-from chameleon.core.infra.auth import CurrentApp, current_app_or_admin
-from chameleon.core.infra.db import get_session
 from chameleon.core.api.response import PageParams, PageResult, Result
+from chameleon.data.infra.auth import CurrentApp, current_app_or_admin
+from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1/sessions", tags=["sessions"])
 

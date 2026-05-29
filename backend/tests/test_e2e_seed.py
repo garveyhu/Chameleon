@@ -13,8 +13,8 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 
-from chameleon.core.infra.db import AsyncSessionLocal, engine
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal, engine
+from chameleon.data.models import (
     Agent,
     ApiKey,
     Permission,
@@ -22,7 +22,7 @@ from chameleon.core.models import (
     Role,
     User,
 )
-from chameleon.core.utils.crypto import decrypt, encrypt
+from chameleon.data.utils.crypto import decrypt, encrypt
 from chameleon.system.seed.defaults import all_permissions
 from chameleon.system.seed.runner import run_seed_if_empty
 

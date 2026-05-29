@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from chameleon.core.utils.snowflake import (
+from chameleon.data.utils.snowflake import (
     _MAX_INSTANCE,
     _Snowflake,
     next_id,

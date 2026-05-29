@@ -9,7 +9,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import ModelPricing
+from chameleon.data.models import ModelPricing
 
 #: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
 #: 改这里只影响新装的库；已存在 model_pricing 行不会被覆盖（seed_if_empty）

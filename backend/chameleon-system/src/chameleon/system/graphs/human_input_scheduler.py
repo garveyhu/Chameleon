@@ -10,7 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
-from chameleon.core.infra.db import AsyncSessionLocal
+from chameleon.data.infra.db import AsyncSessionLocal
 
 _scheduler: AsyncIOScheduler | None = None
 _SWEEP_INTERVAL_MIN = 5

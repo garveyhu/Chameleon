@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import AppTemplate
+from chameleon.data.models import AppTemplate
 from chameleon.system.app_templates.schemas import (
     CATEGORIES,
     AppTemplateItem,

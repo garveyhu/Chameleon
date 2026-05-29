@@ -5,11 +5,13 @@ description = "Chameleon graph provider —— 把可视化编排的工作流(gr
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
+    "chameleon-data",
     "chameleon-providers-base",
 ]
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
+chameleon-data = { workspace = true }
 chameleon-providers-base = { workspace = true }
 
 [build-system]

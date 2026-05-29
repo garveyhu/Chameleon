@@ -5,6 +5,7 @@ description = "Chameleon 对外 AI 服务能力包（business-facing API：agent
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
+    "chameleon-data",
     "chameleon-providers-base",
     "fastapi>=0.115",
     "pydantic>=2.7",
@@ -18,6 +19,7 @@ dependencies = [
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
+chameleon-data = { workspace = true }
 chameleon-providers-base = { workspace = true }
 
 [build-system]

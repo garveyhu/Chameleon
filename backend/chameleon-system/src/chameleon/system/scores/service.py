@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import CallLog, Score
+from chameleon.data.models import CallLog, Score
 from chameleon.system.scores.schemas import (
     CreateScoreRequest,
     FeedbackRequest,

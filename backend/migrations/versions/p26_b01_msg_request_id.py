@@ -19,7 +19,6 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "p26_b01_msg_request_id"
 down_revision: Union[str, Sequence[str], None] = "p26_a01_session_files_v2"
 branch_labels: Union[str, Sequence[str], None] = None

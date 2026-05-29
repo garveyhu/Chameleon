@@ -32,7 +32,6 @@ from chameleon.core.sandbox.runtime import (
     is_production,
 )
 
-
 _PY_BIN_CACHE: dict[Language, str] = {}
 
 

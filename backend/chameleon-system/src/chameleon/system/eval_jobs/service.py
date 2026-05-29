@@ -19,7 +19,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import Dataset, EvalJob, EvalJobRun
+from chameleon.data.models import Dataset, EvalJob, EvalJobRun
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets.judges import JUDGES
 from chameleon.system.eval_jobs.alert import maybe_send_alert
@@ -30,7 +30,6 @@ from chameleon.system.eval_jobs.schemas import (
     TriggerEvalJobResult,
     UpdateEvalJobRequest,
 )
-
 
 # ── CRUD ────────────────────────────────────────────────
 

@@ -21,8 +21,8 @@ from chameleon.api.otel.schemas import (
     ExportTraceServiceRequest,
     ExportTraceServiceResponse,
 )
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.auth import CurrentApp, current_app
+from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1/otel", tags=["otel"])
 

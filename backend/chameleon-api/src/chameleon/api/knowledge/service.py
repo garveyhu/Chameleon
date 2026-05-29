@@ -34,8 +34,8 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.components.knowledge import search_kb
 from chameleon.core.config import inventory
-from chameleon.core.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.core.vector import get_store
+from chameleon.data.models import Chunk, Document, KnowledgeBase, Task
 
 # ── KB CRUD ─────────────────────────────────────────────
 

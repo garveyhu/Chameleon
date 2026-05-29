@@ -10,8 +10,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageResult, Result
-from chameleon.core.infra.db import get_session
-from chameleon.core.models import AuditLog
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import AuditLog
 from chameleon.system.auth.dependencies import require_permission
 
 

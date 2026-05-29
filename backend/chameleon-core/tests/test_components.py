@@ -12,7 +12,7 @@ from chameleon.core.base import (
 from chameleon.core.components import cache, embedding, llm, search_kb, vector
 from chameleon.core.components.cache import CacheManager
 from chameleon.core.components.llms import BaseLLM, ChatDeepSeek, ChatQwen
-from chameleon.core.utils import model_to_dict
+from chameleon.data.utils import model_to_dict
 
 # ── inventory 顶层 callable ─────────────────────────────
 
@@ -146,7 +146,7 @@ def test_model_to_dict_basic():
     """ORM → dict 转换（用真实 ApiKey 模型）"""
     import secrets as _s
 
-    from chameleon.core.models import ApiKey
+    from chameleon.data.models import ApiKey
 
     key = ApiKey(
         app_id="test-conv",
@@ -168,7 +168,7 @@ def test_model_to_dict_basic():
 def test_crypto_encrypt_decrypt_roundtrip(monkeypatch):
     import base64
 
-    from chameleon.core.utils.crypto import decrypt, encrypt, is_encrypted
+    from chameleon.data.utils.crypto import decrypt, encrypt, is_encrypted
 
     key = base64.urlsafe_b64encode(b"x" * 32).decode()
     monkeypatch.setenv("CHAMELEON_CRYPTO_KEY", key)
@@ -181,7 +181,7 @@ def test_crypto_encrypt_decrypt_roundtrip(monkeypatch):
 def test_crypto_get_or_decrypt(monkeypatch):
     import base64
 
-    from chameleon.core.utils.crypto import encrypt, get_or_decrypt
+    from chameleon.data.utils.crypto import encrypt, get_or_decrypt
 
     key = base64.urlsafe_b64encode(b"y" * 32).decode()
     monkeypatch.setenv("CHAMELEON_CRYPTO_KEY", key)

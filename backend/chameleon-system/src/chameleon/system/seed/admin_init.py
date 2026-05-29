@@ -11,8 +11,8 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from chameleon.core.config.constants import LOG_DIR
-from chameleon.core.models import User
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.models import User
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.seed.defaults import (
     DEFAULT_ADMIN_DISPLAY_NAME,
     DEFAULT_ADMIN_LOCALE,

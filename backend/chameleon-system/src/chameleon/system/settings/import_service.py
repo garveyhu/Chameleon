@@ -18,7 +18,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import (
+from chameleon.data.models import (
     Agent,
     ApiKey,
     EmbedConfig,

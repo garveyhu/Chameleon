@@ -18,8 +18,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import KbCollection, KnowledgeBase
-from chameleon.core.models.kb_collection import COLLECTION_TYPES, DEFAULT_INDEXES
+from chameleon.data.models import KbCollection, KnowledgeBase
+from chameleon.data.models.kb_collection import COLLECTION_TYPES, DEFAULT_INDEXES
 
 CollectionType = Literal["generic", "faq", "wiki", "api"]
 

@@ -10,22 +10,20 @@ from __future__ import annotations
 
 import secrets
 
-import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
 from chameleon.core.components.llms.factory import (
-    LLMFactory,
     _CACHE,
+    LLMFactory,
     invalidate_llm,
     reload_llm_cache,
 )
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Agent, LLMModel, Provider
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Agent, LLMModel
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.providers.base.registry import PROVIDERS
-
 
 # ── LLM cache ─────────────────────────────────────────────
 

@@ -17,8 +17,8 @@ from typing import Any
 
 from loguru import logger
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import GraphRun
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import GraphRun
 
 
 def _as_json_obj(v: Any) -> dict | None:

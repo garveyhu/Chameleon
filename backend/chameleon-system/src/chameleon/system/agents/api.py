@@ -29,8 +29,8 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageResult, Result
-from chameleon.core.infra.db import get_session
-from chameleon.core.models import Agent, ApiKey, CallLog, EmbedConfig, Graph
+from chameleon.data.infra.db import get_session
+from chameleon.data.models import Agent, ApiKey, CallLog, EmbedConfig, Graph
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service, prefill_service
 from chameleon.system.agents.prefill_service import AgentPrefillConfig
@@ -446,7 +446,7 @@ async def test_agent(
             message=f"agent_key {a.agent_key} 不在 registry，请确认 reload"
         )
 
-    from chameleon.core.utils.snowflake import next_session_id
+    from chameleon.data.utils.snowflake import next_session_id
     from chameleon.providers.base import PROVIDERS
     from chameleon.providers.base.types import InvokeContext
 
@@ -530,7 +530,7 @@ async def _build_slots_response(
     session: AsyncSession, agent: Agent
 ) -> AgentModelSlotsResponse:
     from chameleon.agentkit import declared_agents
-    from chameleon.core.models.model_def import LLMModel
+    from chameleon.data.models.model_def import LLMModel
 
     manifest = declared_agents().get(agent.agent_key)
     bindings = agent.model_bindings or {}
@@ -585,7 +585,7 @@ async def update_agent_model_bindings(
     _: object = Depends(require_permission("agents:write")),
 ) -> Result[AgentModelSlotsResponse]:
     from chameleon.agentkit import declared_agents
-    from chameleon.core.models.model_def import LLMModel
+    from chameleon.data.models.model_def import LLMModel
 
     agent = await _get_or_404(session, agent_id)
     manifest = declared_agents().get(agent.agent_key)

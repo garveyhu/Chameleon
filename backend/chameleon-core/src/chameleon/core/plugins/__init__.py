@@ -5,24 +5,24 @@ PluginRegistry 骨架；hot reload (admin enable/disable 不重启) + builtin se
 """
 
 from chameleon.core.plugins.manifest import (
-    PluginManifest,
-    ManifestPermissions,
     ManifestConfigField,
-    PluginType,
+    ManifestPermissions,
+    PluginManifest,
     PluginSource,
+    PluginType,
 )
 from chameleon.core.plugins.registry import (
-    PluginRegistry,
     PluginEntry,
-    plugin_registry,
+    PluginRegistry,
     assert_entrypoint_not_internal,
+    plugin_registry,
 )
 from chameleon.core.plugins.sdk import (
     PluginMeta,
+    get_plugin_meta,
+    plugin_embedding,
     plugin_provider,
     plugin_tool,
-    plugin_embedding,
-    get_plugin_meta,
 )
 
 __all__ = [

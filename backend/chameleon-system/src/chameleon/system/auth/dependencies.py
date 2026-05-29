@@ -21,8 +21,8 @@ from chameleon.core.api.exceptions import (
     JwtMissingError,
     PermissionDeniedError,
 )
-from chameleon.core.infra.db import get_session
-from chameleon.core.infra.jwt import JwtInvalidToken, decode_token_with_blacklist
+from chameleon.data.infra.db import get_session
+from chameleon.data.infra.jwt import JwtInvalidToken, decode_token_with_blacklist
 from chameleon.system.auth import service as auth_service
 
 

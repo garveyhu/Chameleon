@@ -34,14 +34,13 @@ from chameleon.core.api.exceptions import (
     ProviderError,
     ResultCode,
 )
-from chameleon.core.infra.auth import CurrentApp
-from chameleon.core.infra.db import AsyncSessionLocal
 from chameleon.core.observe import (
     TraceContext,
-    reset_trace_context,
     set_trace_context,
 )
-from chameleon.core.utils.spans import SpanRecorder
+from chameleon.data.infra.auth import CurrentApp
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.utils.spans import SpanRecorder
 from chameleon.providers.base import AGENTS, PROVIDERS
 from chameleon.providers.base.types import (
     AgentDef,
@@ -189,7 +188,7 @@ def _assert_agent_scope(current_app: CurrentApp, agent_key: str) -> None:
     invoke / stream_invoke 共用入口，覆盖 /v1/invoke 与 /v1/chat/completions。
     作用域域名为 "app"（智能体已升格为「应用」），scope_ref = agent_key。
     """
-    from chameleon.core.infra.auth import assert_scope
+    from chameleon.data.infra.auth import assert_scope
 
     assert_scope(current_app, "app", agent_key)
 

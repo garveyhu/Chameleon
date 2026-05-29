@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.infra import redis as redis_infra
+from chameleon.data.infra import redis as redis_infra
 
 
 @pytest.mark.asyncio

@@ -12,18 +12,17 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import PluginInstance
 from chameleon.core.plugins import (
     PluginManifest,
     plugin_registry,
 )
+from chameleon.data.models import PluginInstance
 from chameleon.system.plugins.schemas import (
     InstallPluginRequest,
     PluginActionResult,
     PluginInstanceItem,
     UpdateConfigRequest,
 )
-
 
 # ── 查询 ────────────────────────────────────────────
 

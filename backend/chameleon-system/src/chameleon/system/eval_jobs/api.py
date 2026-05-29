@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.eval_jobs import scheduler, service
 from chameleon.system.eval_jobs.schemas import (

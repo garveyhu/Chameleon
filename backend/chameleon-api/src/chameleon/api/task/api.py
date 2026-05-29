@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.task import service
 from chameleon.api.task.schemas import TaskItem
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
 from chameleon.core.api.response import Result
+from chameleon.data.infra.auth import CurrentApp, current_app
+from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1/tasks", tags=["tasks"])
 

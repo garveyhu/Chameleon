@@ -17,7 +17,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import (
+from chameleon.data.models import (
     CallLog,
     Dataset,
     DatasetItem,

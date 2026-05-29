@@ -33,8 +33,8 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import KnowledgeBase, RetrievalEvaluation
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import KnowledgeBase, RetrievalEvaluation
 from chameleon.system.kbs.document_service import search_chunks
 
 # ── CRUD ──────────────────────────────────────────────────

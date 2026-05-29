@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chameleon.core.utils import tokenizer
+from chameleon.data.utils import tokenizer
 
 # ── count / encode / decode ─────────────────────────────
 

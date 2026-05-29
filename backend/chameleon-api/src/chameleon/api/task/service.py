@@ -8,9 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.task.schemas import TaskItem
-from chameleon.core.infra.auth import CurrentApp
 from chameleon.core.api.exceptions import TaskNotFoundError
-from chameleon.core.models import Task
+from chameleon.data.infra.auth import CurrentApp
+from chameleon.data.models import Task
 
 
 async def get_task(

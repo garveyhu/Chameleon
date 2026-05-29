@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.models import (
+from chameleon.core.observe import aggregate_rollups
+from chameleon.data.models import (
     Agent,
     ApiKey,
     CallLog,
@@ -22,7 +23,6 @@ from chameleon.core.models import (
     Message,
     Score,
 )
-from chameleon.core.observe import aggregate_rollups
 from chameleon.providers.base import PROVIDERS
 from chameleon.system.admin.schemas import (
     CallLogDetailItem,

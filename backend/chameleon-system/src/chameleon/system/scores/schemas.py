@@ -7,7 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-
 ScoreDataType = Literal["numeric", "categorical", "boolean", "text"]
 ScoreSource = Literal["annotation", "api", "eval", "feedback"]
 

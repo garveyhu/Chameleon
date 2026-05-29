@@ -27,16 +27,16 @@ from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import PluginInstance
 from chameleon.core.plugins.manifest import PluginManifest
+from chameleon.data.models import PluginInstance
 
 _LOAD_TIMEOUT_SEC = 5.0
 
 # Plugin 不许把 entrypoint 指向这些内部模块路径，防越权拿 DB / admin / API 内部能力
 _FORBIDDEN_ENTRYPOINT_PREFIXES = (
-    "chameleon.core.models",
-    "chameleon.core.infra",
-    "chameleon.core.utils.crypto",
+    "chameleon.data.models",
+    "chameleon.data.infra",
+    "chameleon.data.utils.crypto",
     "chameleon.system",
     "chameleon.api",
     "chameleon.app",

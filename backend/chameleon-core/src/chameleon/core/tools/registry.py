@@ -7,7 +7,6 @@ from __future__ import annotations
 
 from chameleon.core.tools.base import Tool
 
-
 _REGISTRY: dict[str, type[Tool]] = {}
 
 

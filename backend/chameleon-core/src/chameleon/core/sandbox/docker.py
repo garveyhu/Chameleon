@@ -27,7 +27,6 @@ from chameleon.core.sandbox.runtime import (
     SandboxRuntimeError,
 )
 
-
 _DEFAULT_IMAGES: dict[Language, str] = {
     "python": "python:3.12-alpine",
     "node": "node:20-alpine",
@@ -125,7 +124,6 @@ class DockerSandboxRuntime(SandboxRuntime):
         config: SandboxConfig,
     ) -> SandboxResult:
         """同步路径：起容器 → 喂 stdin（代码） → wait → 取 logs → cleanup"""
-        import docker  # noqa: F401（确保已可用）
         from docker.errors import (
             APIError,
             ContainerError,

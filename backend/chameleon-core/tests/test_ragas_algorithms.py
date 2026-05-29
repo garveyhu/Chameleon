@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from chameleon.core.eval import (
-    REGISTRY,
     get_algorithm,
     list_algorithms,
 )
@@ -13,7 +12,6 @@ from chameleon.core.eval.algorithms.judge_helpers import (
     jaccard_similarity,
     parse_yes_no,
 )
-
 
 # ── 注册表 ────────────────────────────────────────────────
 

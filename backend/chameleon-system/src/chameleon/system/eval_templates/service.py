@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.models import EvalTemplate
+from chameleon.data.models import EvalTemplate
 from chameleon.system.eval_templates.schemas import (
     CreateEvalTemplateRequest,
     EvalTemplateItem,

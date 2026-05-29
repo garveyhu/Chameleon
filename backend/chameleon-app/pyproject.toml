@@ -5,6 +5,7 @@ description = "Chameleon FastAPI 启动器（薄，仅装配 chameleon-api + cha
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
+    "chameleon-data",
     "chameleon-providers-base",
     "chameleon-provider-local",
     "chameleon-provider-dify",
@@ -27,6 +28,7 @@ dependencies = [
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
+chameleon-data = { workspace = true }
 chameleon-providers-base = { workspace = true }
 chameleon-provider-local = { workspace = true }
 chameleon-provider-dify = { workspace = true }

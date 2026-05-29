@@ -14,7 +14,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import AuditLog
+from chameleon.data.models import AuditLog
 
 
 async def write_audit_log(

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.app_templates import service as t_service
 from chameleon.system.app_templates.schemas import (
     AppTemplateItem,

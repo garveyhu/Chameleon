@@ -8,8 +8,8 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ApiKey, CallLog
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import ApiKey, CallLog
 from chameleon.system.api_key.schemas import CreateApiKeyRequest
 from chameleon.system.api_key.service import create_api_key
 from chameleon.system.pricing import seed_default_pricing

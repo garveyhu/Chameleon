@@ -81,19 +81,19 @@ _bootstrap_test_db()
 
 from chameleon.app.main import create_app
 from chameleon.core.embedding import set_for_test as set_embedding_for_test
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.infra.jwt import init_jwt
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.infra.jwt import init_jwt
+from chameleon.data.models import (
     ApiKey,
     CallLog,
-    Chunk,
     ChatSession,
+    Chunk,
     Document,
     KnowledgeBase,
     Message,
     Task,
 )
-from chameleon.core.utils.crypto import init_crypto
+from chameleon.data.utils.crypto import init_crypto
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import (

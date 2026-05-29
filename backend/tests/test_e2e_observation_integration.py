@@ -10,9 +10,9 @@ import secrets
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import CallLog
 from chameleon.core.observe import ObservationType, observe
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import CallLog
 from chameleon.system.api_key.service import record_call
 
 

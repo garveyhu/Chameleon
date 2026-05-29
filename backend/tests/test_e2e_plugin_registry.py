@@ -7,11 +7,11 @@ import secrets
 import pytest_asyncio
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import PluginInstance
 from chameleon.core.plugins import PluginRegistry
 from chameleon.core.plugins.builtins import BUILTIN_PROVIDERS
 from chameleon.core.plugins.manifest import PluginManifest
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import PluginInstance
 
 
 @pytest_asyncio.fixture(autouse=True)

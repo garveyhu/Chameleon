@@ -32,7 +32,6 @@ from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.embedding import get_embedding_client
-from chameleon.core.models import Chunk, Document
 from chameleon.core.retrieval.expander import (
     CompleteFn,
     expand_queries,
@@ -40,7 +39,8 @@ from chameleon.core.retrieval.expander import (
 )
 from chameleon.core.retrieval.hybrid import Hit, HybridConfig, HybridPipeline
 from chameleon.core.retrieval.rerankers import build_reranker
-from chameleon.core.utils import tokenizer
+from chameleon.data.models import Chunk, Document
+from chameleon.data.utils import tokenizer
 
 
 @dataclass

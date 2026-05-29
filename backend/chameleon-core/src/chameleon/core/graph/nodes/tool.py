@@ -27,14 +27,14 @@ from sqlalchemy import select
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.node_base import Node
 from chameleon.core.graph.registry import register_node_type
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ToolInstance
 from chameleon.core.tools import (
     ToolContext,
     ToolResult,
     get_tool_class,
 )
 from chameleon.core.tools.registry import register_tool as _register_tool_real
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import ToolInstance
 
 
 def register_tool(tool_cls):  # noqa: ANN001

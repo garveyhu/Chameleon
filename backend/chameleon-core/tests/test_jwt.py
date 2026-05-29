@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import secrets
 import time
 
 import pytest
 
-from chameleon.core.infra import redis as redis_infra
-from chameleon.core.infra.jwt import (
+from chameleon.data.infra import redis as redis_infra
+from chameleon.data.infra.jwt import (
     JwtInvalidToken,
     JwtNotConfigured,
     decode_token,
@@ -75,7 +74,7 @@ def test_expired_token_rejected(monkeypatch):
     import jwt as pyjwt
 
     _set_secret(monkeypatch)
-    from chameleon.core.infra.jwt import _get_secret
+    from chameleon.data.infra.jwt import _get_secret
 
     expired = pyjwt.encode(
         {

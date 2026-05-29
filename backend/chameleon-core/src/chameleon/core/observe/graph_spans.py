@@ -59,7 +59,7 @@ async def persist_node_spans(*, root_request_id: str, node_runs: list[Any]) -> N
     if tc is None or not node_runs:
         return
 
-    from chameleon.core.infra.db import AsyncSessionLocal
+    from chameleon.data.infra.db import AsyncSessionLocal
     from chameleon.system.api_key.service import record_call
 
     try:

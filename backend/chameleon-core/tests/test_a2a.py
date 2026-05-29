@@ -33,7 +33,6 @@ from chameleon.providers.base import (
 )
 from chameleon.providers.base.types import _StreamAggregator  # noqa: F401
 
-
 # ── stub provider 和 agent ──────────────────────────────
 
 

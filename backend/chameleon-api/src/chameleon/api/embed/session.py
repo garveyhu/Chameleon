@@ -13,8 +13,8 @@ from __future__ import annotations
 import secrets
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.infra.redis import get_redis
-from chameleon.core.utils.snowflake import next_session_id
+from chameleon.data.infra.redis import get_redis
+from chameleon.data.utils.snowflake import next_session_id
 
 SESSION_TTL_SECONDS = 60 * 60  # 1h
 RATE_LIMIT_PER_MINUTE = 5

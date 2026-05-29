@@ -18,8 +18,8 @@ from chameleon.api.sessions.schemas import (
     MessageItem,
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.infra.auth import CurrentApp
-from chameleon.core.models import ChatSession, Message
+from chameleon.data.infra.auth import CurrentApp
+from chameleon.data.models import ChatSession, Message
 from chameleon.providers.base import AGENTS, PROVIDERS, InvokeContext
 from chameleon.providers.base.types import Message as ProviderMessage
 

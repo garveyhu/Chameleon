@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.config.constants import CONFIG_PATH
 from chameleon.core.config.system_settings_schema import schema_dict, schema_group
-from chameleon.core.models import Setting
+from chameleon.data.models import Setting
 
 
 def _flatten(d: dict[str, Any], prefix: str = "") -> dict[str, Any]:

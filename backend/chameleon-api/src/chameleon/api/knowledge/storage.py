@@ -6,7 +6,7 @@ object key 约定："kb_uploads/{kb_id}/{doc_id}.bin"
 
 from __future__ import annotations
 
-from chameleon.core.infra.object_store import get_object_store
+from chameleon.data.infra.object_store import get_object_store
 
 
 def object_key(kb_id: int, doc_id: int) -> str:

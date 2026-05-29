@@ -14,7 +14,7 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.models import Agent, AgentKbLink, KnowledgeBase
+from chameleon.data.models import Agent, AgentKbLink, KnowledgeBase
 
 
 async def _get_agent(session: AsyncSession, agent_id: int) -> Agent:

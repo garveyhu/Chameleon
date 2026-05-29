@@ -26,7 +26,7 @@ from typing import Any
 
 from chameleon.api.knowledge.chunker import split
 from chameleon.api.knowledge.chunkers.base import ChunkPayload
-from chameleon.core.utils import tokenizer
+from chameleon.data.utils import tokenizer
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+?)\s*$", re.MULTILINE)
 _DEFAULT_MAX_CHUNK = 2000

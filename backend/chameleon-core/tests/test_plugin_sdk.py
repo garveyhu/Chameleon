@@ -7,12 +7,11 @@ import pytest
 from chameleon.core.plugins import (
     assert_entrypoint_not_internal,
     get_plugin_meta,
+    plugin_embedding,
     plugin_provider,
     plugin_tool,
-    plugin_embedding,
 )
 from chameleon.core.plugins.sdk import PluginMeta
-
 
 # ── decorators 附加元数据 ───────────────────────────
 
@@ -73,12 +72,12 @@ def test_get_plugin_meta_returns_none_on_plain_class():
 
 def test_sandbox_rejects_core_models():
     with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.core.models.user:User")
+        assert_entrypoint_not_internal("chameleon.data.models.user:User")
 
 
 def test_sandbox_rejects_core_infra():
     with pytest.raises(ValueError, match="内部模块沙箱"):
-        assert_entrypoint_not_internal("chameleon.core.infra.db:engine")
+        assert_entrypoint_not_internal("chameleon.data.infra.db:engine")
 
 
 def test_sandbox_rejects_system_layer():

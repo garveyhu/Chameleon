@@ -15,7 +15,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.models import GraphRun, HumanInputPending
+from chameleon.data.models import GraphRun, HumanInputPending
 from chameleon.system.graphs.schemas import PendingInputItem
 
 

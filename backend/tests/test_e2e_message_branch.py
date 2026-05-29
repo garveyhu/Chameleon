@@ -9,8 +9,8 @@ from sqlalchemy import delete, select
 
 from chameleon.api.sessions.schemas import AppendMessageDraft
 from chameleon.api.sessions.service import append, create
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import ChatSession, Message
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import ChatSession, Message
 
 
 @pytest_asyncio.fixture

@@ -16,11 +16,11 @@ from httpx import AsyncClient
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Role, User, UserRole
 from chameleon.core.schema import register
 from chameleon.core.schema.registry import _reset_for_tests
-from chameleon.core.utils.passwords import hash_password
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Role, User, UserRole
+from chameleon.data.utils.passwords import hash_password
 from chameleon.system.seed.runner import run_seed_if_empty
 
 

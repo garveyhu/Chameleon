@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageParams, PageResult, Result
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.admin import service
 from chameleon.system.admin.schemas import (
     CallLogDetailItem,

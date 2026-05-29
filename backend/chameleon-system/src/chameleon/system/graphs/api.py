@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import PageResult, Result
 from chameleon.core.api.sse import sse_response
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.db import get_session
 from chameleon.system.api_key.schemas import ApiKeyCreated, ApiKeyItem
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.graphs import generator as graph_generator

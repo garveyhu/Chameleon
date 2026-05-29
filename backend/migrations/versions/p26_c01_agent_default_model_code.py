@@ -22,7 +22,6 @@ from typing import Union
 import sqlalchemy as sa
 from alembic import op
 
-
 revision: str = "p26_c01_agent_default_model_code"
 down_revision: Union[str, Sequence[str], None] = "p26_b01_msg_request_id"
 branch_labels: Union[str, Sequence[str], None] = None

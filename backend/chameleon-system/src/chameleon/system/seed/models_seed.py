@@ -14,8 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.config.constants import CONFIG_PATH
-from chameleon.core.models import LLMModel, ModelDefault, Provider
-from chameleon.core.utils.crypto import encrypt
+from chameleon.data.models import LLMModel, ModelDefault, Provider
+from chameleon.data.utils.crypto import encrypt
 
 
 def _load_model_json(config_dir: Path | None) -> dict | None:

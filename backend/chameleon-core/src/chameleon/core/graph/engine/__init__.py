@@ -9,7 +9,7 @@
 设计原则：
 - Node API 完全兼容（红线：现 Node.execute() 签名不许动）
 - 不依赖 DB / Redis；纯内存数据结构（DB 写入由 GraphRunner service 层负责）
-- 事件流走现 SSE 协议（chameleon.core.infra.sse.SSEEventKind）
+- 事件流走现 SSE 协议（chameleon.data.infra.sse.SSEEventKind）
 
 借鉴：/Users/links/Coding/Hub/dify/api/core/workflow/graph_engine/ 模块化思路
 （不直接 cp 代码；Go-flavor → asyncio + dataclass + Pydantic 重写）

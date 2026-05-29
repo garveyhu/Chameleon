@@ -30,8 +30,8 @@ from chameleon.api.knowledge.schemas import (
 )
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult, Result
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.auth import CurrentApp, current_app
+from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1/kb", tags=["knowledge"])
 

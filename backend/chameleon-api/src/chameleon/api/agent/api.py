@@ -24,8 +24,8 @@ from chameleon.api.agent.schemas import (
 from chameleon.api.agent.stream import sse_iter
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import Result
-from chameleon.core.infra.auth import CurrentApp, current_app
-from chameleon.core.infra.db import get_session
+from chameleon.data.infra.auth import CurrentApp, current_app
+from chameleon.data.infra.db import get_session
 
 
 def _resolve_agent_key_from_key(app: CurrentApp, body_agent_key: str | None) -> str:

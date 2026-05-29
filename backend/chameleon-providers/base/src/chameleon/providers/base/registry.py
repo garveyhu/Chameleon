@@ -21,7 +21,7 @@ from loguru import logger
 from sqlalchemy import select
 
 from chameleon.core.api.exceptions import RegistryError
-from chameleon.core.models import Agent
+from chameleon.data.models import Agent
 from chameleon.providers.base.protocol import Provider
 from chameleon.providers.base.types import AgentDef
 
@@ -251,8 +251,8 @@ async def build_agent_registry_from_db(
       'graph' → providers["graph"]（config 预载该 graph 的 published_spec）
       ...
     """
-    from chameleon.core.infra.db import AsyncSessionLocal
-    from chameleon.core.models import Graph
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import Graph
 
     if local_class_index is None:
         local_class_index = {}
@@ -365,8 +365,8 @@ async def sync_local_agents_to_db(
     """
     from datetime import datetime, timezone
 
-    from chameleon.core.infra.db import AsyncSessionLocal
-    from chameleon.core.models import Agent
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import Agent
 
     code_keys = set(base_index) | set(agentkit_index)
 
@@ -447,9 +447,9 @@ async def init_registry() -> None:
     # Plugin bootstrap：seed builtin manifest + 获取 provider 维度禁用集
     disabled_provider_keys: set[str] = set()
     try:
-        from chameleon.core.infra.db import AsyncSessionLocal
         from chameleon.core.plugins import plugin_registry
         from chameleon.core.plugins.builtins import BUILTIN_PROVIDERS
+        from chameleon.data.infra.db import AsyncSessionLocal
 
         async with AsyncSessionLocal() as s:
             await plugin_registry.bootstrap_builtin(s, BUILTIN_PROVIDERS)

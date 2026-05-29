@@ -10,8 +10,8 @@ from sqlalchemy import delete, select
 
 from chameleon.api.sessions import service as session_service
 from chameleon.api.sessions.schemas import AppendMessageDraft
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import (
     ApiKey,
     ChatSession,
     Message,

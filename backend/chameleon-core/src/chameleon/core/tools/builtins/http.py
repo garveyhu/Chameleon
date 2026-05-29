@@ -31,7 +31,6 @@ from loguru import logger
 from chameleon.core.tools.base import Tool, ToolContext, ToolResult
 from chameleon.core.tools.registry import register_tool
 
-
 _DEFAULT_TIMEOUT = 10.0
 _DEFAULT_MAX_BYTES = 65_536
 

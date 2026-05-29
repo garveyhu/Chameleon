@@ -16,7 +16,7 @@ import secrets
 
 import pytest
 
-from chameleon.core.utils.crypto import (
+from chameleon.data.utils.crypto import (
     CryptoNotConfigured,
     _get_key,
     decrypt,

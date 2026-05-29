@@ -18,9 +18,9 @@ from sqlalchemy import select
 from chameleon.core.api.exceptions import KnowledgeBaseNotFoundError
 from chameleon.core.config import inventory
 from chameleon.core.embedding import get_embedding_client
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import Agent, AgentKbLink, KnowledgeBase
 from chameleon.core.vector import ChunkHit, get_store
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Agent, AgentKbLink, KnowledgeBase
 
 
 @dataclass(frozen=True)

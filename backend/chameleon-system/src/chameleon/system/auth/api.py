@@ -15,8 +15,8 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.response import Result
-from chameleon.core.infra.db import get_session
-from chameleon.core.infra.jwt import REFRESH_TTL_SECONDS
+from chameleon.data.infra.db import get_session
+from chameleon.data.infra.jwt import REFRESH_TTL_SECONDS
 from chameleon.system.auth import service
 from chameleon.system.auth.dependencies import (
     CurrentUser,

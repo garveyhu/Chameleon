@@ -20,8 +20,8 @@ from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
 from sqlalchemy import select
 
-from chameleon.core.infra.db import AsyncSessionLocal
-from chameleon.core.models import EvalJob
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import EvalJob
 
 if TYPE_CHECKING:
     pass

@@ -7,17 +7,15 @@
 
 from __future__ import annotations
 
-import pytest
 import pytest_asyncio
 
 from chameleon.core.sandbox import (
-    SandboxRuntimeError,
     list_runtime_names,
     register_runtime,
 )
 from chameleon.core.sandbox.mock import MockSandboxRuntime
-from chameleon.core.tools.builtins.code_runner import CodeRunnerTool
 from chameleon.core.tools.base import ToolContext
+from chameleon.core.tools.builtins.code_runner import CodeRunnerTool
 
 
 @pytest_asyncio.fixture(autouse=True)

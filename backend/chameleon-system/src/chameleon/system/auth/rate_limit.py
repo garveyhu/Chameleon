@@ -7,7 +7,7 @@ key: chameleon:login_attempts:<username 或 ip>
 from __future__ import annotations
 
 from chameleon.core.api.exceptions import LoginRateLimitError
-from chameleon.core.infra.redis import get_redis
+from chameleon.data.infra.redis import get_redis
 
 MAX_ATTEMPTS = 5
 LOCKOUT_SECONDS = 15 * 60  # 15 分钟
