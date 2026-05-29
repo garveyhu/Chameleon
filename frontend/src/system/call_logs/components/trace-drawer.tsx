@@ -386,8 +386,8 @@ const NodeDetail = ({
         </div>
       </div>
 
-      {/* stat bar：指标平铺，淡色圆角带承托，无分隔线（去线条感） */}
-      <div className="flex flex-wrap gap-x-7 gap-y-3 rounded-lg bg-stone-50 px-4 py-3">
+      {/* stat bar：指标平铺，无填充无卡格；极淡竖发丝分隔 + 放大数值出层次 */}
+      <div className="flex flex-wrap gap-y-3 py-1">
         <Stat k="状态" v={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
         <Stat k="耗时" v={formatDurationMs(node.duration_ms)} />
         <Stat k="模型" v={node.model_code || '—'} mono />
@@ -426,14 +426,14 @@ const Stat = ({
   mono?: boolean;
   tone?: 'ok' | 'err';
 }) => (
-  <div>
-    <div className="text-[10.5px] text-stone-400">{k}</div>
-    <div className="mt-0.5 flex items-baseline gap-1.5">
+  <div className="mr-6 border-r border-stone-100 pr-6 last:mr-0 last:border-r-0 last:pr-0">
+    <div className="text-[10.5px] tracking-wide text-stone-400">{k}</div>
+    <div className="mt-1 flex items-baseline gap-1.5">
       <span
         className={cn(
-          'tnum text-[13.5px] font-semibold',
+          'tnum text-[15px] font-semibold',
           tone === 'ok' ? 'text-emerald-600' : tone === 'err' ? 'text-rose-600' : 'text-stone-800',
-          mono && 'font-mono text-[12.5px]',
+          mono && 'font-mono text-[13px]',
         )}
       >
         {v}
