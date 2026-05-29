@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-data",
+    "chameleon-integrations",
     "chameleon-providers-base",
     "fastapi>=0.115",
     "pydantic[email]>=2.7",
@@ -15,6 +16,7 @@ dependencies = [
 [tool.uv.sources]
 chameleon-core = { workspace = true }
 chameleon-data = { workspace = true }
+chameleon-integrations = { workspace = true }
 chameleon-providers-base = { workspace = true }
 
 [build-system]

@@ -24,9 +24,9 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.vector import get_store
 from chameleon.data.models import Chunk, Document, KnowledgeBase, Task
 from chameleon.data.utils.snowflake import next_id
+from chameleon.integrations.vector import get_store
 
 # ── KB 创建（复用业务层 create_kb：kb_key 唯一 + embedding 维度校验） ──
 

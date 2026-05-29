@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from chameleon.core.config import inventory
 from chameleon.core.vector.base import VectorStore
-from chameleon.core.vector.chroma import ChromaStore
-from chameleon.core.vector.pgvector import PgVectorStore
+from chameleon.integrations.vector.chroma import ChromaStore
+from chameleon.integrations.vector.pgvector import PgVectorStore
 
 _STORE: VectorStore | None = None
 _OVERRIDE: VectorStore | None = None  # 测试用

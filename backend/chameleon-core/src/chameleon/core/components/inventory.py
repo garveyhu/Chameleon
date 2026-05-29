@@ -79,7 +79,7 @@ def embedding(name: str | None = None):
 
 def vector():
     """获取 VectorStore 实例（v1 默认 PgVectorStore）"""
-    from chameleon.core.vector.factory import get_store
+    from chameleon.integrations.vector.factory import get_store
 
     return get_store()
 

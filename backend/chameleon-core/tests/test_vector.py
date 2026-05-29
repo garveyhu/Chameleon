@@ -6,9 +6,9 @@ import pytest
 from sqlalchemy import delete
 
 from chameleon.core.vector.base import ChunkPayload
-from chameleon.core.vector.pgvector import PgVectorStore
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import Chunk, Document, KnowledgeBase
+from chameleon.integrations.vector.pgvector import PgVectorStore
 
 
 def _vec(values: list[float], dim: int = 1536) -> list[float]:
