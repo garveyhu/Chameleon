@@ -47,7 +47,10 @@ from chameleon.providers.base.types import (
     StreamEventType,
     _StreamAggregator,
 )
-from chameleon.system.api_key.service import record_call
+from chameleon.system.api_key.service import (
+    aggregate_generation_rollup,
+    record_call,
+)
 
 
 def check_origin(allowed: list | None, origin: str | None) -> None:
@@ -865,11 +868,16 @@ async def suggest_followups_for_embed(
     model_code: str | None = agent.default_model_code if agent else None
 
     # 2. set TraceContext，让 GenerationRecorder 把这次 followups 的 generation
-    #    行归到 embed 应用 而不是兜底的 internal
+    #    行归到 embed 应用；followups 自身写一条根 trace 行（否则 generation 的
+    #    parent_id 指向不存在的根 → 孤儿，哪个列表都看不到）。request_payload 标
+    #    kind='followup' 以区分真实对话。
+    import time as _time
+
     sid = await embed_session.resolve_session_id(session_token)
+    followups_rid = uuid.uuid4().hex
     token = set_trace_context(
         TraceContext(
-            request_id=uuid.uuid4().hex,
+            request_id=followups_rid,
             channel="embed",
             app_id=getattr(embed, "app_id", None),
             api_key_id=embed.api_key_id,
@@ -878,11 +886,47 @@ async def suggest_followups_for_embed(
             end_user_id=end_user_id,
         )
     )
+    started = _time.monotonic()
+    ok = True
     try:
         return await graph_generator.suggest_followups(
             question, answer, model_code=model_code
         )
+    except Exception:
+        ok = False
+        raise
     finally:
+        # 写 followups 根 trace（generation 子行已由 GenerationRecorder 落，挂在此根下）；
+        # token/cost/model 从子行 SUM 补回。独立短事务，吞异常不影响 followups 返回。
+        try:
+            p, c, t, cost, fmodel = await aggregate_generation_rollup(
+                session, followups_rid
+            )
+            await record_call(
+                session,
+                request_id=followups_rid,
+                app_id=getattr(embed, "app_id", None) or "internal",
+                agent_key=agent.agent_key if agent else "internal",
+                session_id=sid,
+                channel="embed",
+                stream=False,
+                success=ok,
+                code=0 if ok else 500,
+                error_message=None,
+                duration_ms=int((_time.monotonic() - started) * 1000),
+                prompt_tokens=p,
+                completion_tokens=c,
+                total_tokens=t,
+                request_payload={"kind": "followup", "source": "embed", "question": question[:500]},
+                observation_type="trace",
+                api_key_id=embed.api_key_id,
+                end_user_id=end_user_id,
+                model_code=fmodel,
+                cost_usd=cost,
+            )
+            await session.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("followups root trace write failed | rid=%s", followups_rid)
         reset_trace_context(token)
 
 
