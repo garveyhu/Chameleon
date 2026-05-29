@@ -1,6 +1,6 @@
 """ToolInstance ORM —— P18.2 admin 配的工具实例
 
-业务：内置 Tool 类一律存代码层（chameleon.core.tools.builtins/*）；
+业务：内置 Tool 类一律存代码层（chameleon.integrations.tools.builtins/*）；
 本表只存 admin 给某 tool_key 配的运行时参数（如 HTTPTool 的 allowed_url_prefixes）
 + 启用开关。
 

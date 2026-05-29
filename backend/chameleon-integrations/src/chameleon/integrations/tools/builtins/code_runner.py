@@ -42,7 +42,7 @@ from chameleon.core.sandbox import (
     list_runtime_names,
 )
 from chameleon.core.tools.base import Tool, ToolContext, ToolResult
-from chameleon.core.tools.registry import register_tool
+from chameleon.integrations.tools.registry import register_tool
 
 
 class CodeRunnerTool(Tool):

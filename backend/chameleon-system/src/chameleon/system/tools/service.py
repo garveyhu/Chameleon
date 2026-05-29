@@ -10,8 +10,8 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.tools import all_tool_classes, get_tool_class
 from chameleon.data.models import ToolInstance
+from chameleon.integrations.tools import all_tool_classes, get_tool_class
 from chameleon.system.tools.schemas import (
     CreateToolInstanceRequest,
     ToolCatalogItem,

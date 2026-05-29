@@ -1,21 +1,13 @@
-"""Chameleon Tool 协议 + 内置工具集"""
+"""Chameleon Tool 协议
 
-# 触发内置 tools 注册到全局 registry
-from chameleon.core.tools import builtins  # noqa: F401,E402
+仅导出协议 / 数据结构（Tool / ToolContext / ToolResult）。
+registry 工厂与 builtins 实现已迁至 chameleon.integrations.tools。
+"""
+
 from chameleon.core.tools.base import Tool, ToolContext, ToolResult
-from chameleon.core.tools.registry import (
-    all_tool_classes,
-    get_tool_class,
-    list_tool_keys,
-    register_tool,
-)
 
 __all__ = [
     "Tool",
     "ToolContext",
     "ToolResult",
-    "all_tool_classes",
-    "get_tool_class",
-    "list_tool_keys",
-    "register_tool",
 ]

@@ -23,7 +23,7 @@ def bind_tools(client, tool_keys: list[str]):
 
     langchain 的 ChatOpenAI 子类支持 .bind_tools([...])；不支持时返回原 client。
     """
-    from chameleon.core.tools import get_tool_class
+    from chameleon.integrations.tools import get_tool_class
 
     schemas: list[dict[str, Any]] = []
     for key in tool_keys:

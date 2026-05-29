@@ -27,18 +27,19 @@ from sqlalchemy import select
 from chameleon.core.graph.context import NodeContext
 from chameleon.core.graph.node_base import Node
 from chameleon.core.graph.registry import register_node_type
-from chameleon.core.tools import (
-    ToolContext,
-    ToolResult,
-    get_tool_class,
-)
-from chameleon.core.tools.registry import register_tool as _register_tool_real
+from chameleon.core.tools import ToolContext, ToolResult  # 协议留 core
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import ToolInstance
+from chameleon.integrations.tools import (  # registry 已迁 integrations
+    get_tool_class,
+)
+from chameleon.integrations.tools import (
+    register_tool as _register_tool_real,
+)
 
 
 def register_tool(tool_cls):  # noqa: ANN001
-    """转发到 chameleon.core.tools.registry.register_tool
+    """转发到 chameleon.integrations.tools.registry.register_tool
 
     兼容老测试 / 早期代码直接从本模块 import register_tool 的写法。
     """

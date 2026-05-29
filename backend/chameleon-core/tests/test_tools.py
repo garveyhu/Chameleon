@@ -5,14 +5,11 @@ from __future__ import annotations
 import pytest
 from httpx import Response
 
-from chameleon.core.tools import (
-    ToolContext,
-    get_tool_class,
-    list_tool_keys,
-)
-from chameleon.core.tools.base import _validate_args
-from chameleon.core.tools.builtins.http import HTTPTool
-from chameleon.core.tools.builtins.sql import SQLTool
+from chameleon.core.tools import ToolContext  # 协议留 core
+from chameleon.core.tools.base import _validate_args  # 协议留 core
+from chameleon.integrations.tools import get_tool_class, list_tool_keys
+from chameleon.integrations.tools.builtins.http import HTTPTool
+from chameleon.integrations.tools.builtins.sql import SQLTool
 
 # ── registry ─────────────────────────────────────────────
 
