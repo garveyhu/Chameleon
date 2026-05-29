@@ -226,13 +226,13 @@ async def test_delete_document_removes_chunks(
 
 
 async def test_in_process_search_kb(app_key: str) -> None:
-    """from chameleon.core.components.knowledge import search_kb 可被 agent 用"""
+    """from chameleon.integrations.knowledge import search_kb 可被 agent 用"""
     # 先建 KB 并 ingest（用 HTTP 方便，但 search 用 in-process）
     from httpx import ASGITransport
     from httpx import AsyncClient as Client
 
     from chameleon.app.main import create_app
-    from chameleon.core.components.knowledge import search_kb
+    from chameleon.integrations.knowledge import search_kb
 
     app = create_app()
     async with Client(

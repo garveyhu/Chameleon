@@ -1,11 +1,13 @@
-"""in-process 知识库 API（给本地 agent 用）
+"""in-process 知识库检索实现（带 DB 访问的检索编排）
 
-agent 子包只能依赖 chameleon-core，所以这里提供薄壳读 API。
-所有 HTTP 路径（modules/knowledge）也复用这套——保证单一数据路径。
+属 integrations 层：依赖 core（协议/配置/embedding/exceptions）+ data（持久化）+
+integrations.vector（向量存储实现）。所有 HTTP 路径（api/knowledge）也复用这套——
+保证单一数据路径。
 
 公开函数：
   await search_kb(kb_key, query, top_k=..., min_score=...) -> list[ChunkHit]
   await get_kb_meta(kb_key) -> KbMeta | None
+  await list_linked_kb_metas(agent_key) -> list[KbMeta]
 """
 
 from __future__ import annotations

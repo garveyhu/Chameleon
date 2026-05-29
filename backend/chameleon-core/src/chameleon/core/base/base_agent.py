@@ -146,7 +146,7 @@ class BaseAgent(ABC):
 
         没挂 KB → 返空 list。
         """
-        from chameleon.core.components.knowledge import (
+        from chameleon.integrations.knowledge import (
             list_linked_kb_metas,
             search_kb,
         )

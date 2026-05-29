@@ -5,6 +5,7 @@ description = "Chameleon 本地 in-process provider —— 支持 LangGraph / La
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
+    "chameleon-integrations",
     "chameleon-providers-base",
     "chameleon-agentkit",
     # langgraph 是可选范式之一；放这里因为我们的 bridges 默认要求 graph.astream_events 接口
@@ -13,6 +14,7 @@ dependencies = [
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
+chameleon-integrations = { workspace = true }
 chameleon-providers-base = { workspace = true }
 chameleon-agentkit = { workspace = true }
 

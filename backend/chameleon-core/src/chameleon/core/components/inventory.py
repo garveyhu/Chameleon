@@ -104,7 +104,7 @@ async def search_kb(
     top_k: int | None = None,
     min_score: float = 0.0,
 ):
-    """语义检索 KB（薄包装 chameleon.core.knowledge.search_kb）"""
-    from chameleon.core.components.knowledge import search_kb as _search_kb
+    """语义检索 KB（薄包装 chameleon.integrations.knowledge.search_kb）"""
+    from chameleon.integrations.knowledge import search_kb as _search_kb
 
     return await _search_kb(kb_key, query, top_k=top_k, min_score=min_score)

@@ -565,6 +565,7 @@ source = { editable = "chameleon-providers/local" }
 dependencies = [
     { name = "chameleon-agentkit" },
     { name = "chameleon-core" },
+    { name = "chameleon-integrations" },
     { name = "chameleon-providers-base" },
     { name = "langgraph" },
 ]
@@ -573,6 +574,7 @@ dependencies = [
 requires-dist = [
     { name = "chameleon-agentkit", editable = "chameleon-agentkit" },
     { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-integrations", editable = "chameleon-integrations" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "langgraph", specifier = ">=0.2" },
 ]

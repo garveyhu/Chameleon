@@ -9,8 +9,8 @@
 - embeddings/  —— embedding 客户端
 - vector/      —— 向量存储（VectorStore + pgvector）
 - cache/       —— diskcache 单例
-- knowledge    —— in-process KB API（search_kb / get_kb_meta）
 - inventory    —— ★ 全局具名访问点（仿 sage 的 components/inventory.py）
+  其 search_kb facade 惰性转发 chameleon.integrations.knowledge.search_kb
 """
 
 from chameleon.core.components.inventory import (

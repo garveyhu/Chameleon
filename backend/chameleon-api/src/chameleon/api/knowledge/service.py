@@ -4,7 +4,7 @@
 - KB 维度必须等于全局 inventory.embedding_dim()（v1 锁 1536）；
   不一致 → ValidationError fail-fast
 - ingest 投到异步 worker（chameleon.api.knowledge.ingest.run_ingest_task）
-- search 薄包装 chameleon.core.components.knowledge.search_kb（保单一数据路径）
+- search 薄包装 chameleon.integrations.knowledge.search_kb（保单一数据路径）
 """
 
 from __future__ import annotations
@@ -32,9 +32,9 @@ from chameleon.core.api.exceptions import (
     ValidationError,
 )
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.core.components.knowledge import search_kb
 from chameleon.core.config import inventory
 from chameleon.data.models import Chunk, Document, KnowledgeBase, Task
+from chameleon.integrations.knowledge import search_kb
 from chameleon.integrations.vector import get_store
 
 # ── KB CRUD ─────────────────────────────────────────────
