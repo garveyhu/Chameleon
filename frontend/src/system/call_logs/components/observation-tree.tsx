@@ -65,12 +65,15 @@ interface ObservationTreeProps {
   /** 选中节点的 request_id；点击节点回调 */
   selectedId?: string;
   onSelect?: (node: TraceTreeNode) => void;
+  /** 各行初始折叠态（折叠/展开全部时由外层 remount 重置） */
+  defaultCollapsed?: boolean;
 }
 
 export const ObservationTree: React.FC<ObservationTreeProps> = ({
   root,
   selectedId,
   onSelect,
+  defaultCollapsed = false,
 }) => {
   const total = root.duration_ms || 1;
   return (
@@ -81,6 +84,7 @@ export const ObservationTree: React.FC<ObservationTreeProps> = ({
         totalDuration={total}
         selectedId={selectedId}
         onSelect={onSelect}
+        defaultCollapsed={defaultCollapsed}
       />
     </div>
   );
@@ -92,6 +96,7 @@ interface TreeRowProps {
   totalDuration: number;
   selectedId?: string;
   onSelect?: (node: TraceTreeNode) => void;
+  defaultCollapsed?: boolean;
 }
 
 const TreeRow: React.FC<TreeRowProps> = ({
@@ -100,6 +105,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
   totalDuration,
   selectedId,
   onSelect,
+  defaultCollapsed = false,
 }) => {
   const otype = (node.observation_type as ObservationType) || 'generation';
   const Icon = TYPE_ICON[otype] ?? CircleDashed;
@@ -108,7 +114,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
   const widthPct = Math.max(2, Math.min(100, (node.duration_ms / totalDuration) * 100));
   const isSelected = selectedId === node.request_id;
   const hasChildren = node.children.length > 0;
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
     <>
@@ -117,7 +123,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
         className={cn(
           'group relative flex w-full items-center gap-2 rounded px-1 py-1 text-left transition',
           'hover:bg-stone-100/70',
-          isSelected && 'bg-blue-50/80 ring-1 ring-blue-200',
+          isSelected && 'bg-stone-100/80',
         )}
         style={{ paddingLeft: depth * 14 + 4 }}
         onClick={() => onSelect?.(node)}
@@ -216,6 +222,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
               totalDuration={totalDuration}
               selectedId={selectedId}
               onSelect={onSelect}
+              defaultCollapsed={defaultCollapsed}
             />
           ))
         : null}

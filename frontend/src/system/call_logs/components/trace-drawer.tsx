@@ -11,11 +11,13 @@ import {
   Braces,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
   ChevronsRight,
+  ChevronsUpDown,
   ChevronUp,
   FileText,
-  Maximize2,
-  Minimize2,
+  Maximize,
+  Minimize,
   RotateCw,
 } from 'lucide-react';
 
@@ -49,6 +51,7 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
   const qc = useQueryClient();
   const [full, setFull] = useState(false);
   const [widthPx, setWidthPx] = useState(1100);
+  const [resizing, setResizing] = useState(false);
 
   const refresh = () => {
     if (!callLog) return;
@@ -66,9 +69,14 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      // 全局锁的光标/选区还原（拖拽时面板边缘会离开鼠标，靠全局锁避免光标闪烁）
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      setResizing(false);
     };
     document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    setResizing(true);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
@@ -84,7 +92,10 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
           <div
             onMouseDown={startResize}
             title="拖拽调整宽度"
-            className="absolute top-0 bottom-0 left-0 z-20 w-1.5 cursor-col-resize hover:bg-blue-300/60"
+            className={cn(
+              'absolute top-0 bottom-0 left-0 z-20 w-1.5 cursor-col-resize transition-colors',
+              resizing ? 'bg-blue-300/60' : 'hover:bg-blue-300/60',
+            )}
           />
         )}
         <SheetHeader>
@@ -92,20 +103,24 @@ export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext
             {/* LangSmith 式功能 icon 栏：收起 / 全屏 / 上一条 / 下一条 / 刷新 */}
             <div className="flex items-center gap-0.5">
               <IconBtn title="收起" onClick={onClose}>
-                <ChevronsRight className="h-4 w-4" />
+                <ChevronsRight className="h-[15px] w-[15px]" />
               </IconBtn>
               <IconBtn title={full ? '退出全屏' : '全屏'} onClick={() => setFull(f => !f)}>
-                {full ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                {full ? (
+                  <Minimize className="h-[15px] w-[15px]" />
+                ) : (
+                  <Maximize className="h-[15px] w-[15px]" />
+                )}
               </IconBtn>
               <span className="mx-0.5 h-4 w-px bg-stone-200" />
               <IconBtn title="上一条" onClick={onPrev} disabled={!onPrev || !hasPrev}>
-                <ChevronUp className="h-4 w-4" />
+                <ChevronUp className="h-[15px] w-[15px]" />
               </IconBtn>
               <IconBtn title="下一条" onClick={onNext} disabled={!onNext || !hasNext}>
-                <ChevronDown className="h-4 w-4" />
+                <ChevronDown className="h-[15px] w-[15px]" />
               </IconBtn>
               <IconBtn title="刷新" onClick={refresh}>
-                <RotateCw className="h-4 w-4" />
+                <RotateCw className="h-[15px] w-[15px]" />
               </IconBtn>
             </div>
             <span className="h-4 w-px bg-stone-200" />
@@ -174,6 +189,8 @@ const IconBtn = ({
 const TraceBody = ({ requestId }: { requestId: string }) => {
   // 选中节点 id（call_log id）；null → 派生为根，不用 effect 同步
   const [picked, setPicked] = useState<string | null>(null);
+  // 折叠/展开全树：切换时 remount ObservationTree 让每行按此初始化，避开 effect
+  const [treeCollapsed, setTreeCollapsed] = useState(false);
 
   const treeQ = useQuery({
     queryKey: ['call-log-tree', requestId],
@@ -192,13 +209,29 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
     <div className="flex h-full min-h-0">
       {/* 左：observation 树 */}
       <div className="w-[440px] shrink-0 overflow-y-auto border-r border-stone-200/70 p-3">
-        <div className="mb-2 text-[11px] text-stone-500">调用链路 · 点节点看右侧详情</div>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-[11px] font-medium text-stone-500">调用链路</span>
+          <button
+            type="button"
+            title={treeCollapsed ? '展开全部' : '折叠全部'}
+            onClick={() => setTreeCollapsed(c => !c)}
+            className="rounded p-1 text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+          >
+            {treeCollapsed ? (
+              <ChevronsUpDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronsDownUp className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
         {treeQ.isLoading ? (
           <div className="py-10 text-center text-sm text-stone-400">加载链路…</div>
         ) : treeQ.data ? (
           <ObservationTree
+            key={treeCollapsed ? 'collapsed' : 'expanded'}
             root={treeQ.data}
             selectedId={effectiveId}
+            defaultCollapsed={treeCollapsed}
             onSelect={(n: TraceTreeNode) => setPicked(String(n.id))}
           />
         ) : (
@@ -334,7 +367,8 @@ const PayloadView = ({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
+      {/* 固定行高 h-6：折叠时右侧切换消失也不让标题上下跳动 */}
+      <div className="flex h-6 items-center justify-between">
         <button
           type="button"
           onClick={() => setOpen(o => !o)}
@@ -344,12 +378,15 @@ const PayloadView = ({
           {title}
         </button>
         {open && text && (
-          <div className="flex overflow-hidden rounded-md border border-stone-200">
+          <div className="flex items-center gap-0.5">
             <button
               type="button"
               title="Markdown 渲染"
               onClick={() => setRaw(false)}
-              className={cn('px-1.5 py-1', !raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+              className={cn(
+                'rounded p-1 transition',
+                !raw ? 'bg-stone-100 text-stone-700' : 'text-stone-300 hover:text-stone-500',
+              )}
             >
               <FileText className="h-3.5 w-3.5" />
             </button>
@@ -357,7 +394,10 @@ const PayloadView = ({
               type="button"
               title="原始 JSON"
               onClick={() => setRaw(true)}
-              className={cn('px-1.5 py-1', raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+              className={cn(
+                'rounded p-1 transition',
+                raw ? 'bg-stone-100 text-stone-700' : 'text-stone-300 hover:text-stone-500',
+              )}
             >
               <Braces className="h-3.5 w-3.5" />
             </button>

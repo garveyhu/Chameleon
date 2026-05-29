@@ -39,7 +39,7 @@ SYSTEM_PROMPT = """你是 Chameleon 的通用聊天助手。
 )
 async def handle(ctx: AgentRun):
     tone = ctx.config.get("tone") or "专业"
-    docs = await ctx.kb.search(ctx.query, top_k=3)  # 未关联 KB → 空，退化为纯聊天
+    docs = await ctx.kb.search(ctx.query, top_k=3)
     async for delta in ctx.stream(
         slot="chat",
         system=SYSTEM_PROMPT.format(tone=tone),
