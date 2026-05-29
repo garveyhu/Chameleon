@@ -28,6 +28,11 @@ class CallLogItem(BaseModel):
     api_key_id: int | None = None
     # api_key 展示名（join api_keys 推导；无 key 调用为 None）
     api_key_name: str | None = None
+    # 会话标题（join sessions.title 推导；无会话 / 未命名为 None）
+    session_title: str | None = None
+    # 列表内联输入/输出预览（根行 payload 抽取的短文本，LangSmith 式 Input/Output 列）
+    input_preview: str | None = None
+    output_preview: str | None = None
     user_id: int | None = None
     # 编排方式推导（join agents.source；source=graph 时 join graphs.kind）：
     # source ∈ local / graph / dify / fastgpt / ...；kind ∈ chatflow / workflow / None
@@ -102,6 +107,8 @@ class SessionItem(BaseModel):
     agent_key: str
     app_id: str
     end_user_id: str | None = None
+    # 渠道由 call_logs 根行派生（embed / playground / api / openai / internal）
+    channel: str | None = None
     title: str | None = None
     turn_count: int = 0  # 该会话的消息条数
     last_message_at: datetime | None = None

@@ -3,6 +3,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
+import { AgentPicker } from '@/core/components/common/agent-picker';
+import { Input } from '@/core/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -12,6 +14,8 @@ import {
 } from '@/core/components/ui/select';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
+import { toast } from '@/core/lib/toast';
+import { agentApi } from '@/system/agents/services/agent';
 import { kbApi } from '@/system/kbs/services/kb';
 import { modelApi } from '@/system/models/services/model';
 import type { PlaygroundParams } from '@/system/playground/types/playground';
@@ -42,8 +46,53 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
     value: PlaygroundParams[K],
   ) => onChange({ ...params, [key]: value });
 
+  /** 选关联应用 → 用其配置预填（应用默认 ⊕ 会话覆盖）；选「全部应用」(='') 解除关联 */
+  const onPickAgent = async (agentKey: string) => {
+    if (!agentKey) {
+      set('bound_agent_key', null);
+      return;
+    }
+    try {
+      const cfg = await agentApi.prefillConfig(agentKey);
+      const next: PlaygroundParams = { ...params, bound_agent_key: agentKey };
+      // 仅可预填的应用才覆盖配置；workflow/外部应用只记录关联，不动用户现有设置
+      let modelMissing = false;
+      if (cfg.prefillable) {
+        if (cfg.model_code) {
+          const m = models.find(x => x.code === cfg.model_code);
+          if (m) next.model_id = String(m.id);
+          else modelMissing = true; // 应用模型当前不可用/未启用
+        }
+        if (cfg.system_prompt != null) next.system_prompt = cfg.system_prompt;
+        // kb_ids 归一成 string（与 KB 下拉的 String(id) 一致，雪花 id 也安全）
+        next.kb_ids = (cfg.kb_ids ?? []).map(String);
+      }
+      onChange(next);
+      if (modelMissing) {
+        toast.warning(`应用模型「${cfg.model_code}」当前不可用，请手动选择模型`);
+      } else if (cfg.notes) {
+        if (cfg.prefillable) toast.success(cfg.notes);
+        else toast.info(cfg.notes);
+      }
+    } catch {
+      toast.error('载入应用配置失败');
+    }
+  };
+
   return (
     <div className={cn('space-y-3 text-[12.5px]', className)}>
+      <div>
+        <label className="mb-1 block text-stone-600">关联应用（可选）</label>
+        <AgentPicker
+          value={params.bound_agent_key ?? ''}
+          onChange={onPickAgent}
+          width={232}
+        />
+        <p className="mt-1 text-[10.5px] leading-tight text-stone-400">
+          选应用后用其模型 / 提示词 / 知识库预填，仍可手动调整
+        </p>
+      </div>
+
       <div>
         <label className="mb-1 block text-stone-600">模型</label>
         <Select
@@ -74,9 +123,9 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="space-y-3">
         <NumberField
-          label="temperature"
+          label="Temperature"
           value={params.temperature}
           min={0}
           max={2}
@@ -84,7 +133,7 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
           onChange={v => set('temperature', v)}
         />
         <NumberField
-          label="top_p"
+          label="Top P"
           value={params.top_p ?? 1}
           min={0}
           max={1}
@@ -92,7 +141,7 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
           onChange={v => set('top_p', v)}
         />
         <NumberField
-          label="max_tokens"
+          label="Max Tokens"
           value={params.max_tokens ?? 0}
           min={0}
           max={8192}
@@ -172,18 +221,17 @@ const NumberField = ({
   onChange,
   allowEmpty,
 }: NumberFieldProps) => (
-  <div>
-    <label className="mb-1 block text-stone-600">
-      {label} = <span className="font-mono tnum">{allowEmpty && value === 0 ? '∞' : value}</span>
-    </label>
-    <input
-      type="range"
+  <div className="flex items-center justify-between gap-2">
+    <span className="text-stone-600">{label}</span>
+    <Input
+      type="number"
       min={min}
       max={max}
       step={step}
-      value={value}
-      onChange={e => onChange(Number(e.target.value))}
-      className="w-full accent-amber-600"
+      value={allowEmpty && value === 0 ? '' : value}
+      placeholder={allowEmpty ? '∞' : undefined}
+      onChange={e => onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+      className="!h-7 !w-20 text-right text-[12px] tnum"
     />
   </div>
 );

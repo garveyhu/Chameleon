@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import (
@@ -28,11 +28,12 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import PageResult, Result
 from chameleon.core.infra.db import get_session
 from chameleon.core.models import Agent, ApiKey, CallLog, EmbedConfig, Graph
 from chameleon.providers.base import AGENTS, reload_agent_registry
-from chameleon.system.agents import agent_kb_service
+from chameleon.system.agents import agent_kb_service, prefill_service
+from chameleon.system.agents.prefill_service import AgentPrefillConfig
 from chameleon.system.api_key import service as api_key_service
 from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
@@ -68,6 +69,17 @@ class AgentItem(BaseModel):
     icon: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class AgentOption(BaseModel):
+    """轻量选项（给 AgentPicker 下拉用）：分页 + 搜索 + 类别筛。"""
+
+    id: int
+    agent_key: str
+    name: str
+    source: str
+    graph_kind: str | None = None
+    icon: str | None = None
 
 
 class CreateAgentRequest(BaseModel):
@@ -169,6 +181,82 @@ async def list_agents(
         stmt = stmt.where(Agent.enabled.is_(enabled))
     rows = (await session.execute(stmt)).all()
     return Result.ok([_to_item(a, graph_kind) for a, graph_kind in rows])
+
+
+@router.get("/options", response_model=Result[PageResult[AgentOption]])
+async def list_agent_options(
+    q: str | None = Query(default=None, description="名称 / key / 描述 模糊搜索"),
+    category: str | None = Query(
+        default=None,
+        description="应用类别：local / graph-chatflow / graph-workflow / external",
+    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[PageResult[AgentOption]]:
+    """智能体选项分页 —— AgentPicker 用：搜索 + 类别筛 + 向下滚动加载下一页。"""
+    base = (
+        select(Agent, Graph.kind)
+        .outerjoin(Graph, Agent.graph_id == Graph.id)
+        .where(Agent.deleted_at.is_(None))
+    )
+    if category == "local":
+        base = base.where(Agent.source == "local")
+    elif category == "graph-chatflow":
+        base = base.where(Agent.source == "graph", Graph.kind == "chatflow")
+    elif category == "graph-workflow":
+        base = base.where(Agent.source == "graph", Graph.kind == "workflow")
+    elif category == "external":
+        base = base.where(Agent.source.in_(("dify", "fastgpt", "coze")))
+    if q:
+        like = f"%{q}%"
+        base = base.where(
+            or_(
+                Agent.name.ilike(like),
+                Agent.agent_key.ilike(like),
+                Agent.description.ilike(like),
+            )
+        )
+    total = (
+        await session.execute(select(func.count()).select_from(base.subquery()))
+    ).scalar_one()
+    rows = (
+        await session.execute(
+            base.order_by(Agent.source, Agent.name)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
+    items = [
+        AgentOption(
+            id=a.id,
+            agent_key=a.agent_key,
+            name=a.name,
+            source=a.source,
+            graph_kind=gk,
+            icon=a.icon,
+        )
+        for a, gk in rows
+    ]
+    return Result.ok(
+        PageResult(items=items, total=int(total), page=page, page_size=page_size)
+    )
+
+
+@router.get(
+    "/by-key/{agent_key}/prefill-config",
+    response_model=Result[AgentPrefillConfig],
+)
+async def get_agent_prefill_config(
+    agent_key: str,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentPrefillConfig]:
+    """Playground「关联应用」预填：按 source 尽力解析模型/提示词/知识库默认配置。"""
+    return Result.ok(
+        await prefill_service.build_prefill_config(session, agent_key=agent_key)
+    )
 
 
 @router.get("/{agent_id}", response_model=Result[AgentItem])

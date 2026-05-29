@@ -303,6 +303,8 @@ async def list_admin(
     kind: str | None = None,
     status: str | None = None,
     filename_kw: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
 ) -> PageResult[SessionFile]:
     base = select(SessionFile).where(SessionFile.deleted_at.is_(None))
     if session_id:
@@ -315,6 +317,10 @@ async def list_admin(
         base = base.where(SessionFile.status == status)
     if filename_kw:
         base = base.where(SessionFile.filename.ilike(f"%{filename_kw}%"))
+    if since:
+        base = base.where(SessionFile.created_at >= since)
+    if until:
+        base = base.where(SessionFile.created_at <= until)
 
     from sqlalchemy import func as sa_func
 

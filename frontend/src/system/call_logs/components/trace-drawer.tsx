@@ -5,10 +5,10 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 import {
-  Braces,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -16,17 +16,18 @@ import {
   ChevronsRight,
   ChevronsUpDown,
   ChevronUp,
-  Check,
   Copy,
-  FileText,
+  Download,
+  FileDown,
+  Image as ImageIcon,
   Maximize,
   Minimize,
   RotateCw,
 } from 'lucide-react';
 
-import { Markdown } from '@/core/components/chat/markdown';
-import { JsonViewer } from '@/core/components/common/json-viewer';
+import { StatBar, StatItem } from '@/core/components/common/stat-bar';
 import { Badge } from '@/core/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/core/components/ui/popover';
 import {
   Sheet,
   SheetBody,
@@ -36,9 +37,21 @@ import {
 } from '@/core/components/ui/sheet';
 import { cn } from '@/core/lib/cn';
 import { formatCost, formatDateTime, formatDurationMs, formatTokens } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import { ObservationIconRail, ObservationTree } from '@/system/call_logs/components/observation-tree';
+import {
+  buildTraceText,
+  downloadText,
+  exportImage,
+} from '@/system/call_logs/components/trace-export';
+import { ExportContext } from '@/system/call_logs/components/trace-parse';
+import { InputView, OutputView } from '@/system/call_logs/components/trace-payload';
 import { callLogApi } from '@/system/call_logs/services/call-log';
-import type { CallLogItem, TraceTreeNode } from '@/system/call_logs/types/call-log';
+import type {
+  CallLogDetail,
+  CallLogItem,
+  TraceTreeNode,
+} from '@/system/call_logs/types/call-log';
 
 interface Props {
   callLog: CallLogItem | null;
@@ -53,7 +66,7 @@ interface Props {
 export const TraceDrawer = ({ callLog, onClose, onPrev, onNext, hasPrev, hasNext }: Props) => {
   const qc = useQueryClient();
   const [full, setFull] = useState(false);
-  const [widthPx, setWidthPx] = useState(1100);
+  const [widthPx, setWidthPx] = useState(1180);
   const [resizing, setResizing] = useState(false);
 
   const refresh = () => {
@@ -196,6 +209,30 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
   const [treeCollapsed, setTreeCollapsed] = useState(false);
   // 收起整列链路树（详情铺满）
   const [treeHidden, setTreeHidden] = useState(false);
+  // 链路树列宽（右边缘可拖拽，和 drawer 左边缘一样的体验）
+  const [treeWidth, setTreeWidth] = useState(440);
+  const [treeResizing, setTreeResizing] = useState(false);
+
+  const startTreeResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = treeWidth;
+    const onMove = (ev: MouseEvent) => {
+      setTreeWidth(Math.max(240, Math.min(720, startW + ev.clientX - startX)));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      setTreeResizing(false);
+    };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+    setTreeResizing(true);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const treeQ = useQuery({
     queryKey: ['call-log-tree', requestId],
@@ -232,7 +269,10 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
           )}
         </div>
       ) : (
-        <div className="w-[440px] shrink-0 overflow-y-auto border-r border-stone-200/70 p-3">
+        <div
+          style={{ width: treeWidth }}
+          className="shrink-0 overflow-y-auto border-r border-stone-200/70 p-3"
+        >
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-medium text-stone-500">调用链路</span>
             <div className="flex items-center gap-0.5">
@@ -274,6 +314,18 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
         </div>
       )}
 
+      {/* 树列右边缘拖拽手柄（树展开时才有） */}
+      {!treeHidden && (
+        <div
+          onMouseDown={startTreeResize}
+          title="拖拽调整链路树宽度"
+          className={cn(
+            '-ml-px w-1.5 shrink-0 cursor-col-resize transition-colors',
+            treeResizing ? 'bg-blue-300/60' : 'hover:bg-blue-300/60',
+          )}
+        />
+      )}
+
       {/* 右：选中节点详情 */}
       <div className="min-w-0 flex-1 overflow-y-auto p-4">
         {detailQ.isLoading || !detailQ.data ? (
@@ -288,117 +340,140 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
   );
 };
 
-type Payload = Record<string, unknown> | null | undefined;
-
-/** 从 payload 里抽「主文本」（prompt/output/answer 等），用于 Markdown 渲染 */
-const INPUT_TEXT_KEYS = ['prompt_preview', 'input', 'question', 'query', 'text', 'content'];
-const OUTPUT_TEXT_KEYS = ['output_preview', 'output', 'answer', 'text', 'content'];
-
-const pickText = (payload: Payload, keys: string[]): string | null => {
-  if (!payload || typeof payload !== 'object') return null;
-  for (const k of keys) {
-    const v = (payload as Record<string, unknown>)[k];
-    if (typeof v === 'string' && v.trim()) return v;
-  }
-  return null;
-};
-
-// prompt 快照格式 "[role] content"（角色间以 \n 分隔，content 内部也可能含 \n）。
-// 按已知角色标记切成消息块，逐块按角色渲染。
-const ROLE_RE = /(?=^\[(?:system|human|ai|user|assistant|tool|function)\][ \t]?)/im;
-const ROLE_LABEL: Record<string, string> = {
-  system: '系统',
-  human: '用户',
-  user: '用户',
-  ai: '助手',
-  assistant: '助手',
-  tool: '工具',
-  function: '工具',
-};
-const ROLE_BAR: Record<string, string> = {
-  system: 'bg-stone-400',
-  human: 'bg-blue-500',
-  user: 'bg-blue-500',
-  ai: 'bg-violet-400',
-  assistant: 'bg-violet-400',
-  tool: 'bg-amber-400',
-  function: 'bg-amber-400',
-};
-
-interface RoleMsg {
-  role: string;
-  content: string;
-}
-
-/** 解析 "[role] ..." 多消息文本；非该格式返 null */
-const parseMessages = (text: string): RoleMsg[] | null => {
-  if (!/^\[(system|human|ai|user|assistant|tool|function)\]/i.test(text.trimStart())) return null;
-  const parts = text.split(ROLE_RE).filter(p => p.trim());
-  const msgs: RoleMsg[] = [];
-  for (const p of parts) {
-    const m = p.match(/^\[(\w+)\][ \t]?([\s\S]*)$/);
-    if (m) msgs.push({ role: m[1].toLowerCase(), content: m[2].trim() });
-  }
-  return msgs.length ? msgs : null;
-};
-
-/** 右侧节点详情：元信息 + 输入 + 输出（Markdown / 原始 可切） */
-const NodeDetail = ({
-  node,
+/** 导出菜单项 */
+const ExportItem = ({
+  icon,
+  label,
+  onClick,
 }: {
-  node: CallLogItem & { request_payload?: Payload; response_payload?: Payload };
-}) => {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] text-stone-600 transition hover:bg-stone-100 hover:text-stone-900"
+  >
+    <span className="text-stone-400">{icon}</span>
+    {label}
+  </button>
+);
+
+/** 右侧节点详情：元信息 + 输入 + 输出 + 一键导出（文字 / 图片，带元信息） */
+const NodeDetail = ({ node }: { node: CallLogDetail }) => {
+  const detailRef = useRef<HTMLDivElement>(null);
+  // 导出图片时：强制展开所有折叠 + 隐藏导出按钮（截图全量、无多余控件）
+  const [exporting, setExporting] = useState(false);
   const nodeName = node.request_id.includes('.')
     ? node.request_id.slice(node.request_id.indexOf('.') + 1)
     : node.agent_key;
+  const shortId = node.request_id.slice(0, 12);
+
+  const copyText = () => {
+    void navigator.clipboard.writeText(buildTraceText(node));
+    toast.success('已复制溯源文本');
+  };
+  const dlText = () => downloadText(`trace-${shortId}.md`, buildTraceText(node));
+  const dlImage = async () => {
+    if (!detailRef.current) return;
+    // flushSync 同步触发「全展开 + 隐藏按钮」的重渲染，再截图，最后还原
+    flushSync(() => setExporting(true));
+    try {
+      await exportImage(detailRef.current, `trace-${shortId}.png`);
+    } catch {
+      toast.error('导出图片失败');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      {/* 标题 + 身份 mono 行（开始时间 / 请求 / 会话 置顶并排） */}
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[11px] text-violet-600">
-            {node.observation_type}
-          </span>
-          <span className="text-[14px] font-semibold text-stone-900">{nodeName}</span>
-        </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]">
-          <span>
-            <span className="text-stone-400">开始</span>{' '}
-            <span className="font-mono text-stone-600">{formatDateTime(node.created_at)}</span>
-          </span>
-          <span className="min-w-0">
-            <span className="text-stone-400">请求</span>{' '}
-            <button
-              type="button"
-              title="点击复制"
-              onClick={() => void navigator.clipboard.writeText(node.request_id)}
-              className="font-mono text-stone-600 hover:text-blue-600"
-            >
-              {node.request_id}
-            </button>
-          </span>
-          {node.session_id && (
-            <span>
-              <span className="text-stone-400">会话</span>{' '}
-              <span className="font-mono text-stone-600">{node.session_id}</span>
-            </span>
+    <ExportContext.Provider value={exporting}>
+      <div ref={detailRef} className="space-y-4 bg-[var(--color-paper)]">
+        {/* 标题行 + 导出 */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[11px] text-violet-600">
+                {node.observation_type}
+              </span>
+              <span className="text-[14px] font-semibold text-stone-900">{nodeName}</span>
+            </div>
+            {/* nowrap + margin（不用 flex-wrap/gap）：html-to-image 对 flex-wrap+gap 会误判
+                提前换行，导致导出图里「请求」另起一行；改用 whitespace-nowrap 锁单行 */}
+            <div className="mt-1.5 flex items-center text-[11.5px]">
+              <span className="mr-4 whitespace-nowrap">
+                <span className="text-stone-400">开始</span>{' '}
+                <span className="font-mono text-stone-600">{formatDateTime(node.created_at)}</span>
+              </span>
+              {node.session_id && (
+                <span className="mr-4 whitespace-nowrap">
+                  <span className="text-stone-400">会话</span>{' '}
+                  <span className="font-mono text-stone-600">{node.session_id}</span>
+                </span>
+              )}
+              <span className="whitespace-nowrap">
+                <span className="text-stone-400">请求</span>{' '}
+                <button
+                  type="button"
+                  title={`点击复制 ${node.request_id}`}
+                  onClick={() => void navigator.clipboard.writeText(node.request_id)}
+                  className="font-mono text-stone-600 hover:text-blue-600"
+                >
+                  {node.request_id.length > 16
+                    ? `${node.request_id.slice(0, 16)}…`
+                    : node.request_id}
+                </button>
+              </span>
+            </div>
+          </div>
+          {!exporting && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  title="导出 trace"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-stone-200 px-2 py-1 text-[11.5px] text-stone-600 transition hover:border-stone-300 hover:text-stone-900"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  导出
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="!w-44 !p-1">
+                <ExportItem
+                  icon={<Copy className="h-3.5 w-3.5" />}
+                  label="复制文字"
+                  onClick={copyText}
+                />
+                <ExportItem
+                  icon={<FileDown className="h-3.5 w-3.5" />}
+                  label="下载文字 .md"
+                  onClick={dlText}
+                />
+                <ExportItem
+                  icon={<ImageIcon className="h-3.5 w-3.5" />}
+                  label="下载图片 .png"
+                  onClick={() => void dlImage()}
+                />
+              </PopoverContent>
+            </Popover>
           )}
         </div>
-      </div>
 
       {/* stat bar：指标平铺，无填充无卡格；极淡竖发丝分隔 + 放大数值出层次 */}
-      <div className="flex flex-wrap gap-y-3 py-1">
-        <Stat k="状态" v={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
-        <Stat k="耗时" v={formatDurationMs(node.duration_ms)} />
-        <Stat k="模型" v={node.model_code || '—'} mono />
-        <Stat
+      <StatBar>
+        <StatItem k="状态" v={node.success ? '成功' : `失败 ${node.code}`} tone={node.success ? 'ok' : 'err'} />
+        <StatItem k="耗时" v={formatDurationMs(node.duration_ms)} />
+        <StatItem k="模型" v={node.model_code || '—'} mono />
+        <StatItem
           k="Token"
           v={node.total_tokens != null ? formatTokens(node.total_tokens) : '—'}
           sub={node.total_tokens != null ? `↑${node.prompt_tokens ?? 0} ↓${node.completion_tokens ?? 0}` : undefined}
         />
-        <Stat k="成本" v={node.cost_usd != null ? formatCost(node.cost_usd) : '—'} />
-        <Stat k="渠道" v={node.channel || '—'} />
-      </div>
+        <StatItem k="成本" v={node.cost_usd != null ? formatCost(node.cost_usd) : '—'} />
+        <StatItem k="渠道" v={node.channel || '—'} />
+      </StatBar>
 
       {node.error_message && (
         <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
@@ -406,152 +481,10 @@ const NodeDetail = ({
         </div>
       )}
 
-      <PayloadView title="输入" payload={node.request_payload} textKeys={INPUT_TEXT_KEYS} />
-      <PayloadView title="输出" payload={node.response_payload} textKeys={OUTPUT_TEXT_KEYS} />
-    </div>
-  );
-};
-
-/** stat bar 单项：label 小灰 + value 粗，右侧竖线分隔 */
-const Stat = ({
-  k,
-  v,
-  sub,
-  mono,
-  tone,
-}: {
-  k: string;
-  v: string;
-  sub?: string;
-  mono?: boolean;
-  tone?: 'ok' | 'err';
-}) => (
-  <div className="mr-6 border-r border-stone-100 pr-6 last:mr-0 last:border-r-0 last:pr-0">
-    <div className="text-[10.5px] tracking-wide text-stone-400">{k}</div>
-    <div className="mt-1 flex items-baseline gap-1.5">
-      <span
-        className={cn(
-          'tnum text-[15px] font-semibold',
-          tone === 'ok' ? 'text-emerald-600' : tone === 'err' ? 'text-rose-600' : 'text-stone-800',
-          mono && 'font-mono text-[13px]',
-        )}
-      >
-        {v}
-      </span>
-      {sub && <span className="tnum text-[11px] font-normal text-stone-400">{sub}</span>}
-    </div>
-  </div>
-);
-
-/** 悬浮复制按钮：贴消息框右上角，hover 显现，点后短暂打勾 */
-const CopyBtn = ({ text }: { text: string }) => {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      title="复制"
-      onClick={() => {
-        void navigator.clipboard.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1200);
-      }}
-      className="absolute top-0.5 right-0.5 z-10 rounded p-1 text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-stone-700 group-hover/msg:opacity-100"
-    >
-      {done ? (
-        <Check className="h-3.5 w-3.5 text-emerald-500" />
-      ) : (
-        <Copy className="h-3.5 w-3.5" />
-      )}
-    </button>
-  );
-};
-
-/** 输入/输出：有「主文本」时默认 Markdown 渲染（保留换行），可切原始 JSON */
-const PayloadView = ({
-  title,
-  payload,
-  textKeys,
-}: {
-  title: string;
-  payload: Payload;
-  textKeys: string[];
-}) => {
-  const text = pickText(payload, textKeys);
-  const messages = text ? parseMessages(text) : null;
-  const [raw, setRaw] = useState(!text); // 无主文本时直接看原始
-  const [open, setOpen] = useState(true); // 默认展开，可折叠
-  const empty = !payload || Object.keys(payload).length === 0;
-
-  return (
-    <div className="space-y-1.5">
-      {/* 固定行高 h-6：折叠时右侧切换消失也不让标题上下跳动 */}
-      <div className="flex h-6 items-center justify-between">
-        <button
-          type="button"
-          onClick={() => setOpen(o => !o)}
-          className="flex items-center gap-1 text-[12px] font-medium text-stone-700 hover:text-stone-900"
-        >
-          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-          {title}
-        </button>
-        {open && text && (
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              title="Markdown 渲染"
-              onClick={() => setRaw(false)}
-              className={cn(
-                'rounded p-1 transition',
-                !raw ? 'bg-stone-100 text-stone-700' : 'text-stone-300 hover:text-stone-500',
-              )}
-            >
-              <FileText className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              title="原始 JSON"
-              onClick={() => setRaw(true)}
-              className={cn(
-                'rounded p-1 transition',
-                raw ? 'bg-stone-100 text-stone-700' : 'text-stone-300 hover:text-stone-500',
-              )}
-            >
-              <Braces className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        )}
+        <InputView payload={node.request_payload} />
+        <OutputView payload={node.response_payload} />
       </div>
-      {!open ? null : empty ? (
-        <div className="rounded-md border border-dashed border-stone-200 px-3 py-4 text-center text-[11.5px] text-stone-400">
-          无内容
-        </div>
-      ) : !raw && messages ? (
-        <div className="max-h-[460px] space-y-3 overflow-y-auto">
-          {messages.map((m, i) => (
-            <div key={i} className="group/msg relative pl-3.5">
-              {/* 轻量左色条替代描边卡片：系统=灰 / 用户=蓝 / 助手=紫 / 工具=琥珀 */}
-              <span className={cn('absolute top-1 bottom-1 left-0 w-[3px] rounded', ROLE_BAR[m.role] ?? 'bg-stone-300')} />
-              <CopyBtn text={m.content} />
-              <div className="mb-1 text-[10.5px] font-medium text-stone-400">
-                {ROLE_LABEL[m.role] ?? m.role}
-              </div>
-              <div className="text-[13px] leading-relaxed text-stone-800">
-                <Markdown content={m.content} />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : !raw && text ? (
-        <div className="group/msg relative">
-          <CopyBtn text={text} />
-          <div className="max-h-[420px] overflow-y-auto border-l border-stone-200 pl-3.5 text-[13px] leading-relaxed text-stone-800">
-            <Markdown content={text} />
-          </div>
-        </div>
-      ) : (
-        <JsonViewer value={(payload as object) ?? {}} />
-      )}
-    </div>
+    </ExportContext.Provider>
   );
 };
 

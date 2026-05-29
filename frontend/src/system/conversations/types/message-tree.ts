@@ -5,7 +5,13 @@ export interface ConversationItem {
   session_id: string;
   agent_key: string;
   app_id: string;
+  /** 终端用户外部 id（接入方传入；用于按用户筛 / 计费） */
+  end_user_id: string | null;
+  /** 该 session 绑的 owner key id（API/embed/openai 入口盖章；admin 为 NULL） */
+  api_key_id: EntityId | null;
+  provider_conv_id: string | null;
   title: string | null;
+  meta: Record<string, unknown> | null;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;
@@ -24,22 +30,9 @@ export interface MessageItem {
   usage: Record<string, unknown> | null;
   provider: string | null;
   parent_message_id: EntityId | null;
+  /** 本条消息所属调用的 trace_id（= call_logs.request_id）；可下钻 trace */
+  request_id: string | null;
+  /** 用户对该消息的反馈：1 = 👍，-1 = 👎，null = 未反馈 */
+  feedback: number | null;
   created_at: string;
-}
-
-/** 树形节点：一条消息 + 其所有 children（按 seq 升序） */
-export interface MessageTreeNode {
-  message: MessageItem;
-  children: MessageTreeNode[];
-}
-
-/** 树形渲染的"线性视图"单元：每条消息 + 兄弟分支信息 */
-export interface BranchRenderItem {
-  message: MessageItem;
-  /** 同 parent 下的兄弟分支总数（1 = 没分支） */
-  siblingCount: number;
-  /** 当前在第几个分支（1-based，便于显示 "2/3"） */
-  siblingIndex: number;
-  /** 同 parent 下所有兄弟的 message id（用于切换器） */
-  siblingIds: EntityId[];
 }

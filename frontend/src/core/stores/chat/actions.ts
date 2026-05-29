@@ -7,6 +7,7 @@
 import type { StateCreator } from 'zustand';
 
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
 import {
   MAX_COLUMNS,
   newColumn,
@@ -25,6 +26,7 @@ import type {
 } from '@/system/playground/types/playground';
 
 export interface ChatActions {
+  setApiKeyId: (apiKeyId: EntityId | null) => void;
   addColumn: () => void;
   removeColumn: (columnId: string) => void;
   updateParams: (columnId: string, params: PlaygroundParams) => void;
@@ -35,6 +37,13 @@ export interface ChatActions {
   ) => Promise<void>;
   stop: (columnId: string) => void;
   clearMessages: (columnId: string) => void;
+  /** 载入一条历史会话到列（设消息流 + 续接 sessionId + 可选恢复配置） */
+  loadSession: (
+    columnId: string,
+    sessionId: string,
+    messages: PlaygroundMessage[],
+    params?: Partial<PlaygroundParams>,
+  ) => void;
   deleteMessage: (columnId: string, msgId: string) => void;
   editMessage: (columnId: string, msgId: string, next: string) => Promise<void>;
   regenerate: (columnId: string, msgId: string) => Promise<void>;
@@ -109,9 +118,25 @@ export const createChatActions: StateCreator<
   const paramsOf = (columnId: string): PlaygroundParams | undefined =>
     get().columns.find(c => c.id === columnId)?.params;
 
+  /** 写回某列的溯源 sessionId（后端首条 invoke 经 meta 透出后续接用） */
+  const setColumnSession = (columnId: string, sessionId: string) =>
+    set(
+      s => ({
+        columns: s.columns.map(c =>
+          c.id === columnId ? { ...c, sessionId } : c,
+        ),
+      }),
+      false,
+      'chat/setColumnSession',
+    );
+
   const requireModel = (params: PlaygroundParams | undefined): boolean => {
     if (!params?.model_id) {
       toast.error('请先选择模型');
+      return false;
+    }
+    if (get().apiKeyId == null) {
+      toast.error('请先选择一个溯源 Key');
       return false;
     }
     return true;
@@ -131,6 +156,9 @@ export const createChatActions: StateCreator<
     try {
       await streamInvoke(
         {
+          api_key_id: get().apiKeyId,
+          session_id: get().columns.find(c => c.id === columnId)?.sessionId,
+          bound_agent_key: params.bound_agent_key,
           model_id: params.model_id,
           system_prompt:
             overrides?.system_prompt ?? params.system_prompt ?? undefined,
@@ -139,6 +167,8 @@ export const createChatActions: StateCreator<
           max_tokens: params.max_tokens,
           messages: reqMessages,
           kb_ids: params.kb_ids.length ? params.kb_ids : undefined,
+          // transient override（如翻译临时 system_prompt）不写入会话配置快照
+          persist_config: !overrides?.system_prompt,
         },
         {
           signal: controller.signal,
@@ -152,6 +182,9 @@ export const createChatActions: StateCreator<
             }
             if (chunk.meta && typeof chunk.meta.request_id === 'string') {
               patch(columnId, targetId, { requestId: chunk.meta.request_id });
+            }
+            if (chunk.meta && typeof chunk.meta.session_id === 'string') {
+              setColumnSession(columnId, chunk.meta.session_id);
             }
             if (chunk.delta) {
               setMsgs(
@@ -186,6 +219,8 @@ export const createChatActions: StateCreator<
   };
 
   return {
+    setApiKeyId: apiKeyId => set({ apiKeyId }, false, 'chat/setApiKeyId'),
+
     addColumn: () => {
       if (get().columns.length >= MAX_COLUMNS) {
         toast.warning(`最多 ${MAX_COLUMNS} 列`);
@@ -265,6 +300,37 @@ export const createChatActions: StateCreator<
     clearMessages: columnId => {
       aborters.get(columnId)?.abort();
       setMsgs(columnId, () => [], 'chat/clearMessages');
+      // 清空消息 = 开新会话：重置该列 sessionId，下一条 invoke 会建新会话
+      set(
+        s => ({
+          columns: s.columns.map(c =>
+            c.id === columnId ? { ...c, sessionId: null } : c,
+          ),
+        }),
+        false,
+        'chat/clearMessages:resetSession',
+      );
+    },
+
+    loadSession: (columnId, sessionId, messages, params) => {
+      aborters.get(columnId)?.abort();
+      set(
+        s => ({
+          columns: s.columns.map(c =>
+            c.id === columnId
+              ? {
+                  ...c,
+                  sessionId,
+                  // 恢复会话当初的配置（model/KB/参数/关联应用）；缺省保留现状
+                  params: params ? { ...c.params, ...params } : c.params,
+                }
+              : c,
+          ),
+          messages: { ...s.messages, [columnId]: messages },
+        }),
+        false,
+        'chat/loadSession',
+      );
     },
 
     deleteMessage: (columnId, msgId) =>

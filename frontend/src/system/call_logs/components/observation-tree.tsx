@@ -78,14 +78,17 @@ export const ObservationIconRail: React.FC<{
       const otype = (n.observation_type as ObservationType) || 'generation';
       const Icon = TYPE_ICON[otype] ?? CircleDashed;
       const colorCls = TYPE_COLOR[otype] ?? 'text-stone-500';
-      const isSelected = selectedId === n.request_id;
+      const isSelected = selectedId != null && String(n.id) === selectedId;
       return (
         <button
           key={String(n.id)}
           type="button"
           title={n.request_id.includes('.') ? n.request_id.slice(n.request_id.indexOf('.') + 1) : otype}
           onClick={() => onSelect?.(n)}
-          className={cn('rounded p-1 transition hover:bg-stone-100', isSelected && 'bg-stone-100')}
+          className={cn(
+            'rounded p-1 transition hover:bg-stone-100',
+            isSelected && 'bg-blue-100',
+          )}
         >
           <Icon className={cn('h-4 w-4', n.success ? colorCls : 'text-rose-500')} />
         </button>
@@ -146,7 +149,7 @@ const TreeRow: React.FC<TreeRowProps> = ({
   const colorCls = TYPE_COLOR[otype] ?? 'text-stone-500';
 
   const widthPct = Math.max(2, Math.min(100, (node.duration_ms / totalDuration) * 100));
-  const isSelected = selectedId === node.request_id;
+  const isSelected = selectedId != null && String(node.id) === selectedId;
   const hasChildren = node.children.length > 0;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -157,11 +160,15 @@ const TreeRow: React.FC<TreeRowProps> = ({
         className={cn(
           'group relative flex w-full items-center gap-2 rounded px-1 py-1 text-left transition',
           'hover:bg-stone-100/70',
-          isSelected && 'bg-stone-100/80',
+          isSelected && 'bg-blue-50 hover:bg-blue-50',
         )}
         style={{ paddingLeft: depth * 14 + 4 }}
         onClick={() => onSelect?.(node)}
       >
+        {/* 选中态：最左侧高亮竖条（无边框） */}
+        {isSelected && (
+          <span className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-blue-500" />
+        )}
         {/* depth guide lines */}
         {depth > 0 ? (
           <span

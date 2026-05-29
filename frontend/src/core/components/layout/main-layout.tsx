@@ -22,7 +22,7 @@ const PATH_LABELS: Record<string, string> = {
   '/dashboard': '仪表盘',
   '/agents': '应用',
   '/graphs': '工作流',
-  '/playground': '对话 / Playground',
+  '/playground': 'Playground',
   '/embed-configs': '嵌入式',
   '/providers': 'Providers',
   '/models': '模型',

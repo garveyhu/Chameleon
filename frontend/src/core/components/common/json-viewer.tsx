@@ -223,11 +223,14 @@ interface RowProps {
 
 const Row = ({ indent, name, primitive, query }: RowProps) => (
   <div className="group flex items-start" style={indent}>
-    <span className="mr-1 inline-block w-3" />
+    <span className="mr-1 inline-block w-3 shrink-0" />
     {name !== undefined && (
-      <span className="text-stone-700">{highlight(JSON.stringify(name), query)}: </span>
+      <span className="shrink-0 text-stone-700">
+        {highlight(JSON.stringify(name), query)}:&nbsp;
+      </span>
     )}
-    {primitive}
+    {/* 值列 min-w-0 flex-1：长字符串在此列内换行，续行挂在值起点下方对齐 */}
+    <span className="min-w-0 flex-1 break-words">{primitive}</span>
   </div>
 );
 

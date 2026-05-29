@@ -116,7 +116,7 @@ export const DOMAINS: NavDomain[] = [
             to: '/playground',
             icon: MessageSquare,
             i18nKey: 'menu.playground',
-            fallbackTitle: '对话 / Playground',
+            fallbackTitle: 'Playground',
             perm: 'playground:invoke',
           },
         ],

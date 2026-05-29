@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -159,6 +160,8 @@ async def list_session_files(
         None, description="uploaded / parsing / indexing / ready / failed"
     ),
     filename: str | None = Query(None, description="文件名关键字（ilike）"),
+    since: datetime | None = Query(None, description="ISO8601 起始（含）"),
+    until: datetime | None = Query(None, description="ISO8601 结束（含）"),
     db: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[PageResult[SessionFileItem]]:
@@ -171,6 +174,8 @@ async def list_session_files(
         kind=kind,
         status=status,
         filename_kw=filename,
+        since=since,
+        until=until,
     )
     items = [SessionFileItem.from_orm(r) for r in res.items]
     return Result.ok(

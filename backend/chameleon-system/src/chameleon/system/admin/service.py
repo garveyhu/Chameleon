@@ -33,6 +33,29 @@ from chameleon.system.admin.schemas import (
 )
 from chameleon.system.scores.schemas import ScoreItem
 
+_INPUT_PREVIEW_KEYS = ["question", "input", "query", "text", "prompt_preview"]
+_OUTPUT_PREVIEW_KEYS = ["output", "answer", "text", "output_preview"]
+
+
+def _payload_preview(
+    payload: dict | None, keys: list[str], max_len: int = 160
+) -> str | None:
+    """从根行 payload 抽一段短文本预览（命中 keys；否则取 messages 末条 content）。"""
+    if not isinstance(payload, dict):
+        return None
+    for k in keys:
+        v = payload.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()[:max_len]
+    msgs = payload.get("messages")
+    if isinstance(msgs, list):
+        for m in reversed(msgs):
+            if isinstance(m, dict) and isinstance(m.get("content"), str):
+                c = m["content"].strip()
+                if c:
+                    return c[:max_len]
+    return None
+
 
 async def list_call_logs(
     session: AsyncSession,
@@ -43,6 +66,7 @@ async def list_call_logs(
     channel: str | None = None,
     model_code: str | None = None,
     session_id: str | None = None,
+    end_user_id: str | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
     success: bool | None = None,
@@ -64,11 +88,13 @@ async def list_call_logs(
             ApiKey.name.label("api_key_name"),
             Agent.source.label("source"),
             Graph.kind.label("kind"),
+            ChatSession.title.label("session_title"),
         )
         .select_from(CallLog)
         .outerjoin(ApiKey, ApiKey.id == CallLog.api_key_id)
         .outerjoin(Agent, Agent.agent_key == CallLog.agent_key)
         .outerjoin(Graph, Graph.id == Agent.graph_id)
+        .outerjoin(ChatSession, ChatSession.session_id == CallLog.session_id)
         .where(CallLog.parent_id.is_(None))
     )
     if app_id is not None:
@@ -81,6 +107,8 @@ async def list_call_logs(
         stmt = stmt.where(CallLog.model_code == model_code)
     if session_id is not None:
         stmt = stmt.where(CallLog.session_id == session_id)
+    if end_user_id is not None:
+        stmt = stmt.where(CallLog.end_user_id == end_user_id)
     if since is not None:
         stmt = stmt.where(CallLog.created_at >= since)
     if until is not None:
@@ -105,6 +133,9 @@ async def list_call_logs(
         log: CallLog = row[0]
         item = CallLogItem.model_validate(log)
         item.api_key_name = row.api_key_name
+        item.session_title = row.session_title
+        item.input_preview = _payload_preview(log.request_payload, _INPUT_PREVIEW_KEYS)
+        item.output_preview = _payload_preview(log.response_payload, _OUTPUT_PREVIEW_KEYS)
         item.source = row.source
         # kind 仅对 source='graph' 有意义（编排工作流）；其余 source 置空
         item.kind = row.kind if row.source == "graph" else None
@@ -227,28 +258,43 @@ async def list_sessions(
     *,
     agent_key: str | None = None,
     end_user_id: str | None = None,
+    channel: str | None = None,
     since: datetime | None = None,
+    until: datetime | None = None,
 ) -> PageResult[SessionItem]:
     """会话（thread）列表 —— 按 ChatSession 维度（多轮对话一条），区别于 trace 列表。
 
-    turn_count 子查询 SUM messages；按 last_message_at（无则 created_at）倒序。
+    turn_count 子查询 SUM messages；channel 由 call_logs 根行派生（一会话渠道一致）；
+    按 last_message_at（无则 created_at）倒序。
     """
     turn_sq = (
         select(Message.session_id, func.count(Message.id).label("cnt"))
         .group_by(Message.session_id)
         .subquery()
     )
+    # 渠道派生：取该会话 trace 根行的 channel（同一会话渠道一致，聚合任取其一）
+    chan_sq = (
+        select(CallLog.session_id, func.max(CallLog.channel).label("channel"))
+        .where(CallLog.parent_id.is_(None), CallLog.session_id.is_not(None))
+        .group_by(CallLog.session_id)
+        .subquery()
+    )
     base = (
-        select(ChatSession, turn_sq.c.cnt)
+        select(ChatSession, turn_sq.c.cnt, chan_sq.c.channel)
         .outerjoin(turn_sq, turn_sq.c.session_id == ChatSession.session_id)
+        .outerjoin(chan_sq, chan_sq.c.session_id == ChatSession.session_id)
         .where(ChatSession.deleted_at.is_(None))
     )
     if agent_key:
         base = base.where(ChatSession.agent_key == agent_key)
     if end_user_id:
         base = base.where(ChatSession.end_user_id == end_user_id)
+    if channel:
+        base = base.where(chan_sq.c.channel == channel)
     if since:
         base = base.where(ChatSession.created_at >= since)
+    if until:
+        base = base.where(ChatSession.created_at <= until)
 
     total = (
         await session.execute(
@@ -272,12 +318,13 @@ async def list_sessions(
             agent_key=cs.agent_key,
             app_id=cs.app_id,
             end_user_id=cs.end_user_id,
+            channel=chan,
             title=cs.title,
             turn_count=cnt or 0,
             last_message_at=cs.last_message_at,
             created_at=cs.created_at,
         )
-        for cs, cnt in rows
+        for cs, cnt, chan in rows
     ]
     return PageResult(items=items, total=total, page=page.page, page_size=page.page_size)
 

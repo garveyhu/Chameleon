@@ -54,9 +54,17 @@ export interface PlaygroundParams {
   top_p: number | null;
   max_tokens: number | null;
   kb_ids: EntityId[];
+  /** 关联应用：本会话配置基于哪个应用预填（仅溯源记录，运行仍 model-direct） */
+  bound_agent_key?: string | null;
 }
 
 export interface InvokeRequest {
+  /** 溯源：绑定的 owner key（全局一个 Key，必填——后端无 key 直接拒） */
+  api_key_id?: EntityId | null;
+  /** 会话续接：首条不传，后端建会话后经 meta 透出 session_id，后续轮带上 */
+  session_id?: string | null;
+  /** 关联应用（溯源记录，落 session.meta.config.bound_agent_key） */
+  bound_agent_key?: string | null;
   model_id?: EntityId;
   model_name?: string;
   system_prompt?: string;
@@ -65,6 +73,8 @@ export interface InvokeRequest {
   max_tokens?: number | null;
   messages: Array<{ role: PlaygroundRole; content: string | ContentBlock[] }>;
   kb_ids?: EntityId[];
+  /** 是否持久化本轮配置到会话快照；transient override（翻译等）传 false */
+  persist_config?: boolean;
 }
 
 export type InvokeChunk = import('@/core/lib/sse-events').FlatSSEEvent;

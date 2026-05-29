@@ -30,6 +30,7 @@ export const callLogApi = {
     channel?: string;
     model_code?: string;
     session_id?: string;
+    end_user_id?: string;
     success?: boolean;
     since?: string;
     until?: string;
@@ -47,7 +48,9 @@ export const callLogApi = {
     page_size?: number;
     agent_key?: string;
     end_user_id?: string;
+    channel?: string;
     since?: string;
+    until?: string;
   }) => get<PageResult<SessionItem>>('/v1/admin/sessions', { params }),
 };
 

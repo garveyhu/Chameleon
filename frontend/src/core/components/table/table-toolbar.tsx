@@ -4,7 +4,7 @@
  * 控件高度统一 h-7 紧凑
  */
 
-import { Search } from 'lucide-react';
+import { RotateCw, Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Input } from '@/core/components/ui/input';
@@ -48,8 +48,12 @@ export interface ToolbarSearch {
 export interface TableToolbarProps {
   /** 左侧标题（如"用户列表"） */
   title?: React.ReactNode;
+  /** 刷新回调：传入则在筛选区最左（日期筛选器之前）渲染一个刷新 icon */
+  onRefresh?: () => void;
   search?: ToolbarSearch;
   filters?: ToolbarFilter[];
+  /** 右侧控件区最前面的自定义槽（日期区间 / AgentPicker 等放这里，排在下拉前） */
+  leadingExtra?: React.ReactNode;
   /** 右侧 extra（按钮 / 菜单） */
   extra?: React.ReactNode;
   className?: string;
@@ -57,8 +61,10 @@ export interface TableToolbarProps {
 
 export const TableToolbar: React.FC<TableToolbarProps> = ({
   title,
+  onRefresh,
   search,
   filters,
+  leadingExtra,
   extra,
   className,
 }) => {
@@ -67,6 +73,17 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
       {title ? <h3 className="text-[13.5px] font-semibold text-stone-900">{title}</h3> : null}
 
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        {onRefresh ? (
+          <button
+            type="button"
+            title="刷新"
+            onClick={onRefresh}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-stone-400 transition hover:bg-stone-100 hover:text-stone-700"
+          >
+            <RotateCw className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {leadingExtra}
         {search ? (
           <div className="relative">
             <button

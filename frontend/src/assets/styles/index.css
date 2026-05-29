@@ -242,6 +242,12 @@ code, pre, kbd {
   animation: shimmer 1.6s ease-in-out infinite;
 }
 
+/* ─── 热刷新（翻页 / 改筛选）顶部 indeterminate 进度条 ─── */
+@keyframes global-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ─── sidebar 子项 tree connector lines ─── */
 .tree-line {
   position: relative;

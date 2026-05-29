@@ -6,15 +6,6 @@ const module: ModuleRouteConfig = {
   order: 29,
   routes: [
     {
-      path: '/conversations',
-      lazy: async () => {
-        const m = await import(
-          '@/system/conversations/pages/conversations-page'
-        );
-        return { Component: m.ConversationsPage };
-      },
-    },
-    {
       path: '/conversations/:sessionId',
       lazy: async () => {
         const m = await import(

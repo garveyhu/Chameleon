@@ -1,5 +1,30 @@
 import type { EntityId } from '@/core/types/api';
 
+/** 轻量选项（AgentPicker 分页下拉用） */
+export interface AgentOption {
+  id: EntityId;
+  agent_key: string;
+  name: string;
+  source: string;
+  graph_kind: 'chatflow' | 'workflow' | null;
+  icon: string | null;
+}
+
+/** Playground「关联应用」预填：按 source 尽力解析的会话默认配置 */
+export interface AgentPrefillConfig {
+  agent_key: string;
+  name: string;
+  source: string;
+  graph_kind: 'chatflow' | 'workflow' | null;
+  /** 是否能预填出可用配置（workflow/外部应用为 false，仅记录关联） */
+  prefillable: boolean;
+  model_code: string | null;
+  system_prompt: string | null;
+  kb_ids: EntityId[];
+  /** 人类可读说明（预填范围/限制） */
+  notes: string | null;
+}
+
 export interface AgentItem {
   id: EntityId;
   agent_key: string;

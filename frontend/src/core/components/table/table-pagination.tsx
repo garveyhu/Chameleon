@@ -116,9 +116,7 @@ export const TablePagination: React.FC<TablePaginationProps> = ({
           children: <ChevronsRight className="h-3.5 w-3.5" />,
         })}
 
-        {totalPages > 1 ? (
-          <JumpInput current={safePage} totalPages={totalPages} onJump={go} />
-        ) : null}
+        <JumpInput current={safePage} totalPages={totalPages} onJump={go} />
       </div>
     </div>
   );

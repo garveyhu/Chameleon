@@ -25,6 +25,8 @@ export interface SessionItem {
   agent_key: string;
   app_id: string;
   end_user_id: string | null;
+  /** 渠道（call_logs 根行派生）：embed / playground / api / openai / internal */
+  channel: CallChannel | null;
   title: string | null;
   turn_count: number;
   last_message_at: string | null;
@@ -39,6 +41,11 @@ export interface CallLogItem {
   api_key_id?: EntityId | null;
   /** api_key 展示名（后端 join 推导；无 key 调用为 null） */
   api_key_name?: string | null;
+  /** 会话标题（后端 join sessions.title 推导） */
+  session_title?: string | null;
+  /** 列表内联输入/输出预览（根行 payload 抽取的短文本） */
+  input_preview?: string | null;
+  output_preview?: string | null;
   session_id: string | null;
   stream: boolean;
   success: boolean;

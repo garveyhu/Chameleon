@@ -10,7 +10,7 @@
     "kbs": "知识库",
     "embed_configs": "嵌入式智能体",
     "graphs": "工作流",
-    "playground": "对话 / Playground",
+    "playground": "Playground",
     "call_logs": "调用日志",
     "trace": "Trace",
     "cost": "成本统计",
@@ -43,7 +43,7 @@
       "compliance": "合规",
       "platform": "平台"
     },
-    "sessions": "会话 & 运行"
+    "sessions": "会话"
   },
   "agents": {
     "create_app": "新建应用"

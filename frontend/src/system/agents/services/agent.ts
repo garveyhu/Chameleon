@@ -1,11 +1,13 @@
 import { get, post } from '@/core/lib/request';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   AgentApiKey,
   AgentConfigSchema,
   AgentItem,
   AgentModelSlots,
+  AgentOption,
   AgentOverview,
+  AgentPrefillConfig,
   CreateAgentRequest,
   LinkedKbItem,
 } from '@/system/agents/types/agent';
@@ -19,7 +21,15 @@ interface InvokeResult {
 export const agentApi = {
   list: (params?: { source?: string; enabled?: boolean }) =>
     get<AgentItem[]>('/v1/admin/agents', { params }),
+  /** 分页 + 搜索 + 类别筛 —— AgentPicker 下拉用（向下滚动加载下一页） */
+  options: (params?: { q?: string; category?: string; page?: number; page_size?: number }) =>
+    get<PageResult<AgentOption>>('/v1/admin/agents/options', { params }),
   get: (id: EntityId) => get<AgentItem>(`/v1/admin/agents/${id}`),
+  /** Playground「关联应用」预填：按 agent_key 取可预填的模型/提示词/知识库默认配置 */
+  prefillConfig: (agentKey: string) =>
+    get<AgentPrefillConfig>(
+      `/v1/admin/agents/by-key/${encodeURIComponent(agentKey)}/prefill-config`,
+    ),
   create: (req: CreateAgentRequest) => post<AgentItem>('/v1/admin/agents', req),
   update: (
     id: EntityId,

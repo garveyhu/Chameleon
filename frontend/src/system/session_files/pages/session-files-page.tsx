@@ -3,11 +3,12 @@
  * 数据源：admin /v1/admin/session-files。分页 + 多条件查询 + 详情抽屉 +
  * 手动删除（级联清 Document/chunks/MinIO）。
  */
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
 
-import { FileText, Image as ImageIcon, Music, Sheet, Trash2 } from 'lucide-react';
+import { Eye, FileText, Image as ImageIcon, Music, Sheet, Trash2 } from 'lucide-react';
 
+import { DateRangePicker, type DateRange } from '@/core/components/common/date-range-picker';
 import { EmptyState } from '@/core/components/common/empty-state';
 import {
   DataTable,
@@ -17,6 +18,7 @@ import {
   TableToolbar,
 } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
+import { Input } from '@/core/components/ui/input';
 import { StatusBadge } from '@/core/components/ui/status-badge';
 import {
   Modal,
@@ -28,12 +30,14 @@ import {
 } from '@/core/components/ui/modal';
 import {
   Sheet as DrawerRoot,
+  SheetBody,
   SheetContent,
   SheetHeader,
   SheetTitle,
 } from '@/core/components/ui/sheet';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
+import { FilePreviewModal, type PreviewTarget } from '@/system/session_files/components/file-preview-modal';
 import { sessionFileApi } from '@/system/session_files/services/session-file';
 import type { SessionFileItem } from '@/system/session_files/types/session-file';
 
@@ -79,6 +83,16 @@ const formatSize = (n: number): string => {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 };
 
+/** 默认时间区间：近 7 天（含今天） */
+const defaultRange = (): DateRange => {
+  const to = new Date();
+  to.setHours(23, 59, 59, 999);
+  const from = new Date();
+  from.setDate(from.getDate() - 6);
+  from.setHours(0, 0, 0, 0);
+  return { from, to };
+};
+
 export const SessionFilesPage = () => {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
@@ -89,12 +103,16 @@ export const SessionFilesPage = () => {
   const [status, setStatus] = useState('all');
   const [filenameKw, setFilenameKw] = useState('');
   const [filenameDraft, setFilenameDraft] = useState('');
+  const [range, setRange] = useState<DateRange>(defaultRange);
 
   const [detail, setDetail] = useState<SessionFileItem | null>(null);
   const [deleting, setDeleting] = useState<SessionFileItem | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewTarget | null>(null);
 
   const resetPage = () => setPage(1);
 
+  const sinceIso = range.from.toISOString();
+  const untilIso = range.to.toISOString();
   const listQ = useQuery({
     queryKey: [
       'session-files',
@@ -105,6 +123,8 @@ export const SessionFilesPage = () => {
       kind,
       status,
       filenameKw,
+      sinceIso,
+      untilIso,
     ],
     queryFn: () =>
       sessionFileApi.list({
@@ -115,7 +135,10 @@ export const SessionFilesPage = () => {
         kind: kind === 'all' ? undefined : kind,
         status: status === 'all' ? undefined : status,
         filename: filenameKw || undefined,
+        since: sinceIso,
+        until: untilIso,
       }),
+    placeholderData: keepPreviousData,
   });
 
   const deleteMut = useMutation({
@@ -135,11 +158,22 @@ export const SessionFilesPage = () => {
       key: 'filename',
       header: '文件名',
       render: r => (
-        <div className="flex min-w-0 items-center gap-1.5">
+        <div className="group/fn flex min-w-0 items-center gap-1.5">
           <KindIcon kind={r.kind} />
           <span className="truncate text-[12.5px]" title={r.filename}>
             {r.filename}
           </span>
+          <button
+            type="button"
+            title="预览"
+            onClick={e => {
+              e.stopPropagation();
+              setPreviewFile({ id: r.id, filename: r.filename, mime: r.mime });
+            }}
+            className="shrink-0 rounded p-0.5 text-stone-400 opacity-0 transition hover:bg-stone-100 hover:text-blue-600 group-hover/fn:opacity-100"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
         </div>
       ),
     },
@@ -237,6 +271,16 @@ export const SessionFilesPage = () => {
       <SectionCard>
         <TableToolbar
           title="会话文件"
+          onRefresh={() => listQ.refetch()}
+          leadingExtra={
+            <DateRangePicker
+              value={range}
+              onChange={v => {
+                setRange(v);
+                resetPage();
+              }}
+            />
+          }
           search={{
             value: filenameDraft,
             onChange: setFilenameDraft,
@@ -269,34 +313,38 @@ export const SessionFilesPage = () => {
               width: 110,
             },
           ]}
+          extra={
+            <>
+              <Input
+                className="!h-7 text-[12px]"
+                style={{ width: 168 }}
+                placeholder="会话 ID"
+                value={sessionId}
+                onChange={e => setSessionId(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') resetPage();
+                }}
+              />
+              <Input
+                className="!h-7 text-[12px]"
+                style={{ width: 168 }}
+                placeholder="终端用户 ID"
+                value={endUserId}
+                onChange={e => setEndUserId(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') resetPage();
+                }}
+              />
+            </>
+          }
         />
-
-        <div className="mb-2 flex flex-wrap items-center gap-1.5">
-          <input
-            value={sessionId}
-            onChange={e => setSessionId(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') resetPage();
-            }}
-            placeholder="会话 ID 精确匹配"
-            className="h-7 w-[260px] rounded border border-stone-200 px-2 font-mono text-[11px]"
-          />
-          <input
-            value={endUserId}
-            onChange={e => setEndUserId(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') resetPage();
-            }}
-            placeholder="终端用户 ID 精确匹配"
-            className="h-7 w-[200px] rounded border border-stone-200 px-2 font-mono text-[11px]"
-          />
-        </div>
 
         <DataTable
           columns={columns}
           rows={rows}
           rowKey="id"
           loading={listQ.isLoading}
+          refreshing={listQ.isFetching}
           onRowClick={r => setDetail(r)}
           emptyText={
             <EmptyState
@@ -318,7 +366,13 @@ export const SessionFilesPage = () => {
         />
       </SectionCard>
 
-      <DetailDrawer file={detail} onClose={() => setDetail(null)} />
+      <DetailDrawer
+        file={detail}
+        onClose={() => setDetail(null)}
+        onPreview={f => setPreviewFile({ id: f.id, filename: f.filename, mime: f.mime })}
+      />
+
+      <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
 
       <Modal open={!!deleting} onOpenChange={open => !open && setDeleting(null)}>
         <ModalContent className="!max-w-[440px]">
@@ -361,19 +415,16 @@ export const SessionFilesPage = () => {
 const DetailDrawer = ({
   file,
   onClose,
+  onPreview,
 }: {
   file: SessionFileItem | null;
   onClose: () => void;
+  onPreview: (f: SessionFileItem) => void;
 }) => {
   const open = !!file;
   const detailQ = useQuery({
     queryKey: ['session-files', 'detail', file?.id],
     queryFn: () => sessionFileApi.get(file!.id),
-    enabled: open,
-  });
-  const previewQ = useQuery({
-    queryKey: ['session-files', 'preview', file?.id],
-    queryFn: () => sessionFileApi.preview(file!.id),
     enabled: open,
   });
   const f = detailQ.data ?? file;
@@ -385,14 +436,21 @@ const DetailDrawer = ({
           <SheetTitle>{f?.filename ?? '会话文件详情'}</SheetTitle>
         </SheetHeader>
         {f ? (
-          <div className="space-y-4 px-5 py-3 text-[12.5px]">
-            <FilePreview
-              filename={f.filename}
-              loading={previewQ.isLoading}
-              preview={previewQ.data ?? null}
-            />
+          <SheetBody className="text-[12.5px]">
             <KvBlock
               rows={[
+                [
+                  '预览',
+                  <button
+                    key="preview"
+                    type="button"
+                    onClick={() => onPreview(f)}
+                    className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-0.5 text-[12px] text-stone-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    预览文件
+                  </button>,
+                ],
                 ['ID', String(f.id)],
                 ['类型', `${KIND_LABEL[f.kind] || f.kind}（${f.mime}）`],
                 ['大小', formatSize(f.size)],
@@ -410,109 +468,23 @@ const DetailDrawer = ({
                 ],
                 [
                   '切块数',
-                  detailQ.data?.chunk_count != null
-                    ? String(detailQ.data.chunk_count)
-                    : '—',
+                  detailQ.data?.chunk_count != null ? String(detailQ.data.chunk_count) : '—',
                 ],
                 ['MinIO object_id', f.object_id],
-                ...(f.error ? ([['错误', f.error]] as [string, string][]) : []),
+                ...(f.error ? ([['错误', f.error]] as [string, ReactNode][]) : []),
               ]}
             />
-            {previewQ.data?.url ? (
-              <div className="flex gap-2">
-                <Button asChild variant="outline" size="sm">
-                  <a href={previewQ.data.url} download={f.filename}>
-                    下载源文件
-                  </a>
-                </Button>
-              </div>
-            ) : null}
-          </div>
+          </SheetBody>
         ) : null}
       </SheetContent>
     </DrawerRoot>
   );
 };
 
-const FilePreview = ({
-  filename,
-  loading,
-  preview,
-}: {
-  filename: string;
-  loading: boolean;
-  preview: import('@/system/session_files/types/session-file').SessionFilePreview | null;
-}) => {
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-400">
-        加载预览中…
-      </div>
-    );
-  }
-  if (!preview) {
-    return (
-      <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-400">
-        无预览数据
-      </div>
-    );
-  }
-  if (preview.note) {
-    return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-4 text-[12px] text-amber-700">
-        {preview.note}
-      </div>
-    );
-  }
-
-  if (preview.kind === 'image' && preview.url) {
-    return (
-      <div className="overflow-hidden rounded-lg border border-stone-200">
-        <img
-          src={preview.url}
-          alt=""
-          className="max-h-[360px] w-full bg-stone-50 object-contain"
-        />
-      </div>
-    );
-  }
-  if (preview.kind === 'pdf' && preview.url) {
-    return (
-      <iframe
-        title={filename}
-        src={preview.url}
-        className="h-[420px] w-full rounded-lg border border-stone-200"
-      />
-    );
-  }
-  if (preview.kind === 'audio' && preview.url) {
-    return <audio controls src={preview.url} className="w-full" />;
-  }
-  if ((preview.kind === 'text' || preview.kind === 'office') && preview.text != null) {
-    return (
-      <div className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50">
-        <div className="border-b border-stone-200 bg-white px-3 py-1.5 text-[11px] text-stone-500">
-          {preview.kind === 'office' ? '已抽取为纯文本' : '文本预览'}
-          {preview.truncated ? '（已截断）' : ''}
-        </div>
-        <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11.5px] leading-relaxed text-stone-800">
-          {preview.text}
-        </pre>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-dashed border-stone-200 bg-stone-50 px-3 py-6 text-center text-[12px] text-stone-500">
-      该类型不支持内嵌预览，请使用下方按钮下载查看
-    </div>
-  );
-};
-
-const KvBlock = ({ rows }: { rows: [string, string][] }) => (
+const KvBlock = ({ rows }: { rows: [string, ReactNode][] }) => (
   <div className="divide-y divide-stone-100 rounded-lg border border-stone-200">
     {rows.map(([k, v]) => (
-      <div key={k} className="grid grid-cols-[120px_1fr] gap-2 px-3 py-1.5">
+      <div key={k} className="grid grid-cols-[120px_1fr] items-center gap-2 px-3 py-1.5">
         <div className="text-[11px] text-stone-500">{k}</div>
         <div className="break-all font-mono text-[11.5px] text-stone-800">{v}</div>
       </div>

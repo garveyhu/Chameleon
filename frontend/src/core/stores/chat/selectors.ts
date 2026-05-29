@@ -21,3 +21,5 @@ export const columnCount = (s: ChatState): number => s.columns.length;
 
 export const paramsOf = (s: ChatState, columnId: string) =>
   s.columns.find(c => c.id === columnId)?.params;
+
+export const selectApiKeyId = (s: ChatState) => s.apiKeyId;

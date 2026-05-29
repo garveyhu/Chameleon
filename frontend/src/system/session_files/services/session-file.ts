@@ -14,6 +14,8 @@ export interface ListParams {
   kind?: string;
   status?: string;
   filename?: string;
+  since?: string;
+  until?: string;
 }
 
 export const sessionFileApi = {

@@ -1,33 +1,58 @@
-/** 对话详情页 —— 树视图 + 分支切换器 + regenerate/edit-and-resend（P21.4 PR #67+#68） */
+/** 会话详情页 —— 独立设计的「会话」组件（对齐 trace 详情质感）
+ *
+ * 三段式：身份头（标题 + 会话号 + 时间）→ 聚合 stat bar（运行 / Token / 成本 / 模型）
+ * → 真实对话气泡（用户右 / 助手左，参考嵌入式 widget）。默认渲染最新一页，
+ * 上滚到顶按页加载更早（保持视口位置），长会话不一次性渲染。
+ */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Bot, Loader2, User2, Wrench } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Loader2,
+  ListTree,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { MessageActions } from '@/core/components/chat';
-import type {
-  ChatActionMessage,
-  ChatActionRole,
-} from '@/core/components/chat';
-import { VirtualList } from '@/core/components/common/virtual-list';
+import type { ChatActionMessage, ChatActionRole } from '@/core/components/chat';
+import { Markdown } from '@/core/components/chat/markdown';
+import { StatBar, StatItem } from '@/core/components/common/stat-bar';
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
-import { formatDateTime } from '@/core/lib/format';
+import { formatCost, formatDateTime, formatTokens } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
-import { BranchSwitcher } from '@/system/conversations/components/branch-switcher';
-import {
-  useMessageTree,
-  type BranchSelections,
-} from '@/system/conversations/hooks/use-message-tree';
 import { conversationApi } from '@/system/conversations/services/conversation';
-import type {
-  BranchRenderItem,
-  MessageItem,
-} from '@/system/conversations/types/message-tree';
+import type { MessageItem } from '@/system/conversations/types/message-tree';
+import { TraceDrawer } from '@/system/call_logs/components/trace-drawer';
+import { callLogApi } from '@/system/call_logs/services/call-log';
+import type { CallLogItem } from '@/system/call_logs/types/call-log';
+
+const PAGE_SIZE = 50;
+
+const ROLE_LABEL: Record<string, string> = {
+  user: '用户',
+  assistant: '助手',
+  system: '系统',
+  tool: '工具',
+};
+
+const numOf = (u: Record<string, unknown> | null, k: string): number => {
+  const v = u?.[k];
+  return typeof v === 'number' ? v : 0;
+};
 
 export const ConversationDetailPage = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -39,51 +64,81 @@ export const ConversationDetailPage = () => {
     enabled: !!sid,
   });
 
-  const msgsQ = useQuery({
-    queryKey: ['conversations', sid, 'messages'],
-    queryFn: () => conversationApi.listMessages(sid),
+  // 先取总数（仅 1 行）→ 反向分页定位最后一页（最新）
+  const metaQ = useQuery({
+    queryKey: ['conversations', sid, 'messages-meta'],
+    queryFn: () => conversationApi.listMessages(sid, { page: 1, page_size: 1 }),
+    enabled: !!sid,
+  });
+  const total = metaQ.data?.total ?? 0;
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // 从最新页起，往上滚按页加载更早（getNextPageParam 递减）
+  const msgsQ = useInfiniteQuery({
+    queryKey: ['conversations', sid, 'messages', lastPage],
+    queryFn: ({ pageParam }) =>
+      conversationApi.listMessages(sid, { page: pageParam, page_size: PAGE_SIZE }),
+    initialPageParam: lastPage,
+    getNextPageParam: (_last, _all, lastPageParam) =>
+      lastPageParam > 1 ? lastPageParam - 1 : undefined,
+    enabled: !!sid && total > 0,
+  });
+
+  const runsQ = useQuery({
+    queryKey: ['conversations', sid, 'runs'],
+    queryFn: () => callLogApi.list({ session_id: sid, page_size: 200 }),
     enabled: !!sid,
   });
 
-  const [selections, setSelections] = useState<BranchSelections>({});
-  const { visible, tree } = useMessageTree(msgsQ.data?.items, selections);
+  // 已加载页按 seq 升序展示（最新在底部）
+  const messages = useMemo(() => {
+    const all = (msgsQ.data?.pages ?? []).flatMap(p => p.items);
+    return [...all].sort((a, b) => a.seq - b.seq);
+  }, [msgsQ.data]);
+
+  const runByReq = useMemo(() => {
+    const m = new Map<string, CallLogItem>();
+    (runsQ.data?.items ?? []).forEach(r => m.set(r.request_id, r));
+    return m;
+  }, [runsQ.data?.items]);
+
+  const stats = useMemo(() => {
+    const runs = runsQ.data?.items ?? [];
+    const runTotal = runsQ.data?.total ?? runs.length;
+    let tokens = runs.reduce((s, r) => s + (r.total_tokens ?? 0), 0);
+    if (!tokens) {
+      tokens = messages.reduce(
+        (s, m) => s + numOf(m.usage, 'prompt_tokens') + numOf(m.usage, 'completion_tokens'),
+        0,
+      );
+    }
+    const hasCost = runs.some(r => r.cost_usd != null);
+    const cost = runs.reduce((s, r) => s + (r.cost_usd ?? 0), 0);
+    const models = Array.from(
+      new Set(runs.map(r => r.model_code).filter((x): x is string => !!x)),
+    );
+    return { runTotal, tokens, cost, hasCost, models };
+  }, [runsQ.data, messages]);
 
   const qc = useQueryClient();
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['conversations', sid, 'messages'] });
-  };
-
-  // 用户切支 → merge selections（保留显式选过的，覆盖 default）
-  const onSwitchBranch = (parentKey: string, nextId: EntityId) => {
-    setSelections(prev => ({ ...prev, [parentKey]: nextId }));
+    qc.invalidateQueries({ queryKey: ['conversations', sid] });
   };
 
   const regenMut = useMutation({
     mutationFn: (mid: EntityId) => conversationApi.regenerate(sid, mid),
-    onSuccess: (m: MessageItem) => {
-      toast.success('已生成新分支');
-      // 自动切到新分支：parent_message_id → new_msg.id
-      if (m.parent_message_id != null) {
-        setSelections(prev => ({
-          ...prev,
-          [String(m.parent_message_id)]: m.id,
-        }));
-      }
+    onSuccess: () => {
+      toast.success('已生成新回复');
       refresh();
     },
-    onError: e => toast.error('regenerate 失败：' + (e as Error).message),
+    onError: e => toast.error('重新生成失败：' + (e as Error).message),
   });
 
   const editMut = useMutation({
     mutationFn: (p: { mid: EntityId; text: string }) =>
       conversationApi.editAndResend(sid, p.mid, p.text),
-    onSuccess: (newAssistant: MessageItem) => {
-      toast.success('已生成新分支');
-      // 新 assistant 的 parent 是新 user；切到新 user
-      if (newAssistant.parent_message_id != null) {
-        // new_user.parent_message_id = old user 的 parent → selections 切支
-        // 简化：refresh 后由 useMessageTree default 自动选最新（seq desc）
-      }
+    onSuccess: () => {
+      toast.success('已生成新回复');
       refresh();
       setEditingId(null);
     },
@@ -92,18 +147,42 @@ export const ConversationDetailPage = () => {
 
   const [editingId, setEditingId] = useState<EntityId | null>(null);
   const [editText, setEditText] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [traceLog, setTraceLog] = useState<CallLogItem | null>(null);
 
-  const branchInfo = useMemo(() => {
-    let totalBranches = 0;
-    let alternatives = 0;
-    walkTree(tree, n => {
-      if (n.children.length > 1) {
-        totalBranches += 1;
-        alternatives += n.children.length;
-      }
-    });
-    return { totalBranches, alternatives };
-  }, [tree]);
+  // 滚动锚定：首屏滚到底（最新）；加载更早后保持视口位置（DOM 副作用，无 setState）
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevHeight = useRef(0);
+  const initedSid = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || messages.length === 0) return;
+    if (initedSid.current !== sid) {
+      initedSid.current = sid;
+      el.scrollTop = el.scrollHeight;
+      prevHeight.current = el.scrollHeight;
+      return;
+    }
+    if (prevHeight.current && el.scrollHeight > prevHeight.current) {
+      el.scrollTop += el.scrollHeight - prevHeight.current;
+    }
+    prevHeight.current = el.scrollHeight;
+  }, [messages.length, sid]);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollTop <= 48 && msgsQ.hasNextPage && !msgsQ.isFetchingNextPage) {
+      prevHeight.current = el.scrollHeight;
+      void msgsQ.fetchNextPage();
+    }
+  };
+
+  const copySid = () => {
+    void navigator.clipboard.writeText(sid);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  };
 
   if (!sid) {
     return (
@@ -113,109 +192,146 @@ export const ConversationDetailPage = () => {
     );
   }
 
+  const conv = convQ.data;
+  const loading = metaQ.isLoading || (total > 0 && msgsQ.isLoading);
+
   return (
     <div className="space-y-3">
-      <header className="flex items-center gap-3">
-        <Link
-          to="/conversations"
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> 对话
-        </Link>
-        <span className="text-stone-300">/</span>
-        {convQ.isLoading ? (
-          <span className="text-[12.5px] text-stone-400">加载中…</span>
-        ) : convQ.data ? (
-          <div className="flex flex-1 items-baseline gap-2">
-            <span className="text-[15px] font-medium text-stone-900">
-              {convQ.data.title || '(无标题)'}
-            </span>
-            <span className="font-mono text-[11px] text-stone-500">
-              {convQ.data.session_id}
-            </span>
-            <span className="ml-auto" />
-            {branchInfo.totalBranches > 0 && (
-              <span className="rounded bg-fuchsia-50 px-1.5 py-0.5 text-[10.5px] text-fuchsia-700">
-                {branchInfo.totalBranches} 个分叉点 · {branchInfo.alternatives} 条分支
-              </span>
-            )}
-          </div>
-        ) : (
-          <span className="text-[12.5px] text-stone-400">未找到</span>
-        )}
-      </header>
+      {/* 身份头 + 聚合 stat bar */}
+      <SectionCard className="!py-3">
+        <div className="flex items-center gap-2">
+          <Link
+            to="/sessions"
+            title="返回会话列表"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> 会话
+          </Link>
+          <span className="text-stone-300">/</span>
+          <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[11px] text-violet-600">
+            session
+          </span>
+          <span className="truncate text-[15px] font-semibold text-stone-900">
+            {conv?.title || (convQ.isLoading ? '加载中…' : '未命名会话')}
+          </span>
+        </div>
 
-      <SectionCard className="!p-0">
-        {msgsQ.isLoading ? (
-          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-            加载消息中…
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="px-3 py-12 text-center text-[12px] text-stone-400">
-            暂无消息
-          </div>
-        ) : (
-          <VirtualList
-            items={visible}
-            getKey={item => String(item.message.id)}
-            estimateSize={104}
-            className="max-h-[calc(100vh-200px)]"
-            itemClassName="border-b border-stone-100"
-            renderItem={item => (
-              <MessageRow
-                item={item}
-                onSwitchBranch={onSwitchBranch}
-                isEditing={String(editingId) === String(item.message.id)}
-                editText={editText}
-                setEditText={setEditText}
-                startEdit={() => {
-                  setEditingId(item.message.id);
-                  setEditText(item.message.content);
-                }}
-                cancelEdit={() => setEditingId(null)}
-                onRegenerate={() => regenMut.mutate(item.message.id)}
-                onSubmitEdit={() =>
-                  editMut.mutate({ mid: item.message.id, text: editText })
-                }
-                regenPending={regenMut.isPending}
-                editPending={editMut.isPending}
-              />
-            )}
-          />
-        )}
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11.5px]">
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <span className="text-stone-400">会话</span>
+            <button
+              type="button"
+              title="复制会话号"
+              onClick={copySid}
+              className="inline-flex items-center gap-1 font-mono text-stone-600 hover:text-blue-600"
+            >
+              {sid}
+              {copied ? (
+                <Check className="h-3 w-3 text-emerald-500" />
+              ) : (
+                <Copy className="h-3 w-3 opacity-50" />
+              )}
+            </button>
+          </span>
+          {conv && (
+            <>
+              <span>
+                <span className="text-stone-400">创建</span>{' '}
+                <span className="font-mono text-stone-600">{formatDateTime(conv.created_at)}</span>
+              </span>
+              {conv.last_message_at && (
+                <span>
+                  <span className="text-stone-400">最后活跃</span>{' '}
+                  <span className="font-mono text-stone-600">
+                    {formatDateTime(conv.last_message_at)}
+                  </span>
+                </span>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="mt-3">
+          <StatBar>
+            <StatItem k="智能体" v={conv?.agent_key || '—'} mono />
+            <StatItem k="终端用户" v={conv?.end_user_id || '匿名'} mono />
+            <StatItem
+              k="轮次"
+              v={String(stats.runTotal)}
+              sub={total ? `${total} 条消息` : undefined}
+            />
+            <StatItem k="Token" v={stats.tokens ? formatTokens(stats.tokens) : '—'} />
+            <StatItem k="成本" v={stats.hasCost ? formatCost(stats.cost) : '—'} />
+            <StatItem
+              k="模型"
+              v={stats.models[0] || '—'}
+              sub={stats.models.length > 1 ? `+${stats.models.length - 1}` : undefined}
+              mono
+            />
+          </StatBar>
+        </div>
       </SectionCard>
+
+      {/* 真实对话气泡 */}
+      <SectionCard className="!p-0">
+        <div
+          ref={scrollRef}
+          onScroll={onScroll}
+          className="max-h-[calc(100vh-260px)] overflow-y-auto px-5 py-5"
+        >
+          {loading ? (
+            <div className="py-12 text-center text-[12px] text-stone-400">加载消息中…</div>
+          ) : messages.length === 0 ? (
+            <div className="py-12 text-center text-[12px] text-stone-400">暂无消息</div>
+          ) : (
+            <div className="space-y-5">
+              {msgsQ.hasNextPage && (
+                <div className="flex justify-center pb-1">
+                  <button
+                    type="button"
+                    onClick={() => msgsQ.fetchNextPage()}
+                    disabled={msgsQ.isFetchingNextPage}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-3 py-1 text-[12px] text-stone-600 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:opacity-50"
+                  >
+                    {msgsQ.isFetchingNextPage && <Loader2 className="h-3 w-3 animate-spin" />}
+                    加载更早（已加载 {messages.length} / {total}）
+                  </button>
+                </div>
+              )}
+              {messages.map(msg => (
+                <MessageBubble
+                  key={String(msg.id)}
+                  msg={msg}
+                  run={msg.request_id ? runByReq.get(msg.request_id) : undefined}
+                  onOpenTrace={setTraceLog}
+                  isEditing={String(editingId) === String(msg.id)}
+                  editText={editText}
+                  setEditText={setEditText}
+                  startEdit={() => {
+                    setEditingId(msg.id);
+                    setEditText(msg.content);
+                  }}
+                  cancelEdit={() => setEditingId(null)}
+                  onRegenerate={() => regenMut.mutate(msg.id)}
+                  onSubmitEdit={() => editMut.mutate({ mid: msg.id, text: editText })}
+                  regenPending={regenMut.isPending}
+                  editPending={editMut.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </SectionCard>
+
+      <TraceDrawer callLog={traceLog} onClose={() => setTraceLog(null)} />
     </div>
   );
 };
 
-const ROLE_META: Record<
-  string,
-  { label: string; icon: typeof Bot; color: string; bg: string }
-> = {
-  user: { label: 'USER', icon: User2, color: 'text-blue-700', bg: 'bg-blue-50' },
-  assistant: {
-    label: 'ASSISTANT',
-    icon: Bot,
-    color: 'text-emerald-700',
-    bg: 'bg-emerald-50',
-  },
-  system: {
-    label: 'SYSTEM',
-    icon: Wrench,
-    color: 'text-stone-700',
-    bg: 'bg-stone-50',
-  },
-  tool: {
-    label: 'TOOL',
-    icon: Wrench,
-    color: 'text-amber-700',
-    bg: 'bg-amber-50',
-  },
-};
-
-interface MessageRowProps {
-  item: BranchRenderItem;
-  onSwitchBranch: (parentKey: string, nextId: EntityId) => void;
+interface MessageBubbleProps {
+  msg: MessageItem;
+  run?: CallLogItem;
+  onOpenTrace: (run: CallLogItem) => void;
   isEditing: boolean;
   editText: string;
   setEditText: (s: string) => void;
@@ -227,9 +343,10 @@ interface MessageRowProps {
   editPending: boolean;
 }
 
-const MessageRow = ({
-  item,
-  onSwitchBranch,
+const MessageBubble = ({
+  msg,
+  run,
+  onOpenTrace,
   isEditing,
   editText,
   setEditText,
@@ -239,67 +356,25 @@ const MessageRow = ({
   onSubmitEdit,
   regenPending,
   editPending,
-}: MessageRowProps) => {
-  const meta =
-    ROLE_META[item.message.role] ?? {
-      label: item.message.role.toUpperCase(),
-      icon: User2,
-      color: 'text-stone-700',
-      bg: 'bg-stone-50',
-    };
-  const parentKey =
-    item.message.parent_message_id == null
-      ? '__root__'
-      : String(item.message.parent_message_id);
+}: MessageBubbleProps) => {
+  const role = msg.role;
+  const isUser = role === 'user';
+  const label = ROLE_LABEL[role] ?? role;
 
-  const role = item.message.role;
   return (
-    <div className="group px-3 py-3">
-      <div className="mb-1 flex items-center gap-2 text-[10.5px]">
-        <span
-          className={cn(
-            'inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono',
-            meta.bg,
-            meta.color,
-          )}
-        >
-          <meta.icon className="h-3 w-3" />
-          {meta.label}
-        </span>
-        <span className="font-mono text-[10.5px] text-stone-400">
-          #{item.message.seq}
-        </span>
-        <BranchSwitcher
-          siblingIds={item.siblingIds}
-          currentId={item.message.id}
-          onSelect={next => onSwitchBranch(parentKey, next)}
-        />
-        {!isEditing && (
-          <span className="ml-auto">
-            <MessageActions
-              msg={toActionMessage(item.message)}
-              handlers={{
-                onEdit: role === 'user' ? startEdit : undefined,
-                onRegenerate: role === 'assistant' ? onRegenerate : undefined,
-              }}
-              hidden={regenPending ? ['regenerate'] : undefined}
-            />
-          </span>
-        )}
-        <span
-          className={cn(
-            'text-[10.5px] text-stone-400',
-            !isEditing ? '' : 'ml-auto',
-          )}
-        >
-          {regenPending && (
-            <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
-          )}
-          {formatDateTime(item.message.created_at)}
-        </span>
+    <div className={cn('group/msg flex flex-col gap-1', isUser ? 'items-end' : 'items-start')}>
+      {/* 元信息行 */}
+      <div className="flex items-center gap-2 px-1 text-[10.5px] text-stone-400">
+        <span className="font-medium text-stone-500">{label}</span>
+        <span className="font-mono">#{msg.seq}</span>
+        <span className="font-mono">{formatDateTime(msg.created_at)}</span>
+        {msg.feedback === 1 && <ThumbsUp className="h-3 w-3 text-emerald-500" />}
+        {msg.feedback === -1 && <ThumbsDown className="h-3 w-3 text-rose-500" />}
       </div>
+
+      {/* 气泡：直角朝外上角（用户右上 / 助手左上），对齐嵌入式 widget */}
       {isEditing ? (
-        <div className="space-y-2">
+        <div className="w-full max-w-[78%] space-y-2">
           <Textarea
             value={editText}
             onChange={e => setEditText(e.target.value)}
@@ -310,40 +385,64 @@ const MessageRow = ({
             <Button size="sm" variant="ghost" onClick={cancelEdit}>
               取消
             </Button>
-            <Button
-              size="sm"
-              disabled={!editText.trim() || editPending}
-              onClick={onSubmitEdit}
-            >
-              {editPending && (
-                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-              )}
-              发送（新分支）
+            <Button size="sm" disabled={!editText.trim() || editPending} onClick={onSubmitEdit}>
+              {editPending && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+              发送（新回复）
             </Button>
           </div>
         </div>
       ) : (
-        <>
-          <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-stone-800">
-            {item.message.content}
-          </div>
-          {item.message.usage && (
-            <div className="mt-1 font-mono text-[10.5px] text-stone-400">
-              usage · in={String(item.message.usage.prompt_tokens ?? '?')} · out={String(item.message.usage.completion_tokens ?? '?')}
-            </div>
+        <div
+          className={cn(
+            'max-w-[78%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed',
+            isUser
+              ? 'rounded-tr-sm bg-blue-600 whitespace-pre-wrap text-white'
+              : 'rounded-tl-sm border border-stone-200 bg-white text-stone-800',
           )}
-        </>
+        >
+          {isUser ? msg.content : <Markdown content={msg.content} />}
+        </div>
+      )}
+
+      {/* 动作行：trace（常显） + copy / 编辑 / 重新生成（悬浮） */}
+      {!isEditing && (
+        <div
+          className={cn(
+            'flex items-center gap-1.5',
+            isUser ? 'flex-row-reverse' : 'flex-row',
+          )}
+        >
+          {run && (
+            <button
+              type="button"
+              title="查看本轮 trace"
+              onClick={() => onOpenTrace(run)}
+              className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-1.5 py-0.5 text-[10.5px] text-stone-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
+            >
+              <ListTree className="h-3.5 w-3.5" />
+              trace
+            </button>
+          )}
+          <span className="opacity-0 transition group-hover/msg:opacity-100">
+            <MessageActions
+              msg={toActionMessage(msg)}
+              handlers={{
+                onEdit: isUser ? startEdit : undefined,
+                onRegenerate: role === 'assistant' ? onRegenerate : undefined,
+              }}
+              hidden={regenPending ? ['regenerate'] : undefined}
+            />
+          </span>
+          {regenPending && role === 'assistant' && (
+            <Loader2 className="h-3 w-3 animate-spin text-stone-400" />
+          )}
+        </div>
       )}
     </div>
   );
 };
 
-const KNOWN_ROLES: ReadonlySet<string> = new Set([
-  'user',
-  'assistant',
-  'system',
-  'tool',
-]);
+const KNOWN_ROLES: ReadonlySet<string> = new Set(['user', 'assistant', 'system', 'tool']);
 
 function toActionMessage(m: MessageItem): ChatActionMessage {
   const role: ChatActionRole = KNOWN_ROLES.has(m.role)
@@ -351,20 +450,3 @@ function toActionMessage(m: MessageItem): ChatActionMessage {
     : 'assistant';
   return { id: String(m.id), role, content: m.content };
 }
-
-function walkTree(
-  nodes: { children: { children: unknown[] }[] }[],
-  fn: (n: { children: unknown[] }) => void,
-) {
-  // 仅做形态遍历；类型放宽以避免循环依赖
-  for (const n of nodes as unknown as Array<{
-    children: Array<{ children: unknown[] }>;
-  }>) {
-    fn(n);
-    walkTree(n.children as never, fn);
-  }
-}
-
-// 显式 _ 避开 lint 提醒：MessageItem 仅作类型导出参考
-const _typeRef: MessageItem | null = null;
-void _typeRef;

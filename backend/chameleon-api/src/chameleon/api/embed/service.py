@@ -874,12 +874,13 @@ async def suggest_followups_for_embed(
     import time as _time
 
     sid = await embed_session.resolve_session_id(session_token)
+    app_key = _embed_app_label(embed)
     followups_rid = uuid.uuid4().hex
     token = set_trace_context(
         TraceContext(
             request_id=followups_rid,
             channel="embed",
-            app_id=getattr(embed, "app_id", None),
+            app_id=app_key,
             api_key_id=embed.api_key_id,
             agent_key=agent.agent_key if agent else None,
             session_id=sid,
@@ -905,7 +906,7 @@ async def suggest_followups_for_embed(
             await record_call(
                 session,
                 request_id=followups_rid,
-                app_id=getattr(embed, "app_id", None) or "internal",
+                app_id=app_key,
                 agent_key=agent.agent_key if agent else "internal",
                 session_id=sid,
                 channel="embed",

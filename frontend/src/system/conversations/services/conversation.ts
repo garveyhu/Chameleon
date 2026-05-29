@@ -6,18 +6,12 @@ import type {
 } from '@/system/conversations/types/message-tree';
 
 export const conversationApi = {
-  list: (params?: {
-    page?: number;
-    page_size?: number;
-    agent_key?: string;
-  }) =>
-    get<PageResult<ConversationItem>>('/v1/sessions', { params }),
   get: (sessionId: string) =>
     get<ConversationItem>(`/v1/sessions/${sessionId}`),
   listMessages: (sessionId: string, params?: { page?: number; page_size?: number }) =>
     get<PageResult<MessageItem>>(
       `/v1/sessions/${sessionId}/messages`,
-      { params: { page_size: 500, ...params } },
+      { params: { page_size: 200, ...params } },
     ),
 
   // P21.4 PR #68：分支

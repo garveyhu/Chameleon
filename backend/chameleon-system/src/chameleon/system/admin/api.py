@@ -35,6 +35,7 @@ async def list_call_logs(
     channel: str | None = Query(None, description="渠道：api/openai/embed/internal/…"),
     model_code: str | None = Query(None),
     session_id: str | None = Query(None),
+    end_user_id: str | None = Query(None, description="终端用户外部 id"),
     since: datetime | None = Query(None, description="ISO8601 起始（含）"),
     until: datetime | None = Query(None, description="ISO8601 结束（含）"),
     success: bool | None = Query(None),
@@ -49,6 +50,7 @@ async def list_call_logs(
         channel=channel,
         model_code=model_code,
         session_id=session_id,
+        end_user_id=end_user_id,
         since=since,
         until=until,
         success=success,
@@ -87,7 +89,9 @@ async def list_sessions(
     page_size: int = Query(20, ge=1, le=200),
     agent_key: str | None = Query(None),
     end_user_id: str | None = Query(None),
+    channel: str | None = Query(None, description="渠道：embed/playground/api/openai/internal"),
     since: datetime | None = Query(None, description="ISO8601 起始（含）"),
+    until: datetime | None = Query(None, description="ISO8601 结束（含）"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("call_logs:read")),
 ) -> Result[PageResult[SessionItem]]:
@@ -97,7 +101,9 @@ async def list_sessions(
         PageParams(page=page, page_size=page_size),
         agent_key=agent_key,
         end_user_id=end_user_id,
+        channel=channel,
         since=since,
+        until=until,
     )
     return Result.ok(result)
 

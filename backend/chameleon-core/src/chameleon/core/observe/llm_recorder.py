@@ -33,10 +33,20 @@ from chameleon.core.observe.context import (
     current_trace_context,
 )
 
-
 # I/O 快照截断阈值（与现有 root call_log payload 对齐）
 _INPUT_TRUNCATE = 2000
 _OUTPUT_TRUNCATE = 4000
+# 结构化消息单条 content 截断（保留 LangChain 原生 messages 形态，而非拍平成字符串）
+_MSG_CONTENT_MAX = 8000
+# BaseMessage.type → 标准角色（human→user / ai→assistant），前端按角色渲染
+_ROLE_NORM = {
+    "system": "system",
+    "human": "user",
+    "ai": "assistant",
+    "tool": "tool",
+    "function": "tool",
+    "chat": "assistant",
+}
 
 
 def _content_of(msg: Any) -> str:
@@ -124,10 +134,9 @@ class GenerationRecorder(AsyncCallbackHandler):
         **kwargs: Any,
     ) -> None:
         del serialized, parent_run_id, kwargs
-        prompt_text = self._snapshot_prompts(messages)
         self._inflight[str(run_id)] = {
             "start_ms": time.perf_counter(),
-            "prompt_preview": prompt_text[:_INPUT_TRUNCATE],
+            "messages": self._snapshot_messages(messages),
         }
 
     async def on_llm_start(
@@ -141,9 +150,11 @@ class GenerationRecorder(AsyncCallbackHandler):
     ) -> None:
         del serialized, parent_run_id, kwargs
         joined = "\n".join(prompts or [])
+        # 纯补全（无角色）→ 包成单条 user 消息，保持 messages 形态统一
+        msgs = [{"role": "user", "content": joined[:_MSG_CONTENT_MAX]}] if joined else []
         self._inflight[str(run_id)] = {
             "start_ms": time.perf_counter(),
-            "prompt_preview": joined[:_INPUT_TRUNCATE],
+            "messages": msgs,
         }
 
     # ── end / error ───────────────────────────────────────
@@ -166,7 +177,7 @@ class GenerationRecorder(AsyncCallbackHandler):
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
-            prompt_preview=meta.get("prompt_preview"),
+            messages=meta.get("messages"),
             output_preview=output_text[:_OUTPUT_TRUNCATE] if output_text else None,
         )
 
@@ -185,22 +196,30 @@ class GenerationRecorder(AsyncCallbackHandler):
             prompt_tokens=None,
             completion_tokens=None,
             total_tokens=None,
-            prompt_preview=meta.get("prompt_preview"),
+            messages=meta.get("messages"),
             output_preview=None,
         )
 
     # ── helpers ───────────────────────────────────────────
 
     @staticmethod
-    def _snapshot_prompts(messages: list[list[Any]]) -> str:
-        """把 list[list[BaseMessage]] 拼成可读的 prompt 快照"""
-        parts: list[str] = []
-        # 通常只取第一组（单条对话）；多 prompt 并发的情况罕见
+    def _snapshot_messages(messages: list[list[Any]]) -> list[dict]:
+        """把 list[list[BaseMessage]] 转成结构化 [{role, content}]（保留 LangChain 形态）。
+
+        不再拍平成 "[role] ..." 字符串——结构化存储让前端按角色/历史/本轮分组渲染，
+        且可无损导出。content 取纯文本（多模态 ContentBlock 由 _content_of 抽文本）。
+        """
         first_group = messages[0] if messages else []
+        out: list[dict] = []
         for m in first_group:
-            role = getattr(m, "type", None) or m.__class__.__name__
-            parts.append(f"[{role}] {_content_of(m)}")
-        return "\n".join(parts)
+            raw = (getattr(m, "type", None) or m.__class__.__name__).lower()
+            out.append(
+                {
+                    "role": _ROLE_NORM.get(raw, raw),
+                    "content": _content_of(m)[:_MSG_CONTENT_MAX],
+                }
+            )
+        return out
 
     async def _write(
         self,
@@ -212,7 +231,7 @@ class GenerationRecorder(AsyncCallbackHandler):
         prompt_tokens: int | None,
         completion_tokens: int | None,
         total_tokens: int | None,
-        prompt_preview: str | None,
+        messages: list[dict] | None,
         output_preview: str | None,
     ) -> None:
         """落一条 generation call_log；归属字段从 TraceContext 拿，无 scope 兜底"""
@@ -251,15 +270,9 @@ class GenerationRecorder(AsyncCallbackHandler):
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     spans=None,
-                    request_payload=(
-                        {"prompt_preview": prompt_preview}
-                        if prompt_preview
-                        else None
-                    ),
+                    request_payload=({"messages": messages} if messages else None),
                     response_payload=(
-                        {"output_preview": output_preview}
-                        if output_preview
-                        else None
+                        {"output": output_preview} if output_preview else None
                     ),
                     parent_id=parent_id,
                     observation_type=ObservationType.GENERATION.value,

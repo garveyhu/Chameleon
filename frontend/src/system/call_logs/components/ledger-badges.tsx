@@ -15,22 +15,23 @@ export const KindBadge = ({
   kind?: GraphKind | null;
 }) => <OrchestrationBadge source={source} graphKind={kind} />;
 
-const CHANNEL_LABEL: Record<string, string> = {
-  api: 'API',
-  openai: 'OpenAI',
-  embed: '嵌入',
-  playground: 'Playground',
-  internal: '内部',
+/** 渠道 → 中文标签 + 色阶（各渠道有区分度，不再一色灰） */
+const CHANNEL_META: Record<string, { label: string; cls: string }> = {
+  api: { label: 'API', cls: 'bg-blue-50 text-blue-700' },
+  openai: { label: 'OpenAI', cls: 'bg-emerald-50 text-emerald-700' },
+  embed: { label: '嵌入', cls: 'bg-violet-50 text-violet-700' },
+  playground: { label: 'Playground', cls: 'bg-amber-50 text-amber-700' },
+  internal: { label: '内部', cls: 'bg-stone-100 text-stone-500' },
 };
 
 export const ChannelLabel = ({ channel }: { channel?: CallChannel | null }) => {
   if (!channel) {
     return <span className="text-stone-300">—</span>;
   }
-  const label = CHANNEL_LABEL[channel] ?? channel;
+  const meta = CHANNEL_META[channel] ?? { label: channel, cls: 'bg-stone-100 text-stone-600' };
   return (
-    <span className="inline-flex rounded bg-stone-100 px-1.5 py-0.5 text-[10.5px] text-stone-600">
-      {label}
+    <span className={`inline-flex rounded px-1.5 py-0.5 text-[10.5px] ${meta.cls}`}>
+      {meta.label}
     </span>
   );
 };

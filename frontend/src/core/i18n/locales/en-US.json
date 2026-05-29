@@ -10,7 +10,7 @@
     "kbs": "Knowledge Bases",
     "embed_configs": "Embedded Agents",
     "graphs": "Workflows",
-    "playground": "Chat / Playground",
+    "playground": "Playground",
     "call_logs": "Call Logs",
     "trace": "Trace",
     "cost": "Cost",
@@ -43,7 +43,7 @@
       "compliance": "Compliance",
       "platform": "Platform"
     },
-    "sessions": "Sessions & Runs"
+    "sessions": "Sessions"
   },
   "agents": {
     "create_app": "New App"
