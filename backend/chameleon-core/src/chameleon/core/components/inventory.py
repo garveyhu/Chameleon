@@ -49,7 +49,7 @@ def llm(name: str | None = None):
     if cached is not None and name is None:
         return cached
 
-    from chameleon.core.components.llms.factory import LLMFactory
+    from chameleon.integrations.llms.factory import LLMFactory
 
     instance = LLMFactory.create(name)
     if name is None:
@@ -59,7 +59,7 @@ def llm(name: str | None = None):
 
 def llm_by_name(name: str):
     """按模型名取 LLM（与 sage 同名）"""
-    from chameleon.core.components.llms.factory import LLMFactory
+    from chameleon.integrations.llms.factory import LLMFactory
 
     return LLMFactory.create(name)
 

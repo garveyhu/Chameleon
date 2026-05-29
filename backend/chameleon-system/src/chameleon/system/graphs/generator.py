@@ -83,7 +83,7 @@ async def generate_graph_spec(description: str) -> dict[str, Any]:
     """NL 描述 → 校验通过的 GraphSpec dict。失败把错误喂回重试一次。"""
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from chameleon.core.components.llms.factory import resolve_llm
+    from chameleon.integrations.llms.factory import resolve_llm
 
     client = await resolve_llm(None)
     messages: list[Any] = [
@@ -126,7 +126,7 @@ async def suggest_followups(
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from chameleon.core.components.llms.factory import resolve_llm
+    from chameleon.integrations.llms.factory import resolve_llm
 
     try:
         client = await resolve_llm(model_code)

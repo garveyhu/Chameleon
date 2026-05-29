@@ -218,7 +218,7 @@ async def _reload_registry_each_test():
     每次 reset/init 后，需要重新注入 mock provider / mock-echo agent
     （session 级 _registry_with_mock 只在最开始注入一次，会被 reset 清掉）
     """
-    from chameleon.core.components.llms.factory import reload_llm_cache
+    from chameleon.integrations.llms.factory import reload_llm_cache
     from chameleon.providers.base import init_registry
     from chameleon.providers.base.registry import reset_registry_for_test
 

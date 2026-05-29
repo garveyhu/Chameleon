@@ -5,7 +5,6 @@
     from chameleon.core.components import llm, embedding, vector, cache, search_kb
 
 各子模块：
-- llms/        —— LLM 客户端（BaseLLM + 多厂商）
 - embeddings/  —— embedding 客户端
 - vector/      —— 向量存储（VectorStore + pgvector）
 - cache/       —— diskcache 单例

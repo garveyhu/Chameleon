@@ -28,7 +28,6 @@ from chameleon.core.api.sse_events import (
     event_end,
     event_meta,
 )
-from chameleon.core.components.llms.factory import resolve_llm
 from chameleon.core.observe import (
     TraceContext,
     reset_trace_context,
@@ -36,6 +35,7 @@ from chameleon.core.observe import (
 )
 from chameleon.data.models import ChatSession, KnowledgeBase, LLMModel, Message
 from chameleon.data.utils.snowflake import next_session_id
+from chameleon.integrations.llms.factory import resolve_llm
 from chameleon.system.api_key.service import (
     aggregate_generation_rollup,
     record_call,

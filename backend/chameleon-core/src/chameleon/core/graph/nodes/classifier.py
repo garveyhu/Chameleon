@@ -44,7 +44,7 @@ class ClassifierNode(Node[Any, dict]):
     async def execute(self, ctx: NodeContext, input: Any) -> dict:
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        from chameleon.core.components.llms.factory import resolve_llm
+        from chameleon.integrations.llms.factory import resolve_llm
 
         node_vars = (ctx.extra or {}).get("__vars__") or {}
         query = _pick_query(input, node_vars.get("sys") or {})

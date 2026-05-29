@@ -14,14 +14,14 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import delete, select
 
-from chameleon.core.components.llms.factory import (
+from chameleon.data.infra.db import AsyncSessionLocal
+from chameleon.data.models import Agent, LLMModel
+from chameleon.integrations.llms.factory import (
     _CACHE,
     LLMFactory,
     invalidate_llm,
     reload_llm_cache,
 )
-from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import Agent, LLMModel
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.providers.base.registry import PROVIDERS
 

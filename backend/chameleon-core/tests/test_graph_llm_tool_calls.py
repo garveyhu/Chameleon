@@ -52,7 +52,7 @@ class _FakeClientWithBindTools:
 
 @pytest.fixture
 def fake_llm_with_tools():
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     fake = _FakeClientWithBindTools()
     llm_factory.set_for_test(fake)  # type: ignore[arg-type]

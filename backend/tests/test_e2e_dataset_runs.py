@@ -143,7 +143,7 @@ async def test_run_dataset_with_exact_match_all_fail(
     client: AsyncClient, admin_token: str, seeded_dataset: dict
 ):
     """mock LLM 返 'wrong'；expected="Answer #N" → 全 score=0"""
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     llm_factory.set_for_test(_MockLLM("wrong"))  # type: ignore[arg-type]
     try:
@@ -165,7 +165,7 @@ async def test_run_dataset_with_contains_some_pass(
     client: AsyncClient, admin_token: str, seeded_dataset: dict
 ):
     """mock LLM 返 'XXAnswer #0YY'；contains 期望 'Answer #N' → 仅 #0 命中"""
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     llm_factory.set_for_test(_MockLLM("XXAnswer #0YY"))  # type: ignore[arg-type]
     try:
@@ -188,7 +188,7 @@ async def test_run_writes_scores_table(
     client: AsyncClient, admin_token: str, seeded_dataset: dict
 ):
     """run 跑完应往 scores 表写 source='eval' 行"""
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     llm_factory.set_for_test(_MockLLM("Answer #0"))  # type: ignore[arg-type]
     try:
@@ -222,7 +222,7 @@ async def test_run_writes_scores_table(
 async def test_list_runs_and_items(
     client: AsyncClient, admin_token: str, seeded_dataset: dict
 ):
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     llm_factory.set_for_test(_MockLLM("Answer #0"))  # type: ignore[arg-type]
     try:
@@ -257,7 +257,7 @@ async def test_compare_runs_returns_cells(
     client: AsyncClient, admin_token: str, seeded_dataset: dict
 ):
     """跑两个 run；对比返 item × run 表"""
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     # 第一个 run 用 "wrong"
     llm_factory.set_for_test(_MockLLM("wrong"))  # type: ignore[arg-type]
@@ -312,7 +312,7 @@ async def test_compare_runs_rejects_cross_dataset(
         )
         await s.commit()
 
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     llm_factory.set_for_test(_MockLLM("anything"))  # type: ignore[arg-type]
     r1 = await client.post(

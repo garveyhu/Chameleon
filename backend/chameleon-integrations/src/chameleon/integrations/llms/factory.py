@@ -21,10 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.components.llms.base import BaseLLM
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import LLMModel, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
+from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.observe import GenerationRecorder
 
 # 进程内 cache（启动期一次性 load）

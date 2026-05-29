@@ -11,8 +11,8 @@ from chameleon.core.base import (
 )
 from chameleon.core.components import cache, embedding, llm, search_kb, vector
 from chameleon.core.components.cache import CacheManager
-from chameleon.core.components.llms import BaseLLM, ChatDeepSeek, ChatQwen
 from chameleon.data.utils import model_to_dict
+from chameleon.integrations.llms import BaseLLM, ChatDeepSeek, ChatQwen
 
 # ── inventory 顶层 callable ─────────────────────────────
 

@@ -95,7 +95,7 @@ class _FakeStreamModel:
 
 @pytest.fixture
 def fake_stream():
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     fake = _FakeStreamModel(["Hel", "lo", " 世界"])
     llm_factory.set_for_test(fake)  # type: ignore[arg-type]
@@ -188,7 +188,7 @@ class _FakeToolLoopModel:
 
 @pytest.fixture
 def fake_tool_loop():
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     fake = _FakeToolLoopModel()
     llm_factory.set_for_test(fake)  # type: ignore[arg-type]
@@ -230,7 +230,7 @@ async def test_multi_round_tool_call(fake_tool_loop):
 
 async def test_tool_loop_respects_max_rounds():
     """模型每轮都要工具 → 达 max_tool_rounds 即停（防无限循环）"""
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     class _AlwaysToolModel:
         model_name = "always-tool"

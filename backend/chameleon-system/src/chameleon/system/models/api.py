@@ -18,12 +18,12 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
-from chameleon.core.components.llms.base import BaseLLM
-from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import LLMModel, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
+from chameleon.integrations.llms.base import BaseLLM
+from chameleon.integrations.llms.factory import reload_llm_cache
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission

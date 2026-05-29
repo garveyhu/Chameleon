@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-data",
+    "chameleon-integrations",
     "chameleon-providers-base",
     "chameleon-provider-local",
     "chameleon-provider-dify",
@@ -29,6 +30,7 @@ dependencies = [
 [tool.uv.sources]
 chameleon-core = { workspace = true }
 chameleon-data = { workspace = true }
+chameleon-integrations = { workspace = true }
 chameleon-providers-base = { workspace = true }
 chameleon-provider-local = { workspace = true }
 chameleon-provider-dify = { workspace = true }

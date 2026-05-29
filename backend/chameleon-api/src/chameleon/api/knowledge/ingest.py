@@ -349,7 +349,7 @@ async def _generate_qa(
 ) -> list[tuple[str, str]]:
     from langchain_core.messages import HumanMessage
 
-    from chameleon.core.components.llms.factory import resolve_llm
+    from chameleon.integrations.llms.factory import resolve_llm
 
     prompt = (
         "你是知识库问答对生成器。根据【文本】生成 2-4 个高质量问答对，"

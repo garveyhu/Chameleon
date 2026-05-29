@@ -217,7 +217,7 @@ async def _invoke_for_item(
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from chameleon.core.components.llms.factory import llm as get_llm
+    from chameleon.integrations.llms.factory import llm as get_llm
 
     # 从 input_payload 提 query（脱敏后字段 preview / user_input.preview）
     query = _extract_query_text(input_payload)

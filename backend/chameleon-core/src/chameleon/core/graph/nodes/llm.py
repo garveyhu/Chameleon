@@ -145,7 +145,7 @@ class LLMNode(Node[Any, dict]):
     async def _run(
         self, ctx: NodeContext, input: Any, emit: DeltaSink | None
     ) -> dict:
-        from chameleon.core.components.llms.factory import resolve_llm
+        from chameleon.integrations.llms.factory import resolve_llm
 
         data = self.spec.data
         model_name = data.get("model_name")

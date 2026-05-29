@@ -32,13 +32,13 @@ from chameleon.core.api.exceptions import (
     code_to_http_status,
 )
 from chameleon.core.api.response import Result, SafeIntJSONResponse
-from chameleon.core.components.llms.factory import reload_llm_cache
 from chameleon.data.infra import redis as redis_infra
 from chameleon.data.infra.db import engine
 from chameleon.data.infra.jwt import init_jwt
 from chameleon.data.infra.logger import setup_logger
 from chameleon.data.infra.object_store import get_object_store
 from chameleon.data.utils.crypto import init_crypto
+from chameleon.integrations.llms.factory import reload_llm_cache
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router

@@ -65,7 +65,7 @@ class _FakeChatModel:
 
 @pytest.fixture
 def fake_llm():
-    from chameleon.core.components.llms import factory as llm_factory
+    from chameleon.integrations.llms import factory as llm_factory
 
     fake = _FakeChatModel("hello world", {"input_tokens": 3, "output_tokens": 2})
     llm_factory.set_for_test(fake)  # type: ignore[arg-type]

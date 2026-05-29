@@ -217,7 +217,7 @@ def default_complete_fn() -> CompleteFn:
     """生产用 LLM 文本补全适配器（multi-query / HyDE）"""
     from langchain_core.messages import HumanMessage
 
-    from chameleon.core.components.llms.factory import resolve_llm
+    from chameleon.integrations.llms.factory import resolve_llm
 
     async def complete(prompt: str) -> str:
         # #30：per-request 经 channel 路由解析 LLM（无 session → 自开短 session）
