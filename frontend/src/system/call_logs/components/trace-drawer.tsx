@@ -129,6 +129,36 @@ const pickText = (payload: Payload, keys: string[]): string | null => {
   return null;
 };
 
+// prompt 快照格式 "[role] content"（角色间以 \n 分隔，content 内部也可能含 \n）。
+// 按已知角色标记切成消息块，逐块按角色渲染。
+const ROLE_RE = /(?=^\[(?:system|human|ai|user|assistant|tool|function)\][ \t]?)/im;
+const ROLE_LABEL: Record<string, string> = {
+  system: '系统',
+  human: '用户',
+  user: '用户',
+  ai: '助手',
+  assistant: '助手',
+  tool: '工具',
+  function: '工具',
+};
+
+interface RoleMsg {
+  role: string;
+  content: string;
+}
+
+/** 解析 "[role] ..." 多消息文本；非该格式返 null */
+const parseMessages = (text: string): RoleMsg[] | null => {
+  if (!/^\[(system|human|ai|user|assistant|tool|function)\]/i.test(text.trimStart())) return null;
+  const parts = text.split(ROLE_RE).filter(p => p.trim());
+  const msgs: RoleMsg[] = [];
+  for (const p of parts) {
+    const m = p.match(/^\[(\w+)\][ \t]?([\s\S]*)$/);
+    if (m) msgs.push({ role: m[1].toLowerCase(), content: m[2].trim() });
+  }
+  return msgs.length ? msgs : null;
+};
+
 /** 右侧节点详情：元信息 + 输入 + 输出（Markdown / 原始 可切） */
 const NodeDetail = ({
   node,
@@ -193,6 +223,7 @@ const PayloadView = ({
   textKeys: string[];
 }) => {
   const text = pickText(payload, textKeys);
+  const messages = text ? parseMessages(text) : null;
   const [raw, setRaw] = useState(!text); // 无主文本时直接看原始
   const empty = !payload || Object.keys(payload).length === 0;
 
@@ -222,6 +253,21 @@ const PayloadView = ({
       {empty ? (
         <div className="rounded-md border border-dashed border-stone-200 px-3 py-4 text-center text-[11.5px] text-stone-400">
           无内容
+        </div>
+      ) : !raw && messages ? (
+        <div className="max-h-[460px] space-y-2 overflow-y-auto">
+          {messages.map((m, i) => (
+            <div key={i} className="rounded-md border border-stone-200/70 bg-white">
+              <div className="border-b border-stone-100 px-3 py-1">
+                <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-medium text-stone-600">
+                  {ROLE_LABEL[m.role] ?? m.role}
+                </span>
+              </div>
+              <div className="px-3 py-2 text-[13px] leading-relaxed">
+                <Markdown content={m.content} />
+              </div>
+            </div>
+          ))}
         </div>
       ) : !raw && text ? (
         <div className="max-h-[420px] overflow-y-auto rounded-md border border-stone-200/70 bg-white px-3 py-2 text-[13px] leading-relaxed">
