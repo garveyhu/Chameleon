@@ -179,7 +179,7 @@ class BaseAgent(ABC):
                 async for ev in cls.from_langgraph_graph(ctx, graph):
                     yield ev
         """
-        from chameleon.core.base.bridges import astream_from_langgraph_graph
+        from chameleon.integrations.bridges import astream_from_langgraph_graph
 
         async for ev in astream_from_langgraph_graph(ctx, graph, **kwargs):
             yield ev
@@ -195,7 +195,7 @@ class BaseAgent(ABC):
         extras: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """LangChain Runnable 桥"""
-        from chameleon.core.base.bridges import astream_from_runnable
+        from chameleon.integrations.bridges import astream_from_runnable
 
         async for ev in astream_from_runnable(
             ctx,

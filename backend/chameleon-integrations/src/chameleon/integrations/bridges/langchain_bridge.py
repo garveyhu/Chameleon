@@ -4,7 +4,7 @@
 
 用法：
 
-    from chameleon.core.base.bridges import astream_from_runnable
+    from chameleon.integrations.bridges import astream_from_runnable
     from chameleon.core.components import llm
     from langchain_core.prompts import ChatPromptTemplate
 

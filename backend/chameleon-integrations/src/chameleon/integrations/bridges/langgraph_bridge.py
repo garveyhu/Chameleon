@@ -2,7 +2,7 @@
 
 任何 agent 想用 LangGraph CompiledGraph 编排，只要：
 
-    from chameleon.core.base.bridges import astream_from_langgraph_graph
+    from chameleon.integrations.bridges import astream_from_langgraph_graph
 
     async def astream(cls, ctx):
         graph = cls._get_or_build_graph()
