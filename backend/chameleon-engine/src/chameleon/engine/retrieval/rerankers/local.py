@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import re
 
-from chameleon.core.retrieval.hybrid import Hit
-from chameleon.core.retrieval.rerankers.base import JudgeFn, Reranker
+from chameleon.engine.retrieval.hybrid import Hit
+from chameleon.engine.retrieval.rerankers.base import JudgeFn, Reranker
 
 # ── 1. PassThrough ─────────────────────────────────────
 

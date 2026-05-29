@@ -22,8 +22,8 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.core.retrieval.hybrid import Hit
-from chameleon.core.retrieval.rerankers.base import (
+from chameleon.engine.retrieval.hybrid import Hit
+from chameleon.engine.retrieval.rerankers.base import (
     Reranker,
     RerankScore,
     apply_rerank_scores,

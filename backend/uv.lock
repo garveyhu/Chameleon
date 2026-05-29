@@ -310,6 +310,7 @@ source = { editable = "chameleon-api" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-data" },
+    { name = "chameleon-engine" },
     { name = "chameleon-integrations" },
     { name = "chameleon-providers-base" },
     { name = "fastapi" },
@@ -325,6 +326,7 @@ dependencies = [
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
+    { name = "chameleon-engine", editable = "chameleon-engine" },
     { name = "chameleon-integrations", editable = "chameleon-integrations" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "fastapi", specifier = ">=0.115" },

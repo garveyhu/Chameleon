@@ -6,7 +6,7 @@ import pytest
 
 from chameleon.api.knowledge import hit_test
 from chameleon.core.api.exceptions import ValidationError
-from chameleon.core.retrieval.hybrid import Hit
+from chameleon.engine.retrieval.hybrid import Hit
 
 
 class _FakeKB:

@@ -14,7 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
 
-from chameleon.core.retrieval.hybrid import Hit
+from chameleon.engine.retrieval.hybrid import Hit
 
 
 class Reranker(Protocol):

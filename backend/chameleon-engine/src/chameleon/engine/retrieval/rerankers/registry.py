@@ -22,13 +22,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from chameleon.core.retrieval.rerankers.base import JudgeFn, Reranker
-from chameleon.core.retrieval.rerankers.clients import (
+from chameleon.engine.retrieval.rerankers.base import JudgeFn, Reranker
+from chameleon.engine.retrieval.rerankers.clients import (
     BgeReranker,
     CohereReranker,
     make_client_reranker,
 )
-from chameleon.core.retrieval.rerankers.local import (
+from chameleon.engine.retrieval.rerankers.local import (
     make_dedupe_reranker,
     make_dedupe_then_judge_reranker,
     make_llm_judge_reranker,

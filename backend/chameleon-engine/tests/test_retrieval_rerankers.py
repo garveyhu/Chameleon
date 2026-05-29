@@ -5,15 +5,15 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from chameleon.core.retrieval import Hit, build_reranker
-from chameleon.core.retrieval.rerankers import (
+from chameleon.engine.retrieval import Hit, build_reranker
+from chameleon.engine.retrieval.rerankers import (
     BgeReranker,
     CohereReranker,
     RerankScore,
     apply_rerank_scores,
     make_client_reranker,
 )
-from chameleon.core.retrieval.rerankers.clients import _parse_rerank_response
+from chameleon.engine.retrieval.rerankers.clients import _parse_rerank_response
 
 
 def _hits(*ids: int) -> list[Hit]:

@@ -1,4 +1,4 @@
-"""chameleon.core.retrieval —— 检索算子库
+"""chameleon.engine.retrieval —— 检索算子库
 
 P22.4 PR #79：抽出 hybrid 6 步管道为独立模块，便于：
 - 单测每一步（无 DB 依赖）
@@ -17,12 +17,12 @@ Pipeline（6 步）：
 - ⛔ quarantined chunks 不应出现在结果（半软删保留）
 """
 
-from chameleon.core.retrieval.expander import (
+from chameleon.engine.retrieval.expander import (
     CompleteFn,
     expand_queries,
     hyde_query,
 )
-from chameleon.core.retrieval.hybrid import (
+from chameleon.engine.retrieval.hybrid import (
     Hit,
     HybridConfig,
     HybridPipeline,
@@ -32,7 +32,7 @@ from chameleon.core.retrieval.hybrid import (
     fuse_rrf_many,
     metadata_filter,
 )
-from chameleon.core.retrieval.rerankers import (
+from chameleon.engine.retrieval.rerankers import (
     BgeReranker,
     CohereReranker,
     JudgeFn,
@@ -46,7 +46,7 @@ from chameleon.core.retrieval.rerankers import (
     make_llm_judge_reranker,
     pass_through,
 )
-from chameleon.core.retrieval.vlm_caption import (
+from chameleon.engine.retrieval.vlm_caption import (
     CaptionFn,
     CaptionResult,
     VLMClient,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.retrieval import (
+from chameleon.engine.retrieval import (
     Hit,
     HybridConfig,
     HybridPipeline,

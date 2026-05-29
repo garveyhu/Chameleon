@@ -23,8 +23,8 @@ from chameleon.core.api.exceptions import (
     ResultCode,
     ValidationError,
 )
-from chameleon.core.retrieval.pipeline import RetrievalParams, retrieve
 from chameleon.data.models import Document, KnowledgeBase
+from chameleon.engine.retrieval.pipeline import RetrievalParams, retrieve
 
 _MODES = ("vector", "keyword", "hybrid")
 

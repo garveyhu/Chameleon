@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chameleon.core.retrieval import (
+from chameleon.engine.retrieval import (
     Hit,
     make_dedupe_reranker,
     make_dedupe_then_judge_reranker,

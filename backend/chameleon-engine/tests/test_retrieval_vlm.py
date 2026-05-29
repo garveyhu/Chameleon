@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chameleon.core.retrieval import (
+from chameleon.engine.retrieval import (
     Hit,
     HybridConfig,
     generate_caption,

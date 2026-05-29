@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from chameleon.core.retrieval.hybrid import Hit
-from chameleon.core.retrieval.pipeline import RetrievalParams, _assemble_and_run
+from chameleon.engine.retrieval.hybrid import Hit
+from chameleon.engine.retrieval.pipeline import RetrievalParams, _assemble_and_run
 
 
 def _hit(cid: int, *, kind: str = "text", content: str = "") -> Hit:
@@ -164,7 +164,7 @@ async def test_hyde_reranks_with_original_query_not_hypothetical():
     # 用 local_dedupe 之外的方式注入 reranker：直接走 _assemble_and_run 的 reranker_config
     # 这里改用 monkeypatch 风格不便，故用 hybrid 直测覆盖（见 test_retrieval_expander）。
     # 本测确认 _assemble_and_run 把原 query 透传给 pipeline.run 的 rerank_query。
-    from chameleon.core.retrieval import pipeline as pl
+    from chameleon.engine.retrieval import pipeline as pl
 
     params = RetrievalParams(
         kb_id=1, embedding_model="m", top_k=5, use_hyde=True
