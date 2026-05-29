@@ -25,10 +25,6 @@ S7 起，generation 类型的观测**不应**由调用方手开（BaseLLM 回调
 其他类型由业务层显式 record_call。
 """
 
-from chameleon.core.observe.aggregator import (
-    ObservationRollup,
-    aggregate_rollups,
-)
 from chameleon.core.observe.context import (
     ObservationContext,
     ObservationType,
@@ -49,11 +45,9 @@ from chameleon.core.observe.sink import (
 
 __all__ = [
     "ObservationContext",
-    "ObservationRollup",
     "ObservationSink",
     "ObservationType",
     "TraceContext",
-    "aggregate_rollups",
     "current_observation_id",
     "current_trace_context",
     "get_observation_sink",

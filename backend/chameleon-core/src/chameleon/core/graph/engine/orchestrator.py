@@ -188,7 +188,7 @@ class Orchestrator:
             # 节点轨迹落 call_logs span 行（嵌在根 trace 下；无 trace scope 自动跳过）。
             # generation 行已在节点 execute 期间由 GenerationRecorder 按同一确定性 id
             # 挂到对应 span 下 —— 这里补落 span 壳，trace 树即成 LangSmith 层级。
-            from chameleon.core.observe.graph_spans import persist_node_spans
+            from chameleon.integrations.observe import persist_node_spans
 
             await persist_node_spans(
                 root_request_id=ctx.request_id, node_runs=node_runs

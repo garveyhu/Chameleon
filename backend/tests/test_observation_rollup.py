@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from chameleon.core.observe import aggregate_rollups
 from chameleon.data.models import CallLog
+from chameleon.integrations.observe import aggregate_rollups
 
 
 def _log(rid: str, parent: str | None, *, cost=None, pt=0, ct=0, tt=0) -> CallLog:
