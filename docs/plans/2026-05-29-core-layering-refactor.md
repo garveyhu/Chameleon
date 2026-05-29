@@ -142,7 +142,7 @@ core 该留下的核心抽象；方案 A 的 **CallLog handler** 正是 integrat
 |------|------|:---:|
 | **R0** | 装 import-linter，标 core 禁 sqlalchemy/langchain，先让违规全暴露（暂 warn 不 fail） | 极低 |
 | **R1** | 抽 **chameleon-data**（models+db+infra+utils+config 加载）：建包 + uv workspace 接线 + 全局改 import 路径 + alembic env 指向 | 中（机械、面广） |
-| **R2** | 掐断 5 个耦合点（retrieval/vector 返纯类型、KBNode 走协议注入、observe 走 sink 协议） | 中高（改行为） |
+| **R2** | 掐断**真正必须现在断**的耦合点 = observe 走 ObservationSink 协议（消 core→system 上行）。其余 4 个（retrieval/vector 返纯类型、factory 注入 config、KBNode 走协议）**搬到 integrations/engine 即合法，改为 R3/R4 顺手做**（非阻塞，避免无谓改行为风险） | 中（已完成） |
 | **R3** | 抽 **chameleon-integrations**（组件实现 + 观测 handler + bridges） | 中 |
 | **R4** | 抽 **chameleon-engine**（graph+retrieval+eval+jobs） | 中 |
 | **R5** | core 自然瘦成协议层；重指各上层包依赖；import-linter 转 enforce（CI fail） | 低 |
