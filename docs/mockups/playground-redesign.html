@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Playground 重构方案</title>
+<style>
+  :root{
+    --paper:#fbfaf7; --warm:#f5f4ee; --line:#e7e5e0; --line2:#efece6;
+    --ink:#1c1917; --ink2:#57534e; --ink3:#a8a29e; --blue:#2563eb; --blue50:#eff6ff;
+    --violet:#7c3aed; --violet50:#f5f3ff; --emerald:#059669; --rose:#e11d48;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eceae4;color:var(--ink);font:13px/1.5 -apple-system,"PingFang SC","Microsoft YaHei",system-ui,sans-serif}
+  .wrap{max-width:1280px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--ink2);font-size:13px;margin:0 0 24px}
+  .variant{margin:0 0 40px}
+  .vh{display:flex;align-items:baseline;gap:10px;margin:0 0 10px}
+  .vh b{font-size:15px}
+  .vh .ref{color:var(--ink3);font-size:12px}
+  .vnote{color:var(--ink2);font-size:12.5px;margin:0 0 12px;max-width:880px}
+  .frame{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05)}
+  .app{height:560px;display:flex;flex-direction:column}
+  /* top bar */
+  .top{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);background:#fff}
+  .top .ttl{font-weight:600;font-size:14px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{border:0;background:#fff;padding:5px 11px;font-size:12px;color:var(--ink2);cursor:pointer}
+  .seg button.on{background:var(--blue50);color:var(--blue);font-weight:600}
+  .spacer{flex:1}
+  .mdl{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:9px;padding:5px 10px;background:#fff;font-size:12.5px;cursor:pointer}
+  .av{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#7c3aed,#2563eb);display:inline-block}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 11px;font-size:12px;color:var(--ink2);cursor:pointer}
+  .btn.pri{background:var(--blue);border-color:var(--blue);color:#fff}
+  .chip{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--ink2);background:#fff}
+  /* body layout */
+  .body{flex:1;display:flex;min-height:0}
+  .left{width:200px;border-right:1px solid var(--line);background:var(--warm);padding:10px;overflow:auto}
+  .center{flex:1;display:flex;flex-direction:column;min-width:0}
+  .right{width:280px;border-left:1px solid var(--line);background:#fff;padding:14px;overflow:auto}
+  .sec{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);margin:14px 0 7px}
+  .sec:first-child{margin-top:0}
+  /* chat */
+  .thread{flex:1;overflow:auto;padding:18px 22px;display:flex;flex-direction:column;gap:16px;background:linear-gradient(#fff,#fcfbf9)}
+  .row{display:flex}
+  .row.u{justify-content:flex-end}
+  .bub{max-width:78%;padding:9px 13px;border-radius:14px;font-size:12.5px;line-height:1.55}
+  .u .bub{background:var(--blue);color:#fff;border-top-right-radius:4px}
+  .a .bub{background:#fff;border:1px solid var(--line);border-top-left-radius:4px}
+  .meta{font-size:10.5px;color:var(--ink3);margin-bottom:4px;padding:0 2px}
+  /* composer */
+  .composer{border-top:1px solid var(--line);padding:12px 16px;background:#fff}
+  .cbox{border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .cbox .ph{color:var(--ink3);font-size:13px}
+  .crow{display:flex;align-items:center;gap:8px;margin-top:10px}
+  .icobtn{width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink2);display:inline-flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer}
+  .send{margin-left:auto;width:30px;height:30px;border-radius:50%;background:var(--blue);color:#fff;border:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+  /* fields */
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:11.5px;color:var(--ink2);margin-bottom:5px}
+  .inp{width:100%;border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;background:#fff}
+  .ta{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:12px;min-height:58px;background:#fff;resize:none}
+  .slider{display:flex;align-items:center;gap:8px}
+  .track{flex:1;height:4px;border-radius:3px;background:var(--line)}
+  .track .fill{height:100%;border-radius:3px;background:var(--blue)}
+  .knob{width:13px;height:13px;border-radius:50%;background:#fff;border:2px solid var(--blue);margin-left:-6px}
+  .val{font-size:11.5px;color:var(--ink);font-variant-numeric:tabular-nums;width:30px;text-align:right}
+  .kbpill{display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--violet50);color:var(--violet);border-radius:999px;padding:3px 9px;margin:0 5px 5px 0}
+  .preset{padding:7px 9px;border-radius:8px;font-size:12px;color:var(--ink2);cursor:pointer}
+  .preset:hover{background:#fff}
+  .preset.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:inset 2px 0 0 var(--blue)}
+  /* compare columns */
+  .cols{flex:1;display:flex;min-height:0}
+  .col{flex:1;display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0}
+  .col:last-child{border-right:0}
+  .colh{display:flex;align-items:center;gap:7px;padding:8px 11px;border-bottom:1px solid var(--line);background:var(--warm)}
+  .colh .nm{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .colh .gear{margin-left:auto;color:var(--ink3);cursor:pointer}
+  .colstat{display:flex;gap:10px;padding:5px 11px;border-bottom:1px solid var(--line2);font-size:10.5px;color:var(--ink3);font-variant-numeric:tabular-nums}
+  .colthread{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:11px}
+  .shared{border-top:1px solid var(--line);padding:11px 16px;background:#fff}
+  .badge{font-size:10px;color:var(--ink3)}
+  .addcol{width:46px;display:flex;align-items:center;justify-content:center;color:var(--ink3);border-right:1px solid var(--line);cursor:pointer;font-size:20px}
+  /* drawer (B) */
+  .drawer{position:relative}
+  .drawerPanel{position:absolute;top:0;right:0;bottom:0;width:300px;background:#fff;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.06);padding:14px;overflow:auto}
+  .pop{border:1px solid var(--line);border-radius:10px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,.1);padding:12px;width:240px}
+  .tag{font-size:10px;border-radius:5px;padding:1px 6px;background:var(--warm);color:var(--ink2)}
+  .cite{font-size:11px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;margin-top:7px;color:var(--ink2);background:var(--warm)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Playground 重构方案（3 版）</h1>
+  <p class="sub">现状：多列对比，每列把「模型 + 系统提示 + 参数 + KB」竖着堆在聊天上方，纵向拥挤、参数与对话争空间。下面三版分别对标 Anthropic Console / Google AI Studio / Vercel AI Playground。</p>
+
+  <!-- ============ 变体 A ============ -->
+  <section class="variant">
+    <div class="vh"><b>A · 工作台三栏</b><span class="ref">参考 Anthropic Console Workbench / OpenAI Playground</span></div>
+    <p class="vnote">单会话聚焦：左=预设/历史（保存的 prompt 模板，一键载入），中=对话流，右=运行设置（模型、系统提示、采样参数滑杆、知识库、工具）。参数从「堆在聊天上方」挪到右栏常驻面板，对话区获得全部纵向空间。顶栏放模型 + 「单聊/对比」切换 + Get Code/导出。</p>
+    <div class="frame"><div class="app">
+      <div class="top">
+        <span class="ttl">Playground</span>
+        <div class="seg"><button class="on">单聊</button><button>对比</button></div>
+        <span class="spacer"></span>
+        <button class="btn">清空</button>
+        <button class="btn">导出 .md</button>
+        <button class="btn">&lt;/&gt; Get Code</button>
+      </div>
+      <div class="body">
+        <div class="left">
+          <div class="sec">预设</div>
+          <div class="preset on">＋ 空白对话</div>
+          <div class="preset">客服话术调优</div>
+          <div class="preset">SQL 生成器</div>
+          <div class="preset">中英互译</div>
+          <div class="sec">最近</div>
+          <div class="preset">秋天的诗…</div>
+          <div class="preset">总结会议讲稿…</div>
+        </div>
+        <div class="center">
+          <div class="thread">
+            <div class="row u"><div><div class="meta" style="text-align:right">你</div><div class="bub">帮我写一首关于秋天的诗，七言绝句，带点清冷感</div></div></div>
+            <div class="row a"><div><div class="meta">qwen-plus · 1.2s · 320 tok</div><div class="bub">霜林晚照雁声残，<br>独倚西楼夜未阑。<br>一纸旧笺风里展，<br>银杏满地不知寒。<div class="cite">引用 · 会议讲稿.md · 第 3 段</div></div></div></div>
+          </div>
+          <div class="composer">
+            <div class="cbox"><div class="ph">输入消息，⌘↵ 发送…</div>
+              <div class="crow"><span class="icobtn">＋</span><span class="chip">📎 已附 1</span><button class="send">↑</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="field"><label>模型</label><div class="mdl" style="width:100%"><span class="av"></span>qwen-plus<span class="spacer"></span>▾</div></div>
+          <div class="field"><label>系统提示</label><textarea class="ta">你是一个擅长古典诗词的助手…</textarea></div>
+          <div class="sec">采样</div>
+          <div class="field"><label>Temperature <span style="float:right;color:var(--ink)">0.7</span></label><div class="slider"><div class="track"><div class="fill" style="width:35%"></div></div><span class="knob"></span></div></div>
+          <div class="field"><label>Top-P <span style="float:right;color:var(--ink)">1.0</span></label><div class="slider"><div class="track"><div class="fill" style="width:100%"></div></div><span class="knob"></span></div></div>
+          <div class="field"><label>Max tokens <span style="float:right;color:var(--ink)">2048</span></label><div class="slider"><div class="track"><div class="fill" style="width:25%"></div></div><span class="knob"></span></div></div>
+          <div class="sec">知识库</div>
+          <div><span class="kbpill">📚 产品手册 ×</span><span class="kbpill">＋ 关联</span></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ============ 变体 B ============ -->
+  <section class="variant">
+    <div class="vh"><b>B · 沉浸单栏 + 设置抽屉</b><span class="ref">参考 Google AI Studio / ChatGPT</span></div>
+    <p class="vnote">极简：去掉常驻侧栏，对话占满全宽，底部居中 composer。模型选择在顶栏左上；参数收进右侧「运行设置」抽屉（点齿轮滑出）。适合「就想痛快聊/调一个模型」的高频场景，干扰最少。</p>
+    <div class="frame"><div class="app">
+      <div class="top">
+        <div class="mdl"><span class="av"></span>qwen-plus ▾</div>
+        <span class="chip">temp 0.7</span><span class="chip">2048 tok</span><span class="chip">📚 1</span>
+        <span class="spacer"></span>
+        <button class="btn">清空</button><button class="btn">⚙ 运行设置</button>
+      </div>
+      <div class="body drawer">
+        <div class="center">
+          <div class="thread" style="padding:22px 18%">
+            <div class="row u"><div><div class="bub">介绍一下你的能力</div></div></div>
+            <div class="row a"><div><div class="meta">qwen-plus</div><div class="bub">你好～我是小柴，记性很好，也很喜欢和你一起写诗 ✍️<br>我擅长：用中文写作、根据偏好调风格、记住你提过的意象…</div></div></div>
+          </div>
+          <div class="composer" style="padding:14px 18%">
+            <div class="cbox"><div class="ph">发消息…</div>
+              <div class="crow"><span class="icobtn">＋</span><span class="spacer"></span><span class="badge">⌘↵ 发送</span><button class="send">↑</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="drawerPanel">
+          <div style="display:flex;align-items:center;margin-bottom:10px"><b style="font-size:13px">运行设置</b><span class="spacer"></span><span style="color:var(--ink3);cursor:pointer">✕</span></div>
+          <div class="field"><label>模型</label><div class="mdl" style="width:100%"><span class="av"></span>qwen-plus<span class="spacer"></span>▾</div></div>
+          <div class="field"><label>系统提示</label><textarea class="ta">你是小柴…</textarea></div>
+          <div class="field"><label>Temperature <span style="float:right">0.7</span></label><div class="slider"><div class="track"><div class="fill" style="width:35%"></div></div><span class="knob"></span></div></div>
+          <div class="field"><label>Max tokens <span style="float:right">2048</span></label><div class="slider"><div class="track"><div class="fill" style="width:25%"></div></div><span class="knob"></span></div></div>
+          <div class="sec">知识库</div><div><span class="kbpill">📚 产品手册 ×</span><span class="kbpill">＋</span></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ============ 变体 C ============ -->
+  <section class="variant">
+    <div class="vh"><b>C · 对比优先 + 共享输入</b><span class="ref">参考 Vercel AI Playground / OpenRouter（进化现有多列）</span></div>
+    <p class="vnote">保留我们已有的多列对比，但两处升级：① 参数不再堆在每列顶部——列头只留「模型名 + 齿轮 popover」，腾出对话空间；② 底部 <b>共享 composer</b>，一次输入广播到所有列同时跑，列头实时显示 token/耗时/成本，天然做 A/B。加列在最左 ＋。</p>
+    <div class="frame"><div class="app">
+      <div class="top">
+        <span class="ttl">Playground</span>
+        <div class="seg"><button>单聊</button><button class="on">对比</button></div>
+        <span class="spacer"></span>
+        <button class="btn">导出对比 .md</button>
+      </div>
+      <div class="cols">
+        <div class="addcol">＋</div>
+        <div class="col">
+          <div class="colh"><span class="av"></span><span class="nm">qwen-plus</span><span class="gear">⚙</span></div>
+          <div class="colstat"><span>1.2s</span><span>320 tok</span><span>$0.0001</span></div>
+          <div class="colthread">
+            <div class="row u"><div><div class="bub">写一句秋天的诗</div></div></div>
+            <div class="row a"><div><div class="bub">银杏满地不知寒。</div></div></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colh"><span class="av" style="background:linear-gradient(135deg,#059669,#2563eb)"></span><span class="nm">deepseek-chat</span><span class="gear">⚙</span></div>
+          <div class="colstat"><span>0.9s</span><span>288 tok</span><span>$0.0000</span></div>
+          <div class="colthread">
+            <div class="row u"><div><div class="bub">写一句秋天的诗</div></div></div>
+            <div class="row a"><div><div class="bub">霜叶红于二月花。</div></div></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="colh"><span class="av" style="background:linear-gradient(135deg,#e11d48,#7c3aed)"></span><span class="nm">gpt-4o-mini</span><span class="gear">⚙</span></div>
+          <div class="colstat"><span>1.6s</span><span>301 tok</span><span>$0.0002</span></div>
+          <div class="colthread">
+            <div class="row u"><div><div class="bub">写一句秋天的诗</div></div></div>
+            <div class="row a"><div><div class="bub">一窗疏雨送清秋。</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="shared">
+        <div class="cbox"><div class="ph">一次输入，广播到全部 3 列同时运行…</div>
+          <div class="crow"><span class="icobtn">＋</span><span class="badge">⌘↵ 同时发送给所有列</span><button class="send">↑</button></div>
+        </div>
+      </div>
+      <!-- 列头齿轮 popover 示意 -->
+      <div style="position:absolute;left:140px;top:150px"><div class="pop">
+        <div class="field" style="margin-bottom:9px"><label>模型</label><div class="mdl" style="width:100%"><span class="av"></span>qwen-plus<span class="spacer"></span>▾</div></div>
+        <div class="field" style="margin-bottom:9px"><label>Temperature <span style="float:right">0.7</span></label><div class="slider"><div class="track"><div class="fill" style="width:35%"></div></div><span class="knob"></span></div></div>
+        <div class="field" style="margin:0"><label>系统提示</label><textarea class="ta" style="min-height:40px">…</textarea></div>
+      </div></div>
+    </div></div>
+  </section>
+
+  <p class="sub" style="margin-top:8px">我的建议：日常调试用 <b>A（三栏工作台）</b>当默认（最通用、参数好找）；保留 <b>C 的共享输入对比</b>作为「对比」开关下的形态（我们已有多列底子，升级成本最低、最出彩）。B 可作为「专注模式」的轻量选项。</p>
+</div>
+</body>
+</html>

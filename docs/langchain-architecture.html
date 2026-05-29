@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LangChain 架构与抽象模式深度解析</title>
+<style>
+  :root{
+    --ink:#1f2933; --ink-soft:#52606d; --bg:#fbfbfa; --paper:#ffffff;
+    --accent:#2b6cb0; --accent-d:#1e5090; --violet:#7c5cc4; --green:#2f855a;
+    --amber:#b7791f; --rose:#c53030;
+    --border:#e6e3dd; --code-bg:#f4f6f8; --note-bg:#eef4fb; --warn-bg:#fef6ec;
+    --radius:10px; --maxw:880px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:grid; grid-template-columns:248px minmax(0,1fr); max-width:1240px; margin:0 auto; gap:0;}
+  /* TOC */
+  nav.toc{
+    position:sticky; top:0; align-self:start; height:100vh; overflow-y:auto;
+    padding:28px 18px 40px; border-right:1px solid var(--border); font-size:13.5px;
+  }
+  nav.toc .brand{font-weight:700; font-size:14px; color:var(--accent-d); margin-bottom:14px; letter-spacing:.02em;}
+  nav.toc a{display:block; color:var(--ink-soft); text-decoration:none; padding:4px 8px; border-radius:6px; margin:1px 0;}
+  nav.toc a:hover{background:var(--note-bg); color:var(--accent-d);}
+  nav.toc a.sub{padding-left:20px; font-size:12.5px; color:#7b8794;}
+  main{padding:40px clamp(20px,5vw,64px) 120px; min-width:0;}
+  header.hero{margin-bottom:36px;}
+  header.hero h1{font-size:30px; line-height:1.25; margin:0 0 10px; letter-spacing:-.01em;}
+  header.hero .sub{color:var(--ink-soft); font-size:16px; margin:0;}
+  header.hero .tag{display:inline-block; margin-top:14px; font-size:12.5px; color:var(--accent-d); background:var(--note-bg); border:1px solid #d4e3f5; padding:4px 11px; border-radius:999px;}
+  h2{font-size:23px; margin:52px 0 8px; padding-top:14px; border-top:1px solid var(--border); letter-spacing:-.01em;}
+  h2 .n{color:var(--accent); font-variant-numeric:tabular-nums; margin-right:10px;}
+  h3{font-size:17.5px; margin:30px 0 6px; color:var(--ink);}
+  p{margin:12px 0;}
+  code{font-family:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace; font-size:13.5px; background:var(--code-bg); padding:1.5px 6px; border-radius:5px; color:#9b2c6f;}
+  pre{background:#0f1720; color:#e6edf3; border-radius:var(--radius); padding:16px 18px; overflow-x:auto; font-size:13px; line-height:1.65; margin:16px 0;}
+  pre code{background:none; color:inherit; padding:0; font-size:13px;}
+  .tok-k{color:#ff7b72} .tok-s{color:#a5d6ff} .tok-c{color:#8b949e; font-style:italic} .tok-f{color:#d2a8ff} .tok-n{color:#79c0ff}
+  table{border-collapse:collapse; width:100%; margin:18px 0; font-size:14px;}
+  th,td{border:1px solid var(--border); padding:9px 12px; text-align:left; vertical-align:top;}
+  th{background:#f3f4f1; font-weight:600;}
+  td code{font-size:12.5px;}
+  .note,.warn,.key{border-radius:var(--radius); padding:14px 18px; margin:18px 0; font-size:14.5px;}
+  .note{background:var(--note-bg); border-left:4px solid var(--accent);}
+  .warn{background:var(--warn-bg); border-left:4px solid var(--amber);}
+  .key{background:#f0f7f2; border-left:4px solid var(--green);}
+  .note b,.warn b,.key b{color:var(--ink);}
+  .mermaid{background:var(--paper); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin:20px 0; text-align:center;}
+  figcaption{text-align:center; color:#7b8794; font-size:12.5px; margin:-8px 0 22px;}
+  .lead{font-size:17px; color:var(--ink-soft);}
+  strong{color:var(--ink);}
+  .pill{display:inline-block; font-size:12px; padding:1px 8px; border-radius:999px; background:#eef0ee; color:var(--ink-soft); margin-right:4px;}
+  hr{border:none; border-top:1px dashed var(--border); margin:40px 0;}
+  .footer{margin-top:60px; padding-top:20px; border-top:1px solid var(--border); color:#9aa5b1; font-size:13px;}
+  @media(max-width:860px){ .wrap{grid-template-columns:1fr} nav.toc{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc">
+  <div class="brand">LangChain 架构</div>
+  <a href="#intro">引子 · 它到底解决什么</a>
+  <a href="#runnable">1 · 一切皆 Runnable</a>
+  <a href="#lcel">2 · LCEL：用 | 组合一切</a>
+  <a href="#hierarchy">3 · 抽象基类全景</a>
+  <a href="#template">4 · 模板方法：脏活在基类</a>
+  <a href="#callbacks">5 · 回调系统（核心）</a>
+  <a href="#runtree" class="sub">5.1 run 树与事件流</a>
+  <a href="#tracer" class="sub">5.2 LangSmith = 一个 handler</a>
+  <a href="#packages">6 · 依赖倒置与分包</a>
+  <a href="#streaming">7 · 流式与事件</a>
+  <a href="#patterns">8 · 设计模式总览</a>
+  <a href="#takeaways">9 · 可借鉴的心法</a>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>LangChain 架构与抽象模式深度解析</h1>
+  <p class="sub">从「一切皆 Runnable」到回调总线——拆解 LangChain 如何用一组抽象基类，把异构的 LLM 生态收口成可组合、可观测、可替换的统一形状。</p>
+  <span class="tag">学习笔记 · 2026-05-29</span>
+</header>
+
+<section id="intro">
+<p class="lead">LangChain 真正的价值不是「调 OpenAI 的语法糖」，而是一套<strong>架构契约</strong>：它赌定了三件事——
+<strong>统一接口、可组合、可观测内建</strong>，并用一组抽象基类把这三件事钉死在最底层。
+理解了这套抽象，你就理解了为什么「在 LangSmith 配一下，全链路流量就被捕获并渲染」。</p>
+
+<p>它要解决的根本矛盾是：LLM 生态<strong>极度异构</strong>——不同厂商的模型、不同的向量库、五花八门的检索器/工具/解析器，
+还要支持同步/异步/流式/批量四种执行形态，外加重试、回退、缓存、追踪这些横切关注点。
+如果每个组件各长各的样、每个调用方各写各的胶水，系统会迅速腐烂。LangChain 的答案是：<strong>先定义形状，再填实现</strong>。</p>
+
+<div class="key"><b>一句话主线：</b>把每一种「能力」抽象成一个<strong>基类</strong>，让基类承担所有横切逻辑（回调、配置、重试、流式），
+子类只填一个「核心方法」；再让所有基类共享同一个<strong>执行协议（Runnable）</strong>和同一条<strong>回调总线（CallbackManager）</strong>。
+于是组合是免费的，观测是免费的，替换实现也是免费的。</div>
+</section>
+
+<h2 id="runnable"><span class="n">1</span>第一性原理：一切皆 Runnable</h2>
+<p>LangChain 的地基是一个协议——<code>Runnable</code>。模型、提示词模板、检索器、输出解析器、工具、甚至一段普通函数，
+<strong>统统实现同一个接口</strong>。这意味着任意两个组件都能拼接，因为它们说同一种「语言」。</p>
+
+<p>这套统一接口的核心方法（每个都有同步 / 异步两版）：</p>
+<table>
+<tr><th>方法</th><th>形态</th><th>说明</th></tr>
+<tr><td><code>invoke</code> / <code>ainvoke</code></td><td>单次</td><td>一个输入 → 一个输出</td></tr>
+<tr><td><code>batch</code> / <code>abatch</code></td><td>批量</td><td>多输入并行处理</td></tr>
+<tr><td><code>stream</code> / <code>astream</code></td><td>流式</td><td>逐块吐出输出</td></tr>
+<tr><td><code>astream_events</code></td><td>事件流</td><td>吐出结构化的执行事件（含 run_id / 嵌套层级）</td></tr>
+<tr><td><code>with_config</code> / <code>with_retry</code> / <code>with_fallbacks</code> / <code>bind</code></td><td>装饰</td><td>包一层返回新的 Runnable（不可变）</td></tr>
+</table>
+
+<figure>
+<pre class="mermaid">
+flowchart TB
+    classDef hub fill:#2b6cb0,stroke:#1e5090,stroke-width:2px,color:#fff
+    classDef leaf fill:#90cdf4,stroke:#63b3ed,stroke-width:1px,color:#1a365d
+    R(["Runnable 协议<br/>invoke · stream · batch · async"]):::hub
+    P[PromptTemplate]:::leaf --> R
+    M[ChatModel]:::leaf --> R
+    RT[Retriever]:::leaf --> R
+    T[Tool]:::leaf --> R
+    O[OutputParser]:::leaf --> R
+    F["普通函数<br/>RunnableLambda"]:::leaf --> R
+    R --> C(["因为都是 Runnable<br/>所以能用 | 任意拼接"]):::hub
+</pre>
+<figcaption>图 1 · 异构组件被同一个 Runnable 协议「拍平」成可拼接的积木</figcaption>
+</figure>
+
+<div class="note"><b>关键直觉：</b>统一接口不是为了「好看」，而是<strong>组合的前提</strong>。
+当所有东西都是 <code>Runnable</code>，「编排」就退化成「拼接」——不需要专门的胶水类，<code>|</code> 运算符就够了。</div>
+
+<h2 id="lcel"><span class="n">2</span>LCEL：用 <code>|</code> 组合一切</h2>
+<p>LCEL（LangChain Expression Language）就是建立在 Runnable 之上的<strong>声明式组合语言</strong>。
+管道符 <code>|</code> 把左边的输出喂给右边，串成一个 <code>RunnableSequence</code>；而这个序列<strong>本身又是一个 Runnable</strong>
+（组合子的封闭性），可以继续被组合、被流式、被追踪。</p>
+
+<pre><code><span class="tok-c"># 最经典的三段式：提示词 → 模型 → 解析器</span>
+chain = prompt <span class="tok-k">|</span> model <span class="tok-k">|</span> output_parser
+chain.invoke({<span class="tok-s">"topic"</span>: <span class="tok-s">"变色龙"</span>})        <span class="tok-c"># 同步</span>
+<span class="tok-k">async for</span> chunk <span class="tok-k">in</span> chain.astream({...}):  <span class="tok-c"># 流式——整条链自动支持</span>
+    ...</code></pre>
+
+<p>除了串行，还有几个组合原语（它们也都是 Runnable）：</p>
+<table>
+<tr><th>原语</th><th>作用</th></tr>
+<tr><td><code>RunnableSequence</code>（<code>a | b</code>）</td><td>串行：上一步输出 = 下一步输入</td></tr>
+<tr><td><code>RunnableParallel</code>（<code>{}</code>）</td><td>并行：同一输入分发到多个分支，输出合成 dict</td></tr>
+<tr><td><code>RunnablePassthrough</code></td><td>原样透传输入（常配 <code>.assign()</code> 往字典里加字段）</td></tr>
+<tr><td><code>RunnableLambda</code></td><td>把任意函数包成 Runnable</td></tr>
+<tr><td><code>RunnableBranch</code></td><td>条件路由（if/elif/else）</td></tr>
+</table>
+
+<p>一条 RAG 链用 LCEL 写出来，结构一目了然：</p>
+<pre><code>rag = (
+    {<span class="tok-s">"context"</span>: retriever, <span class="tok-s">"question"</span>: RunnablePassthrough()}  <span class="tok-c"># 并行：检索 + 透传问题</span>
+    <span class="tok-k">|</span> prompt        <span class="tok-c"># 把 context+question 填进模板</span>
+    <span class="tok-k">|</span> model         <span class="tok-c"># 调 LLM</span>
+    <span class="tok-k">|</span> StrOutputParser()
+)</code></pre>
+
+<figure>
+<pre class="mermaid">
+flowchart LR
+    classDef p fill:#48bb78,stroke:#38a169,stroke-width:2px,color:#fff
+    classDef m fill:#2b6cb0,stroke:#1e5090,stroke-width:2px,color:#fff
+    classDef io fill:#90cdf4,stroke:#63b3ed,color:#1a365d
+    Q([问题]):::io --> PAR{"RunnableParallel"}:::p
+    PAR -->|context| RT[Retriever]:::m
+    PAR -->|question| PASS[Passthrough]:::m
+    RT --> MERGE["{context, question}"]:::p
+    PASS --> MERGE
+    MERGE --> PR[Prompt]:::m --> LLM[ChatModel]:::m --> OP[OutputParser]:::m --> A([答案]):::io
+</pre>
+<figcaption>图 2 · 一条 RAG 链：并行检索 + 透传 → 模板 → 模型 → 解析，全程是一个可流式/可追踪的 Runnable</figcaption>
+</figure>
+
+<div class="key"><b>组合子封闭性（closure）：</b>「Runnable 组合出来的东西仍是 Runnable」——这是整套设计的数学美感所在。
+正因如此，流式、批量、回调、配置传播这些能力，<strong>对一条链和对一个组件是一视同仁的</strong>，不需要为「链」单独写一套。</div>
+
+<h2 id="hierarchy"><span class="n">3</span>抽象基类全景</h2>
+<p>在 Runnable 这个通用协议之下，LangChain 为每一类「能力」定义了<strong>专门的抽象基类</strong>。
+基类规定了「这一类能力的标准形状」+「你必须实现的那个核心方法」。下面是主干：</p>
+
+<figure>
+<pre class="mermaid">
+classDiagram
+    class Runnable {
+      +invoke() / ainvoke()
+      +stream() / astream()
+      +batch() / with_config()
+    }
+    class BaseLanguageModel
+    class BaseChatModel {
+      +_generate()*  «你实现»
+      +_stream()
+    }
+    class BaseRetriever {
+      +_get_relevant_documents()*  «你实现»
+    }
+    class BaseTool {
+      +_run()*  «你实现»
+      +args_schema
+    }
+    class BaseOutputParser {
+      +parse()*  «你实现»
+    }
+    class BasePromptTemplate {
+      +format()*  «你实现»
+    }
+    class VectorStore {
+      +similarity_search()*
+      +as_retriever()
+    }
+    class Embeddings {
+      +embed_documents()*
+      +embed_query()*
+    }
+    Runnable <|-- BaseLanguageModel
+    Runnable <|-- BaseRetriever
+    Runnable <|-- BaseTool
+    Runnable <|-- BaseOutputParser
+    Runnable <|-- BasePromptTemplate
+    BaseLanguageModel <|-- BaseChatModel
+    VectorStore ..> BaseRetriever : as_retriever()
+</pre>
+<figcaption>图 3 · 抽象基类层级：每个基类都是 Runnable，又各自规定一个「你必须实现」的核心方法（带 *）</figcaption>
+</figure>
+
+<p>每个基类的「契约」长这样——<strong>你只填核心方法，公共方法基类替你实现</strong>：</p>
+<table>
+<tr><th>能力</th><th>抽象基类</th><th>你实现的核心方法</th><th>你调用的公共方法</th></tr>
+<tr><td>对话模型</td><td><code>BaseChatModel</code></td><td><code>_generate</code> / <code>_agenerate</code></td><td><code>invoke</code> / <code>stream</code></td></tr>
+<tr><td>检索器</td><td><code>BaseRetriever</code></td><td><code>_get_relevant_documents</code></td><td><code>invoke</code></td></tr>
+<tr><td>工具</td><td><code>BaseTool</code></td><td><code>_run</code> / <code>_arun</code></td><td><code>invoke</code> / <code>run</code></td></tr>
+<tr><td>输出解析</td><td><code>BaseOutputParser</code></td><td><code>parse</code></td><td><code>invoke</code></td></tr>
+<tr><td>提示词</td><td><code>BasePromptTemplate</code></td><td><code>format</code></td><td><code>invoke</code></td></tr>
+<tr><td>向量库</td><td><code>VectorStore</code></td><td><code>similarity_search</code> 等</td><td><code>as_retriever()</code> → Retriever</td></tr>
+<tr><td>嵌入</td><td><code>Embeddings</code></td><td><code>embed_documents</code> / <code>embed_query</code></td><td>（直接调，<strong>无回调</strong>）</td></tr>
+<tr><td>回调</td><td><code>BaseCallbackHandler</code></td><td><code>on_*_start/end/error</code></td><td>（被总线调用）</td></tr>
+</table>
+
+<div class="warn"><b>注意这个不对称：</b><code>Embeddings</code> 是少数<strong>不在回调体系里</strong>的基类——
+它不 fire 生命周期事件。所以「向量化」天生是 LangChain 追踪的盲区，要观测它得自己包一层。
+（这正是 Chameleon 方案 A 里 Embedding/Reranker 走自有 <code>observe()</code> 切面、而非 LangChain 回调的原因。）</div>
+
+<h2 id="template"><span class="n">4</span>模板方法：脏活在基类，子类只填核心</h2>
+<p>这是整套设计里<strong>复用性最高的模式</strong>。以 <code>BaseChatModel</code> 为例：你调的是公共的 <code>invoke()</code>，
+但 <code>invoke()</code> 自己并不知道怎么调某个具体模型——它把<strong>横切逻辑全做了</strong>（解析配置、开回调、缓存、计时、错误处理），
+然后在中间留一个抽象方法 <code>_generate()</code> 让子类填厂商细节。</p>
+
+<pre><code><span class="tok-c"># 你要接一个新模型，只需继承基类、实现一个方法</span>
+<span class="tok-k">class</span> <span class="tok-f">MyChatModel</span>(BaseChatModel):
+    <span class="tok-k">def</span> <span class="tok-f">_generate</span>(self, messages, stop, run_manager, **kwargs):
+        <span class="tok-c"># ← 只写「怎么调我家模型」这一件事</span>
+        resp = my_vendor_sdk.chat(to_vendor_format(messages))
+        <span class="tok-c"># run_manager 是基类塞进来的「回调把手」，用它发 token 事件</span>
+        <span class="tok-k">return</span> ChatResult(generations=[...])
+    <span class="tok-c"># invoke / stream / batch / 回调 / 重试 …… 统统白嫖基类的</span></code></pre>
+
+<figure>
+<pre class="mermaid">
+sequenceDiagram
+    participant U as 调用方
+    participant B as BaseChatModel.invoke()
+    participant CM as CallbackManager
+    participant G as _generate() «子类»
+    U->>B: invoke(messages, config)
+    B->>CM: on_chat_model_start  (开 run，分配 run_id)
+    B->>G: _generate(messages, run_manager)
+    G-->>B: ChatResult
+    B->>CM: on_llm_end  (token / 用量 / 输出)
+    B-->>U: AIMessage
+    Note over B,CM: 回调、计时、缓存、重试都在基类里<br/>子类只关心 _generate 一件事
+</pre>
+<figcaption>图 4 · 模板方法时序：公共方法（基类）夹着抽象方法（子类），横切逻辑被「钉」在基类里只写一次</figcaption>
+</figure>
+
+<div class="key"><b>为什么这招威力大：</b>因为<strong>回调被埋在基类的公共方法里</strong>，所以「任何子类、任何调用方」都自动 fire 事件——
+观测不依赖子类作者记得埋点，也不依赖调用方配合。这就是「在底层切面做好，上层全白嫖」的本质。
+你只要走的是 <code>BaseChatModel</code>，追踪就是免费的。</div>
+
+<h2 id="callbacks"><span class="n">5</span>回调系统：可观测性内建于基类</h2>
+<p>这是和 Chameleon 当前工作最相关的一节，也是 LangSmith 魔法的来源。回调系统由三部分组成：</p>
+<ul>
+<li><span class="pill">Handler</span><code>BaseCallbackHandler</code>——定义一堆生命周期钩子，你想消费事件就实现它。</li>
+<li><span class="pill">Manager</span><code>CallbackManager</code>——总线。持有一组已注册的 handler，在每个生命周期点把事件 <strong>fan-out</strong> 给所有 handler。</li>
+<li><span class="pill">Run</span>每次组件执行 = 一个 <strong>run</strong>，分配 <code>run_id</code>，并记下 <code>parent_run_id</code>，从而拼出一棵<strong>运行树</strong>。</li>
+</ul>
+
+<p><code>BaseCallbackHandler</code> 的钩子覆盖了所有组件类型——这就是「全捕获」的接口基础：</p>
+<pre><code><span class="tok-k">class</span> <span class="tok-f">BaseCallbackHandler</span>:
+    <span class="tok-k">def</span> <span class="tok-f">on_chat_model_start</span>(self, serialized, messages, *, run_id, parent_run_id, **kw): ...
+    <span class="tok-k">def</span> <span class="tok-f">on_llm_new_token</span>(self, token, *, run_id, **kw): ...   <span class="tok-c"># 流式逐 token</span>
+    <span class="tok-k">def</span> <span class="tok-f">on_llm_end</span>(self, response, *, run_id, **kw): ...      <span class="tok-c"># 含 token 用量</span>
+    <span class="tok-k">def</span> <span class="tok-f">on_chain_start</span>(self, ...): ...  <span class="tok-k">def</span> <span class="tok-f">on_chain_end</span>(self, ...): ...
+    <span class="tok-k">def</span> <span class="tok-f">on_tool_start</span>(self, ...): ...   <span class="tok-k">def</span> <span class="tok-f">on_tool_end</span>(self, ...): ...
+    <span class="tok-k">def</span> <span class="tok-f">on_retriever_start</span>(self, query, ...): ...
+    <span class="tok-k">def</span> <span class="tok-f">on_retriever_end</span>(self, documents, ...): ...
+    <span class="tok-k">def</span> <span class="tok-f">on_agent_action</span>(self, ...): ...  <span class="tok-k">def</span> <span class="tok-f">on_agent_finish</span>(self, ...): ...</code></pre>
+
+<h3 id="runtree">5.1 run 树：parent_run_id 怎么拼出层级</h3>
+<p>每个组件被 invoke 时，基类向 CallbackManager 要一个 <strong>run manager</strong>（带新分配的 <code>run_id</code>）。
+当这个组件内部又调别的 Runnable 时，子调用从配置里继承父的回调管理器，于是子 run 的 <code>parent_run_id</code> = 父 run 的 <code>run_id</code>。
+一棵嵌套的运行树就这样<strong>自动</strong>长出来——没有人手动维护层级。</p>
+
+<figure>
+<pre class="mermaid">
+flowchart TB
+    classDef chain fill:#7c5cc4,stroke:#5f46a0,stroke-width:2px,color:#fff
+    classDef llm fill:#2b6cb0,stroke:#1e5090,stroke-width:2px,color:#fff
+    classDef rt fill:#dd6b20,stroke:#b7591b,stroke-width:2px,color:#fff
+    classDef tool fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+    A["RAG Chain<br/>run_id=R1 · parent=∅"]:::chain
+    A --> B["Retriever<br/>run_id=R2 · parent=R1"]:::rt
+    A --> C["ChatModel<br/>run_id=R3 · parent=R1"]:::llm
+    C --> D["Tool 调用<br/>run_id=R4 · parent=R3"]:::tool
+</pre>
+<figcaption>图 5 · 运行树由 run_id / parent_run_id 自动拼成；任何 handler 拿到这棵树就能还原完整调用链</figcaption>
+</figure>
+
+<p>回调如何「传播」下去？靠 <code>RunnableConfig</code>。你在最外层 <code>invoke</code> 时塞一个 handler，它会随 config 流到每一个子 Runnable：</p>
+<pre><code>handler = MyHandler()
+rag.invoke(question, config={<span class="tok-s">"callbacks"</span>: [handler]})
+<span class="tok-c"># handler 会收到 on_chain_start → on_retriever_* → on_chat_model_* → on_tool_* …… 一条不漏</span></code></pre>
+
+<h3 id="tracer">5.2 LangSmith 不过是「一个 handler」</h3>
+<p>理解了上面，LangSmith 的「配一下全捕获」就毫无神秘可言了：<strong>LangSmith 的 tracer（<code>LangChainTracer</code>）本身就是一个
+<code>BaseCallbackHandler</code></strong>。它实现了所有 <code>on_*</code> 钩子，把每个 run（带 run_id/parent_run_id/输入输出/用量/计时）POST 到 LangSmith 服务端，
+服务端再把运行树渲染成那个漂亮的瀑布图。</p>
+
+<p>而「配一下」= 设一个环境变量 <code>LANGCHAIN_TRACING_V2=true</code>，LangChain 就在<strong>全局回调管理器</strong>里自动挂上这个 tracer。
+于是你<strong>一行业务代码都不用改</strong>，所有走 Runnable 的流量就被捕获了。</p>
+
+<figure>
+<pre class="mermaid">
+flowchart LR
+    classDef comp fill:#90cdf4,stroke:#63b3ed,color:#1a365d
+    classDef bus fill:#2b6cb0,stroke:#1e5090,stroke-width:2px,color:#fff
+    classDef h fill:#7c5cc4,stroke:#5f46a0,stroke-width:2px,color:#fff
+    L[ChatModel]:::comp --> CM
+    R[Retriever]:::comp --> CM
+    T[Tool]:::comp --> CM
+    CM["CallbackManager（总线）"]:::bus
+    CM --> H1["LangSmith Tracer<br/>（云端渲染）"]:::h
+    CM --> H2["你的自定义 Handler<br/>（落自己的库）"]:::h
+    CM --> H3["流式 UI Handler<br/>（推前端）"]:::h
+</pre>
+<figcaption>图 6 · 同一条总线、多个 handler 并存——LangSmith 和「你自己落库的 handler」是平级的可插拔消费端</figcaption>
+</figure>
+
+<div class="key"><b>对 Chameleon 的映射：</b>你们的 <code>GenerationRecorder</code> 就是「自己写的那个 handler」——它实现 <code>on_llm_end</code> 把 generation 落进 <code>call_logs</code>。
+方案 A 要做的，无非是让 <strong>Retriever / Tool 也走这条总线</strong>（成为 LangChain 原生基类），
+再把 <code>GenerationRecorder</code> 泛化成处理 <code>on_retriever_end</code> / <code>on_tool_end</code> 的多事件 handler。
+顺带——挂上 LangSmith 官方 tracer 就能云端渲染，二者并存。</div>
+
+<h2 id="packages"><span class="n">6</span>依赖倒置与分包：核心定义形状，集成填实现</h2>
+<p>LangChain 把「抽象」和「实现」拆进不同的包，方向严格单向——这是它能容纳上百个厂商集成却不烂的关键。</p>
+
+<figure>
+<pre class="mermaid">
+flowchart TB
+    classDef core fill:#1a365d,stroke:#0f2440,stroke-width:2px,color:#fff
+    classDef mid fill:#2b6cb0,stroke:#1e5090,stroke-width:2px,color:#fff
+    classDef part fill:#48bb78,stroke:#38a169,stroke-width:2px,color:#fff
+    classDef app fill:#dd6b20,stroke:#b7591b,stroke-width:2px,color:#fff
+    CORE["langchain-core<br/>Runnable + 所有抽象基类 + 回调协议<br/>（几乎零重依赖）"]:::core
+    PART["langchain-openai / -anthropic …<br/>厂商集成：实现基类"]:::part
+    LC["langchain<br/>chains / agents / 检索编排"]:::mid
+    COMM["langchain-community<br/>社区集成"]:::part
+    APP["你的应用"]:::app
+    PART --> CORE
+    COMM --> CORE
+    LC --> CORE
+    APP --> LC
+    APP --> PART
+    APP --> CORE
+</pre>
+<figcaption>图 7 · 依赖只指向核心：core 定义接口，集成与应用依赖抽象——典型的依赖倒置（DIP）</figcaption>
+</figure>
+
+<table>
+<tr><th>包</th><th>职责</th></tr>
+<tr><td><code>langchain-core</code></td><td>Runnable、所有抽象基类、回调协议、消息/文档等数据结构。<strong>只定义形状，不绑厂商。</strong></td></tr>
+<tr><td><code>langchain-openai</code> 等伙伴包</td><td>把某厂商 SDK <strong>适配</strong>成基类的实现（Adapter）。</td></tr>
+<tr><td><code>langchain</code></td><td>chains / agents / 检索策略等<strong>编排逻辑</strong>，只依赖 core 的接口。</td></tr>
+<tr><td><code>langchain-community</code></td><td>长尾社区集成。</td></tr>
+</table>
+
+<div class="note"><b>分层心法：</b>把「契约」沉到一个零依赖的核心包，让所有实现反向依赖它。
+换厂商 = 换一个实现包，编排逻辑一行不动。这与 Chameleon 的 <code>chameleon-core</code> ← <code>system</code> ← <code>api</code> 单向依赖是<strong>同一种纪律</strong>——
+也正因如此，方案 A 里「核心层只能定义基类 + sink 协议，不能 import <code>record_call</code>」。</div>
+
+<h2 id="streaming"><span class="n">7</span>流式与事件：一次实现，处处可流</h2>
+<p>因为流式被定义在 Runnable 协议里（<code>astream</code>），而组合子是封闭的，所以<strong>一条链自动可流式</strong>——
+LangChain 会尽可能把流「透传」到最后一个支持流的环节。更强的是 <code>astream_events</code>：它吐出结构化事件
+（<code>on_chat_model_stream</code> / <code>on_retriever_end</code> …，每个都带 <code>run_id</code>、<code>parent_ids</code>、<code>tags</code>），
+让前端可以按节点粒度渲染「正在检索…正在生成…」。</p>
+<pre><code><span class="tok-k">async for</span> ev <span class="tok-k">in</span> rag.astream_events(question, version=<span class="tok-s">"v2"</span>):
+    <span class="tok-k">if</span> ev[<span class="tok-s">"event"</span>] == <span class="tok-s">"on_retriever_end"</span>:
+        show_citations(ev[<span class="tok-s">"data"</span>][<span class="tok-s">"output"</span>])
+    <span class="tok-k">elif</span> ev[<span class="tok-s">"event"</span>] == <span class="tok-s">"on_chat_model_stream"</span>:
+        push_token(ev[<span class="tok-s">"data"</span>][<span class="tok-s">"chunk"</span>])</code></pre>
+<p>注意：<code>astream_events</code> 本质上<strong>也是回调系统的产物</strong>——它在内部挂一个把事件转成异步迭代器的 handler。
+所以「流式事件」和「追踪」共享同一套底层机制。</p>
+
+<h2 id="patterns"><span class="n">8</span>设计模式总览：把 LangChain 翻译成 GoF</h2>
+<p>抛开框架术语，LangChain 的抽象其实是几个经典设计模式的精到组合：</p>
+<table>
+<tr><th>LangChain 机制</th><th>经典模式</th><th>解决什么</th></tr>
+<tr><td>基类 <code>invoke()</code> 夹 <code>_generate()</code></td><td><b>模板方法</b> Template Method</td><td>横切逻辑只写一次，子类只填核心</td></tr>
+<tr><td>集成包实现基类接口</td><td><b>策略 / 适配器</b> Strategy / Adapter</td><td>厂商可插拔、可替换</td></tr>
+<tr><td><code>RunnableSequence/Parallel</code></td><td><b>组合</b> Composite</td><td>「链」和「组件」被一致对待</td></tr>
+<tr><td><code>BaseCallbackHandler</code> + Manager</td><td><b>观察者</b> Observer</td><td>执行与观测解耦，多消费端并存</td></tr>
+<tr><td><code>with_retry / with_fallbacks / bind</code></td><td><b>装饰器</b> Decorator</td><td>不改组件给它加能力（返回新 Runnable）</td></tr>
+<tr><td><code>langchain-core</code> 定接口</td><td><b>依赖倒置</b> DIP</td><td>实现依赖抽象，而非反过来</td></tr>
+</table>
+
+<h2 id="takeaways"><span class="n">9</span>提炼：可借鉴的架构心法</h2>
+<p>抛开 LangChain 具体 API，留下这几条放之四海皆准的设计心法：</p>
+<ol>
+<li><b>先定形状，再填实现。</b>给每类能力一个抽象基类 + 一个统一执行协议，异构生态才能被「拍平」成可组合的积木。</li>
+<li><b>横切关注点钉在基类，别散在调用方。</b>回调、配置、重试、流式——谁都不该手写。基类做一次，所有子类与调用方白嫖。<span style="color:var(--ink-soft)">（这正是你说的「写入 call_log 要在更底层做好」。）</span></li>
+<li><b>可观测性是一等公民，不是事后补丁。</b>把「发事件」织进基类的生命周期，再让消费端（落库 / 云端 / 前端流）作为可插拔 handler 挂在同一条总线上。</li>
+<li><b>组合优于继承，且组合子要封闭。</b>「组合出来的还是同类」才能让能力（流式/追踪）对组件和对链一视同仁。</li>
+<li><b>契约沉核心，实现反向依赖。</b>零依赖的核心包定义接口，集成与应用都指向它——换实现零成本，分层不腐烂。</li>
+</ol>
+
+<div class="key"><b>回到 Chameleon：</b>你们已经在 LLM 这条做对了全部五条（<code>BaseLLM</code> = 基类、<code>GenerationRecorder</code> = handler、core 定契约）。
+方案 A 不过是把同样的五条心法，从 LLM 一种能力<strong>复刻到 Retriever / Tool / Embedding / Reranker</strong>——
+让「任意入口、任意组件，自动产出干净 trace」从 LLM 的专属待遇，变成全组件的默认行为。</div>
+
+<div class="footer">
+LangChain 架构学习笔记 · 用于理解抽象基类设计与回调切面 · 配套方案见 <code>docs/plans/2026-05-29-component-callback-instrumentation.md</code>
+</div>
+</main>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    themeVariables:{
+      fontFamily:'-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif',
+      fontSize:'14px',
+      primaryColor:'#eef4fb', primaryBorderColor:'#63b3ed', primaryTextColor:'#1a365d',
+      lineColor:'#9aa5b1'
+    },
+    flowchart:{ curve:'basis', htmlLabels:true }
+  });
+</script>
+</body>
+</html>
