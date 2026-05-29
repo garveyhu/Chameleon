@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { Markdown } from '@/core/components/chat/markdown';
 import { JsonViewer } from '@/core/components/common/json-viewer';
 import { Badge } from '@/core/components/ui/badge';
 import {
@@ -113,20 +114,37 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
   );
 };
 
-/** 右侧节点详情：元信息行 + 输入 + 输出 */
-const NodeDetail = ({ node }: { node: CallLogItem & { request_payload?: unknown; response_payload?: unknown } }) => {
+type Payload = Record<string, unknown> | null | undefined;
+
+/** 从 payload 里抽「主文本」（prompt/output/answer 等），用于 Markdown 渲染 */
+const INPUT_TEXT_KEYS = ['prompt_preview', 'input', 'question', 'query', 'text', 'content'];
+const OUTPUT_TEXT_KEYS = ['output_preview', 'output', 'answer', 'text', 'content'];
+
+const pickText = (payload: Payload, keys: string[]): string | null => {
+  if (!payload || typeof payload !== 'object') return null;
+  for (const k of keys) {
+    const v = (payload as Record<string, unknown>)[k];
+    if (typeof v === 'string' && v.trim()) return v;
+  }
+  return null;
+};
+
+/** 右侧节点详情：元信息 + 输入 + 输出（Markdown / 原始 可切） */
+const NodeDetail = ({
+  node,
+}: {
+  node: CallLogItem & { request_payload?: Payload; response_payload?: Payload };
+}) => {
   const nodeName = node.request_id.includes('.')
     ? node.request_id.slice(node.request_id.indexOf('.') + 1)
     : node.agent_key;
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-600">
-            {node.observation_type}
-          </span>
-          <span className="text-[13px] font-medium text-stone-900">{nodeName}</span>
-        </div>
+      <div className="flex items-center gap-2">
+        <span className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[11px] text-stone-600">
+          {node.observation_type}
+        </span>
+        <span className="text-[13px] font-medium text-stone-900">{nodeName}</span>
       </div>
 
       {/* 元信息卡片 */}
@@ -144,6 +162,8 @@ const NodeDetail = ({ node }: { node: CallLogItem & { request_payload?: unknown;
         />
         <Meta label="成本" value={node.cost_usd != null ? formatCost(node.cost_usd) : '—'} />
         <Meta label="渠道" value={node.channel || '—'} />
+        <Meta label="开始时间" value={formatDateTime(node.created_at)} mono />
+        <Meta label="请求 ID" value={node.request_id} mono copyable />
       </div>
 
       {node.error_message && (
@@ -152,18 +172,64 @@ const NodeDetail = ({ node }: { node: CallLogItem & { request_payload?: unknown;
         </div>
       )}
 
-      <Section title="输入">
-        <JsonViewer value={(node.request_payload as object) ?? {}} />
-      </Section>
-      <Section title="输出">
-        <JsonViewer value={(node.response_payload as object) ?? {}} />
-      </Section>
+      <PayloadView title="输入" payload={node.request_payload} textKeys={INPUT_TEXT_KEYS} />
+      <PayloadView title="输出" payload={node.response_payload} textKeys={OUTPUT_TEXT_KEYS} />
 
       <div className="border-t border-stone-200 pt-2 text-[11px] text-stone-500">
         会话 <span className="font-mono">{node.session_id ?? '—'}</span>
-        <span className="mx-2 text-stone-300">·</span>
-        时间 <span className="font-mono">{formatDateTime(node.created_at)}</span>
       </div>
+    </div>
+  );
+};
+
+/** 输入/输出：有「主文本」时默认 Markdown 渲染（保留换行），可切原始 JSON */
+const PayloadView = ({
+  title,
+  payload,
+  textKeys,
+}: {
+  title: string;
+  payload: Payload;
+  textKeys: string[];
+}) => {
+  const text = pickText(payload, textKeys);
+  const [raw, setRaw] = useState(!text); // 无主文本时直接看原始
+  const empty = !payload || Object.keys(payload).length === 0;
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-medium text-stone-700">{title}</span>
+        {text && (
+          <div className="flex overflow-hidden rounded-md border border-stone-200 text-[11px]">
+            <button
+              type="button"
+              onClick={() => setRaw(false)}
+              className={cn('px-2 py-0.5', !raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+            >
+              Markdown
+            </button>
+            <button
+              type="button"
+              onClick={() => setRaw(true)}
+              className={cn('px-2 py-0.5', raw ? 'bg-stone-800 text-white' : 'text-stone-500 hover:bg-stone-100')}
+            >
+              原始
+            </button>
+          </div>
+        )}
+      </div>
+      {empty ? (
+        <div className="rounded-md border border-dashed border-stone-200 px-3 py-4 text-center text-[11.5px] text-stone-400">
+          无内容
+        </div>
+      ) : !raw && text ? (
+        <div className="max-h-[420px] overflow-y-auto rounded-md border border-stone-200/70 bg-white px-3 py-2 text-[13px] leading-relaxed">
+          <Markdown content={text} />
+        </div>
+      ) : (
+        <JsonViewer value={(payload as object) ?? {}} />
+      )}
     </div>
   );
 };
@@ -173,11 +239,13 @@ const Meta = ({
   value,
   mono,
   tone,
+  copyable,
 }: {
   label: string;
   value: string;
   mono?: boolean;
   tone?: 'ok' | 'err';
+  copyable?: boolean;
 }) => (
   <div className="rounded-md border border-stone-200/70 bg-white px-2.5 py-1.5">
     <div className="text-[10.5px] text-stone-500">{label}</div>
@@ -186,16 +254,12 @@ const Meta = ({
         'mt-0.5 truncate text-[12px]',
         mono && 'font-mono',
         tone === 'ok' ? 'text-emerald-700' : tone === 'err' ? 'text-rose-600' : 'text-stone-800',
+        copyable && 'cursor-pointer hover:text-blue-600',
       )}
+      title={copyable ? '点击复制' : value}
+      onClick={copyable ? () => void navigator.clipboard.writeText(value) : undefined}
     >
       {value}
     </div>
-  </div>
-);
-
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="space-y-1.5">
-    <div className="text-[12px] font-medium text-stone-700">{title}</div>
-    {children}
   </div>
 );
