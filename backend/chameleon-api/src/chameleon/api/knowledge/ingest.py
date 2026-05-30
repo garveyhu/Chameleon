@@ -21,7 +21,7 @@ from sqlalchemy import select
 from chameleon.api.knowledge import chunker, parsers, storage
 from chameleon.api.task import service as task_service
 from chameleon.core.config import inventory
-from chameleon.core.embedding import ImageEmbedder, get_embedding_client
+from chameleon.integrations.embedding import ImageEmbedder, get_embedding_client
 from chameleon.core.vector import ChunkPayload
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import Chunk, Document, KnowledgeBase

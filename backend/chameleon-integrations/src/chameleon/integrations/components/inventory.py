@@ -69,7 +69,7 @@ def llm_by_name(name: str):
 
 def embedding(name: str | None = None):
     """获取 embedding 客户端"""
-    from chameleon.core.embedding.factory import get_embedding_client
+    from chameleon.integrations.embedding.factory import get_embedding_client
 
     return get_embedding_client(name)
 

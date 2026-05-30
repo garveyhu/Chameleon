@@ -6,11 +6,11 @@ OpenAI 兼容协议（DashScope/Local 占位）。
 """
 
 from chameleon.core.embedding.base import EmbeddingClient
-from chameleon.core.embedding.factory import (
+from chameleon.integrations.embedding.factory import (
     get_embedding_client,
     set_for_test,
 )
-from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 
 # sage 风格命名别名（让 sage 用户看着顺）
 OpenAIEmbeddings = OpenAICompatEmbedding  # OpenAI 协议兼容（含 DeepSeek/Qwen 兼容模式）

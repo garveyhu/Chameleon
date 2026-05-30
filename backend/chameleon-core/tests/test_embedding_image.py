@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.core.embedding import image as image_mod
-from chameleon.core.embedding.image import ImageEmbedder
+from chameleon.integrations.embedding import image as image_mod
+from chameleon.integrations.embedding.image import ImageEmbedder
 
 
 class _StubEmbedding:

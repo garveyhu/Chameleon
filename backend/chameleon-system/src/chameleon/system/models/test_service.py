@@ -24,7 +24,7 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.data.models import LLMModel, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
 from chameleon.integrations.llms.base import BaseLLM

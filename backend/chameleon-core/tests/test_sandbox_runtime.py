@@ -14,8 +14,8 @@ from chameleon.core.sandbox import (
     list_runtime_names,
     register_runtime,
 )
-from chameleon.core.sandbox.mock import MockSandboxRuntime
 from chameleon.core.sandbox.runtime import is_production
+from chameleon.integrations.sandbox.mock import MockSandboxRuntime
 
 # ── config 上下界校验 ────────────────────────────────────
 

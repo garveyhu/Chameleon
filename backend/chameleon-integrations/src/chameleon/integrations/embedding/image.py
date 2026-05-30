@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 from loguru import logger
 
-from chameleon.core.embedding.factory import get_embedding_client
+from chameleon.integrations.embedding.factory import get_embedding_client
 
 #: caption_fn 签名：image_url → caption text
 CaptionFn = Callable[[str], Awaitable[str]]

@@ -3,7 +3,7 @@
 import respx
 from httpx import Response
 
-from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 
 
 async def test_embed_basic(respx_mock) -> None:

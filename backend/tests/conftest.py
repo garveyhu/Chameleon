@@ -80,7 +80,7 @@ def _bootstrap_test_db() -> None:
 _bootstrap_test_db()
 
 from chameleon.app.main import create_app
-from chameleon.core.embedding import set_for_test as set_embedding_for_test
+from chameleon.integrations.embedding import set_for_test as set_embedding_for_test
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.infra.jwt import init_jwt
 from chameleon.data.models import (

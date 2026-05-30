@@ -12,7 +12,7 @@ from chameleon.core.sandbox import SandboxConfig
 
 def _docker_available() -> bool:
     try:
-        from chameleon.core.sandbox.docker import DockerSandboxRuntime
+        from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
         rt = DockerSandboxRuntime()
         # 同步 ping，避免 anyio await
@@ -27,7 +27,7 @@ _SKIP_REASON = "docker daemon 不可达；本地启 Docker Desktop 后再跑"
 
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_python_hello():
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     assert await rt.healthcheck()
@@ -41,7 +41,7 @@ async def test_docker_python_hello():
 
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_python_nonzero_exit():
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     result = await rt.execute(
@@ -54,7 +54,7 @@ async def test_docker_python_nonzero_exit():
 
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_python_runtime_error_to_stderr():
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     result = await rt.execute(
@@ -68,7 +68,7 @@ async def test_docker_python_runtime_error_to_stderr():
 
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_timeout_kills_container():
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     result = await rt.execute(
@@ -81,7 +81,7 @@ async def test_docker_timeout_kills_container():
 
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_stdout_truncated():
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     code = "print('A' * 200_000)"
@@ -96,7 +96,7 @@ async def test_docker_stdout_truncated():
 @pytest.mark.skipif(not _DOCKER_OK, reason=_SKIP_REASON)
 async def test_docker_network_none_blocks():
     """network=none → 任何 socket connect 应失败"""
-    from chameleon.core.sandbox.docker import DockerSandboxRuntime
+    from chameleon.integrations.sandbox.docker import DockerSandboxRuntime
 
     rt = DockerSandboxRuntime()
     code = (
@@ -126,7 +126,7 @@ def test_docker_module_import_doesnt_blow_up_when_docker_missing(
 
     # 真实流程：DockerSandboxRuntime() 抛 SandboxRuntimeError
     # 但 module 本身 import 不应该崩
-    from chameleon.core.sandbox import docker as docker_module
+    from chameleon.integrations.sandbox import docker as docker_module
 
     importlib.reload(docker_module)
     # 类 import 还在

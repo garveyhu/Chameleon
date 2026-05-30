@@ -19,10 +19,10 @@ from sqlalchemy import select
 
 from chameleon.core.api.exceptions import KnowledgeBaseNotFoundError
 from chameleon.core.config import inventory
-from chameleon.core.embedding import get_embedding_client
 from chameleon.core.vector import ChunkHit
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import Agent, AgentKbLink, KnowledgeBase
+from chameleon.integrations.embedding import get_embedding_client
 from chameleon.integrations.vector import get_store
 
 

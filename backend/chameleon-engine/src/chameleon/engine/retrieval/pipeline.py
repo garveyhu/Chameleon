@@ -31,7 +31,6 @@ from loguru import logger
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.embedding import get_embedding_client
 from chameleon.data.models import Chunk, Document
 from chameleon.data.utils import tokenizer
 from chameleon.engine.retrieval.expander import (
@@ -41,6 +40,7 @@ from chameleon.engine.retrieval.expander import (
 )
 from chameleon.engine.retrieval.hybrid import Hit, HybridConfig, HybridPipeline
 from chameleon.engine.retrieval.rerankers import build_reranker
+from chameleon.integrations.embedding import get_embedding_client
 
 
 @dataclass

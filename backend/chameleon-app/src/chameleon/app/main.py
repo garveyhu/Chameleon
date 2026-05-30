@@ -112,7 +112,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await human_input_scheduler.start()
 
     # P20.1：sandbox runtime 注册（docker 可达 → docker，dev 兜底 mock）
-    from chameleon.core.sandbox import bootstrap_runtimes
+    from chameleon.integrations.sandbox import bootstrap_runtimes
 
     sbx_runtimes = await bootstrap_runtimes()
     logger.info("sandbox runtimes: {}", sbx_runtimes)

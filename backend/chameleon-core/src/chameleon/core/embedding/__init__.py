@@ -1,21 +1,9 @@
-"""embedding client 工厂
+"""EmbeddingClient 协议（协议层）
 
-v1 仅支持 OpenAI 兼容协议（裁决 A9）：OpenAI / DeepSeek / Qwen 兼容模式 / vLLM 同走。
+具体实现（OpenAI 兼容 client / 工厂 / 图片 embedder）已移到
+chameleon.integrations.embedding。core 只留 EmbeddingClient 协议。
 """
 
 from chameleon.core.embedding.base import EmbeddingClient
-from chameleon.core.embedding.factory import get_embedding_client, set_for_test
-from chameleon.core.embedding.image import (
-    CaptionFn,
-    ImageEmbedder,
-    ImageEmbedResult,
-)
 
-__all__ = [
-    "CaptionFn",
-    "EmbeddingClient",
-    "ImageEmbedResult",
-    "ImageEmbedder",
-    "get_embedding_client",
-    "set_for_test",
-]
+__all__ = ["EmbeddingClient"]

@@ -610,7 +610,7 @@ async def update_chunk(
     """编辑切块：改内容则重嵌向量；可改关键词 / 启停。"""
     chunk = await _get_chunk(session, kb_id=kb_id, doc_id=doc_id, chunk_id=chunk_id)
     if content is not None and content.strip() and content != chunk.content:
-        from chameleon.core.embedding import get_embedding_client
+        from chameleon.integrations.embedding import get_embedding_client
         from chameleon.data.utils.tokenizer import approx_tokens
 
         kb = await _get_kb(session, kb_id)

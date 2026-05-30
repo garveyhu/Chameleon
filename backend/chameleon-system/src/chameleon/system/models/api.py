@@ -18,7 +18,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
-from chameleon.core.embedding.openai_compat import OpenAICompatEmbedding
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import LLMModel, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
