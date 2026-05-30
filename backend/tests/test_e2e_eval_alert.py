@@ -370,7 +370,7 @@ async def test_alert_notifier_failure_doesnt_break_trigger(
 
 
 async def test_webhook_notifier_2xx_success(respx_mock):
-    from chameleon.core.components.notifier import WebhookNotifier
+    from chameleon.integrations.components.notifier import WebhookNotifier
 
     route = respx_mock.post(_WEBHOOK_URL).mock(
         return_value=httpx.Response(204)
@@ -387,7 +387,7 @@ async def test_webhook_notifier_2xx_success(respx_mock):
 
 
 async def test_slack_notifier_non_200(respx_mock):
-    from chameleon.core.components.notifier import SlackNotifier
+    from chameleon.integrations.components.notifier import SlackNotifier
 
     respx_mock.post(_SLACK_URL).mock(
         return_value=httpx.Response(403, text="invalid_token")

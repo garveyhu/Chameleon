@@ -7,8 +7,8 @@ agent 在 graph 节点里 import 现成 chain，避免在节点内 inline 复杂
 
     # chain/general_chat_chain.py
     from langchain_core.runnables import RunnablePassthrough
-    from chameleon.core.components import llm
-    from chameleon.core.function.prompts.general_chat import GENERAL_PROMPT
+    from chameleon.integrations.components import llm
+    from chameleon.integrations.function.prompts.general_chat import GENERAL_PROMPT
 
     def build_general_chat_chain():
         return GENERAL_PROMPT | llm() | (lambda msg: msg.content)

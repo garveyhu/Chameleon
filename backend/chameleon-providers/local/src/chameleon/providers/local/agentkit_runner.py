@@ -20,8 +20,8 @@ from typing import Any
 
 from chameleon.agentkit import AgentRun, RuntimeTransport
 from chameleon.agentkit._spec import Doc, ModelSlot
-from chameleon.core.components import llm, llm_by_name, search_kb
 from chameleon.core.observe.context import observe
+from chameleon.integrations.components import llm, llm_by_name, search_kb
 from chameleon.integrations.knowledge import list_linked_kb_metas
 from chameleon.providers.base.types import (
     Citation,

@@ -9,9 +9,9 @@ from chameleon.core.base import (
     BaseAgent,
     agent_router,
 )
-from chameleon.core.components import cache, embedding, llm, search_kb, vector
-from chameleon.core.components.cache import CacheManager
 from chameleon.data.utils import model_to_dict
+from chameleon.integrations.components import cache, embedding, llm, search_kb, vector
+from chameleon.integrations.components.cache import CacheManager
 from chameleon.integrations.llms import BaseLLM, ChatDeepSeek, ChatQwen
 
 # ── inventory 顶层 callable ─────────────────────────────

@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 from loguru import logger
 
-from chameleon.core.components.notifier.base import Notifier
+from chameleon.integrations.components.notifier.base import Notifier
 
 
 class WebhookNotifier(Notifier):

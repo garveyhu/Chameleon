@@ -6,7 +6,7 @@
   约定（如 `kb:{kb_key}:meta`、`agent:{key}:metadata`）
 
 用法：
-    from chameleon.core.components import cache
+    from chameleon.integrations.components import cache
     cache().set("my-key", value, expire=3600)
     v = cache().get("my-key", default=None)
     cache().delete("my-key")

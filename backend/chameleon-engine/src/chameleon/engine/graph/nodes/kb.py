@@ -66,7 +66,7 @@ class KBNode(Node[Any, dict]):
 
     async def execute(self, ctx: NodeContext, input: Any) -> dict:
         # lazy import 避免 chameleon-core 在 import 时反向依赖 chameleon-api
-        from chameleon.core.components.inventory import search_kb
+        from chameleon.integrations.components.inventory import search_kb
 
         use_eph = bool(self.spec.data.get("use_ephemeral_kb"))
         kb_key = self.spec.data.get("kb_key") or ""

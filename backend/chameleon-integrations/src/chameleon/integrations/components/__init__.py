@@ -2,7 +2,7 @@
 
 统一的"AI 基础能力门面"——agent 业务代码统一从这里 import：
 
-    from chameleon.core.components import llm, embedding, vector, cache, search_kb
+    from chameleon.integrations.components import llm, embedding, vector, cache, search_kb
 
 各子模块：
 - embeddings/  —— embedding 客户端
@@ -12,7 +12,7 @@
   其 search_kb facade 惰性转发 chameleon.integrations.knowledge.search_kb
 """
 
-from chameleon.core.components.inventory import (
+from chameleon.integrations.components.inventory import (
     cache,
     embedding,
     llm,

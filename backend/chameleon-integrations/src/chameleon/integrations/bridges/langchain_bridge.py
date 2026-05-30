@@ -5,7 +5,7 @@
 用法：
 
     from chameleon.integrations.bridges import astream_from_runnable
-    from chameleon.core.components import llm
+    from chameleon.integrations.components import llm
     from langchain_core.prompts import ChatPromptTemplate
 
     class MyAgent(BaseAgent):

@@ -90,14 +90,12 @@ forbidden_modules = [
     "langchain_openai",
     "langgraph",
 ]
-# core 模块加载期零重依赖；下面这些是 IoC 便利 facade 的【惰性】函数内 import，
-# 经 integrations 间接触达 sqlalchemy/langchain——运行期按需，非加载期。与 layers 契约同一组。
+# core 模块加载期零重依赖；仅剩 base_agent 的 SDK 便利构造器（from_langgraph_graph /
+# from_runnable / KB 检索）是【惰性】函数内 import，经 integrations 间接触达 langchain——
+# 运行期按需，非加载期。与 layers 契约同一组。
 ignore_imports = [
     "chameleon.core.base.base_agent -> chameleon.integrations.bridges",
     "chameleon.core.base.base_agent -> chameleon.integrations.knowledge",
-    "chameleon.core.components.inventory -> chameleon.integrations.llms.factory",
-    "chameleon.core.components.inventory -> chameleon.integrations.vector.factory",
-    "chameleon.core.components.inventory -> chameleon.integrations.knowledge",
 ]
 
 [[tool.importlinter.contracts]]
@@ -109,14 +107,11 @@ layers = [
     "chameleon.data",
     "chameleon.core",
 ]
-# 已知的 IoC 便利 facade：core 惰性委托 integrations 实现（不在模块加载期拉重依赖进 core，
-# 由上面的 forbidden 契约兜底）。有意保留——base_agent 的范式桥/KB 检索是 SDK 便利方法，
-# inventory 是组件具名访问点。后续若做 DI 注入（参照 observe/sink.py 的 ObservationSink）可消除。
+# 仅剩 base_agent 的 SDK 便利构造器惰性委托 integrations（范式桥 / KB 检索）——惰性、运行期按需。
+# inventory / components / function 已整包迁出 core 到 integrations，不再是 core→integrations facade。
+# 后续若要连 base_agent 这条也消除，可参照 observe/sink.py 的 ObservationSink 做注入。
 ignore_imports = [
     "chameleon.core.base.base_agent -> chameleon.integrations.bridges",
     "chameleon.core.base.base_agent -> chameleon.integrations.knowledge",
-    "chameleon.core.components.inventory -> chameleon.integrations.llms.factory",
-    "chameleon.core.components.inventory -> chameleon.integrations.vector.factory",
-    "chameleon.core.components.inventory -> chameleon.integrations.knowledge",
 ]
 

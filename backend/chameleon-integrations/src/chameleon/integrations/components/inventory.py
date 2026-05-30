@@ -6,7 +6,7 @@
 
 业务代码统一从这里 import：
 
-    from chameleon.core.components import llm, embedding, vector, cache, search_kb
+    from chameleon.integrations.components import llm, embedding, vector, cache, search_kb
 
     chat_model = llm()                 # LLM 客户端
     embedder = embedding()              # embedding 客户端
@@ -89,7 +89,7 @@ def vector():
 
 def cache():
     """获取 CacheManager 实例（diskcache 单例）"""
-    from chameleon.core.components.cache.manager import CacheManager
+    from chameleon.integrations.components.cache.manager import CacheManager
 
     return CacheManager()
 

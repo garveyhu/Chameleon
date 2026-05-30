@@ -222,7 +222,7 @@ async def test_kb_node_basic():
         NodeSpec(id="kb", type="kb", data={"kb_key": "demo", "top_k": 3})
     )
     with patch(
-        "chameleon.core.components.inventory.search_kb",
+        "chameleon.integrations.components.inventory.search_kb",
         new=AsyncMock(return_value=fake_hits),
     ) as mock_search:
         out = await node.execute(_ctx(), {"query": "anything"})
@@ -248,7 +248,7 @@ async def test_kb_node_picks_query_from_answer_field():
 
     node = KBNode(NodeSpec(id="kb", type="kb", data={"kb_key": "demo"}))
     with patch(
-        "chameleon.core.components.inventory.search_kb",
+        "chameleon.integrations.components.inventory.search_kb",
         new=AsyncMock(return_value=[]),
     ) as mock_search:
         await node.execute(_ctx(), {"answer": "look this up"})
@@ -284,7 +284,7 @@ async def test_chain_kb_then_llm(fake_llm):
     ]
     executor = Orchestrator(spec)
     with patch(
-        "chameleon.core.components.inventory.search_kb",
+        "chameleon.integrations.components.inventory.search_kb",
         new=AsyncMock(return_value=fake_hits),
     ):
         result = await executor.run(

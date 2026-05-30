@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import httpx
 
-from chameleon.core.components.notifier import (
+from chameleon.integrations.components.notifier import (
     NOTIFIER_REGISTRY,
     SlackNotifier,
     WebhookNotifier,

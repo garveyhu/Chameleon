@@ -8,9 +8,9 @@ channel 健康、配额等）。无状态单例。
 
 from __future__ import annotations
 
-from chameleon.core.components.notifier.base import Notifier
-from chameleon.core.components.notifier.slack import SlackNotifier
-from chameleon.core.components.notifier.webhook import WebhookNotifier
+from chameleon.integrations.components.notifier.base import Notifier
+from chameleon.integrations.components.notifier.slack import SlackNotifier
+from chameleon.integrations.components.notifier.webhook import WebhookNotifier
 
 NOTIFIER_REGISTRY: dict[str, Notifier] = {
     "slack": SlackNotifier(),
