@@ -17,8 +17,26 @@ from chameleon.integrations.bridges.langgraph_bridge import (
     ctx_to_langgraph_messages,
 )
 
+
+def wire_agent_bridges() -> None:
+    """把 langgraph / runnable 桥注入 core.base 的桥注册表。
+
+    应用启动（chameleon-app create_app）与测试 conftest 调一次；之后 BaseAgent.astream
+    在 agent 定义 build_graph()/build_runnable() 时即可经注册表委托到这里的实现，
+    避免 core 反向 import integrations。
+    """
+    from chameleon.core.base.bridge_registry import (
+        set_langgraph_bridge,
+        set_runnable_bridge,
+    )
+
+    set_langgraph_bridge(astream_from_langgraph_graph)
+    set_runnable_bridge(astream_from_runnable)
+
+
 __all__ = [
     "astream_from_langgraph_graph",
     "astream_from_runnable",
     "ctx_to_langgraph_messages",
+    "wire_agent_bridges",
 ]

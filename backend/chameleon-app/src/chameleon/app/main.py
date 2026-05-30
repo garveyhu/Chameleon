@@ -147,9 +147,20 @@ def _register_observation_sink() -> None:
     set_observation_sink(record_call)
 
 
+def _wire_agent_bridges() -> None:
+    """注入 agent 范式桥：BaseAgent.astream 在 agent 用 build_graph()/build_runnable()
+    时经 core.base.bridge_registry 委托到 integrations 的 langgraph / runnable 桥。
+    app 在此注入，core 不 import integrations。
+    """
+    from chameleon.integrations.bridges import wire_agent_bridges
+
+    wire_agent_bridges()
+
+
 def create_app() -> FastAPI:
     setup_logger()
     _register_observation_sink()
+    _wire_agent_bridges()
 
     app = FastAPI(
         title="Chameleon",
