@@ -68,15 +68,19 @@ addopts = "--import-mode=importlib"
 # 不设 testpaths——默认从 rootdir 递归发现，覆盖各子包 tests/
 # 跨包集成测试放 workspace 根的 tests/
 
-# ── import-linter：core 分层重构护栏（见 docs/plans/2026-05-29-core-layering-refactor.md）──
-# R0 阶段：只立「core 禁重依赖」契约，跑出违规清单当作业清单。
-# 现在【预期会失败】（core 还没拆），R5 收尾后转 CI enforce。手动跑：uv run lint-imports
+# ── import-linter：core 分层架构护栏（见 docs/plans/2026-05-29-core-layering-refactor.md）──
+# R5：两条契约均 GREEN，作为分层守门。无 CI——本地 / pre-commit 跑：uv run lint-imports
 [tool.importlinter]
-root_packages = ["chameleon.core"]
+root_packages = [
+    "chameleon.core",
+    "chameleon.data",
+    "chameleon.integrations",
+    "chameleon.engine",
+]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "core 保持纯抽象：禁 sqlalchemy / langchain 系（R0 baseline）"
+name = "core 保持纯抽象：禁 sqlalchemy / langchain 系"
 type = "forbidden"
 source_modules = ["chameleon.core"]
 forbidden_modules = [
@@ -85,5 +89,34 @@ forbidden_modules = [
     "langchain_core",
     "langchain_openai",
     "langgraph",
+]
+# core 模块加载期零重依赖；下面这些是 IoC 便利 facade 的【惰性】函数内 import，
+# 经 integrations 间接触达 sqlalchemy/langchain——运行期按需，非加载期。与 layers 契约同一组。
+ignore_imports = [
+    "chameleon.core.base.base_agent -> chameleon.integrations.bridges",
+    "chameleon.core.base.base_agent -> chameleon.integrations.knowledge",
+    "chameleon.core.components.inventory -> chameleon.integrations.llms.factory",
+    "chameleon.core.components.inventory -> chameleon.integrations.vector.factory",
+    "chameleon.core.components.inventory -> chameleon.integrations.knowledge",
+]
+
+[[tool.importlinter.contracts]]
+name = "分层基座单向：core ← data ← integrations ← engine（禁反向 / 越层）"
+type = "layers"
+layers = [
+    "chameleon.engine",
+    "chameleon.integrations",
+    "chameleon.data",
+    "chameleon.core",
+]
+# 已知的 IoC 便利 facade：core 惰性委托 integrations 实现（不在模块加载期拉重依赖进 core，
+# 由上面的 forbidden 契约兜底）。有意保留——base_agent 的范式桥/KB 检索是 SDK 便利方法，
+# inventory 是组件具名访问点。后续若做 DI 注入（参照 observe/sink.py 的 ObservationSink）可消除。
+ignore_imports = [
+    "chameleon.core.base.base_agent -> chameleon.integrations.bridges",
+    "chameleon.core.base.base_agent -> chameleon.integrations.knowledge",
+    "chameleon.core.components.inventory -> chameleon.integrations.llms.factory",
+    "chameleon.core.components.inventory -> chameleon.integrations.vector.factory",
+    "chameleon.core.components.inventory -> chameleon.integrations.knowledge",
 ]
 
