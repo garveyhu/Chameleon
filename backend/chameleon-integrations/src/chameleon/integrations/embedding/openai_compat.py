@@ -48,6 +48,28 @@ class OpenAICompatEmbedding:
         if not texts:
             return []
 
+        # LangChain Embeddings 基类不 fire 回调 → 用 record_scope 切面落 embedding 节点。
+        # 仅在请求级 trace scope 内记（跳过 KB 摄入等无 TraceContext 的批量场景，防刷屏）。
+        from chameleon.core.observe.context import (
+            ObservationType,
+            current_trace_context,
+        )
+
+        if current_trace_context() is None:
+            return await self._embed_all(texts)
+
+        from chameleon.integrations.observe.aspect import record_scope
+
+        async with record_scope(
+            observation_type=ObservationType.EMBEDDING,
+            name=self.model,
+            request_payload={"model": self.model, "dim": self.dim, "count": len(texts)},
+        ) as scope:
+            results = await self._embed_all(texts)
+            scope.response_payload = {"count": len(results), "dim": self.dim}
+            return results
+
+    async def _embed_all(self, texts: list[str]) -> list[list[float]]:
         results: list[list[float]] = []
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i : i + self.batch_size]

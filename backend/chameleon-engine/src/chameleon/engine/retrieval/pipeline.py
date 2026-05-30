@@ -43,6 +43,36 @@ from chameleon.engine.retrieval.rerankers import build_reranker
 from chameleon.integrations.embedding import get_embedding_client
 
 
+def _traced_reranker(reranker):  # noqa: ANN001, ANN202
+    """把 reranker callable 包 observe 切面落 reranker 节点。
+
+    LangChain 无原生 rerank 回调 → 用 record_scope（同 embedding 套路），落同一 sink。
+    仅在请求级 trace scope 内记。
+    """
+
+    async def _wrapped(query: str, hits: list):  # noqa: ANN202
+        from chameleon.core.observe.context import (
+            ObservationType,
+            current_trace_context,
+        )
+
+        if current_trace_context() is None:
+            return await reranker(query, hits)
+
+        from chameleon.integrations.observe.aspect import record_scope
+
+        async with record_scope(
+            observation_type=ObservationType.RERANKER,
+            name=getattr(reranker, "model", None) or type(reranker).__name__,
+            request_payload={"in_count": len(hits)},
+        ) as scope:
+            out = await reranker(query, hits)
+            scope.response_payload = {"out_count": len(out)}
+            return out
+
+    return _wrapped
+
+
 @dataclass
 class RetrievalParams:
     """一次检索的全部配置（KB / collection 配置映射到这里）"""
@@ -266,7 +296,7 @@ async def _assemble_and_run(
     reranker = None
     if params.reranker_config:
         try:
-            reranker = build_reranker(params.reranker_config)
+            reranker = _traced_reranker(build_reranker(params.reranker_config))
         except ValueError:
             logger.exception("invalid reranker_config | rerank disabled")
 

@@ -45,6 +45,7 @@ class ObservationType(StrEnum):
     - agent      —— Agent 推理一轮
     - tool       —— 工具调用
     - retriever  —— RAG 检索
+    - reranker   —— 重排
     - evaluator  —— 自动评估
     - embedding  —— 向量化调用
     - guardrail  —— 内容审核
@@ -56,6 +57,7 @@ class ObservationType(StrEnum):
     AGENT = "agent"
     TOOL = "tool"
     RETRIEVER = "retriever"
+    RERANKER = "reranker"
     EVALUATOR = "evaluator"
     EMBEDDING = "embedding"
     GUARDRAIL = "guardrail"
