@@ -29,6 +29,7 @@ from chameleon.core.api.sse_events import (
     event_meta,
 )
 from chameleon.core.observe import (
+    ObservationType,
     TraceContext,
     reset_trace_context,
     set_trace_context,
@@ -36,6 +37,7 @@ from chameleon.core.observe import (
 from chameleon.data.models import ChatSession, KnowledgeBase, LLMModel, Message
 from chameleon.data.utils.snowflake import next_session_id
 from chameleon.integrations.llms.factory import resolve_llm
+from chameleon.integrations.observe.aspect import record_scope
 from chameleon.system.api_key.service import (
     aggregate_generation_rollup,
     record_call,
@@ -197,6 +199,20 @@ async def build_kb_context(
     return PLAYGROUND_CTX_HEADER + "\n\n".join(pieces) + "\n\n", citations
 
 
+def _clip_citations(citations: list[dict], *, max_items: int = 20) -> list[dict]:
+    """retriever 节点输出去 bloat：每条 citation 原文截 300 字预览、列表封顶 max_items。
+
+    原文全量已在 generation 子节点的 messages 里，溯源面板只需预览 + 分项分数。
+    """
+    out: list[dict] = []
+    for c in citations[:max_items]:
+        item = {k: v for k, v in c.items() if k != "content"}
+        content = c.get("content") or ""
+        item["preview"] = content[:300] + "…" if len(content) > 300 else content
+        out.append(item)
+    return out
+
+
 def build_messages(
     *,
     system_prompt: str | None,
@@ -336,37 +352,29 @@ async def invoke_stream(
     ok = True
     answer_parts: list[str] = []
     try:
-        kb_started = time.monotonic()
-        kb_context, citations = await build_kb_context(
-            session, query=user_text, kb_ids=kb_ids
-        )
-        kb_duration_ms = int((time.monotonic() - kb_started) * 1000)
-        # KB 召回落成 retriever 观测节点（结构化引用，挂在根 trace 下，与 generation 平级）
-        if citations:
-            try:
-                await record_call(
-                    session,
-                    request_id=f"{request_id}.kb",
-                    app_id=PLAYGROUND_APP_ID,
-                    agent_key=PLAYGROUND_AGENT_KEY,
-                    session_id=session_id,
-                    channel="playground",
-                    stream=False,
-                    success=True,
-                    code=0,
-                    error_message=None,
-                    duration_ms=kb_duration_ms,
-                    request_payload={"query": user_text[:500], "kb_ids": kb_ids},
-                    response_payload={"citations": citations},
-                    parent_id=request_id,
-                    observation_type="retriever",
-                    api_key_id=api_key_id,
-                    end_user_id=operator_eid,
-                    user_id=operator_user_id,
+        # KB 召回包成 retriever 观测段：record_scope 自身落 retriever 节点（query +
+        # citations），且开了嵌套上下文 → build_kb_context 内部的 embedding / reranker
+        # 的 record_scope 会以本段为父自动嵌套（解决 embedding 落 trace 根、时长看着
+        # 与 retriever 相加的问题）。无 KB 时不开段。
+        if kb_ids:
+            async with record_scope(
+                observation_type=ObservationType.RETRIEVER,
+                name="kb.search",
+                request_payload={
+                    "query": user_text[:500],
+                    "kb_ids": kb_ids,
+                    "top_k": PLAYGROUND_TOP_K,
+                },
+            ) as kb_scope:
+                kb_context, citations = await build_kb_context(
+                    session, query=user_text, kb_ids=kb_ids
                 )
-                await session.commit()
-            except Exception:  # noqa: BLE001
-                logger.exception("playground retriever node persist failed")
+                kb_scope.response_payload = {
+                    "count": len(citations),
+                    "citations": _clip_citations(citations),
+                }
+        else:
+            kb_context, citations = "", []
         lc_messages = build_messages(
             system_prompt=system_prompt,
             kb_context=kb_context,

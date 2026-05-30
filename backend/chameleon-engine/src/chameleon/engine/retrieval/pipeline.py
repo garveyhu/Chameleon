@@ -64,10 +64,38 @@ def _traced_reranker(reranker):  # noqa: ANN001, ANN202
         async with record_scope(
             observation_type=ObservationType.RERANKER,
             name=getattr(reranker, "model", None) or type(reranker).__name__,
-            request_payload={"in_count": len(hits)},
+            request_payload={
+                "query": (query or "")[:300],
+                "in_count": len(hits),
+                # 候选文档（封顶 20，content 不入——已在 retriever 节点里）：让溯源
+                # 能看出"重排前是哪些、初始分多少"，否则只有 in_count 无法 debug。
+                "candidates": [
+                    {
+                        "chunk_id": h.chunk_id,
+                        "doc_id": h.doc_id,
+                        "title": h.document_title,
+                        "pre_score": round(float(h.score), 4),
+                    }
+                    for h in hits[:20]
+                ],
+            },
         ) as scope:
             out = await reranker(query, hits)
-            scope.response_payload = {"out_count": len(out)}
+            scope.response_payload = {
+                "out_count": len(out),
+                # 存活文档 + rerank 分 + 新顺序（封顶 20，content ≤200 字）：能回答
+                # "对的文档为什么被刷掉 / 重排是否真生效"。
+                "survivors": [
+                    {
+                        "chunk_id": h.chunk_id,
+                        "doc_id": h.doc_id,
+                        "title": h.document_title,
+                        "rerank_score": (h.meta or {}).get("rerank_score"),
+                        "content": (h.content or "")[:200],
+                    }
+                    for h in out[:20]
+                ],
+            }
             return out
 
     return _wrapped

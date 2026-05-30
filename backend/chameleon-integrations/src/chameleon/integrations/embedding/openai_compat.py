@@ -63,10 +63,25 @@ class OpenAICompatEmbedding:
         async with record_scope(
             observation_type=ObservationType.EMBEDDING,
             name=self.model,
-            request_payload={"model": self.model, "dim": self.dim, "count": len(texts)},
+            request_payload={
+                "model": self.model,
+                "dim": self.dim,
+                "count": len(texts),
+                "total_chars": sum(len(t) for t in texts),
+                # 被 embed 的原文预览（每条 ≤200 字、最多 3 条）——查询期通常 1 条，
+                # 让溯源能看出"embed 了什么"；全量文本/向量不存（bloat）。
+                "texts_preview": [t[:200] for t in texts[:3]],
+            },
         ) as scope:
             results = await self._embed_all(texts)
-            scope.response_payload = {"count": len(results), "dim": self.dim}
+            scope.response_payload = {
+                "count": len(results),
+                "dim": self.dim,
+                # 首条向量前 8 维做 sanity check（非全零/NaN），不存全量 1536 维。
+                "vector_preview": (
+                    [round(float(x), 6) for x in results[0][:8]] if results else None
+                ),
+            }
             return results
 
     async def _embed_all(self, texts: list[str]) -> list[list[float]]:
