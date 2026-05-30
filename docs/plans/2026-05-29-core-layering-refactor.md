@@ -1,5 +1,12 @@
 # chameleon-core 分层重构：拆出「纯抽象 core」
 
+> ✅ **已完成（R0–R5，2026-05-30）**。分支 `refactor/core-layering`（未 push/未并，共 16 commit）。
+> 4 包成型：**core**（纯协议，pydantic-only）/ **data**（ORM+infra）/ **integrations**（厂商实现+观测后端）/ **engine**（graph/retrieval/eval/a2a/jobs 编排）。
+> import-linter **2 契约 GREEN**：① core 禁 sqlalchemy/langchain；② 严格分层 core←data←integrations←engine 单向。
+> 5 条已知 IoC 便利 facade（base_agent 范式桥/KB、inventory 组件访问点）惰性 core→integrations，显式 ignore_imports 白名单+注释（可后续 DI 注入消除）。
+> **遗留（可选）**：R3b 架构纯度（embedding/sandbox/schema/cache impl 仍在 core，不触发 linter，宜迁 integrations）；上层 product 包（app/api/system/providers）未纳入 layers 契约；无 CI（本地/pre-commit 跑 lint-imports）。
+> 提交链：R0 e987fbc · R1 72c1741 · R2 88023cc · R3 02d6644/9287389/7748682/bf23a89/913aad5/b260be4 · R4 25131fd/bd58575/19f9c8c/73c0fe5/fb1b279 · R5 e94e6c8。
+
 > 2026-05-29 · 把臃肿的 chameleon-core（~30% 抽象 + ~70% 实现/编排/持久化）按 LangChain
 > 纪律重新分层为 4 包：**core（纯协议）/ data（持久化+平台）/ integrations（厂商实现+观测后端）/
 > engine（编排）**。core 重新变成 pydantic-only 的协议薄壳，重 SDK（sqlalchemy / langchain-openai /
