@@ -85,6 +85,6 @@ client.flush()
 
 ## ObservationType 枚举
 
-`trace` / `span` / `generation` / `agent` / `tool` / `retriever` / `embedding` / `evaluator` / `guardrail`
+`trace` / `span` / `generation` / `agent` / `tool` / `retriever` / `evaluator` / `embedding` / `guardrail`
 
 写到 `chameleon.observation_type` 属性，让 backend converter 识别。

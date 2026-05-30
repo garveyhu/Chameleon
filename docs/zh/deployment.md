@@ -36,10 +36,12 @@ vim docker/containers/.env
 脚本动作：
 
 1. 自动建 `data/{pg,redis,resources,logs}` 目录
-2. 调 `build-images.sh` build 三个镜像（base / code / ui）
-3. `docker compose up -d` 起 5 服务
+2. 调 `build-images.sh` build 四个镜像（base / venv / code / ui）
+3. `docker compose up -d` 拉起 6 个容器：`chameleon-pg` / `chameleon-redis` / `venv-init` / `code-init` / `chameleon-backend` / `chameleon-ui`（其中 `venv-init` / `code-init` 为一次性 init 容器，把 `.venv` 和源码 cp 进共享 volume 后退出）
 4. 等待 backend healthy（最多 90s）
 5. 打印访问入口
+
+> 镜像采用 4 段拆分：`base`（python + uv + os deps + entrypoint，主容器跑它）/ `venv`（data-only，仅 `.venv`，依赖变更才换）/ `code`（data-only，源码 + migrations，每次代码改）/ `ui`（nginx + 前端 dist + widget.js）。init 容器把 `venv` / `code` 镜像里的内容拷进 named volume，再挂给主容器，做到「改代码只 rebuild code」。
 
 ### 3. 访问
 
@@ -50,10 +52,13 @@ vim docker/containers/.env
 ### 4. 增量重建
 
 ```bash
-./docker/scripts/run-local.sh code      # 只 rebuild backend
-./docker/scripts/run-local.sh ui        # 只 rebuild frontend
-./docker/scripts/run-local.sh code ui   # 多个
+./docker/scripts/run-local.sh code        # 改了代码 → 只 rebuild code（最常见，最快）
+./docker/scripts/run-local.sh venv code   # 改了 pyproject.toml/依赖 → rebuild venv + code
+./docker/scripts/run-local.sh ui          # 只 rebuild frontend
+./docker/scripts/run-local.sh code ui     # 多个
 ```
+
+> 不传参 = 全量 build（base / venv / code / ui）+ up；传参 = 只 rebuild 指定子集 + up。`venv` 依赖 `base`，传 `venv` 时会先按需 build `base`。
 
 ### 5. 停止 / 重置
 

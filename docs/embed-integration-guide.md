@@ -1,6 +1,6 @@
-# 嵌入式应用接入指南（S10/S11 之后）
+# 嵌入式应用接入指南
 
-> 2026-05-28 重构后的接入契约。覆盖：终端用户身份识别（三模式）、会话颁发、会话管理（列表/续接/删除/改名）、错误处理。
+> 嵌入式接入契约。覆盖：终端用户身份识别（三模式）、会话颁发、会话管理（列表/续接/删除/改名）、错误处理。
 
 ## 1. 基本流程
 
@@ -28,7 +28,7 @@ POST /v1/embed/{embed_key}/session
 }
 ```
 
-后端 `sha256(device_id)[:24]` → `end_user_id`。同设备同浏览器 = 同 end_user，浏览器清缓存后变新人。
+后端 `"anon_" + sha256(device_id)[:24]` → `end_user_id`。同设备同浏览器 = 同 end_user，浏览器清缓存后变新人。
 
 ### 2.2 external_user_id（接入方维护）
 
@@ -56,7 +56,7 @@ POST /v1/embed/{embed_key}/session
 
 JWT payload 必带 `sub` claim 当 `end_user_id`，可选 `exp` 标签到期时间。后端用 `session_policy.jwt_signing_secret_encrypted` 解出密钥验签。
 
-## 3. 会话管理（S11 新端点）
+## 3. 会话管理端点
 
 颁完 token 后，前端可调以下端点维护历史会话——**全部按 token 上绑定的 end_user_id 隔离**，跨用户访问会 404。
 
@@ -101,9 +101,9 @@ generation 子行（每次 LLM 调用一条，`observation_type='generation'`）
 ## 6. 错误码常见
 
 - `40402 SessionNotFound`：session_id 不存在 / 越权（不属于 token 上绑的 end_user）
-- `JwtInvalid`：jwt_token 验签失败、过期、缺 sub，或 session_token 不匹配 embed_key
-- `AppRateLimit`：单 token 频率超限（默认 5 msg/min）
-- `40300 PermissionDenied`：origin 不在白名单 / allow_user_manage=false 时的删/改名
+- `40112 JwtInvalid`：jwt_token 验签失败、过期、缺 sub，或 session_token 不匹配 embed_key
+- `42901 AppRateLimit`：单 token 频率超限（默认 5 msg/min）
+- `40310 PermissionDenied`：origin 不在白名单 / allow_user_manage=false 时的删/改名
 
 ## 7. 历史会话不串号原则
 
@@ -119,7 +119,6 @@ generation 子行（每次 LLM 调用一条，`observation_type='generation'`）
 - `chameleon-api/src/chameleon/api/embed/service.py` — `resolve_end_user_from_request` + 三模式分流
 - `chameleon-api/src/chameleon/api/embed/session.py` — Redis token + end_user_id 绑定
 - `chameleon-api/src/chameleon/api/embed/api.py` — 端点路由
-- `chameleon-core/src/chameleon/core/models/embed_config.py` — `api_key_id` + `session_policy` 列
-- `chameleon-core/src/chameleon/core/observe/llm_recorder.py` — generation 自动落账
-
-**Plan**: `docs/plans/2026-05-28-session-and-observability-refactor.md`
+- `chameleon-data/src/chameleon/data/models/embed_config.py` — `api_key_id` + `session_policy` 列
+- `chameleon-data/src/chameleon/data/models/api_key.py` — `CallLog` ORM（call_logs 归属字段）
+- `chameleon-integrations/src/chameleon/integrations/observe/llm_recorder.py` — generation 自动落账

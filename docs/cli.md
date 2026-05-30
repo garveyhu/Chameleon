@@ -88,7 +88,9 @@ uv run chameleon db downgrade <revision>  # 回滚到指定 revision
 ```
 
 实际执行的是 `alembic upgrade` / `alembic downgrade` 命令。
-环境变量 `DATABASE_URL` 由 `migrations/env.py` 自动从 `config/.env` 读取。
+连接串由 `migrations/env.py` 通过 `chameleon.core.config.inventory.database_url()` 解析：
+优先取环境变量 `DATABASE_URL`（容器化部署 override），否则从 `config/component.json` 的
+`database.*` 字段拼接；`config/.env` 在加载时自动 `load_dotenv`，便于注入 `DATABASE_URL`。
 
 ### 示例
 
@@ -107,13 +109,15 @@ CLI 仅做 bootstrap；其它管理操作走 HTTP：
 ```bash
 ADMIN_KEY="chm_xxx..."
 
-# 发普通 app key
+# 发普通调用 key（global 作用域，前缀 chm_）
+# app_id 是自由的「调用方/来源标签」，可选；scope_type 决定作用域与前缀：
+#   global → chm_（默认，通吃） / app → app-（绑某智能体） / kb → kbs-（绑某知识库）
 curl -X POST http://localhost:7009/v1/admin/api-keys \
   -H "Authorization: Bearer $ADMIN_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"app_id":"my-app","name":"My App","scopes":[]}'
+  -d '{"app_id":"my-app","name":"My App","scopes":[],"scope_type":"global"}'
 
-# 列出 keys（不含明文）
+# 列出 keys（plain_key 留存可复制，hash 永不回显）
 curl -H "Authorization: Bearer $ADMIN_KEY" \
   http://localhost:7009/v1/admin/api-keys
 
@@ -130,13 +134,13 @@ curl -H "Authorization: Bearer $ADMIN_KEY" \
   http://localhost:7009/v1/admin/providers/status
 ```
 
-## 未来扩展点（v0.2+）
+## 未来扩展点
 
 CLI 设计为可扩展。如需要：
 
-- `chameleon agents list` —— 显示当前注册的 agent
+- `chameleon agents list` —— 显示当前注册的 agent（含 entry-points 发现的本地 agent）
 - `chameleon agents reload` —— 不重启 reload registry（需架构支持）
 - `chameleon kb ingest --kb=x --file=y.md` —— 命令行 ingest
 - `chameleon key revoke <id>` —— CLI 包装 HTTP
 
-v1 不提供——HTTP 接口已覆盖。
+当前不提供——上述能力 HTTP 管理接口（`/v1/admin/...`）已覆盖。

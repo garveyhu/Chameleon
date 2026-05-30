@@ -35,8 +35,8 @@ Four values **must** be set in `.env`:
 
 Steps:
 1. Auto-create `data/{pg,redis,resources,logs}` dirs
-2. `build-images.sh` builds base / code / ui
-3. `docker compose up -d` starts 5 services
+2. `build-images.sh` builds base / venv / code / ui
+3. `docker compose up -d` starts the runtime services (Postgres, Redis, venv-init, code-init, backend, ui)
 4. Wait for backend healthy (up to 90s)
 5. Print access banner
 
@@ -49,8 +49,9 @@ Steps:
 ### 4. Incremental rebuild
 
 ```bash
-./docker/scripts/run-local.sh code      # rebuild backend only
-./docker/scripts/run-local.sh ui        # rebuild frontend only
+./docker/scripts/run-local.sh code        # rebuild backend code only (most common)
+./docker/scripts/run-local.sh venv code   # rebuild deps + code (after pyproject.toml changes)
+./docker/scripts/run-local.sh ui          # rebuild frontend only
 ```
 
 ### 5. Stop / reset

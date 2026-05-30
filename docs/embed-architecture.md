@@ -10,7 +10,7 @@
 - **嵌入式应用 = 业务方网页直接弹气泡聊天的场景**，跟 Service API（业务方后端拿 key 调用）走两条完全独立的路径
 - 安全核心：**Origin 白名单 + 短期 session_token**（Redis TTL 1h），永久 key 不能暴露在浏览器
 - 身份核心：**三种识别模式**（匿名设备 / 外部 user id / 签名 JWT）决定一个浏览器对应哪个 `end_user_id`，所有会话按它隔离
-- 10 个端点不是冗余，是 widget 完整生命周期（**启动 → 识别 → 调用 → 历史管理 → 反馈**）所必需的；Dify、FastGPT 都是这套套路
+- 端点不是冗余，是 widget 完整生命周期（**启动 → 识别 → 调用 → 历史管理 → 会话文件 → 反馈**）所必需的；Dify、FastGPT 都是这套套路
 - 流量归属：每次调用 `call_logs` 记 `channel='embed' + app_id='embed:{embed_key}' + end_user_id + session_id`；每次 LLM 调用通过 BaseLLM 回调自动落 `observation_type='generation'` 子行
 
 ---
@@ -199,7 +199,7 @@ call_logs
 
 ### 4.2 终端用户身份识别（三模式）
 
-`POST /session` 时按 `embed.session_policy.identification_mode` 分流（`chameleon-api/.../embed/service.py:148`）：
+`POST /session` 时按 `embed.session_policy.identification_mode` 分流（`chameleon-api/.../embed/service.py` 的 `resolve_end_user_from_request`）：
 
 ```python
 def resolve_end_user_from_request(embed, req) -> str | None:
@@ -328,7 +328,7 @@ chameleon:embed:ratelimit:<token>    → count              TTL 60s   (5 msg/min
 
 ## 5. 端点完整说明
 
-10 个端点按生命周期分四组。所有端点路径前缀 `/v1/embed/{embed_key}/`，所有都要带 `Origin` 头。
+核心端点按生命周期分四组（启动 / 调用 / 会话管理 / 反馈）。此外还有会话文件组（`files/presigned-upload`、`files/{object_id}/finalize`、文件状态、列文件、删文件）支撑嵌入端的 ephemeral RAG，以及 `followups` 追问推荐，机制同上、本文不逐一展开。所有端点路径前缀 `/v1/embed/{embed_key}/`，所有都要带 `Origin` 头。
 
 ### 5.1 启动 / 配置
 
@@ -363,7 +363,7 @@ chameleon:embed:ratelimit:<token>    → count              TTL 60s   (5 msg/min
 | 鉴权 | Origin + session_token |
 | 入参 | `{session_token, input: "你好"}` |
 | 出参 | `{answer, session_id, request_id}` |
-| 内部做啥 | ①resolve_session(token) 拿 embed_id + sid + end_user_id ②`check_rate_limit` ③开 `TraceContext`（channel='embed'）④调 `agent.service.invoke()` ⑤`agent.service` 落 sessions+messages+call_logs；BaseLLM 回调自动落 generation 子行 |
+| 内部做啥 | ①resolve_session(token) 拿 embed_id + sid + end_user_id ②`check_rate_limit` ③`set_trace_context`（channel='embed'）④按 agent 的 provider 取 `PROVIDERS[...]` 走 `provider.invoke(ctx)`（local / dify / fastgpt / graph 等）⑤embed service 落 sessions+messages+call_logs；BaseLLM 回调自动落 generation 子行 |
 
 #### `POST /invoke/stream`（SSE 流式，主流）
 
@@ -573,13 +573,13 @@ GROUP BY 1, 2;
 
 ### 7.3 BaseLLM 自动落 generation
 
-实现位置：`chameleon-core/src/chameleon/core/observe/llm_recorder.py`。
+实现位置：`chameleon-integrations/src/chameleon/integrations/observe/llm_recorder.py`。
 
 机制：
-- `chameleon-core/.../components/llms/factory.py` 构造 BaseLLM 时注入 `GenerationRecorder` callback
+- `chameleon-integrations/.../llms/factory.py` 构造 BaseLLM 时注入 `GenerationRecorder` callback
 - `on_chat_model_start` 缓存 prompt + 时间戳
 - `on_llm_end` 提取 usage（streaming 走 `usage_metadata`，非 streaming 走 `llm_output.token_usage`）
-- 从 `TraceContext` ContextVar 拿 `app_id/api_key_id/end_user_id/channel/session_id` 写一条 generation 子行
+- 从 `TraceContext` ContextVar（`chameleon-core/.../observe/context.py`）拿 `app_id/api_key_id/end_user_id/channel/session_id` 写一条 generation 子行
 
 **所以无论调用走哪个入口（embed / service api / 编辑器调试 / 评测 / KB 召回里的 reranker），只要 LLM 真的被调用，generation 一定有 row**——不会因为开发者忘记写切面而漏。
 
@@ -706,15 +706,17 @@ widget 自带：
 
 | 文件 | 内容 |
 |------|------|
-| `chameleon-api/src/chameleon/api/embed/api.py` | 10 个端点路由 + 入参校验 + 响应包装 |
-| `chameleon-api/src/chameleon/api/embed/service.py` | 业务编排：origin 验证、三模式 end_user 解析、invoke/stream 入口、会话管理 |
+| `chameleon-api/src/chameleon/api/embed/api.py` | 嵌入端点路由（config/session/invoke(/stream)/sessions 管理/files/followups/feedback）+ 入参校验 + 响应包装 |
+| `chameleon-api/src/chameleon/api/embed/service.py` | 业务编排：origin 验证、三模式 end_user 解析、按 provider 走 invoke/stream、会话管理、call_logs 落表 |
 | `chameleon-api/src/chameleon/api/embed/session.py` | Redis token + end_user_id + sid + rate limit |
 | `chameleon-api/src/chameleon/api/embed/schemas.py` | SessionPolicy / CreateSessionRequest 等 DTO |
-| `chameleon-core/src/chameleon/core/models/embed_config.py` | embed_configs ORM |
-| `chameleon-core/src/chameleon/core/models/session.py` | ChatSession + Message ORM |
-| `chameleon-core/src/chameleon/core/observe/llm_recorder.py` | GenerationRecorder（BaseLLM 回调，generation 行自动落） |
+| `chameleon-data/src/chameleon/data/models/embed_config.py` | embed_configs ORM |
+| `chameleon-data/src/chameleon/data/models/session.py` | ChatSession + Message ORM |
+| `chameleon-providers/src/chameleon/providers/base/` | provider registry（`AGENTS` / `PROVIDERS`）+ local / dify / fastgpt / graph 实现 |
+| `chameleon-integrations/src/chameleon/integrations/observe/llm_recorder.py` | GenerationRecorder（BaseLLM 回调，generation 行自动落） |
+| `chameleon-integrations/src/chameleon/integrations/llms/factory.py` | LLM 工厂，构造 BaseLLM 时注入 GenerationRecorder |
 | `chameleon-core/src/chameleon/core/observe/context.py` | TraceContext ContextVar |
-| `chameleon-system/src/chameleon/system/embed_configs/` | 后台 CRUD service |
+| `chameleon-system/src/chameleon/system/embed_configs/api.py` | 后台 CRUD service |
 
 ### 前端
 

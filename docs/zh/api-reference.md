@@ -21,6 +21,8 @@
 
 业务异常 `success: false`，`code` 是业务错误码（非 HTTP status）。HTTP 状态码由错误码映射。
 
+> 例外：OpenAI 兼容端点（`/v1/chat/completions`）和 OTLP 摄入端点（`/v1/otel/v1/traces`）按各自协议返回原生结构，不套统一响应包装。
+
 ### 错误码（节选）
 
 | code | HTTP | 含义 |
@@ -38,10 +40,15 @@
 
 | Endpoint 类型 | 鉴权方式 |
 |---|---|
-| `/v1/admin/*` | `Authorization: Bearer <jwt-access-token>` |
-| `/v1/invoke` | `Authorization: Bearer <app-api-key>` |
-| `/v1/embed/{embed_key}/*` | 无（公开，校验 Origin + session_token） |
+| `/v1/admin/*` | `Authorization: Bearer <jwt-access-token>` + 权限点校验 |
+| `/v1/invoke` · `/v1/info` · `/v1/chat/completions` | `Authorization: Bearer <api-key>`（key 即身份） |
+| `/v1/sessions/*` · `/v1/kb/*` · `/v1/files/*` · `/v1/tasks/*` | `Authorization: Bearer <api-key>` |
+| `/v1/embed/{embed_key}/*` | 无 JWT（公开，校验 Origin 白名单 + session_token） |
+| `/v1/otel/v1/traces` | OTLP 摄入（按部署接入约定） |
 | `/v1/auth/refresh` | HTTP-only Cookie `refresh_token` |
+
+API key 作用域分三类，签发时前缀区分：全局 `chm_` / 应用 `app-` / 知识库 `kbs-`。
+key 隐含应用身份（Dify 套路）——app-scoped key 直接定位绑定的应用，global key 需在 body 显式带 `agent_key`。
 
 ## 一、Auth
 
@@ -71,19 +78,27 @@
 
 把当前 access 加入黑名单，清 refresh_token Cookie。
 
+### GET /v1/auth/me
+
+返当前 JWT 对应用户视图。
+
 ### POST /v1/auth/change-password
 
 ```json
 { "old_password": "...", "new_password": "..." }
 ```
 
+首次登录强制改密走 `POST /v1/auth/first-change-password`。
+
 ## 二、Agent invoke（业务方调用）
 
-### POST /v1/agents/{agent_key}/invoke
+对外服务调用统一靠 `Authorization: Bearer <api-key>` + 扁平路径，key 即应用身份。
+
+### POST /v1/invoke
 
 ```http
-POST /v1/agents/qwen-chat/invoke
-Authorization: Bearer <app-api-key>
+POST /v1/invoke
+Authorization: Bearer <api-key>
 Content-Type: application/json
 ```
 
@@ -91,9 +106,23 @@ Content-Type: application/json
 {
   "input": "你好",
   "session_id": "optional-session-id",
-  "stream": false
+  "user": "external-end-user-id",
+  "agent_key": "qwen-chat",
+  "stream": false,
+  "attachments": [],
+  "context": {},
+  "options": {}
 }
 ```
+
+字段说明：
+
+- `input`：`str` → 取 session 历史；`list`（`{role, content, ...}`）→ 客户端自管历史。
+- `session_id`：缺省 → 新建会话，响应回显新 ID；传入续接（须同 agent + 同 `user`）。
+- `user`：终端用户外部标识（接入方维护的不透明字符串，对应 Dify / OpenAI 协议的 `user`），用于会话归属、历史隔离、按用户统计。
+- `agent_key`：仅 global 作用域 key 需要；app-scoped key 不传或填与 `scope_ref` 同值。
+- `attachments`：本次调用附带的文件（图片走多模态；文档/数据走临时 RAG）。
+- `stream`：`true` → SSE；`false` → 单次 JSON。
 
 非流式响应：
 
@@ -101,9 +130,13 @@ Content-Type: application/json
 {
   "code": 0,
   "data": {
-    "answer": "你好！有什么可以帮你的？",
     "session_id": "abc123",
-    "request_id": "req-xxx"
+    "request_id": "req-xxx",
+    "answer": "你好！有什么可以帮你的？",
+    "steps": [],
+    "citations": [],
+    "tool_calls": [],
+    "usage": { "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0 }
   }
 }
 ```
@@ -111,16 +144,34 @@ Content-Type: application/json
 流式响应（`stream: true`）：返回 `text/event-stream` SSE：
 
 ```
-data: {"delta":"你好","done":false}
-data: {"delta":"！","done":false}
-data: {"delta":"","done":true,"session_id":"abc123"}
+data: {"type":"delta","data":{"text":"你好"}}
+data: {"type":"delta","data":{"text":"！"}}
+data: {"type":"done","data":{"session_id":"abc123"}}
+```
+
+### GET /v1/info
+
+返当前 key 绑定的应用信息（Dify `GET /info` 等价）：`scope_type` / `agent` / `name`。
+
+### POST /v1/chat/completions（OpenAI 兼容）
+
+`model` 字段取 agent_key；`stream=true` → SSE chunk + `[DONE]`。可让 `openai-python` 直接换 `base_url` 与 `api_key` 接入。
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:7009/v1", api_key="chm_...")
+resp = client.chat.completions.create(
+    model="qwen-chat",
+    messages=[{"role": "user", "content": "你好"}],
+)
 ```
 
 ## 三、嵌入式 Widget API（公开）
 
-### GET /v1/embed/{embed_key}/config
+前缀 `/v1/embed/{embed_key}/*`，不走 JWT；服务端校验请求头 `Origin` 是否在 `allowed_origins` 白名单，调用态靠 session_token。
 
-服务端校验请求头 `Origin` 是否在 `allowed_origins` 白名单。
+### GET /v1/embed/{embed_key}/config
 
 ```json
 {
@@ -128,15 +179,19 @@ data: {"delta":"","done":true,"session_id":"abc123"}
   "data": {
     "embed_key": "abc123",
     "name": "官网客服",
+    "description": "...",
     "ui_config": { "title": "...", "primary_color": "#0ea5e9" },
-    "behavior": { "welcome_message": "...", "placeholder": "..." }
+    "behavior": { "welcome_message": "...", "placeholder": "...", "show_citations": true },
+    "session_policy": { "identification_mode": "anonymous", "show_history_sidebar": false }
   }
 }
 ```
 
+`session_policy` 只暴露 widget 需要的开关（身份模式 / 历史侧栏 / 自动续接等）；签名密钥等机密字段后端持有、绝不下发。
+
 ### POST /v1/embed/{embed_key}/session
 
-颁 session_token（Redis TTL 1h），后续 `invoke` 用：
+颁 session_token（Redis 短 TTL），后续 `invoke` 用。可选 body 按 `session_policy.identification_mode` 解析终端用户身份（`device_id` / `external_user_id` / `jwt_token`）并绑到 token；不传 body 时返回未绑用户的 token（向后兼容）：
 
 ```json
 { "session_token": "...", "expires_in": 3600 }
@@ -145,14 +200,71 @@ data: {"delta":"","done":true,"session_id":"abc123"}
 ### POST /v1/embed/{embed_key}/invoke
 
 ```json
-{ "session_token": "...", "input": "你好" }
+{ "session_token": "...", "input": "你好", "attachments": [] }
 ```
 
 ```json
-{ "code": 0, "data": { "answer": "...", "session_id": "..." } }
+{ "code": 0, "data": { "answer": "...", "session_id": "...", "request_id": "..." } }
 ```
 
-## 四、Admin API（节选）
+### POST /v1/embed/{embed_key}/invoke/stream
+
+同 invoke，返回 `text/event-stream` SSE。
+
+### 其余 widget 端点
+
+- 会话历史：`GET /v1/embed/{embed_key}/sessions` · `GET /v1/embed/{embed_key}/sessions/{id}/messages`（按 session_token 解析 end_user 隔离）。
+- 会话文件：`POST /v1/embed/{embed_key}/files/presigned-upload` · `POST /v1/embed/{embed_key}/files/{object_id}/finalize`（按 `behavior` 校验大小/类型）。
+- 追问建议：`GET /v1/embed/{embed_key}/.../followups`。
+- 反馈打分：`POST /v1/embed/{embed_key}/feedback`。
+
+## 四、公开数据 API
+
+携带 `Authorization: Bearer <api-key>`，按 key 作用域访问。
+
+### 会话（Sessions）
+
+```
+GET  /v1/sessions                          # 列表（按 agent / end_user 过滤）
+GET  /v1/sessions/{session_id}             # 详情
+GET  /v1/sessions/{session_id}/messages    # 消息分页
+POST /v1/sessions/{session_id}/delete      # 删除
+```
+
+### 知识库（KB，kbs- 作用域 key）
+
+```
+GET  /v1/kb                                 # 知识库元信息
+POST /v1/kb/update
+POST /v1/kb/delete
+POST /v1/kb/documents                       # 投递文档（异步 ingest）
+GET  /v1/kb/documents                       # 文档分页
+GET  /v1/kb/documents/{doc_id}
+POST /v1/kb/documents/{doc_id}/update
+POST /v1/kb/documents/{doc_id}/delete
+POST /v1/kb/search                          # hybrid 检索（vector + BM25 + RRF + reranker）
+```
+
+### 文件
+
+```
+POST /v1/files/presigned-upload             # 申请预签名上传 URL
+POST /v1/files/{object_id}/finalize         # 上传完成回执
+```
+
+### 任务
+
+```
+GET  /v1/tasks/{task_id}                     # 异步任务状态查询
+```
+
+### OTLP 摄入
+
+```
+POST /v1/otel/v1/traces                      # OpenTelemetry trace 上报（OTLP/HTTP）
+```
+
+## 五、Admin API（节选）
 
 完整列表见 `/openapi.json`，路径前缀 `/v1/admin/*`，统一 JWT 鉴权 + 权限点校验。
 
@@ -191,17 +303,45 @@ POST   /v1/admin/models
 
 GET    /v1/admin/agents
 POST   /v1/admin/agents/{id}/update        # 改 enabled / config
-POST   /v1/admin/agents/{id}/invoke-test   # admin 测试调用
 ```
 
-### 应用 / API Key
+### API Key
+
+API key 归属作用域（app / agent / kb），key 隐含其访问身份。创建时返回明文 token，仅一次。
 
 ```
-GET    /v1/admin/apps
-POST   /v1/admin/apps
-GET    /v1/admin/apps/{id}/api-keys
-POST   /v1/admin/apps/{id}/api-keys        # 返回明文 token（仅一次）
-POST   /v1/admin/api-keys/{id}/delete
+GET    /v1/admin/api-keys                  # 分页列表（仅回显前缀）
+POST   /v1/admin/api-keys                  # 创建（返回明文 token，仅一次）
+POST   /v1/admin/api-keys/{id}/revoke      # 吊销
+```
+
+### 应用模板
+
+```
+GET    /v1/admin/app-templates
+GET    /v1/admin/app-templates/{id}
+POST   /v1/admin/app-templates
+POST   /v1/admin/app-templates/{id}/update
+POST   /v1/admin/app-templates/{id}/delete
+```
+
+### 工作流（Graphs）
+
+```
+GET    /v1/admin/graphs
+POST   /v1/admin/graphs
+POST   /v1/admin/graphs/{id}/update
+...
+```
+
+### 知识库 / 数据集 / 评测
+
+```
+GET    /v1/admin/kbs
+GET    /v1/admin/datasets
+GET    /v1/admin/eval-jobs
+GET    /v1/admin/eval-templates
+GET    /v1/admin/scores
 ```
 
 ### 嵌入式配置
@@ -213,12 +353,24 @@ POST   /v1/admin/embed-configs/{id}/update
 POST   /v1/admin/embed-configs/{id}/delete
 ```
 
-### 调用日志 / 审计日志 / Dashboard
+### 可观测（Trace / Session）
+
+`call_logs` 是 trace 的唯一真相源；前端拆 Trace（单次运行）· Session（会话 thread）两 tab。
 
 ```
-GET    /v1/admin/call-logs              # 分页 + 多维过滤
+GET    /v1/admin/call-logs                       # 分页 + 多维过滤
+GET    /v1/admin/call-logs/{id}                  # 详情含 spans + payload
+GET    /v1/admin/call-logs/{request_id}/tree     # 嵌套 observation trace 树
+GET    /v1/admin/sessions                        # 会话（ChatSession）维度列表
+```
+
+### 审计日志 / Dashboard
+
+```
 GET    /v1/admin/audit-logs             # 分页
-GET    /v1/admin/dashboard/overview     # 4 个数字 + 24h 曲线 + top-N
+GET    /v1/admin/dashboard/overview     # 概览数字 + 曲线 + top-N
+GET    /v1/admin/dashboard/timeseries
+GET    /v1/admin/dashboard/cost/totals  # 成本汇总
 ```
 
 ### 配置导入导出
@@ -228,11 +380,11 @@ POST   /v1/admin/settings/export        # 下载 zip
 POST   /v1/admin/settings/import        # 上传 zip（multipart/form-data）
 ```
 
-## 五、SDK
+## 六、SDK
 
-v0.1 暂未发布官方 SDK。直接 HTTP 调用即可，对外契约稳定。
+对外契约稳定，可直接 HTTP 调用，也可用官方 SDK：
 
-未来计划：
-- Python: `pip install chameleon-sdk`
-- Node.js: `npm install @chameleon/sdk`
-- 兼容 OpenAI SDK 的协议层（让 `openai-python` 直接换 base_url 就能用）
+- **Python**：`pip install chameleon-sdk`（httpx sync + async；`@trace` 装饰器、`patch_openai` / `patch_all` 自动埋点）
+- **TypeScript / Node.js**：`npm install @chameleon/sdk`
+- **OpenAI 协议层**：兼容 `/v1/chat/completions`，`openai-python` 直接换 `base_url` 即可接入
+- **遥测**：OTLP/HTTP 上报到 `/v1/otel/v1/traces`，trace 接入 call_logs 统一观测

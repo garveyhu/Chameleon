@@ -249,7 +249,7 @@ WHERE api_key_id = ? AND end_user_id = ?;
 - `chameleon-api/.../knowledge/api.py` — KB 扁平 API：GET `/v1/kb` + 文档增改删查 + 检索
 - `chameleon-api/.../sessions/api.py` — 会话管理；自动按 key.scope_ref 锁定
 - `chameleon-api/.../openai/api.py` — OpenAI 兼容
-- `chameleon-core/.../observe/llm_recorder.py` — generation 行自动落账
-- `chameleon-core/.../infra/auth.py` — `CurrentApp` + key scope 解析
+- `chameleon-integrations/.../observe/llm_recorder.py` — generation 行自动落账
+- `chameleon-data/.../infra/auth.py` — `CurrentApp` + key scope 解析
 
 **Plan**: `docs/plans/2026-05-28-session-and-observability-refactor.md`
