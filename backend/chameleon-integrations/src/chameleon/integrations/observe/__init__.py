@@ -12,11 +12,17 @@ from chameleon.integrations.observe.aggregator import (
     aggregate_rollups,
 )
 from chameleon.integrations.observe.graph_spans import persist_node_spans
-from chameleon.integrations.observe.llm_recorder import GenerationRecorder
+from chameleon.integrations.observe.llm_recorder import (
+    CallLogCallbackHandler,
+    GenerationRecorder,
+    get_calllog_handler,
+)
 
 __all__ = [
+    "CallLogCallbackHandler",
     "GenerationRecorder",
     "ObservationRollup",
     "aggregate_rollups",
+    "get_calllog_handler",
     "persist_node_spans",
 ]

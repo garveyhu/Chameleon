@@ -111,13 +111,19 @@ def _output_text(response: Any) -> str:
         return ""
 
 
+def _elapsed_ms(start_ms: float | None) -> int:
+    """start（perf_counter）→ 现在的毫秒数；无 start 兜 0。"""
+    return int((time.perf_counter() - start_ms) * 1000) if start_ms else 0
+
+
 class GenerationRecorder(AsyncCallbackHandler):
     """模型调用 generation 行记录器（一次 .ainvoke()/.astream() 落一行）"""
 
     raise_error: bool = False  # langchain 默认即可：回调内部错误不上抛
     run_inline: bool = True  # 在调用方协程内同步跑（保留 ContextVar 可见）
 
-    def __init__(self, model_code: str) -> None:
+    def __init__(self, model_code: str | None = None) -> None:
+        # model_code 仅 generation 用（算 cost）；retriever / tool 共用本 handler 时为 None
         self.model_code = model_code
         # 用 run_id 关联 start/end；每个 run 不会跨多个 callback 实例
         self._inflight: dict[str, dict[str, Any]] = {}
@@ -199,6 +205,158 @@ class GenerationRecorder(AsyncCallbackHandler):
             messages=meta.get("messages"),
             output_preview=None,
         )
+
+    # ── retriever 钩子（LangChain BaseRetriever 原生 fire）─────────
+
+    async def on_retriever_start(
+        self,
+        serialized: dict[str, Any],
+        query: str,
+        *,
+        run_id,
+        parent_run_id=None,
+        **kwargs: Any,
+    ) -> None:
+        del serialized, parent_run_id, kwargs
+        self._inflight[str(run_id)] = {
+            "start_ms": time.perf_counter(),
+            "request_payload": {"query": (query or "")[:_INPUT_TRUNCATE]},
+        }
+
+    async def on_retriever_end(
+        self, documents: list[Any], *, run_id, **kwargs: Any
+    ) -> None:
+        del kwargs
+        meta = self._inflight.pop(str(run_id), None) or {}
+        citations = [
+            {
+                "source": (getattr(d, "metadata", {}) or {}).get("source"),
+                "ref": (getattr(d, "metadata", {}) or {}).get("ref"),
+                "score": (getattr(d, "metadata", {}) or {}).get("score"),
+                "content": (getattr(d, "page_content", "") or "")[:300],
+            }
+            for d in (documents or [])
+        ]
+        await self._write_component(
+            observation_type=ObservationType.RETRIEVER,
+            success=True,
+            code=0,
+            error_message=None,
+            duration_ms=_elapsed_ms(meta.get("start_ms")),
+            request_payload=meta.get("request_payload"),
+            response_payload={"hit_count": len(citations), "citations": citations},
+        )
+
+    async def on_retriever_error(
+        self, error: BaseException, *, run_id, **kwargs: Any
+    ) -> None:
+        del kwargs
+        meta = self._inflight.pop(str(run_id), None) or {}
+        await self._write_component(
+            observation_type=ObservationType.RETRIEVER,
+            success=False,
+            code=500,
+            error_message=f"{type(error).__name__}: {str(error)[:300]}",
+            duration_ms=_elapsed_ms(meta.get("start_ms")),
+            request_payload=meta.get("request_payload"),
+            response_payload=None,
+        )
+
+    # ── tool 钩子（LangChain BaseTool 原生 fire）──────────────────
+
+    async def on_tool_start(
+        self,
+        serialized: dict[str, Any],
+        input_str: str,
+        *,
+        run_id,
+        parent_run_id=None,
+        **kwargs: Any,
+    ) -> None:
+        del parent_run_id
+        name = (serialized or {}).get("name")
+        self._inflight[str(run_id)] = {
+            "start_ms": time.perf_counter(),
+            "request_payload": {
+                "tool": name,
+                "input": str(input_str)[:_INPUT_TRUNCATE],
+                "kwargs": {k: str(v)[:200] for k, v in (kwargs.get("inputs") or {}).items()}
+                if isinstance(kwargs.get("inputs"), dict)
+                else None,
+            },
+        }
+
+    async def on_tool_end(self, output: Any, *, run_id, **kwargs: Any) -> None:
+        del kwargs
+        meta = self._inflight.pop(str(run_id), None) or {}
+        await self._write_component(
+            observation_type=ObservationType.TOOL,
+            success=True,
+            code=0,
+            error_message=None,
+            duration_ms=_elapsed_ms(meta.get("start_ms")),
+            request_payload=meta.get("request_payload"),
+            response_payload={"output": str(output)[:_OUTPUT_TRUNCATE]},
+        )
+
+    async def on_tool_error(
+        self, error: BaseException, *, run_id, **kwargs: Any
+    ) -> None:
+        del kwargs
+        meta = self._inflight.pop(str(run_id), None) or {}
+        await self._write_component(
+            observation_type=ObservationType.TOOL,
+            success=False,
+            code=500,
+            error_message=f"{type(error).__name__}: {str(error)[:300]}",
+            duration_ms=_elapsed_ms(meta.get("start_ms")),
+            request_payload=meta.get("request_payload"),
+            response_payload=None,
+        )
+
+    # ── 通用组件 writer（retriever / tool；无 token / model_code）──
+
+    async def _write_component(
+        self,
+        *,
+        observation_type: ObservationType,
+        success: bool,
+        code: int,
+        error_message: str | None,
+        duration_ms: int,
+        request_payload: dict[str, Any] | None,
+        response_payload: dict[str, Any] | None,
+    ) -> None:
+        from chameleon.core.observe.sink import record_observation
+        from chameleon.data.infra.db import AsyncSessionLocal
+
+        tc = current_trace_context()
+        parent_id = current_observation_id() or (tc.request_id if tc else None)
+        try:
+            async with AsyncSessionLocal() as session:
+                await record_observation(
+                    session,
+                    request_id=uuid.uuid4().hex,
+                    app_id=(tc.app_id if tc else None) or "internal",
+                    agent_key=(tc.agent_key if tc else None) or "internal",
+                    session_id=tc.session_id if tc else None,
+                    stream=False,
+                    success=success,
+                    code=code,
+                    error_message=error_message,
+                    duration_ms=duration_ms,
+                    request_payload=request_payload,
+                    response_payload=response_payload,
+                    parent_id=parent_id,
+                    observation_type=observation_type.value,
+                    channel=(tc.channel if tc else "internal"),
+                    api_key_id=tc.api_key_id if tc else None,
+                    end_user_id=tc.end_user_id if tc else None,
+                    user_id=tc.user_id if tc else None,
+                )
+                await session.commit()
+        except Exception:  # noqa: BLE001
+            logger.exception("component observation record failed | type={}", observation_type)
 
     # ── helpers ───────────────────────────────────────────
 
@@ -289,3 +447,19 @@ class GenerationRecorder(AsyncCallbackHandler):
                 self.model_code,
                 gen_request_id,
             )
+
+
+#: 语义别名——本类已泛化为全组件回调（generation / retriever / tool 钩子）。
+#: LLMFactory 仍按 GenerationRecorder 注入；retriever / tool 按 CallLogCallbackHandler 用。
+CallLogCallbackHandler = GenerationRecorder
+
+
+_SHARED_HANDLER: GenerationRecorder | None = None
+
+
+def get_calllog_handler() -> GenerationRecorder:
+    """全组件共用的 handler 单例（retriever / tool 注入用；无 model_code）。"""
+    global _SHARED_HANDLER
+    if _SHARED_HANDLER is None:
+        _SHARED_HANDLER = CallLogCallbackHandler()
+    return _SHARED_HANDLER
