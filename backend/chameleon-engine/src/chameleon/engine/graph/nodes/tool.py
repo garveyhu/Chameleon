@@ -103,14 +103,33 @@ async def run_tool(
         extra=extra or {},
     )
 
-    result = await tool.run_with_validation(args, tool_ctx)
-    return {
-        "tool_key": tool_key,
-        "ok": result.ok,
-        "data": result.data,
-        "error": result.error,
-        "meta": result.meta,
-    }
+    # Tool 是自定义 ABC（非 LangChain BaseTool）→ 执行点包 record_scope 落 TOOL 节点。
+    # 此入口被 graph ToolNode 与 LLMNode function-calling 共用，一处覆盖全工具路径。
+    from chameleon.core.observe.context import ObservationType
+    from chameleon.integrations.observe.aspect import record_scope
+
+    async with record_scope(
+        observation_type=ObservationType.TOOL,
+        name=tool_key,
+        request_payload={"tool_key": tool_key, "args": str(args)[:2000]},
+    ) as scope:
+        result = await tool.run_with_validation(args, tool_ctx)
+        scope.success = bool(result.ok)
+        if not result.ok:
+            scope.code = 500
+            scope.error_message = (result.error or "")[:500]
+        scope.response_payload = {
+            "ok": result.ok,
+            "data": str(result.data)[:2000] if result.data is not None else None,
+            "error": result.error,
+        }
+        return {
+            "tool_key": tool_key,
+            "ok": result.ok,
+            "data": result.data,
+            "error": result.error,
+            "meta": result.meta,
+        }
 
 
 class ToolNode(Node[Any, dict]):
