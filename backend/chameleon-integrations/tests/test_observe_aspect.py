@@ -85,6 +85,23 @@ async def test_record_scope_nests_under_parent(captured):
     assert captured[0]["parent_id"] == "parent-span"
 
 
+async def test_record_scope_falls_back_to_trace_root(captured):
+    """无外层 observe span（如 retriever 原生回调不入栈）时，parent 回退到 trace 根，
+    避免 embedding / reranker / tool 成为孤儿 trace。"""
+    from chameleon.integrations.observe.aspect import record_scope
+
+    token = set_trace_context(
+        TraceContext(request_id="trace-root", app_id="a", agent_key="g")
+    )
+    try:
+        async with record_scope(observation_type=ObservationType.EMBEDDING):
+            pass
+    finally:
+        reset_trace_context(token)
+
+    assert captured[0]["parent_id"] == "trace-root"
+
+
 async def test_record_scope_marks_error(captured):
     from chameleon.integrations.observe.aspect import record_scope
 

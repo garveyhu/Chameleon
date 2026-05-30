@@ -93,6 +93,10 @@ async def _persist(
     from chameleon.data.infra.db import AsyncSessionLocal
 
     tc = current_trace_context()
+    # 无嵌套父（如 retriever 内部的 embedding：retriever 走 LangChain 原生回调，
+    # 不入 _CURRENT_OBS_ID 栈）时回退到 trace 根，避免成为孤儿 trace。
+    # 与 GenerationRecorder._write_component 的归属逻辑一致。
+    effective_parent = parent_id or (tc.request_id if tc else None)
     try:
         async with AsyncSessionLocal() as session:
             await record_observation(
@@ -108,7 +112,7 @@ async def _persist(
                 duration_ms=duration_ms,
                 request_payload=scope.request_payload,
                 response_payload=scope.response_payload,
-                parent_id=parent_id,
+                parent_id=effective_parent,
                 observation_type=observation_type,
                 channel=(tc.channel if tc else "internal"),
                 api_key_id=tc.api_key_id if tc else None,
