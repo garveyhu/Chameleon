@@ -106,33 +106,62 @@ async def search_kb(
     top_k: int | None = None,
     min_score: float = 0.0,
 ) -> list[ChunkHit]:
-    """语义检索 kb
+    """语义检索 kb（自动落 retriever 观测节点）
 
     flow:
       kb_key → KbMeta → embed(query) → vector.search → list[ChunkHit]
+
+    经 record_scope 切面自动出 retriever trace 节点（全调用路径覆盖：API / 嵌入式 /
+    Playground / 工作流 / agentkit），无需调用方手写埋点。
     """
-    meta = await get_kb_meta(kb_key)
-    if meta is None:
-        raise KnowledgeBaseNotFoundError(message=f"知识库不存在: {kb_key}")
+    from chameleon.core.observe.context import ObservationType
+    from chameleon.integrations.observe.aspect import record_scope
 
     k = top_k or inventory.kb_default_top_k()
-    client = get_embedding_client(meta.embedding_model)
-    vecs = await client.embed([query])
-    if not vecs:
-        return []
+    async with record_scope(
+        observation_type=ObservationType.RETRIEVER,
+        name="search_kb",
+        request_payload={
+            "kb_key": kb_key,
+            "query": query[:500],
+            "top_k": k,
+            "mode": "vector",
+        },
+    ) as scope:
+        meta = await get_kb_meta(kb_key)
+        if meta is None:
+            raise KnowledgeBaseNotFoundError(message=f"知识库不存在: {kb_key}")
 
-    store = get_store()
-    hits = await store.search(
-        kb_id=meta.id,
-        query_vec=vecs[0],
-        top_k=k,
-        min_score=min_score,
-    )
-    logger.debug(
-        "search_kb | kb={} | query_len={} | top_k={} | hits={}",
-        kb_key,
-        len(query),
-        k,
-        len(hits),
-    )
-    return hits
+        client = get_embedding_client(meta.embedding_model)
+        vecs = await client.embed([query])
+        if not vecs:
+            scope.response_payload = {"hit_count": 0, "citations": []}
+            return []
+
+        store = get_store()
+        hits = await store.search(
+            kb_id=meta.id,
+            query_vec=vecs[0],
+            top_k=k,
+            min_score=min_score,
+        )
+        scope.response_payload = {
+            "hit_count": len(hits),
+            "citations": [
+                {
+                    "source": kb_key,
+                    "ref": f"doc{h.doc_id}#{h.seq}",
+                    "content": h.content[:300],
+                    "score": round(h.score, 4),
+                }
+                for h in hits
+            ],
+        }
+        logger.debug(
+            "search_kb | kb={} | query_len={} | top_k={} | hits={}",
+            kb_key,
+            len(query),
+            k,
+            len(hits),
+        )
+        return hits
