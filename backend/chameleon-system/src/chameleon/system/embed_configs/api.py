@@ -18,6 +18,7 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import PageResult, Result
 from chameleon.data.infra.db import get_session
+from chameleon.data.infra.object_store import refresh_object_urls
 from chameleon.data.models import Agent, EmbedConfig
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
@@ -88,10 +89,18 @@ def _generate_embed_key() -> str:
     return f"emb_{body}"
 
 
+def _to_item(e: EmbedConfig) -> EmbedConfigItem:
+    """ORM → DTO，并刷新 ui_config 里的对象存储 URL（icon/bubble 图存的是 24h
+    presigned，过期后表单预览/卡片会裂图，serve 时按 object key 重签）。"""
+    item = EmbedConfigItem.model_validate(e)
+    item.ui_config = refresh_object_urls(item.ui_config)
+    return item
+
+
 async def _flush_refresh(session: AsyncSession, e: EmbedConfig) -> EmbedConfigItem:
     await session.flush()
     await session.refresh(e)
-    return EmbedConfigItem.model_validate(e)
+    return _to_item(e)
 
 
 # ── 路由 ──────────────────────────────────────────────────
@@ -126,7 +135,7 @@ async def list_embed_configs(
     )
     return Result.ok(
         PageResult(
-            items=[EmbedConfigItem.model_validate(r) for r in rows],
+            items=[_to_item(r) for r in rows],
             total=total,
             page=page,
             page_size=page_size,
@@ -151,7 +160,7 @@ async def get_embed_config(
         raise BusinessError(
             ResultCode.AgentNotFound, message=f"embed_config 不存在: {config_id}"
         )
-    return Result.ok(EmbedConfigItem.model_validate(e))
+    return Result.ok(_to_item(e))
 
 
 @router.post("", response_model=Result[EmbedConfigItem])

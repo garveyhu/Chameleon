@@ -1381,7 +1381,11 @@ export class ChameleonWidget {
     input: string,
     attachments?: WidgetAttachment[],
   ): Promise<void> {
-    const res = await this.session.invokeWithRetry(input, attachments);
+    const res = await this.session.invokeWithRetry(
+      input,
+      this.currentSessionId,
+      attachments,
+    );
     if (res.session_id && res.session_id !== this.currentSessionId) {
       this.currentSessionId = res.session_id;
       this.rememberSid(res.session_id);
@@ -1409,6 +1413,7 @@ export class ChameleonWidget {
     try {
       await this.session.streamWithRetry(
         input,
+        this.currentSessionId,
         (chunk: StreamChunk) => {
           if (chunk.error) {
             errorChunk = chunk.error;

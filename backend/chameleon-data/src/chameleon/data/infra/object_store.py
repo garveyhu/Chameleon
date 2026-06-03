@@ -13,7 +13,8 @@ from __future__ import annotations
 import io
 import threading
 from datetime import timedelta
-from typing import BinaryIO
+from typing import Any, BinaryIO
+from urllib.parse import unquote, urlparse
 
 from loguru import logger
 from minio import Minio
@@ -150,7 +151,50 @@ class ObjectStore:
             "last_modified": info.last_modified,
         }
 
+    def refresh_url(
+        self, url: str | None, *, expires_seconds: int = 7 * 24 * 3600
+    ) -> str | None:
+        """指向本 store（同 endpoint + bucket）的 URL → 提取 object key 重签新鲜
+        presigned GET URL；其余（外链 / data: / emoji / 非本 store）原样返回。
+
+        用途：把 presigned GET URL 当持久字段存的地方（ui_config 的 icon/bubble 图等），
+        serve 时刷新一遍，避免 24h 后签名过期变裂图。key 取自路径段，与旧签名是否过期无关。
+        """
+        if not url or "://" not in url:
+            return url
+        parsed = urlparse(url)
+        if parsed.netloc != self._endpoint:
+            return url
+        path = unquote(parsed.path).lstrip("/")
+        prefix = f"{self._bucket}/"
+        if not path.startswith(prefix):
+            return url
+        key = path[len(prefix) :]
+        if not key:
+            return url
+        return self.presigned_get_url(key, expires_seconds=expires_seconds)
+
 
 def get_object_store() -> ObjectStore:
     """获取全局 ObjectStore 单例。"""
     return ObjectStore()
+
+
+def refresh_object_urls(obj: Any, *, expires_seconds: int = 7 * 24 * 3600) -> Any:
+    """递归刷新嵌套结构（dict / list / str）里所有指向本 store 的 presigned URL。
+
+    非本 store 的字符串原样透传，因此对 ui_config 这种混了颜色 / 文案 / emoji /
+    对象存储 URL 的字典安全：只有真正指向 MinIO 的 URL 会被重签。
+    """
+    store = get_object_store()
+
+    def _walk(v: Any) -> Any:
+        if isinstance(v, str):
+            return store.refresh_url(v, expires_seconds=expires_seconds)
+        if isinstance(v, dict):
+            return {k: _walk(x) for k, x in v.items()}
+        if isinstance(v, list):
+            return [_walk(x) for x in v]
+        return v
+
+    return _walk(obj)

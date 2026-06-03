@@ -35,6 +35,7 @@ from chameleon.core.api.sse_events import (
     event_meta,
 )
 from chameleon.core.observe import TraceContext, reset_trace_context, set_trace_context
+from chameleon.data.infra.object_store import refresh_object_urls
 from chameleon.data.models import Agent, ChatSession, EmbedConfig
 from chameleon.data.utils.crypto import get_or_decrypt
 from chameleon.providers.base import AGENTS, PROVIDERS
@@ -49,6 +50,15 @@ from chameleon.system.api_key.service import (
     aggregate_generation_rollup,
     record_call,
 )
+
+
+def public_ui_config(ui_config: dict | None) -> dict | None:
+    """serve 公开配置时刷新 ui_config 里的对象存储 URL（icon_url / bubble_image_url 等）。
+
+    上传时存的是 24h presigned GET URL，过期后 widget 渲染成裂图；这里 serve 时按
+    object key 重签一遍。非对象存储的字段（颜色 / 文案 / emoji）原样透传。
+    """
+    return refresh_object_urls(ui_config)
 
 
 def check_origin(allowed: list | None, origin: str | None) -> None:
@@ -313,6 +323,20 @@ async def rename_embed_session(
     return row
 
 
+async def _resolve_invoke_sid(
+    session_token: str, client_session_id: str | None
+) -> str:
+    """invoke 落库用的会话 id：客户端传了 → 以它为准 + 纠正 token 绑定；否则用 token 绑定。
+
+    让「widget 显示的会话」成为权威，消除「显示会话 ≠ token 绑定会话」时消息落错会话
+    （切会话/多标签/竞态都可能让二者偏离）。归属越权在 _ensure_session_row_for_embed 兜。
+    """
+    if client_session_id:
+        await embed_session.rebind_session_id(session_token, client_session_id)
+        return client_session_id
+    return await embed_session.resolve_session_id(session_token)
+
+
 async def _ensure_session_row_for_embed(
     db_session: AsyncSession,
     *,
@@ -323,7 +347,8 @@ async def _ensure_session_row_for_embed(
 ) -> ChatSession:
     """get-or-create —— 首次 embed 调用时往 sessions 表补一行，让 S11 列表端能查到。
 
-    后续同一 sid 调用直接返回已有行（不重复创建）。
+    后续同一 sid 调用直接返回已有行（不重复创建）。已存在但归属另一终端用户 → 拒绝
+    （防客户端伪造 session_id 越权写入他人会话）。
     """
     row = (
         await db_session.execute(
@@ -331,6 +356,12 @@ async def _ensure_session_row_for_embed(
         )
     ).scalar_one_or_none()
     if row is not None:
+        if (
+            row.end_user_id is not None
+            and end_user_id is not None
+            and row.end_user_id != end_user_id
+        ):
+            raise PermissionDeniedError(message="会话不属于当前用户")
         return row
     row = ChatSession(
         session_id=session_id,
@@ -432,14 +463,20 @@ async def invoke_once(
     user_input: str,
     attachments: list[dict] | None = None,
     request_id: str | None,
+    client_session_id: str | None = None,
 ) -> InvokeResult:
-    """非流式调用 + 写 call_log"""
+    """非流式调用 + 写 call_log
+
+    client_session_id：widget 当前显示的会话 id（权威来源）。传了就以它为准并把
+    token 绑定纠正过去，避免「显示的会话」与「token 服务端绑定」偏离导致消息落错
+    会话；缺省（老 widget）回退到 token 绑定。归属越权由 _ensure_session_row_for_embed 守。
+    """
     await _ensure_session_matches(session_token, embed.id)
     await embed_session.check_rate_limit(session_token)
     agent = await _resolve_agent(session, embed)
     app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
-    sid = await embed_session.resolve_session_id(session_token)
+    sid = await _resolve_invoke_sid(session_token, client_session_id)
     end_user_id = await embed_session.resolve_end_user_id(session_token)
     # S10：set TraceContext —— provider 内的 LLM 调用经 BaseLLM 回调自动落 generation 行
     set_trace_context(
@@ -617,6 +654,7 @@ async def stream_invoke(
     attachments: list[dict] | None = None,
     request_id: str | None,
     show_citations: bool = True,
+    client_session_id: str | None = None,
 ) -> AsyncIterator[dict]:
     """SSE 调用 + 末尾写 call_log。
 
@@ -632,7 +670,7 @@ async def stream_invoke(
     agent = await _resolve_agent(session, embed)
     app_key = _embed_app_label(embed)
     rid = request_id or uuid.uuid4().hex
-    sid = await embed_session.resolve_session_id(session_token)
+    sid = await _resolve_invoke_sid(session_token, client_session_id)
     end_user_id = await embed_session.resolve_end_user_id(session_token)
     # S10：set TraceContext —— provider 内的 LLM 调用经 BaseLLM 回调自动落 generation 行
     set_trace_context(

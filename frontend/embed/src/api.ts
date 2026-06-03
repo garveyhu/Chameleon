@@ -115,9 +115,12 @@ export class EmbedApi {
   async invoke(
     sessionToken: string,
     input: string,
+    sessionId: string | null,
     attachments?: WidgetAttachment[],
   ): Promise<InvokeResponse> {
     const body: Record<string, unknown> = { session_token: sessionToken, input };
+    // 把当前显示的会话 id 作为权威传给后端，消息必落到这个会话（不依赖 token 绑定）
+    if (sessionId) body.session_id = sessionId;
     if (attachments && attachments.length) {
       body.attachments = attachments.map(toWireAttachment);
     }
@@ -248,11 +251,13 @@ export class EmbedApi {
   async invokeStream(
     sessionToken: string,
     input: string,
+    sessionId: string | null,
     onChunk: (chunk: StreamChunk) => void,
     signal?: AbortSignal,
     attachments?: WidgetAttachment[],
   ): Promise<void> {
     const body: Record<string, unknown> = { session_token: sessionToken, input };
+    if (sessionId) body.session_id = sessionId;
     if (attachments && attachments.length) {
       body.attachments = attachments.map(toWireAttachment);
     }

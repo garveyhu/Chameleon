@@ -66,6 +66,13 @@ class _EmbedAttachment(BaseModel):
 class InvokeRequest(BaseModel):
     session_token: str
     input: str = Field(min_length=1, max_length=8000)
+    session_id: str | None = Field(
+        None,
+        description=(
+            "widget 当前显示的会话 id（权威）。传了就落到该会话，消除「显示会话 ≠ "
+            "token 绑定会话」时消息落错；缺省回退 token 绑定（老 widget 兼容）。"
+        ),
+    )
     attachments: list[_EmbedAttachment] | None = Field(
         None,
         description="本次调用附带的文件（图片走多模态；其他类型 Phase B 起走临时 RAG）",
@@ -103,7 +110,9 @@ async def get_public_config(
             embed_key=e.embed_key,
             name=e.name,
             description=e.description,
-            ui_config=e.ui_config,
+            # 刷新 ui_config 里的对象存储 URL（icon/bubble 图）：存的是 24h presigned，
+            # 过期后会裂图，serve 时按 object key 重签。
+            ui_config=embed_service.public_ui_config(e.ui_config),
             behavior=e.behavior,
             session_policy=policy_raw or None,
         )
@@ -152,6 +161,7 @@ async def invoke(
         user_input=req.input,
         attachments=[a.model_dump() for a in (req.attachments or [])],
         request_id=request.headers.get("X-Request-Id"),
+        client_session_id=req.session_id,
     )
     return Result.ok(
         InvokeResponse(
@@ -721,6 +731,7 @@ async def invoke_stream(
             attachments=[a.model_dump() for a in (req.attachments or [])],
             request_id=request.headers.get("X-Request-Id"),
             show_citations=show_citations,
+            client_session_id=req.session_id,
         ),
         log_label=f"embed:{embed_key}",
     )

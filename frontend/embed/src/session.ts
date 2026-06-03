@@ -95,15 +95,16 @@ export class SessionManager {
 
   async invokeWithRetry(
     input: string,
+    sessionId: string | null,
     attachments?: WidgetAttachment[],
   ): Promise<InvokeResponse> {
     const token = await this.getToken();
     try {
-      return await this.api.invoke(token, input, attachments);
+      return await this.api.invoke(token, input, sessionId, attachments);
     } catch (e) {
       if (isTokenInvalidError(e)) {
         const newToken = await this.refresh();
-        return this.api.invoke(newToken, input, attachments);
+        return this.api.invoke(newToken, input, sessionId, attachments);
       }
       throw e;
     }
@@ -111,17 +112,25 @@ export class SessionManager {
 
   async streamWithRetry(
     input: string,
+    sessionId: string | null,
     onChunk: (c: StreamChunk) => void,
     signal?: AbortSignal,
     attachments?: WidgetAttachment[],
   ): Promise<void> {
     const token = await this.getToken();
     try {
-      await this.api.invokeStream(token, input, onChunk, signal, attachments);
+      await this.api.invokeStream(token, input, sessionId, onChunk, signal, attachments);
     } catch (e) {
       if (isTokenInvalidError(e)) {
         const newToken = await this.refresh();
-        await this.api.invokeStream(newToken, input, onChunk, signal, attachments);
+        await this.api.invokeStream(
+          newToken,
+          input,
+          sessionId,
+          onChunk,
+          signal,
+          attachments,
+        );
         return;
       }
       throw e;
