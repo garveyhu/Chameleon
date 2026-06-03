@@ -1,13 +1,23 @@
 /** Playground —— 单聊三栏（默认）/ 对比多列（共享输入广播）两态
  *
- * 单聊：左 预设 · 中 对话流+输入 · 右 运行设置(ParamPanel)。
- * 对比：N 列并排，列头模型名 + 齿轮 popover 改参数；底部共享 composer 一次广播到所有列。
- * 状态全在 core/stores/chat（按 columnId）。
+ * 单聊：左 历史会话 · 中 对话流+输入 · 右 运行设置(ParamPanel)。
+ * 对比：左 对比历史 · N 列并排（列头模型名 + 齿轮 + 提升单聊）· 底部共享 composer 广播。
+ * 状态全在 core/stores/chat（按 columnId），并本地持久化（reload 续接每列会话）。
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Settings2, Sparkles, Trash2, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  Columns2,
+  History,
+  KeyRound,
+  MessageSquare,
+  Plus,
+  Settings2,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { SectionCard } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
@@ -19,13 +29,16 @@ import {
   SelectTrigger,
 } from '@/core/components/ui/select';
 import { cn } from '@/core/lib/cn';
+import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import { useAuthStore } from '@/core/stores/auth-store';
 import { MAX_COLUMNS, isStreaming, useChatStore } from '@/core/stores/chat';
 import { selectApiKeyId } from '@/core/stores/chat/selectors';
 import { apiKeyApi } from '@/system/api_keys/services/app';
+import { TraceDrawer } from '@/system/call_logs/components/trace-drawer';
 import { callLogApi } from '@/system/call_logs/services/call-log';
+import type { CallLogItem } from '@/system/call_logs/types/call-log';
 import { conversationApi } from '@/system/conversations/services/conversation';
 import type { MessageItem } from '@/system/conversations/types/message-tree';
 import type { UploadResult } from '@/system/files/services/file-upload';
@@ -38,6 +51,14 @@ import type {
   PlaygroundMessage,
   PlaygroundParams,
 } from '@/system/playground/types/playground';
+
+/** loadSession 的类型（避免到处写长签名） */
+type LoadSessionFn = (
+  columnId: string,
+  sessionId: string,
+  messages: PlaygroundMessage[],
+  params?: Partial<PlaygroundParams>,
+) => void;
 
 /** 后台历史 message → playground 消息流（仅取 user/assistant，标记已完成） */
 const toPlaygroundMessages = (msgs: MessageItem[]): PlaygroundMessage[] =>
@@ -82,6 +103,43 @@ const metaToParams = (
   return out;
 };
 
+/** 把某历史会话拉回来载入某列（meta.config 恢复参数 + 消息回放）。
+ *  单聊切换 / 对比还原 / reload 懒加载 / 跨模式都复用它。 */
+const loadSessionIntoColumn = async (
+  columnId: string,
+  sessionId: string,
+  loadSession: LoadSessionFn,
+): Promise<void> => {
+  const [detail, res] = await Promise.all([
+    conversationApi.get(sessionId).catch(() => null),
+    conversationApi.listMessages(sessionId),
+  ]);
+  loadSession(
+    columnId,
+    sessionId,
+    toPlaygroundMessages(res.items),
+    metaToParams(detail?.meta),
+  );
+};
+
+/** playground 消息 → 最小 CallLogItem，喂 TraceDrawer（按 request_id 拉真实调用链路树）。 */
+const synthCallLog = (msg: PlaygroundMessage): CallLogItem => ({
+  id: msg.requestId as EntityId,
+  request_id: msg.requestId ?? '',
+  app_id: 'playground',
+  agent_key: 'playground',
+  session_id: null,
+  stream: true,
+  success: msg.status !== 'failed',
+  code: msg.status === 'failed' ? 500 : 0,
+  error_message: msg.error ?? null,
+  duration_ms: 0,
+  prompt_tokens: msg.usage?.input_tokens ?? null,
+  completion_tokens: msg.usage?.output_tokens ?? null,
+  total_tokens: msg.usage?.total_tokens ?? null,
+  created_at: new Date().toISOString(),
+});
+
 const PRESETS: { label: string; system: string }[] = [
   { label: '＋ 空白对话', system: '' },
   { label: '客服话术调优', system: '你是耐心、专业的客服助手，回答简洁友好，必要时引导用户提供更多信息。' },
@@ -90,15 +148,39 @@ const PRESETS: { label: string; system: string }[] = [
 ];
 
 export const PlaygroundPage = () => {
-  const [mode, setMode] = useState<'single' | 'compare'>('single');
+  const [traceLog, setTraceLog] = useState<CallLogItem | null>(null);
+  const mode = useChatStore(s => s.mode);
+  const setMode = useChatStore(s => s.setMode);
   const columns = useChatStore(s => s.columns);
   const addColumn = useChatStore(s => s.addColumn);
+  const newCompare = useChatStore(s => s.newCompare);
   const updateParams = useChatStore(s => s.updateParams);
   const send = useChatStore(s => s.send);
   const stop = useChatStore(s => s.stop);
   const clearMessages = useChatStore(s => s.clearMessages);
+  const loadSession = useChatStore(s => s.loadSession);
+
+  // 持久化恢复后：为「有 sessionId 但无消息」的列懒加载历史（messages 不持久化）
+  const hydrated = useRef(false);
+  useEffect(() => {
+    if (hydrated.current) return;
+    hydrated.current = true;
+    const st = useChatStore.getState();
+    for (const c of st.columns) {
+      if (c.sessionId && (st.messages[c.id]?.length ?? 0) === 0) {
+        void loadSessionIntoColumn(c.id, c.sessionId, loadSession).catch(() => {
+          /* 会话可能已删，忽略 */
+        });
+      }
+    }
+  }, [loadSession]);
 
   const first = columns[0];
+  const openTrace = (msg: PlaygroundMessage) => {
+    if (msg.requestId) setTraceLog(synthCallLog(msg));
+  };
+
+  if (!first) return null;
 
   return (
     <SectionCard className="!p-0">
@@ -123,10 +205,16 @@ export const PlaygroundPage = () => {
         <span className="ml-auto" />
         <KeyPicker />
         {mode === 'compare' && (
-          <Button size="sm" variant="ghost" onClick={addColumn} disabled={columns.length >= MAX_COLUMNS}>
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            加列（最多 {MAX_COLUMNS}）
-          </Button>
+          <>
+            <Button size="sm" variant="ghost" onClick={() => newCompare()}>
+              <Sparkles className="mr-1 h-3.5 w-3.5" />
+              新对比
+            </Button>
+            <Button size="sm" variant="ghost" onClick={addColumn} disabled={columns.length >= MAX_COLUMNS}>
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              加列（最多 {MAX_COLUMNS}）
+            </Button>
+          </>
         )}
       </div>
 
@@ -137,43 +225,29 @@ export const PlaygroundPage = () => {
           onStop={() => stop(first.id)}
           onClear={() => clearMessages(first.id)}
           applyPreset={sys => updateParams(first.id, { ...first.params, system_prompt: sys })}
+          onOpenTrace={openTrace}
         />
       ) : (
         <ComparePane
           onBroadcast={(t, a) => columns.forEach(c => void send(c.id, t, a))}
           onStopAll={() => columns.forEach(c => stop(c.id))}
+          onOpenTrace={openTrace}
         />
       )}
+
+      <TraceDrawer callLog={traceLog} onClose={() => setTraceLog(null)} />
     </SectionCard>
   );
 };
 
-// ── A · 单聊三栏 ──────────────────────────────────────────
+// ── 历史会话侧栏（单聊 / 对比共用外观）─────────────────────────
 
-const SinglePane = ({
-  columnId,
-  onSend,
-  onStop,
-  onClear,
-  applyPreset,
-}: {
-  columnId: string;
-  onSend: (t: string, a: UploadResult[]) => void;
-  onStop: () => void;
-  onClear: () => void;
-  applyPreset: (system: string) => void;
-}) => {
-  const params = useChatStore(s => s.columns.find(c => c.id === columnId)?.params);
-  const sessionId = useChatStore(s => s.columns.find(c => c.id === columnId)?.sessionId);
-  const updateParams = useChatStore(s => s.updateParams);
-  const loadSession = useChatStore(s => s.loadSession);
-  const streaming = useChatStore(s => isStreaming(s, columnId));
-
+/** 拉当前用户的 playground 会话列表（单聊用：列出可续接的会话） */
+const usePlaygroundSessions = (streaming: boolean) => {
   const user = useAuthStore(s => s.user);
   const endUser = user ? String(user.id) : undefined;
   const qc = useQueryClient();
-
-  const sessionsQ = useQuery({
+  const q = useQuery({
     queryKey: ['playground-sessions', endUser],
     queryFn: () =>
       callLogApi.listSessions({
@@ -184,34 +258,82 @@ const SinglePane = ({
       }),
     enabled: !!endUser,
   });
-
-  // 流结束后刷新历史列表（新会话冒泡到顶部）；zustand 读 streaming，invalidate 非 setState
+  // 流结束后刷新列表（新会话冒泡到顶部）
   useEffect(() => {
     if (!streaming && endUser)
       qc.invalidateQueries({ queryKey: ['playground-sessions', endUser] });
   }, [streaming, endUser, qc]);
+  return { sessions: q.data?.items ?? [], isLoading: q.isLoading, endUser, qc };
+};
+
+// ── A · 单聊三栏 ──────────────────────────────────────────
+
+const SinglePane = ({
+  columnId,
+  onSend,
+  onStop,
+  onClear,
+  applyPreset,
+  onOpenTrace,
+}: {
+  columnId: string;
+  onSend: (t: string, a: UploadResult[]) => void;
+  onStop: () => void;
+  onClear: () => void;
+  applyPreset: (system: string) => void;
+  onOpenTrace: (msg: PlaygroundMessage) => void;
+}) => {
+  const params = useChatStore(s => s.columns.find(c => c.id === columnId)?.params);
+  const sessionId = useChatStore(s => s.columns.find(c => c.id === columnId)?.sessionId);
+  const updateParams = useChatStore(s => s.updateParams);
+  const loadSession = useChatStore(s => s.loadSession);
+  const addColumnLoaded = useChatStore(s => s.addColumnLoaded);
+  const setMode = useChatStore(s => s.setMode);
+  const streaming = useChatStore(s => isStreaming(s, columnId));
+  const { sessions, isLoading, endUser, qc } = usePlaygroundSessions(streaming);
 
   const openSession = async (sid: string) => {
     if (sid === sessionId) return;
     try {
-      // 并行拉消息 + 会话详情（meta.config 恢复运行设置）
-      const [detail, res] = await Promise.all([
-        conversationApi.get(sid).catch(() => null),
-        conversationApi.listMessages(sid),
-      ]);
-      loadSession(
-        columnId,
-        sid,
-        toPlaygroundMessages(res.items),
-        metaToParams(detail?.meta),
-      );
+      await loadSessionIntoColumn(columnId, sid, loadSession);
     } catch {
       toast.error('载入会话失败');
     }
   };
 
+  const deleteSession = async (sid: string, title?: string | null) => {
+    const ok = await confirm({
+      title: '删除此会话？',
+      description: `「${title || '未命名会话'}」及其消息将被删除，不可撤销。`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await conversationApi.remove(sid);
+      if (sid === sessionId) onClear(); // 删的是当前会话 → 清空对话区
+      qc.invalidateQueries({ queryKey: ['playground-sessions', endUser] });
+      toast.success('会话已删除');
+    } catch {
+      toast.error('删除失败');
+    }
+  };
+
+  // P3：把某历史会话作为新一列加入对比 + 切到对比模式
+  const addToCompare = async (sid: string) => {
+    try {
+      const [detail, res] = await Promise.all([
+        conversationApi.get(sid).catch(() => null),
+        conversationApi.listMessages(sid),
+      ]);
+      addColumnLoaded(sid, toPlaygroundMessages(res.items), metaToParams(detail?.meta));
+      setMode('compare');
+      toast.success('已加入对比');
+    } catch {
+      toast.error('加入对比失败');
+    }
+  };
+
   if (!params) return null;
-  const sessions = sessionsQ.data?.items ?? [];
 
   return (
     <div className="flex h-[calc(100vh-150px)]">
@@ -232,30 +354,52 @@ const SinglePane = ({
           </div>
           {sessions.length === 0 ? (
             <div className="px-1.5 py-3 text-[11.5px] text-stone-400">
-              {sessionsQ.isLoading ? '加载中…' : '暂无历史会话'}
+              {isLoading ? '加载中…' : '暂无历史会话'}
             </div>
           ) : (
             sessions.map(s => {
               const active = s.session_id === sessionId;
               return (
-                <button
+                <div
                   key={s.session_id}
-                  type="button"
-                  onClick={() => void openSession(s.session_id)}
                   className={cn(
-                    'mb-0.5 block w-full rounded-md px-2 py-1.5 text-left transition',
+                    'group/sess relative mb-0.5 flex items-center rounded-md transition',
                     active
                       ? 'bg-white shadow-sm ring-1 ring-stone-200'
                       : 'hover:bg-white/70',
                   )}
                 >
-                  <div className="truncate text-[12px] text-stone-700">
-                    {s.title || '未命名会话'}
+                  <button
+                    type="button"
+                    onClick={() => void openSession(s.session_id)}
+                    className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left"
+                  >
+                    <div className="truncate pr-10 text-[12px] text-stone-700">
+                      {s.title || '未命名会话'}
+                    </div>
+                    <div className="truncate text-[10px] text-stone-400">
+                      {formatDateTime(s.last_message_at ?? s.created_at)} · {s.turn_count} 轮
+                    </div>
+                  </button>
+                  <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5 opacity-0 transition group-hover/sess:opacity-100">
+                    <button
+                      type="button"
+                      title="加入对比（作为新一列）"
+                      onClick={() => void addToCompare(s.session_id)}
+                      className="rounded p-1 text-stone-400 transition hover:bg-violet-50 hover:text-violet-600"
+                    >
+                      <Columns2 className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      title="删除会话"
+                      onClick={() => void deleteSession(s.session_id, s.title)}
+                      className="rounded p-1 text-stone-400 transition hover:bg-rose-50 hover:text-rose-600"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </div>
-                  <div className="truncate text-[10px] text-stone-400">
-                    {formatDateTime(s.last_message_at ?? s.created_at)} · {s.turn_count} 轮
-                  </div>
-                </button>
+                </div>
               );
             })
           )}
@@ -296,7 +440,7 @@ const SinglePane = ({
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
-        <MessageThread columnId={columnId} />
+        <MessageThread columnId={columnId} onOpenTrace={onOpenTrace} />
         <div className="border-t border-stone-200/70 p-3">
           <Composer onSend={onSend} streaming={streaming} onStop={onStop} />
         </div>
@@ -310,41 +454,149 @@ const SinglePane = ({
   );
 };
 
-// ── C · 对比多列 + 共享输入 ──────────────────────────────
+// ── C · 对比多列 + 对比历史侧栏 + 共享输入 ──────────────────
 
 const ComparePane = ({
   onBroadcast,
   onStopAll,
+  onOpenTrace,
 }: {
   onBroadcast: (t: string, a: UploadResult[]) => void;
   onStopAll: () => void;
+  onOpenTrace: (msg: PlaygroundMessage) => void;
 }) => {
   const columns = useChatStore(s => s.columns);
   const anyStreaming = useChatStore(s => s.columns.some(c => isStreaming(s, c.id)));
   const removeColumn = useChatStore(s => s.removeColumn);
   const clearMessages = useChatStore(s => s.clearMessages);
+  const loadSession = useChatStore(s => s.loadSession);
+  const compareHistory = useChatStore(s => s.compareHistory);
+  const activeCompareId = useChatStore(s => s.activeCompareId);
+  const upsertActiveCompare = useChatStore(s => s.upsertActiveCompare);
+  const openCompare = useChatStore(s => s.openCompare);
+  const deleteCompare = useChatStore(s => s.deleteCompare);
   const multi = columns.length > 1;
 
+  const modelsQ = useQuery({
+    queryKey: ['playground-models'],
+    queryFn: () => modelApi.list({ kind: 'chat' }),
+    staleTime: 60_000,
+  });
+  const modelCode = (modelId?: EntityId | null): string =>
+    modelsQ.data?.find(m => String(m.id) === String(modelId))?.code ?? '未选模型';
+
+  // 流式全部结束 → 把当前对比工作区 upsert 进历史（捕获各列已落定的 sessionId + label）
+  const wasStreaming = useRef(false);
+  useEffect(() => {
+    if (wasStreaming.current && !anyStreaming) {
+      const labels = Object.fromEntries(
+        useChatStore.getState().columns.map(c => [c.id, modelCode(c.params.model_id)]),
+      );
+      upsertActiveCompare(labels);
+    }
+    wasStreaming.current = anyStreaming;
+    // modelCode 依赖 modelsQ.data；只需在 streaming 变化时跑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyStreaming, upsertActiveCompare]);
+
+  const openGroup = async (groupId: string) => {
+    const pairs = openCompare(groupId); // 重建列 + 切 compare，返回 [colId, sid][]
+    await Promise.all(
+      pairs.map(([colId, sid]) =>
+        loadSessionIntoColumn(colId, sid, loadSession).catch(() => {
+          /* 会话可能已删 */
+        }),
+      ),
+    );
+  };
+
+  const removeGroup = async (groupId: string, label: string) => {
+    const ok = await confirm({
+      title: '删除此对比记录？',
+      description: `「${label}」从对比历史移除（不影响底层会话）。`,
+      danger: true,
+    });
+    if (ok) deleteCompare(groupId);
+  };
+
   return (
-    <div className="flex h-[calc(100vh-150px)] flex-col">
-      <div className="flex min-h-0 flex-1">
-        {columns.map((col, i) => (
-          <CompareColumn
-            key={col.id}
-            columnId={col.id}
-            index={i}
-            onClear={() => clearMessages(col.id)}
-            onRemove={multi ? () => removeColumn(col.id) : undefined}
+    <div className="flex h-[calc(100vh-150px)]">
+      <aside className="flex w-56 shrink-0 flex-col border-r border-stone-200/70 bg-[var(--color-warm-2)]/30">
+        <div className="flex-1 overflow-auto p-1.5">
+          <div className="flex items-center gap-1 px-1.5 py-1 text-[10.5px] tracking-wide text-stone-400">
+            <History className="h-3 w-3" />
+            对比历史
+          </div>
+          {compareHistory.length === 0 ? (
+            <div className="px-1.5 py-3 text-[11.5px] text-stone-400">
+              暂无对比记录（发一次广播即自动存档）
+            </div>
+          ) : (
+            compareHistory.map(g => {
+              const active = g.id === activeCompareId;
+              const models = g.columns
+                .map(c => c.modelLabel)
+                .filter(Boolean)
+                .join(' · ');
+              return (
+                <div
+                  key={g.id}
+                  className={cn(
+                    'group/cmp relative mb-0.5 flex items-center rounded-md transition',
+                    active
+                      ? 'bg-white shadow-sm ring-1 ring-stone-200'
+                      : 'hover:bg-white/70',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => void openGroup(g.id)}
+                    className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left"
+                  >
+                    <div className="truncate pr-5 text-[12px] text-stone-700">
+                      {g.label}
+                    </div>
+                    <div className="truncate text-[10px] text-stone-400">
+                      {g.columns.length} 列 · {models || '—'}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    title="删除对比记录"
+                    onClick={() => void removeGroup(g.id, g.label)}
+                    className="absolute top-1.5 right-1.5 rounded p-1 text-stone-400 opacity-0 transition hover:bg-rose-50 hover:text-rose-600 group-hover/cmp:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1">
+          {columns.map((col, i) => (
+            <CompareColumn
+              key={col.id}
+              columnId={col.id}
+              index={i}
+              modelLabel={modelCode(col.params.model_id)}
+              onClear={() => clearMessages(col.id)}
+              onRemove={multi ? () => removeColumn(col.id) : undefined}
+              onOpenTrace={onOpenTrace}
+            />
+          ))}
+        </div>
+        <div className="border-t border-stone-200/70 p-3">
+          <Composer
+            onSend={onBroadcast}
+            streaming={anyStreaming}
+            onStop={onStopAll}
+            placeholder={`一次输入，广播到全部 ${columns.length} 列同时运行… ⌘/Ctrl+Enter`}
           />
-        ))}
-      </div>
-      <div className="border-t border-stone-200/70 p-3">
-        <Composer
-          onSend={onBroadcast}
-          streaming={anyStreaming}
-          onStop={onStopAll}
-          placeholder={`一次输入，广播到全部 ${columns.length} 列同时运行… ⌘/Ctrl+Enter`}
-        />
+        </div>
       </div>
     </div>
   );
@@ -353,24 +605,22 @@ const ComparePane = ({
 const CompareColumn = ({
   columnId,
   index,
+  modelLabel,
   onClear,
   onRemove,
+  onOpenTrace,
 }: {
   columnId: string;
   index: number;
+  modelLabel: string;
   onClear: () => void;
   onRemove?: () => void;
+  onOpenTrace: (msg: PlaygroundMessage) => void;
 }) => {
   const params = useChatStore(s => s.columns.find(c => c.id === columnId)?.params);
   const updateParams = useChatStore(s => s.updateParams);
-  const modelsQ = useQuery({
-    queryKey: ['playground-models'],
-    queryFn: () => modelApi.list({ kind: 'chat' }),
-    staleTime: 60_000,
-  });
+  const promoteToSingle = useChatStore(s => s.promoteToSingle);
   if (!params) return null;
-  const modelLabel =
-    modelsQ.data?.find(m => String(m.id) === String(params.model_id))?.code ?? '未选模型';
 
   return (
     <div className="flex min-w-0 flex-1 flex-col border-r border-stone-200/70 last:border-r-0">
@@ -380,6 +630,14 @@ const CompareColumn = ({
           {modelLabel}
           <span className="ml-1 text-[10.5px] font-normal text-stone-400">列 {index + 1}</span>
         </span>
+        <button
+          type="button"
+          title="在单聊打开此列"
+          onClick={() => promoteToSingle(columnId)}
+          className="rounded p-1 text-stone-400 transition hover:bg-blue-50 hover:text-blue-600"
+        >
+          <MessageSquare className="h-3.5 w-3.5" />
+        </button>
         <Popover>
           <PopoverTrigger asChild>
             <button
@@ -413,7 +671,7 @@ const CompareColumn = ({
           </button>
         )}
       </header>
-      <MessageThread columnId={columnId} />
+      <MessageThread columnId={columnId} onOpenTrace={onOpenTrace} />
     </div>
   );
 };

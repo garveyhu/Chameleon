@@ -11,6 +11,10 @@ import type { EntityId } from '@/core/types/api';
 import {
   MAX_COLUMNS,
   newColumn,
+  newColumnId,
+  newParams,
+  persistChat,
+  type ChatMode,
   type ChatState,
 } from '@/core/stores/chat/state';
 import { scoreApi } from '@/system/call_logs/services/call-log';
@@ -27,8 +31,26 @@ import type {
 
 export interface ChatActions {
   setApiKeyId: (apiKeyId: EntityId | null) => void;
+  /** 切单聊 / 对比（持久化） */
+  setMode: (mode: ChatMode) => void;
   addColumn: () => void;
+  /** 新增一列并直接载入某历史会话（P3「单聊会话加入对比」） */
+  addColumnLoaded: (
+    sessionId: string,
+    messages: PlaygroundMessage[],
+    params?: Partial<PlaygroundParams>,
+  ) => void;
+  /** 把某列「提升」为单聊：只留该列 + 切单聊模式（P3） */
+  promoteToSingle: (columnId: string) => void;
   removeColumn: (columnId: string) => void;
+  // ── 对比历史（P2，客户端分组持久化）──
+  /** 把当前对比工作区 upsert 进 compareHistory；modelLabels: columnId→模型名 */
+  upsertActiveCompare: (modelLabels: Record<string, string>) => void;
+  /** 开新对比：重置成单列空白、activeCompareId=null（保留历史） */
+  newCompare: () => void;
+  /** 打开历史对比：用快照重建列；返回需懒加载消息的 [columnId, sessionId][] */
+  openCompare: (groupId: string) => Array<readonly [string, string]>;
+  deleteCompare: (groupId: string) => void;
   updateParams: (columnId: string, params: PlaygroundParams) => void;
   send: (
     columnId: string,
@@ -118,8 +140,11 @@ export const createChatActions: StateCreator<
   const paramsOf = (columnId: string): PlaygroundParams | undefined =>
     get().columns.find(c => c.id === columnId)?.params;
 
+  /** 把可持久化切片写 localStorage（仅在非流式 mutation 后调，避开 delta 高频写） */
+  const save = () => persistChat(get());
+
   /** 写回某列的溯源 sessionId（后端首条 invoke 经 meta 透出后续接用） */
-  const setColumnSession = (columnId: string, sessionId: string) =>
+  const setColumnSession = (columnId: string, sessionId: string) => {
     set(
       s => ({
         columns: s.columns.map(c =>
@@ -129,6 +154,8 @@ export const createChatActions: StateCreator<
       false,
       'chat/setColumnSession',
     );
+    save(); // 续接 id 落本地，reload 后能继续这轮会话
+  };
 
   const requireModel = (params: PlaygroundParams | undefined): boolean => {
     if (!params?.model_id) {
@@ -219,7 +246,15 @@ export const createChatActions: StateCreator<
   };
 
   return {
-    setApiKeyId: apiKeyId => set({ apiKeyId }, false, 'chat/setApiKeyId'),
+    setApiKeyId: apiKeyId => {
+      set({ apiKeyId }, false, 'chat/setApiKeyId');
+      save();
+    },
+
+    setMode: mode => {
+      set({ mode }, false, 'chat/setMode');
+      save();
+    },
 
     addColumn: () => {
       if (get().columns.length >= MAX_COLUMNS) {
@@ -235,6 +270,40 @@ export const createChatActions: StateCreator<
         false,
         'chat/addColumn',
       );
+      save();
+    },
+
+    addColumnLoaded: (sessionId, messages, params) => {
+      if (get().columns.length >= MAX_COLUMNS) {
+        toast.warning(`最多 ${MAX_COLUMNS} 列`);
+        return;
+      }
+      const col = {
+        id: newColumnId(),
+        params: { ...newParams(), ...params },
+        sessionId,
+      };
+      set(
+        s => ({
+          columns: [...s.columns, col],
+          messages: { ...s.messages, [col.id]: messages },
+        }),
+        false,
+        'chat/addColumnLoaded',
+      );
+      save();
+    },
+
+    promoteToSingle: columnId => {
+      const col = get().columns.find(c => c.id === columnId);
+      if (!col) return;
+      const msgs = get().messages[columnId] ?? [];
+      set(
+        { mode: 'single', columns: [col], messages: { [columnId]: msgs }, activeCompareId: null },
+        false,
+        'chat/promoteToSingle',
+      );
+      save();
     },
 
     removeColumn: columnId => {
@@ -252,9 +321,10 @@ export const createChatActions: StateCreator<
         false,
         'chat/removeColumn',
       );
+      save();
     },
 
-    updateParams: (columnId, params) =>
+    updateParams: (columnId, params) => {
       set(
         s => ({
           columns: s.columns.map(c =>
@@ -263,7 +333,9 @@ export const createChatActions: StateCreator<
         }),
         false,
         'chat/updateParams',
-      ),
+      );
+      save();
+    },
 
     send: async (columnId, text, attachments) => {
       const params = paramsOf(columnId);
@@ -310,6 +382,7 @@ export const createChatActions: StateCreator<
         false,
         'chat/clearMessages:resetSession',
       );
+      save();
     },
 
     loadSession: (columnId, sessionId, messages, params) => {
@@ -331,6 +404,91 @@ export const createChatActions: StateCreator<
         false,
         'chat/loadSession',
       );
+      save();
+    },
+
+    upsertActiveCompare: modelLabels => {
+      const st = get();
+      const cols = st.columns.map(c => ({
+        params: c.params,
+        sessionId: c.sessionId ?? null,
+        modelLabel: modelLabels[c.id],
+      }));
+      // 还没真正发过（无任何会话）不存，避免堆一堆空白对比
+      if (!cols.some(c => c.sessionId)) return;
+      const firstUser = (st.messages[st.columns[0]?.id] ?? []).find(
+        m => m.role === 'user',
+      );
+      const label =
+        firstUser?.content?.trim().slice(0, 30) ||
+        cols
+          .map(c => c.modelLabel)
+          .filter(Boolean)
+          .join(' vs ') ||
+        '未命名对比';
+      set(
+        s => {
+          const id = s.activeCompareId ?? newColumnId();
+          const entry = { id, label, updatedAt: Date.now(), columns: cols };
+          return {
+            compareHistory: [
+              entry,
+              ...s.compareHistory.filter(g => g.id !== id),
+            ],
+            activeCompareId: id,
+          };
+        },
+        false,
+        'chat/upsertActiveCompare',
+      );
+      save();
+    },
+
+    newCompare: () => {
+      const a = newColumn();
+      const b = newColumn();
+      set(
+        {
+          columns: [a, b],
+          messages: { [a.id]: [], [b.id]: [] },
+          activeCompareId: null,
+        },
+        false,
+        'chat/newCompare',
+      );
+      save();
+    },
+
+    openCompare: groupId => {
+      const g = get().compareHistory.find(x => x.id === groupId);
+      if (!g) return [];
+      const cols = g.columns.map(c => ({
+        id: newColumnId(),
+        params: c.params,
+        sessionId: c.sessionId,
+      }));
+      set(
+        { columns: cols, messages: {}, activeCompareId: g.id, mode: 'compare' },
+        false,
+        'chat/openCompare',
+      );
+      save();
+      return cols
+        .filter(c => c.sessionId)
+        .map(c => [c.id, c.sessionId as string] as const);
+    },
+
+    deleteCompare: groupId => {
+      set(
+        s => ({
+          compareHistory: s.compareHistory.filter(g => g.id !== groupId),
+          activeCompareId:
+            s.activeCompareId === groupId ? null : s.activeCompareId,
+        }),
+        false,
+        'chat/deleteCompare',
+      );
+      save();
     },
 
     deleteMessage: (columnId, msgId) =>

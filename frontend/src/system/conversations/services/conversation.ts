@@ -8,6 +8,8 @@ import type {
 export const conversationApi = {
   get: (sessionId: string) =>
     get<ConversationItem>(`/v1/sessions/${sessionId}`),
+  remove: (sessionId: string) =>
+    post<ConversationItem>(`/v1/sessions/${sessionId}/delete`),
   listMessages: (sessionId: string, params?: { page?: number; page_size?: number }) =>
     get<PageResult<MessageItem>>(
       `/v1/sessions/${sessionId}/messages`,

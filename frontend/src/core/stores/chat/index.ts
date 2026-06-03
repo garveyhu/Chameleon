@@ -6,7 +6,10 @@ export {
   newColumnId,
   newParams,
   type ChatColumn,
+  type ChatMode,
   type ChatState,
+  type CompareColumnSnapshot,
+  type CompareGroup,
 } from '@/core/stores/chat/state';
 export type { ChatActions } from '@/core/stores/chat/actions';
 export {
