@@ -15,6 +15,7 @@
     "trace": "Trace",
     "cost": "Cost",
     "datasets": "Datasets",
+    "eval_templates": "Scorecards",
     "eval_jobs": "Evaluations",
     "plugins": "Plugins",
     "marketplace": "Marketplace",

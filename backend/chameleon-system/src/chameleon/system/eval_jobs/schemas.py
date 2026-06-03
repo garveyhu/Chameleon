@@ -17,6 +17,7 @@ class EvalJobItem(BaseModel):
     name: str
     description: str | None = None
     dataset_id: int
+    dataset_name: str | None = None
     target_kind: str
     target_key: str | None = None
     model_override: str | None = None

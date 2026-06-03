@@ -56,15 +56,51 @@ _MAX_REDACTED_PREVIEW = 80  # 字符
 
 async def list_datasets(session: AsyncSession) -> list[DatasetItemDTO]:
     rows = (
-        (
-            await session.execute(
-                select(Dataset).order_by(Dataset.created_at.desc())
-            )
-        )
+        (await session.execute(select(Dataset).order_by(Dataset.created_at.desc())))
         .scalars()
         .all()
     )
-    return [DatasetItemDTO.model_validate(r) for r in rows]
+    items = [DatasetItemDTO.model_validate(r) for r in rows]
+    if not rows:
+        return items
+
+    ids = [r.id for r in rows]
+    cnt_rows = (
+        await session.execute(
+            select(DatasetRun.dataset_id, func.count())
+            .where(DatasetRun.dataset_id.in_(ids))
+            .group_by(DatasetRun.dataset_id)
+        )
+    ).all()
+    cnt_map = {did: n for did, n in cnt_rows}
+
+    # 每个 dataset 最近一次运行的 summary.mean_score
+    last_rows = (
+        await session.execute(
+            select(DatasetRun.dataset_id, DatasetRun.summary)
+            .where(DatasetRun.dataset_id.in_(ids))
+            .order_by(DatasetRun.dataset_id, DatasetRun.created_at.desc())
+        )
+    ).all()
+    last_score_map: dict[int, float | None] = {}
+    for did, summary in last_rows:
+        if did not in last_score_map:  # desc 排序后首次见即最近
+            last_score_map[did] = _extract_mean_score(summary)
+
+    for it in items:
+        it.run_count = cnt_map.get(it.id, 0)
+        it.last_run_score = last_score_map.get(it.id)
+    return items
+
+
+def _extract_mean_score(summary: dict[str, Any] | None) -> float | None:
+    if not summary:
+        return None
+    for k in ("mean_score", "mean", "avg_score"):
+        v = summary.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return None
 
 
 async def get_dataset(session: AsyncSession, dataset_id: int) -> DatasetItemDTO:
@@ -132,14 +168,10 @@ async def update_item(
     session: AsyncSession, item_id: int, req: UpdateItemRequest
 ) -> DatasetItemItem:
     row = (
-        await session.execute(
-            select(DatasetItem).where(DatasetItem.id == item_id)
-        )
+        await session.execute(select(DatasetItem).where(DatasetItem.id == item_id))
     ).scalar_one_or_none()
     if row is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"dataset_item 不存在: {item_id}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"dataset_item 不存在: {item_id}")
     if req.expected_output is not None:
         row.expected_output = req.expected_output
     if req.meta is not None:
@@ -204,9 +236,7 @@ async def sample_from_logs(
         if lg.request_id in existing_set:
             skipped += 1
             continue
-        redacted_input, dropped_in = _redact_input(
-            lg.request_payload, pii_strategy
-        )
+        redacted_input, dropped_in = _redact_input(lg.request_payload, pii_strategy)
         if dropped_in:
             dropped_pii += 1
             continue
@@ -238,12 +268,16 @@ async def sample_from_logs(
         existing_set.add(lg.request_id)
 
     ds.item_count = (
-        await session.execute(
-            select(func.count())
-            .select_from(DatasetItem)
-            .where(DatasetItem.dataset_id == ds.id)
-        )
-    ).scalar_one() + added - 0  # 上面尚未 commit，手算
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(DatasetItem)
+                .where(DatasetItem.dataset_id == ds.id)
+            )
+        ).scalar_one()
+        + added
+        - 0
+    )  # 上面尚未 commit，手算
     # 简化：让 commit 后 ORM 看到 added 行；先 flush 再 count
     await session.flush()
     ds.item_count = (
@@ -315,9 +349,7 @@ async def bulk_import_items(
         )
     ).scalar_one()
     await session.commit()
-    return BulkImportResult(
-        dataset_id=ds.id, added=added, dropped_pii=dropped_pii
-    )
+    return BulkImportResult(dataset_id=ds.id, added=added, dropped_pii=dropped_pii)
 
 
 # ── 脱敏 helper ───────────────────────────────────────────
@@ -346,9 +378,7 @@ def _redact_input(
             raw_preview = text[:_MAX_REDACTED_PREVIEW] + (
                 "…" if len(text) > _MAX_REDACTED_PREVIEW else ""
             )
-            processed_preview, dropped = apply_pii_strategy(
-                raw_preview, pii_strategy
-            )
+            processed_preview, dropped = apply_pii_strategy(raw_preview, pii_strategy)
             if dropped:
                 return out, True
             out[k] = {
@@ -409,24 +439,16 @@ async def list_runs(
     return [DatasetRunRow.model_validate(r) for r in rows]
 
 
-async def get_run(
-    session: AsyncSession, run_id: int
-) -> DatasetRunDetail:
+async def get_run(session: AsyncSession, run_id: int) -> DatasetRunDetail:
     row = (
-        await session.execute(
-            select(DatasetRun).where(DatasetRun.id == run_id)
-        )
+        await session.execute(select(DatasetRun).where(DatasetRun.id == run_id))
     ).scalar_one_or_none()
     if row is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"dataset_run 不存在: {run_id}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"dataset_run 不存在: {run_id}")
     return DatasetRunDetail.model_validate(row)
 
 
-async def list_run_items(
-    session: AsyncSession, run_id: int
-) -> list[DatasetRunItemRow]:
+async def list_run_items(session: AsyncSession, run_id: int) -> list[DatasetRunItemRow]:
     rows = (
         (
             await session.execute(
@@ -441,19 +463,13 @@ async def list_run_items(
     return [DatasetRunItemRow.model_validate(r) for r in rows]
 
 
-async def compare_runs(
-    session: AsyncSession, run_ids: list[int]
-) -> CompareRunsResult:
+async def compare_runs(session: AsyncSession, run_ids: list[int]) -> CompareRunsResult:
     """item-by-item 对比 N 个 run
 
     同 dataset 内的 run 才能对比；否则 raise。
     """
     runs = (
-        (
-            await session.execute(
-                select(DatasetRun).where(DatasetRun.id.in_(run_ids))
-            )
-        )
+        (await session.execute(select(DatasetRun).where(DatasetRun.id.in_(run_ids))))
         .scalars()
         .all()
     )
@@ -485,9 +501,7 @@ async def compare_runs(
     run_items = (
         (
             await session.execute(
-                select(DatasetRunItem).where(
-                    DatasetRunItem.dataset_run_id.in_(run_ids)
-                )
+                select(DatasetRunItem).where(DatasetRunItem.dataset_run_id.in_(run_ids))
             )
         )
         .scalars()
@@ -563,15 +577,20 @@ async def score_distribution(
     per_metric: dict[str, list[tuple[int, float]]] = {}
     for r in rows:
         scores = r.eval_scores
-        if not isinstance(scores, dict):
-            continue
-        for k, v in scores.items():
-            if k.startswith("_") or k == "weighted_total":
-                # _error 等内部字段不入分布；weighted_total 单独单独算
-                pass
-            if not isinstance(v, (int, float)):
-                continue
-            per_metric.setdefault(k, []).append((r.id, float(v)))
+        used_metric = False
+        if isinstance(scores, dict):
+            for k, v in scores.items():
+                # _error 等内部字段、weighted_total 加权总分不入逐维度分布
+                if k.startswith("_") or k == "weighted_total":
+                    continue
+                if not isinstance(v, (int, float)):
+                    continue
+                per_metric.setdefault(k, []).append((r.id, float(v)))
+                used_metric = True
+        # 兜底：无 eval_template 的纯 judge run（eval_scores 空）用 scalar score
+        # 做「总分」单维度分布，否则直方图对最常见的 run 类型是空的
+        if not used_metric and r.score is not None:
+            per_metric.setdefault("总分", []).append((r.id, float(r.score)))
 
     metrics_out: list[MetricDistribution] = []
     total_scored = 0
@@ -598,9 +617,7 @@ async def score_distribution(
     )
 
 
-def _bucketize(
-    values: list[float], n: int
-) -> list[ScoreBucket]:
+def _bucketize(values: list[float], n: int) -> list[ScoreBucket]:
     """把 [0,1] 范围切 n 桶；最后一桶闭区间"""
     if n < 1:
         n = 10
@@ -627,12 +644,8 @@ def _bucketize(
 
 async def _load_dataset(session: AsyncSession, dataset_id: int) -> Dataset:
     row = (
-        await session.execute(
-            select(Dataset).where(Dataset.id == dataset_id)
-        )
+        await session.execute(select(Dataset).where(Dataset.id == dataset_id))
     ).scalar_one_or_none()
     if row is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"dataset 不存在: {dataset_id}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"dataset 不存在: {dataset_id}")
     return row

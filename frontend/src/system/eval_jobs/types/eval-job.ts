@@ -13,6 +13,7 @@ export interface EvalJobItem {
   name: string;
   description: string | null;
   dataset_id: EntityId;
+  dataset_name: string | null;
   target_kind: 'agent' | 'graph';
   target_key: string | null;
   model_override: string | null;

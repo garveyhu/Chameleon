@@ -19,6 +19,7 @@ import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { formatDateTime } from '@/core/lib/format';
+import { formatScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { datasetApi } from '@/system/datasets/services/dataset';
@@ -89,6 +90,36 @@ export const DatasetsPage = () => {
           {r.item_count}
         </span>
       ),
+    },
+    {
+      key: 'run_count',
+      header: '运行',
+      align: 'right',
+      width: 64,
+      render: r => (
+        <span
+          className={cn(
+            'tnum',
+            (r.run_count ?? 0) > 0 ? 'text-stone-600' : 'text-stone-300',
+          )}
+        >
+          {r.run_count ?? 0}
+        </span>
+      ),
+    },
+    {
+      key: 'last_run_score',
+      header: '最近评分',
+      align: 'right',
+      width: 84,
+      render: r =>
+        r.last_run_score != null ? (
+          <span className={cn('tnum', scoreColor(r.last_run_score))}>
+            {formatScore(r.last_run_score)}
+          </span>
+        ) : (
+          <span className="text-stone-300">—</span>
+        ),
     },
     {
       key: 'created_at',

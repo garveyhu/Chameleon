@@ -15,6 +15,7 @@
     "trace": "Trace",
     "cost": "成本统计",
     "datasets": "数据集",
+    "eval_templates": "评分模板",
     "eval_jobs": "评测任务",
     "plugins": "插件",
     "marketplace": "插件市场",

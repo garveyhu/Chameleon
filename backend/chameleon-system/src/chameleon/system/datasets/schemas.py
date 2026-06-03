@@ -15,6 +15,8 @@ class DatasetItem(BaseModel):
     name: str
     description: str | None = None
     item_count: int
+    run_count: int = 0
+    last_run_score: float | None = None
     created_at: datetime
     updated_at: datetime
 

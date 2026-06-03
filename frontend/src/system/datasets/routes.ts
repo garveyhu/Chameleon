@@ -21,6 +21,15 @@ const module: ModuleRouteConfig = {
         return { Component: m.DatasetDetailPage };
       },
     },
+    {
+      path: '/eval-templates',
+      lazy: async () => {
+        const m = await import(
+          '@/system/datasets/pages/eval-templates-page'
+        );
+        return { Component: m.EvalTemplatesPage };
+      },
+    },
   ],
 };
 

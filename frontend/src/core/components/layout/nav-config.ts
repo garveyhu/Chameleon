@@ -20,6 +20,7 @@ import {
   MessagesSquare,
   Newspaper,
   Puzzle,
+  Ruler,
   Settings,
   ShieldCheck,
   ShoppingBag,
@@ -125,6 +126,7 @@ export const DOMAINS: NavDomain[] = [
         fallbackTitle: '质量 & 成本',
         children: [
           { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: '数据集', perm: 'datasets:read' },
+          { to: '/eval-templates', icon: Ruler, i18nKey: 'menu.eval_templates', fallbackTitle: '评分模板', perm: 'datasets:read' },
           { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
         ],
       },

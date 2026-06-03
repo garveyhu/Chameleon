@@ -13,6 +13,8 @@ import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, parseScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
+import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { EvalJobFormModal } from '@/system/eval_jobs/components/eval-job-form-modal';
 import { evalJobApi } from '@/system/eval_jobs/services/eval-job';
 import {
@@ -55,6 +57,7 @@ export const EvalJobDetailPage = () => {
   const jobId = id ?? '';
   const qc = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  const [runId, setRunId] = useState<EntityId | null>(null);
 
   const jobQ = useQuery({
     queryKey: ['eval-job', jobId],
@@ -162,9 +165,15 @@ export const EvalJobDetailPage = () => {
           <h3 className="mb-3 text-[13px] font-medium text-stone-800">
             运行历史
           </h3>
-          <RunsTable runs={runs} loading={runsQ.isLoading && !runsQ.data} />
+          <RunsTable
+            runs={runs}
+            loading={runsQ.isLoading && !runsQ.data}
+            onOpenRun={setRunId}
+          />
         </CardContent>
       </Card>
+
+      <RunDetailDrawer runId={runId} onClose={() => setRunId(null)} />
 
       <EvalJobFormModal
         open={editOpen}
@@ -183,7 +192,11 @@ const InfoGrid = ({ job }: { job: EvalJobItem }) => {
   const cards: { label: string; value: string; mono?: boolean; cls?: string }[] =
     [
       { label: '计划', value: c.label, mono: c.mono },
-      { label: '数据集', value: `#${job.dataset_id}`, mono: true },
+      {
+        label: '数据集',
+        value: job.dataset_name ?? `#${job.dataset_id}`,
+        mono: !job.dataset_name,
+      },
       { label: '评分器', value: job.judge },
       {
         label: '被测对象',
@@ -260,9 +273,11 @@ const TrendChart = ({ runs }: { runs: EvalJobRunItem[] }) => {
 const RunsTable = ({
   runs,
   loading,
+  onOpenRun,
 }: {
   runs: EvalJobRunItem[];
   loading: boolean;
+  onOpenRun: (runId: EntityId) => void;
 }) => {
   const cols: DataTableColumn<EvalJobRunItem>[] = [
     {
@@ -356,6 +371,9 @@ const RunsTable = ({
       rows={runs}
       rowKey="id"
       loading={loading}
+      onRowClick={r => {
+        if (r.dataset_run_id != null) onOpenRun(r.dataset_run_id);
+      }}
       emptyText="还没有运行记录"
       minWidth={560}
     />

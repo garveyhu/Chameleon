@@ -40,17 +40,35 @@ async def list_jobs(session: AsyncSession) -> list[EvalJobItem]:
         .scalars()
         .all()
     )
-    return [EvalJobItem.model_validate(r) for r in rows]
+    items = [EvalJobItem.model_validate(r) for r in rows]
+    name_map = await _dataset_name_map(session, {r.dataset_id for r in rows})
+    for it in items:
+        it.dataset_name = name_map.get(it.dataset_id)
+    return items
 
 
 async def get_job(session: AsyncSession, job_id: int) -> EvalJobItem:
     row = await _load_job(session, job_id)
-    return EvalJobItem.model_validate(row)
+    item = EvalJobItem.model_validate(row)
+    name_map = await _dataset_name_map(session, {row.dataset_id})
+    item.dataset_name = name_map.get(row.dataset_id)
+    return item
 
 
-async def create_job(
-    session: AsyncSession, req: CreateEvalJobRequest
-) -> EvalJobItem:
+async def _dataset_name_map(
+    session: AsyncSession, dataset_ids: set[int]
+) -> dict[int, str]:
+    if not dataset_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(Dataset.id, Dataset.name).where(Dataset.id.in_(dataset_ids))
+        )
+    ).all()
+    return {r.id: r.name for r in rows}
+
+
+async def create_job(session: AsyncSession, req: CreateEvalJobRequest) -> EvalJobItem:
     await _validate_dataset(session, req.dataset_id)
     _validate_judge(req.judge)
     _validate_cron(req.cron_expr)
@@ -162,11 +180,15 @@ async def trigger_job(
             judge=job.judge,
         )
         mean_score = _to_decimal(
-            (dataset_run.summary or {}).get("mean_score") if dataset_run.summary else None
+            (dataset_run.summary or {}).get("mean_score")
+            if dataset_run.summary
+            else None
         )
         prev = _to_decimal(job.last_score)
         delta = (
-            (mean_score - prev) if (mean_score is not None and prev is not None) else None
+            (mean_score - prev)
+            if (mean_score is not None and prev is not None)
+            else None
         )
         # ds_runner.run_dataset 已 commit；这里重新 attach
         job_run = await session.get(EvalJobRun, jr_id)
@@ -190,9 +212,7 @@ async def trigger_job(
         try:
             await maybe_send_alert(session, job, job_run)
         except Exception:  # noqa: BLE001
-            logger.exception(
-                "eval_alert pipeline raised | job={}", job.id
-            )
+            logger.exception("eval_alert pipeline raised | job={}", job.id)
     except Exception as e:  # noqa: BLE001
         logger.exception("eval_job trigger failed | id={}", job_id)
         # 回滚后只更新失败状态
@@ -242,34 +262,24 @@ async def _load_job(session: AsyncSession, job_id: int) -> EvalJob:
         await session.execute(select(EvalJob).where(EvalJob.id == job_id))
     ).scalar_one_or_none()
     if row is None:
-        raise BusinessError(
-            ResultCode.NotFound, message=f"eval_job 不存在: {job_id}"
-        )
+        raise BusinessError(ResultCode.NotFound, message=f"eval_job 不存在: {job_id}")
     return row
 
 
 async def _validate_dataset(session: AsyncSession, dataset_id: int) -> None:
     exists = (
-        await session.execute(
-            select(Dataset.id).where(Dataset.id == dataset_id)
-        )
+        await session.execute(select(Dataset.id).where(Dataset.id == dataset_id))
     ).scalar_one_or_none()
     if exists is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"dataset 不存在: {dataset_id}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"dataset 不存在: {dataset_id}")
 
 
 async def _validate_unique_key(session: AsyncSession, job_key: str) -> None:
     exists = (
-        await session.execute(
-            select(EvalJob.id).where(EvalJob.job_key == job_key)
-        )
+        await session.execute(select(EvalJob.id).where(EvalJob.job_key == job_key))
     ).scalar_one_or_none()
     if exists is not None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"job_key 已存在: {job_key}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"job_key 已存在: {job_key}")
 
 
 def _validate_judge(judge: str) -> None:

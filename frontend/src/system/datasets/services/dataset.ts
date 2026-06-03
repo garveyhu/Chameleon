@@ -3,31 +3,48 @@ import type { EntityId } from '@/core/types/api';
 import type {
   BulkImportRequest,
   BulkImportResult,
+  CompareRunsResult,
   CreateDatasetRequest,
   DatasetItem,
   DatasetItemRow,
+  DatasetRunDetail,
+  DatasetRunItemRow,
+  DatasetRunRow,
   SampleFromLogsRequest,
   SampleResult,
+  ScoreDistributionResult,
+  UpdateItemRequest,
 } from '@/system/datasets/types/dataset';
 
+const BASE = '/v1/admin/datasets';
+
 export const datasetApi = {
-  list: () => get<DatasetItem[]>('/v1/admin/datasets'),
-  get: (id: EntityId) => get<DatasetItem>(`/v1/admin/datasets/${id}`),
-  create: (req: CreateDatasetRequest) =>
-    post<DatasetItem>('/v1/admin/datasets', req),
+  list: () => get<DatasetItem[]>(BASE),
+  get: (id: EntityId) => get<DatasetItem>(`${BASE}/${id}`),
+  create: (req: CreateDatasetRequest) => post<DatasetItem>(BASE, req),
   update: (id: EntityId, req: Partial<CreateDatasetRequest>) =>
-    post<DatasetItem>(`/v1/admin/datasets/${id}/update`, req),
-  delete: (id: EntityId) =>
-    post<void>(`/v1/admin/datasets/${id}/delete`),
+    post<DatasetItem>(`${BASE}/${id}/update`, req),
+  delete: (id: EntityId) => post<void>(`${BASE}/${id}/delete`),
   listItems: (id: EntityId, limit = 200) =>
-    get<DatasetItemRow[]>(`/v1/admin/datasets/${id}/items`, {
-      params: { limit },
-    }),
+    get<DatasetItemRow[]>(`${BASE}/${id}/items`, { params: { limit } }),
   sampleFromLogs: (id: EntityId, req: SampleFromLogsRequest) =>
-    post<SampleResult>(`/v1/admin/datasets/${id}/sample-from-logs`, req),
+    post<SampleResult>(`${BASE}/${id}/sample-from-logs`, req),
   bulkImport: (id: EntityId, req: BulkImportRequest) =>
-    post<BulkImportResult>(
-      `/v1/admin/datasets/${id}/items/bulk-import`,
-      req,
-    ),
+    post<BulkImportResult>(`${BASE}/${id}/items/bulk-import`, req),
+  /** 人工标注：改某 item 的 expected_output / meta */
+  updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
+    post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),
+
+  // ── runs（实验运行）—— 接出已就绪的 5 个端点 ──
+  listRuns: (datasetId: EntityId) =>
+    get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
+  getRun: (runId: EntityId) => get<DatasetRunDetail>(`${BASE}/runs/${runId}`),
+  listRunItems: (runId: EntityId) =>
+    get<DatasetRunItemRow[]>(`${BASE}/runs/${runId}/items`),
+  compareRuns: (runIds: EntityId[]) =>
+    post<CompareRunsResult>(`${BASE}/runs/compare`, { run_ids: runIds }),
+  scoreDistribution: (runId: EntityId, threshold = 0.5, buckets = 10) =>
+    get<ScoreDistributionResult>(`${BASE}/runs/${runId}/score-distribution`, {
+      params: { threshold, buckets },
+    }),
 };
