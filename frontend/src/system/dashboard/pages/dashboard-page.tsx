@@ -1,170 +1,78 @@
-/** Dashboard 主页：DateRangePicker + 综合指标 + 时序图 + top agents/apps */
+/** 可观测总览 —— 单页多 tab（概览 / 成本），统一区间联动。
+ *
+ * 无大标题：tab 栏 + 时间选择器一行。nav 只保留「仪表盘」一个入口（dashboard:read），
+ * 成本 tab 在页内按 call_logs:read 权限显隐；两路由 /dashboard、/dashboard/cost 渲染同一壳。
+ */
+import { useLocation, useNavigate } from 'react-router-dom';
 
-import { useQuery } from '@tanstack/react-query';
-import { Activity, Bot, KeySquare, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { DateRangePicker } from '@/core/components/common/date-range-picker';
+import { RequirePermission } from '@/core/components/common/permission-guard';
+import { cn } from '@/core/lib/cn';
+import { useAuthStore } from '@/core/stores/auth-store';
+import { useDashboardRange } from '@/system/dashboard/hooks/useDashboardRange';
+import { CostTab } from '@/system/dashboard/pages/tabs/cost-tab';
+import { OverviewTab } from '@/system/dashboard/pages/tabs/overview-tab';
 
-import { DateRangePicker, type DateRange } from '@/core/components/common/date-range-picker';
-import { PageHeader } from '@/core/components/common/page-header';
-import { Spinner } from '@/core/components/common/spinner';
-import { Card, CardContent } from '@/core/components/ui/card';
-import { StatTile } from '@/core/components/ui/stat-tile';
-import { TimeSeriesChart } from '@/core/components/ui/time-series-chart';
-import { formatNumber, formatPercent } from '@/core/lib/format';
-import { dashboardApi } from '@/system/dashboard/services/dashboard';
-import type { OverviewItem } from '@/system/dashboard/types/dashboard';
+type TabKey = 'overview' | 'cost';
 
-const defaultRange = (): DateRange => {
-  const to = new Date();
-  to.setHours(23, 59, 59, 999);
-  const from = new Date();
-  from.setDate(from.getDate() - 6);
-  from.setHours(0, 0, 0, 0);
-  return { from, to };
-};
+const TABS: { key: TabKey; label: string; perm: string; path: string }[] = [
+  { key: 'overview', label: '概览', perm: 'dashboard:read', path: '/dashboard' },
+  { key: 'cost', label: '成本', perm: 'call_logs:read', path: '/dashboard/cost' },
+];
 
 export const DashboardPage = () => {
-  const [range, setRange] = useState<DateRange>(defaultRange);
-  const params = useMemo(
-    () => ({ from_ts: range.from.toISOString(), to_ts: range.to.toISOString() }),
-    [range],
-  );
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hasPermission = useAuthStore(s => s.hasPermission);
+  const { range, setRange, params } = useDashboardRange();
 
-  const overviewQ = useQuery({
-    queryKey: ['dashboard', 'overview', params],
-    queryFn: () => dashboardApi.overview(params),
-  });
-  const tsQ = useQuery({
-    queryKey: ['dashboard', 'timeseries', params],
-    queryFn: () => dashboardApi.timeseries({ ...params, granularity: 'auto' }),
-  });
-  const agentsQ = useQuery({
-    queryKey: ['dashboard', 'top-agents', params],
-    queryFn: () => dashboardApi.topAgents({ ...params, limit: 5 }),
-  });
-  const appsQ = useQuery({
-    queryKey: ['dashboard', 'top-apps', params],
-    queryFn: () => dashboardApi.topApps({ ...params, limit: 5 }),
-  });
+  const visibleTabs = TABS.filter(t => hasPermission(t.perm));
+  const active: TabKey = location.pathname.startsWith('/dashboard/cost')
+    ? 'cost'
+    : 'overview';
+  const activePerm = TABS.find(t => t.key === active)?.perm ?? 'dashboard:read';
 
-  const o: OverviewItem | undefined = overviewQ.data;
-  const delta = (() => {
-    if (!o || o.prev_period_calls === undefined || o.total_calls_in_range === undefined) return null;
-    if (!o.prev_period_calls) return o.total_calls_in_range > 0 ? 1 : 0;
-    return (o.total_calls_in_range - o.prev_period_calls) / o.prev_period_calls;
-  })();
+  const switchTab = (t: TabKey) => {
+    const path = TABS.find(x => x.key === t)?.path;
+    if (path && path !== location.pathname) {
+      navigate({ pathname: path, search: location.search });
+    }
+  };
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <PageHeader title="Dashboard" description="按所选时间区间综合指标" />
+      <div className="mb-4 flex items-center justify-between gap-3">
+        {visibleTabs.length > 1 ? (
+          <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
+            {visibleTabs.map(t => (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => switchTab(t.key)}
+                className={cn(
+                  'rounded-md px-3.5 py-1 text-[13px] transition',
+                  active === t.key
+                    ? 'bg-stone-800 text-white'
+                    : 'text-stone-600 hover:bg-stone-100',
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
         <DateRangePicker value={range} onChange={setRange} />
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        <StatTile
-          label="区间内调用"
-          value={formatNumber(o?.total_calls_in_range ?? o?.total_calls_24h ?? 0)}
-          hint={`上一周期 ${formatNumber(o?.prev_period_calls ?? 0)}`}
-          delta={delta}
-          icon={Activity}
-          tone="primary"
-        />
-        <StatTile
-          label="成功率 (24h)"
-          value={formatPercent(o?.success_rate_24h ?? 1)}
-          hint={`平均 ${(o?.avg_duration_ms_24h ?? 0).toFixed(0)} ms`}
-          icon={Sparkles}
-          tone={
-            (o?.success_rate_24h ?? 1) > 0.95
-              ? 'success'
-              : (o?.success_rate_24h ?? 1) > 0.8
-                ? 'warning'
-                : 'danger'
-          }
-        />
-        <StatTile
-          label="Token 消耗 (24h)"
-          value={formatNumber(
-            (o?.total_prompt_tokens_24h ?? 0) + (o?.total_completion_tokens_24h ?? 0),
-          )}
-          hint={`提示 ${formatNumber(o?.total_prompt_tokens_24h ?? 0)} · 完成 ${formatNumber(o?.total_completion_tokens_24h ?? 0)}`}
-          icon={Bot}
-          tone="primary"
-        />
-        <StatTile
-          label="活跃应用 (24h)"
-          value={formatNumber(o?.active_apps_24h ?? 0)}
-          hint={`活跃 agent ${o?.active_agents_24h ?? 0}`}
-          icon={KeySquare}
-          tone="primary"
-        />
-      </div>
-
-      <div className="mt-6 grid grid-cols-3 gap-4">
-        <Card className="col-span-2">
-          <CardContent className="pt-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-stone-900">调用趋势</h3>
-              <div className="flex items-center gap-2 text-[11px] text-stone-400">
-                {tsQ.data?.granularity ? <span>按 {tsQ.data.granularity}</span> : null}
-                {tsQ.isLoading && <Spinner size="sm" />}
-              </div>
-            </div>
-            <TimeSeriesChart
-              data={tsQ.data?.points ?? []}
-              xKey="ts"
-              height={256}
-              series={[
-                { dataKey: 'total', name: '总调用', color: 'var(--color-primary-600)' },
-                { dataKey: 'errors', name: '错误数', color: '#ef4444' },
-              ]}
-              xTickFormatter={t =>
-                tsQ.data?.granularity === 'day'
-                  ? new Date(t).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-                  : new Date(t).toLocaleTimeString('zh-CN', { hour: '2-digit' })
-              }
-              labelFormatter={t => new Date(t).toLocaleString('zh-CN')}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-5">
-            <h3 className="mb-3 text-sm font-medium text-stone-900">Top Agents</h3>
-            <ul className="space-y-2">
-              {(agentsQ.data || []).map(a => (
-                <li key={a.agent_key} className="flex items-center justify-between text-sm">
-                  <span className="font-mono text-stone-700">{a.agent_key}</span>
-                  <span className="text-stone-500">{formatNumber(a.count)}</span>
-                </li>
-              ))}
-              {agentsQ.data?.length === 0 && (
-                <li className="py-4 text-center text-xs text-stone-400">暂无数据</li>
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="mt-4">
-        <Card>
-          <CardContent className="pt-5">
-            <h3 className="mb-3 text-sm font-medium text-stone-900">Top Apps</h3>
-            <ul className="space-y-2">
-              {(appsQ.data || []).map(a => (
-                <li key={a.app_id} className="flex items-center justify-between text-sm">
-                  <span className="font-mono text-stone-700">{a.app_id}</span>
-                  <span className="text-stone-500">{formatNumber(a.count)}</span>
-                </li>
-              ))}
-              {appsQ.data?.length === 0 && (
-                <li className="py-4 text-center text-xs text-stone-400">暂无数据</li>
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+      <RequirePermission perm={activePerm}>
+        {active === 'cost' ? (
+          <CostTab params={params} />
+        ) : (
+          <OverviewTab params={params} />
+        )}
+      </RequirePermission>
     </div>
   );
 };
