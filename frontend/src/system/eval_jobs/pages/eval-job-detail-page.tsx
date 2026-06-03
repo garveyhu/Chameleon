@@ -1,29 +1,54 @@
-/** Eval Job 详情页 —— 概览 + trend chart + 最近 runs 表
- *
- * 设计：
- *  - Header：返回 / job_key / 立即触发 / 编辑 / 启用切换
- *  - 4 张卡片：cron / dataset / judge / alert
- *  - SVG trend chart：最近 30 次 mean_score
- *  - 表格：runs 列表
- */
+/** 评测任务详情页 —— 概览信息卡 + 分数趋势 + 运行历史 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Pencil, Play } from 'lucide-react';
-import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { SectionCard } from '@/core/components/table';
+import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { Card, CardContent } from '@/core/components/ui/card';
+import { TimeSeriesChart } from '@/core/components/ui/time-series-chart';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { formatScore, parseScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
 import { EvalJobFormModal } from '@/system/eval_jobs/components/eval-job-form-modal';
 import { evalJobApi } from '@/system/eval_jobs/services/eval-job';
-import type {
-  EvalJobRunItem,
-  UpdateEvalJobPayload,
+import {
+  CRON_CUSTOM_SENTINEL,
+  CRON_PRESETS,
+  type EvalJobItem,
+  type EvalJobRunItem,
+  type UpdateEvalJobPayload,
 } from '@/system/eval_jobs/types/eval-job';
+import { useState } from 'react';
+
+const cronLabel = (expr: string): { label: string; mono: boolean } => {
+  const p = CRON_PRESETS.find(
+    x => x.value === expr && x.value !== CRON_CUSTOM_SENTINEL,
+  );
+  return p ? { label: p.label, mono: false } : { label: expr, mono: true };
+};
+
+const TRIGGER_LABEL: Record<string, string> = {
+  cron: '定时',
+  manual: '手动',
+  api: '接口',
+};
+const STATUS_LABEL: Record<string, string> = {
+  pending: '等待',
+  running: '运行中',
+  success: '成功',
+  failed: '失败',
+  cancelled: '已取消',
+};
+const statusBg = (s: string): string =>
+  s === 'success'
+    ? 'bg-emerald-50 text-emerald-700'
+    : s === 'failed'
+      ? 'bg-rose-50 text-rose-700'
+      : 'bg-stone-50 text-stone-600';
 
 export const EvalJobDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +61,6 @@ export const EvalJobDetailPage = () => {
     queryFn: () => evalJobApi.get(jobId),
     enabled: !!jobId,
   });
-
   const runsQ = useQuery({
     queryKey: ['eval-job-runs', jobId],
     queryFn: () => evalJobApi.listRuns(jobId, 50),
@@ -54,34 +78,26 @@ export const EvalJobDetailPage = () => {
       setEditOpen(false);
     },
   });
-
   const trigMut = useMutation({
     mutationFn: () => evalJobApi.trigger(jobId),
     onSuccess: r => {
-      const score =
-        r.mean_score !== null ? Number(r.mean_score).toFixed(4) : 'n/a';
-      toast.success(`触发完成 · ${r.status} · 分数 ${score}`);
+      toast.success(`触发完成 · ${r.status} · 分数 ${formatScore(r.mean_score)}`);
       qc.invalidateQueries({ queryKey: ['eval-job', jobId] });
       qc.invalidateQueries({ queryKey: ['eval-job-runs', jobId] });
     },
-    onError: (e: unknown) => {
-      toast.error((e as { message?: string })?.message || '触发失败');
-    },
+    onError: (e: unknown) =>
+      toast.error((e as { message?: string })?.message || '触发失败'),
   });
 
   if (!jobId) {
-    return (
-      <SectionCard>
-        <div className="p-6 text-sm text-stone-500">非法的 job id</div>
-      </SectionCard>
-    );
+    return <div className="p-6 text-sm text-stone-500">非法的任务编号</div>;
   }
 
   const job = jobQ.data;
   const runs = runsQ.data ?? [];
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex items-center gap-3">
         <Link
           to="/eval-jobs"
@@ -109,14 +125,10 @@ export const EvalJobDetailPage = () => {
                   : 'bg-stone-50 text-stone-500',
               )}
             >
-              {job.enabled ? '启用' : '禁用'}
+              {job.enabled ? '启用' : '停用'}
             </Badge>
             <span className="ml-auto flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setEditOpen(true)}
-              >
+              <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
                 <Pencil className="mr-1 h-3 w-3" /> 编辑
               </Button>
               <Button
@@ -125,7 +137,7 @@ export const EvalJobDetailPage = () => {
                 disabled={!job.enabled || trigMut.isPending}
               >
                 <Play className="mr-1 h-3 w-3" />
-                {trigMut.isPending ? '触发中…' : '立即触发'}
+                {trigMut.isPending ? '运行中…' : '立即运行'}
               </Button>
             </span>
           </>
@@ -134,27 +146,25 @@ export const EvalJobDetailPage = () => {
         )}
       </div>
 
-      {job && <OverviewCards job={job} />}
+      {job && <InfoGrid job={job} />}
 
-      <SectionCard className="!p-4">
-        <h3 className="mb-3 text-[13px] font-medium text-stone-800">
-          mean_score 趋势（最近 {runs.length} 次）
-        </h3>
-        <TrendChart runs={runs} />
-      </SectionCard>
+      <Card>
+        <CardContent className="pt-5">
+          <h3 className="mb-3 text-[13px] font-medium text-stone-800">
+            分数趋势（最近 {runs.length} 次）
+          </h3>
+          <TrendChart runs={runs} />
+        </CardContent>
+      </Card>
 
-      <SectionCard className="!p-4">
-        <h3 className="mb-3 text-[13px] font-medium text-stone-800">
-          运行历史
-        </h3>
-        {runs.length === 0 ? (
-          <div className="py-8 text-center text-[12px] text-stone-400">
-            还没有运行记录
-          </div>
-        ) : (
-          <RunsTable runs={runs} />
-        )}
-      </SectionCard>
+      <Card>
+        <CardContent className="pt-5">
+          <h3 className="mb-3 text-[13px] font-medium text-stone-800">
+            运行历史
+          </h3>
+          <RunsTable runs={runs} loading={runsQ.isLoading && !runsQ.data} />
+        </CardContent>
+      </Card>
 
       <EvalJobFormModal
         open={editOpen}
@@ -167,62 +177,54 @@ export const EvalJobDetailPage = () => {
   );
 };
 
-// ── 概览卡片 ──────────────────────────────────────────
-
-interface JobOverviewCardsProps {
-  job: NonNullable<ReturnType<typeof useQuery>['data']> extends never
-    ? never
-    : import('@/system/eval_jobs/types/eval-job').EvalJobItem;
-}
-
-const OverviewCards: React.FC<JobOverviewCardsProps> = ({ job }) => {
-  const cards = [
-    { label: 'Cron', value: job.cron_expr, mono: true },
-    { label: 'Dataset', value: `#${job.dataset_id}`, mono: true },
-    { label: 'Judge', value: job.judge },
-    { label: 'Target', value: `${job.target_kind} / ${job.target_key ?? '—'}` },
-    {
-      label: '最近分数',
-      value:
-        job.last_score !== null ? Number(job.last_score).toFixed(4) : '—',
-      mono: true,
-    },
-    {
-      label: '最近触发',
-      value: job.last_run_at ? formatDateTime(job.last_run_at) : '—',
-      mono: true,
-    },
-    {
-      label: 'Alert',
-      value: job.alert_config
-        ? `${job.alert_config.kind} · 阈值 ${job.alert_config.regression_threshold ?? 0.1}`
-        : '未启用',
-    },
-    {
-      label: 'Updated',
-      value: formatDateTime(job.updated_at),
-      mono: true,
-    },
-  ];
-
+const InfoGrid = ({ job }: { job: EvalJobItem }) => {
+  const c = cronLabel(job.cron_expr);
+  const lastScore = parseScore(job.last_score);
+  const cards: { label: string; value: string; mono?: boolean; cls?: string }[] =
+    [
+      { label: '计划', value: c.label, mono: c.mono },
+      { label: '数据集', value: `#${job.dataset_id}`, mono: true },
+      { label: '评分器', value: job.judge },
+      {
+        label: '被测对象',
+        value: `${job.target_kind === 'graph' ? '工作流' : '智能体'} / ${job.target_key ?? '—'}`,
+      },
+      {
+        label: '最近分数',
+        value: formatScore(job.last_score),
+        mono: true,
+        cls: scoreColor(lastScore),
+      },
+      {
+        label: '最近运行',
+        value: job.last_run_at ? formatDateTime(job.last_run_at) : '—',
+        mono: true,
+      },
+      {
+        label: '告警',
+        value: job.alert_config
+          ? `${job.alert_config.kind === 'slack' ? 'Slack' : 'Webhook'} · 阈值 ${job.alert_config.regression_threshold ?? 0.1}`
+          : '未启用',
+      },
+      { label: '更新时间', value: formatDateTime(job.updated_at), mono: true },
+    ];
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {cards.map(c => (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {cards.map(card => (
         <div
-          key={c.label}
+          key={card.label}
           className="rounded-md border border-stone-200/70 bg-white px-3 py-2"
         >
-          <div className="text-[10.5px] uppercase tracking-wider text-stone-400">
-            {c.label}
-          </div>
+          <div className="text-[10.5px] text-stone-400">{card.label}</div>
           <div
             className={cn(
               'mt-0.5 truncate text-[12.5px] text-stone-800',
-              c.mono && 'font-mono tnum',
+              card.mono && 'font-mono tnum',
+              card.cls,
             )}
-            title={c.value}
+            title={card.value}
           >
-            {c.value}
+            {card.value}
           </div>
         </div>
       ))}
@@ -230,197 +232,132 @@ const OverviewCards: React.FC<JobOverviewCardsProps> = ({ job }) => {
   );
 };
 
-// ── trend chart ──────────────────────────────────────
-
-interface TrendChartProps {
-  runs: EvalJobRunItem[];
-}
-
-const TrendChart: React.FC<TrendChartProps> = ({ runs }) => {
-  // runs 是 desc，画图要 asc
-  const pts = useMemo(() => {
-    return [...runs]
-      .reverse()
-      .filter(r => r.mean_score !== null)
-      .map(r => ({
-        id: r.id,
-        score: Number(r.mean_score),
-        status: r.status,
-        alert: r.alert_sent,
-      }));
-  }, [runs]);
-
-  if (pts.length === 0) {
-    return (
-      <div className="py-10 text-center text-[12px] text-stone-400">
-        暂无评分数据
-      </div>
-    );
-  }
-
-  const W = 720;
-  const H = 160;
-  const padX = 28;
-  const padY = 16;
-  const innerW = W - padX * 2;
-  const innerH = H - padY * 2;
-  const stepX = pts.length > 1 ? innerW / (pts.length - 1) : 0;
-
-  const toY = (s: number) => padY + innerH - s * innerH;
-  const linePath = pts
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${padX + i * stepX} ${toY(p.score)}`)
-    .join(' ');
-
+const TrendChart = ({ runs }: { runs: EvalJobRunItem[] }) => {
+  const points = [...runs]
+    .reverse()
+    .filter(r => r.mean_score !== null)
+    .map(r => ({ ts: r.created_at, score: parseScore(r.mean_score) ?? 0 }));
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      width="100%"
-      height={H}
-      className="text-stone-400"
-    >
-      {/* 横向 grid */}
-      {[0, 0.25, 0.5, 0.75, 1].map(v => (
-        <g key={v}>
-          <line
-            x1={padX}
-            x2={W - padX}
-            y1={toY(v)}
-            y2={toY(v)}
-            stroke="currentColor"
-            strokeOpacity={0.15}
-            strokeDasharray="2 3"
-          />
-          <text
-            x={padX - 6}
-            y={toY(v) + 3}
-            fontSize="9"
-            textAnchor="end"
-            fill="currentColor"
-          >
-            {v.toFixed(2)}
-          </text>
-        </g>
-      ))}
-      {/* 折线 */}
-      <path
-        d={linePath}
-        fill="none"
-        stroke="var(--color-primary-500, #2563eb)"
-        strokeWidth={1.5}
-      />
-      {/* 点 */}
-      {pts.map((p, i) => {
-        const color =
-          p.status === 'success'
-            ? '#10b981'
-            : p.status === 'failed'
-              ? '#ef4444'
-              : '#a8a29e';
-        return (
-          <g key={String(p.id)}>
-            <circle
-              cx={padX + i * stepX}
-              cy={toY(p.score)}
-              r={3}
-              fill={color}
-              stroke="white"
-              strokeWidth={1}
-            />
-            {p.alert && (
-              <line
-                x1={padX + i * stepX}
-                x2={padX + i * stepX}
-                y1={padY}
-                y2={H - padY}
-                stroke="#f59e0b"
-                strokeOpacity={0.6}
-                strokeDasharray="2 2"
-              />
-            )}
-          </g>
-        );
-      })}
-    </svg>
+    <TimeSeriesChart
+      data={points}
+      xKey="ts"
+      height={180}
+      series={[
+        { dataKey: 'score', name: '平均分', color: 'var(--color-primary-600)' },
+      ]}
+      xTickFormatter={ts =>
+        new Date(ts).toLocaleDateString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+        })
+      }
+      labelFormatter={ts => new Date(ts).toLocaleString('zh-CN')}
+      empty="暂无评分数据"
+    />
   );
 };
 
-// ── runs table ───────────────────────────────────────
-
-interface RunsTableProps {
+const RunsTable = ({
+  runs,
+  loading,
+}: {
   runs: EvalJobRunItem[];
-}
-
-const RunsTable: React.FC<RunsTableProps> = ({ runs }) => (
-  <table className="w-full text-[12px]">
-    <thead className="text-[10.5px] uppercase tracking-wider text-stone-500">
-      <tr>
-        <th className="px-2 py-1.5 text-left">时间</th>
-        <th className="px-2 py-1.5 text-left">触发</th>
-        <th className="px-2 py-1.5 text-left">状态</th>
-        <th className="px-2 py-1.5 text-right">mean_score</th>
-        <th className="px-2 py-1.5 text-right">delta</th>
-        <th className="px-2 py-1.5 text-left">alert</th>
-      </tr>
-    </thead>
-    <tbody>
-      {runs.map(r => {
-        const delta = r.delta_score !== null ? Number(r.delta_score) : null;
-        const mean = r.mean_score !== null ? Number(r.mean_score) : null;
+  loading: boolean;
+}) => {
+  const cols: DataTableColumn<EvalJobRunItem>[] = [
+    {
+      key: 'created_at',
+      header: '时间',
+      render: r => (
+        <span className="font-mono text-[10.5px] text-stone-500">
+          {formatDateTime(r.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: 'triggered_by',
+      header: '触发方式',
+      width: 90,
+      render: r => (
+        <span className="text-stone-600">
+          {TRIGGER_LABEL[r.triggered_by] ?? r.triggered_by}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: '状态',
+      width: 88,
+      render: r => (
+        <Badge
+          variant="outline"
+          className={cn('text-[10.5px]', statusBg(r.status))}
+        >
+          {STATUS_LABEL[r.status] ?? r.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'mean_score',
+      header: '平均分',
+      align: 'right',
+      width: 84,
+      render: r => (
+        <span className={cn('tnum', scoreColor(parseScore(r.mean_score)))}>
+          {formatScore(r.mean_score)}
+        </span>
+      ),
+    },
+    {
+      key: 'delta_score',
+      header: '分数变化',
+      align: 'right',
+      width: 92,
+      render: r => {
+        const d = parseScore(r.delta_score);
+        if (d === null) return <span className="text-stone-400">—</span>;
         return (
-          <tr key={String(r.id)} className="border-t border-stone-200/70">
-            <td className="px-2 py-1.5 font-mono text-[10.5px] text-stone-500">
-              {formatDateTime(r.created_at)}
-            </td>
-            <td className="px-2 py-1.5 text-stone-600">{r.triggered_by}</td>
-            <td className="px-2 py-1.5">
-              <Badge
-                variant="outline"
-                className={cn(
-                  'text-[10.5px]',
-                  r.status === 'success'
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : r.status === 'failed'
-                      ? 'bg-rose-50 text-rose-700'
-                      : 'bg-stone-50 text-stone-600',
-                )}
-              >
-                {r.status}
-              </Badge>
-            </td>
-            <td className="px-2 py-1.5 text-right font-mono tnum text-stone-800">
-              {mean !== null ? mean.toFixed(4) : '—'}
-            </td>
-            <td
-              className={cn(
-                'px-2 py-1.5 text-right font-mono tnum',
-                delta === null
-                  ? 'text-stone-400'
-                  : delta < 0
-                    ? 'text-rose-600'
-                    : delta > 0
-                      ? 'text-emerald-600'
-                      : 'text-stone-600',
-              )}
-            >
-              {delta === null
-                ? '—'
-                : `${delta >= 0 ? '+' : ''}${delta.toFixed(4)}`}
-            </td>
-            <td className="px-2 py-1.5">
-              {r.alert_sent ? (
-                <Badge
-                  variant="outline"
-                  className="bg-amber-50 text-[10.5px] text-amber-700"
-                >
-                  sent
-                </Badge>
-              ) : (
-                <span className="text-[10.5px] text-stone-400">—</span>
-              )}
-            </td>
-          </tr>
+          <span
+            className={cn(
+              'tnum',
+              d < 0
+                ? 'text-rose-600'
+                : d > 0
+                  ? 'text-emerald-600'
+                  : 'text-stone-600',
+            )}
+          >
+            {d >= 0 ? '+' : ''}
+            {d.toFixed(2)}
+          </span>
         );
-      })}
-    </tbody>
-  </table>
-);
+      },
+    },
+    {
+      key: 'alert_sent',
+      header: '告警',
+      width: 72,
+      render: r =>
+        r.alert_sent ? (
+          <Badge
+            variant="outline"
+            className="bg-amber-50 text-[10.5px] text-amber-700"
+          >
+            已发送
+          </Badge>
+        ) : (
+          <span className="text-[10.5px] text-stone-400">—</span>
+        ),
+    },
+  ];
+  return (
+    <DataTable
+      columns={cols}
+      rows={runs}
+      rowKey="id"
+      loading={loading}
+      emptyText="还没有运行记录"
+      minWidth={560}
+    />
+  );
+};

@@ -1,11 +1,11 @@
-/** Datasets 列表页 —— 列表 + 新建 + 删除（P21.1 PR #61） */
+/** 数据集列表页 —— DataTable + 新建 + 删除 */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Database, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { SectionCard } from '@/core/components/table';
+import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import {
@@ -31,6 +31,8 @@ export const DatasetsPage = () => {
   const nav = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [sortKey, setSortKey] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const listQ = useQuery({
     queryKey: ['datasets'],
@@ -47,8 +49,8 @@ export const DatasetsPage = () => {
 
   const handleDelete = async (ds: DatasetItem) => {
     const ok = await confirm({
-      title: `删除 dataset "${ds.name}"？`,
-      description: `共 ${ds.item_count} 条 items；删除后所有 dataset_runs 关联失效（CASCADE）。不可恢复。`,
+      title: `删除数据集「${ds.name}」？`,
+      description: `共 ${ds.item_count} 条样本；删除后该数据集的全部样本与历史运行记录一并清除，不可恢复。`,
       confirmText: '删除',
       danger: true,
     });
@@ -56,85 +58,116 @@ export const DatasetsPage = () => {
     deleteMut.mutate(ds.id);
   };
 
+  const cols: DataTableColumn<DatasetItem>[] = [
+    {
+      key: 'name',
+      header: '名称',
+      render: r => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-stone-800">{r.name}</div>
+          {r.description && (
+            <div className="truncate text-[11px] text-stone-400">
+              {r.description}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'item_count',
+      header: '样本数',
+      align: 'right',
+      width: 92,
+      sortable: true,
+      render: r => (
+        <span
+          className={cn(
+            'tnum',
+            r.item_count > 0 ? 'text-stone-700' : 'text-stone-400',
+          )}
+        >
+          {r.item_count}
+        </span>
+      ),
+    },
+    {
+      key: 'created_at',
+      header: '创建时间',
+      align: 'right',
+      width: 168,
+      render: r => (
+        <span className="text-[11.5px] text-stone-500">
+          {formatDateTime(r.created_at)}
+        </span>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      align: 'right',
+      width: 56,
+      render: r => (
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            handleDelete(r);
+          }}
+          className="rounded p-1 text-stone-400 hover:bg-rose-50 hover:text-rose-600"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      ),
+    },
+  ];
+
+  const rows = [...(listQ.data ?? [])].sort((a, b) => {
+    if (sortKey === 'item_count') {
+      return sortOrder === 'asc'
+        ? a.item_count - b.item_count
+        : b.item_count - a.item_count;
+    }
+    return 0;
+  });
+
   return (
-    <div className="space-y-3">
-      <header className="flex items-center justify-between">
+    <div>
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Database className="h-4 w-4 text-stone-500" />
-          <h1 className="text-[15px] font-medium text-stone-800">
-            Datasets
-          </h1>
+          <h1 className="text-[14px] font-medium text-stone-800">数据集</h1>
           <span className="text-[11px] text-stone-400">
-            {listQ.data?.length ?? '...'} 个
+            {listQ.data?.length ?? '…'} 个
           </span>
         </div>
         <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> 新建 Dataset
+          <Plus className="mr-1 h-3.5 w-3.5" /> 新建数据集
         </Button>
-      </header>
+      </div>
 
-      <SectionCard className="!p-0">
-        <table className="w-full text-[12.5px]">
-          <thead className="bg-warm-2/40 text-[11px] text-stone-500">
-            <tr>
-              <th className="px-3 py-2 text-left">名称</th>
-              <th className="px-3 py-2 text-left">描述</th>
-              <th className="px-3 py-2 text-right">items</th>
-              <th className="px-3 py-2 text-right">创建</th>
-              <th className="px-3 py-2 text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {(listQ.data ?? []).map(ds => (
-              <tr
-                key={String(ds.id)}
-                className="cursor-pointer hover:bg-warm-2/30"
-                onClick={() => nav(`/datasets/${ds.id}`)}
-              >
-                <td className="px-3 py-2 font-medium text-stone-800">
-                  {ds.name}
-                </td>
-                <td className="px-3 py-2 text-stone-500">
-                  {ds.description ?? '—'}
-                </td>
-                <td
-                  className={cn(
-                    'px-3 py-2 text-right font-mono tnum',
-                    ds.item_count > 0 ? 'text-stone-700' : 'text-stone-400',
-                  )}
-                >
-                  {ds.item_count}
-                </td>
-                <td className="px-3 py-2 text-right text-[11.5px] text-stone-500">
-                  {formatDateTime(ds.created_at)}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <button
-                    type="button"
-                    onClick={e => {
-                      e.stopPropagation();
-                      handleDelete(ds);
-                    }}
-                    className="rounded p-1 text-stone-400 hover:bg-rose-50 hover:text-rose-600"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {listQ.data?.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-3 py-12 text-center text-[12px] text-stone-400"
-                >
-                  暂无 dataset，点右上「新建」开始
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </SectionCard>
+      <DataTable
+        columns={cols}
+        rows={rows}
+        rowKey="id"
+        sortKey={sortKey}
+        sortOrder={sortOrder}
+        onSortChange={(k, o) => {
+          setSortKey(k);
+          setSortOrder(o);
+        }}
+        loading={listQ.isLoading}
+        onRowClick={r => nav(`/datasets/${r.id}`)}
+        emptyText="暂无数据集"
+        emptyExtra={
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setCreateOpen(true)}
+          >
+            新建数据集
+          </Button>
+        }
+      />
 
       {createOpen && (
         <CreateModal
@@ -170,7 +203,7 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
     <Modal open onOpenChange={open => !open && onClose()}>
       <ModalContent>
         <ModalHeader>
-          <ModalTitle>新建 Dataset</ModalTitle>
+          <ModalTitle>新建数据集</ModalTitle>
         </ModalHeader>
         <div className="space-y-3 px-4 py-3">
           <div>

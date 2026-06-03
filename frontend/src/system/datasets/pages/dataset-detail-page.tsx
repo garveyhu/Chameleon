@@ -1,11 +1,11 @@
-/** Dataset 详情页 —— items 表 + 采样 / import 入口（P21.1 PR #61） */
+/** 数据集详情页 —— 样本（items）表 + 采样 / 导入入口（运行 Runs / 对比见 P2） */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { SectionCard } from '@/core/components/table';
+import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
@@ -27,7 +27,6 @@ export const DatasetDetailPage = () => {
     queryFn: () => datasetApi.get(dsId),
     enabled: !!dsId,
   });
-
   const itemsQ = useQuery({
     queryKey: ['datasets', dsId, 'items'],
     queryFn: () => datasetApi.listItems(dsId, 200),
@@ -40,21 +39,71 @@ export const DatasetDetailPage = () => {
   };
 
   if (!dsId) {
-    return (
-      <SectionCard>
-        <div className="p-6 text-sm text-stone-500">非法的 dataset 编号</div>
-      </SectionCard>
-    );
+    return <div className="p-6 text-sm text-stone-500">非法的数据集编号</div>;
   }
 
+  const cols: DataTableColumn<DatasetItemRow>[] = [
+    {
+      key: 'source',
+      header: '来源',
+      width: 96,
+      render: it => {
+        const isLog = !!it.source_call_log_id;
+        return (
+          <span
+            className={cn(
+              'rounded px-1.5 py-0.5 text-[10.5px]',
+              isLog
+                ? 'bg-emerald-50 text-emerald-700'
+                : 'bg-indigo-50 text-indigo-700',
+            )}
+          >
+            {isLog ? '日志采样' : '手工导入'}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'input',
+      header: '输入预览',
+      render: it => (
+        <span className="truncate font-mono text-[11.5px] text-stone-700">
+          {extractPreview(it.input_payload) || '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'expected',
+      header: '预期输出',
+      render: it => (
+        <span className="truncate text-[11.5px] text-stone-500">
+          {it.expected_output
+            ? JSON.stringify(it.expected_output).slice(0, 80)
+            : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'sampled',
+      header: '采样时间',
+      align: 'right',
+      width: 160,
+      render: it => (
+        <span className="text-[11px] text-stone-500">
+          {formatDateTime(String(sampledAt(it)))}
+        </span>
+      ),
+    },
+  ];
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <header className="flex items-center gap-3">
         <Link
           to="/datasets"
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Datasets
+          <ArrowLeft className="h-3.5 w-3.5" /> 数据集
         </Link>
         <span className="text-stone-300">/</span>
         {dsQ.isLoading ? (
@@ -65,7 +114,7 @@ export const DatasetDetailPage = () => {
               {dsQ.data.name}
             </span>
             <span className="text-[11.5px] text-stone-500">
-              · {dsQ.data.item_count} items
+              · {dsQ.data.item_count} 样本
             </span>
             <span className="ml-auto" />
             <Button
@@ -84,33 +133,14 @@ export const DatasetDetailPage = () => {
         )}
       </header>
 
-      <SectionCard className="!p-0">
-        <table className="w-full text-[12.5px]">
-          <thead className="bg-warm-2/40 text-[11px] text-stone-500">
-            <tr>
-              <th className="px-3 py-2 text-left">来源</th>
-              <th className="px-3 py-2 text-left">input preview</th>
-              <th className="px-3 py-2 text-left">expected</th>
-              <th className="px-3 py-2 text-right">采样时间</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {(itemsQ.data ?? []).map(it => (
-              <ItemRow key={String(it.id)} item={it} />
-            ))}
-            {itemsQ.data?.length === 0 && (
-              <tr>
-                <td
-                  colSpan={4}
-                  className="px-3 py-12 text-center text-[12px] text-stone-400"
-                >
-                  暂无 items；点右上「采样」或「导入」开始
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </SectionCard>
+      <DataTable
+        columns={cols}
+        rows={itemsQ.data ?? []}
+        rowKey="id"
+        loading={itemsQ.isLoading}
+        emptyText="暂无样本，点右上「从日志采样」或「手工导入」开始"
+        minWidth={640}
+      />
 
       {sampleOpen && (
         <SampleFromLogsModal
@@ -136,48 +166,10 @@ export const DatasetDetailPage = () => {
   );
 };
 
-const ItemRow = ({ item }: { item: DatasetItemRow }) => {
-  const source =
-    item.source_call_log_id
-      ? 'call_log'
-      : ((item.meta as Record<string, unknown> | null)?.source as
-          | string
-          | undefined) ?? 'manual';
-  const preview = extractPreview(item.input_payload);
-  const expectedText = item.expected_output
-    ? JSON.stringify(item.expected_output).slice(0, 80)
-    : '—';
-  const sampledAt =
-    (item.meta as Record<string, unknown> | null)?.sampled_at ??
-    (item.meta as Record<string, unknown> | null)?.imported_at ??
-    item.created_at;
-
-  return (
-    <tr className="hover:bg-warm-2/30">
-      <td className="px-3 py-2">
-        <span
-          className={cn(
-            'rounded px-1.5 py-0.5 text-[10.5px] font-mono uppercase',
-            source === 'call_log'
-              ? 'bg-emerald-50 text-emerald-700'
-              : 'bg-indigo-50 text-indigo-700',
-          )}
-        >
-          {source}
-        </span>
-      </td>
-      <td className="px-3 py-2 font-mono text-[11.5px] text-stone-700">
-        {preview || '—'}
-      </td>
-      <td className="px-3 py-2 text-[11.5px] text-stone-500">
-        {expectedText}
-      </td>
-      <td className="px-3 py-2 text-right text-[11px] text-stone-500">
-        {formatDateTime(String(sampledAt))}
-      </td>
-    </tr>
-  );
-};
+function sampledAt(item: DatasetItemRow): unknown {
+  const meta = item.meta as Record<string, unknown> | null;
+  return meta?.sampled_at ?? meta?.imported_at ?? item.created_at;
+}
 
 function extractPreview(payload: Record<string, unknown>): string {
   for (const v of Object.values(payload)) {

@@ -124,7 +124,7 @@ export const DOMAINS: NavDomain[] = [
         i18nKey: 'menu.group.quality',
         fallbackTitle: '质量 & 成本',
         children: [
-          { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: 'Datasets', perm: 'datasets:read' },
+          { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: '数据集', perm: 'datasets:read' },
           { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
         ],
       },
