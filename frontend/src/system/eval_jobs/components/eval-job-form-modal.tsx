@@ -41,6 +41,22 @@ import {
   CRON_PRESETS,
 } from '@/system/eval_jobs/types/eval-job';
 
+/** G2：评分方式中文名 + 说明（量纲提示）。GSB / DSL 模式待后续期加入下拉 */
+const JUDGE_META: Record<string, { label: string; desc: string }> = {
+  exact_match: {
+    label: '精确匹配',
+    desc: '模型回答与理想回答完全一致才算对（0 / 1 二值）',
+  },
+  contains: {
+    label: '包含匹配',
+    desc: '理想回答作为子串出现在模型回答里即算对（0 / 1 二值）',
+  },
+  llm_judge: {
+    label: 'AI 评分',
+    desc: '由大模型对比理想 / 实际回答打分并给出理由（语义级 0–1 连续分）',
+  },
+};
+
 interface DatasetItem {
   id: EntityId;
   name: string;
@@ -258,7 +274,7 @@ export const EvalJobFormModal = ({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Judge</Label>
+              <Label>评分方式</Label>
               <Select value={judge} onValueChange={setJudge}>
                 <SelectTrigger>
                   <SelectValue />
@@ -266,11 +282,16 @@ export const EvalJobFormModal = ({
                 <SelectContent>
                   {(judgesQ.data ?? ['exact_match']).map(j => (
                     <SelectItem key={j} value={j}>
-                      {j}
+                      {JUDGE_META[j]?.label ?? j}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {JUDGE_META[judge] && (
+                <p className="text-[10.5px] leading-snug text-stone-400">
+                  {JUDGE_META[judge].desc}
+                </p>
+              )}
             </div>
           </div>
 
