@@ -36,6 +36,7 @@ from chameleon.system.datasets.schemas import (
     CompareItemCell,
     CompareRunsResult,
     CreateDatasetRequest,
+    CreateItemRequest,
     DatasetItemItem,
     DatasetRunDetail,
     DatasetRunItemDetail,
@@ -200,6 +201,70 @@ async def list_items(
         .all()
     )
     return [DatasetItemItem.model_validate(r) for r in rows]
+
+
+async def create_item(
+    session: AsyncSession, dataset_id: int, req: CreateItemRequest
+) -> DatasetItemItem:
+    """电子表格单条新增样本（H2）
+
+    与 bulk-import 一致：对 input_payload / expected_output 跑一次 PII 策略
+    （默认 mask），落库后重算冗余 item_count。
+
+    Raises:
+        BusinessError: dataset 不存在，或 drop 策略下输入命中 PII 被整条丢弃。
+    """
+    ds = await _load_dataset(session, dataset_id)
+    pii_strategy: PiiStrategy = req.pii_strategy  # type: ignore[assignment]
+    masked_input, dropped_in = apply_pii_strategy_dict(req.input_payload, pii_strategy)
+    masked_expected, dropped_out = apply_pii_strategy_dict(
+        req.expected_output, pii_strategy
+    )
+    if dropped_in or dropped_out:
+        raise BusinessError(
+            ResultCode.Fail,
+            message="输入或预期输出命中 PII，drop 策略下无法新增",
+        )
+    item = DatasetItem(
+        dataset_id=ds.id,
+        source_call_log_id=None,
+        input_payload=masked_input or {},
+        expected_output=masked_expected,
+        meta={
+            **(req.meta or {}),
+            "source": "manual_add",
+            "pii_strategy": pii_strategy,
+            "added_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
+    session.add(item)
+    await session.flush()
+    await session.refresh(item)
+    ds.item_count = await _count_items(session, ds.id)
+    out = DatasetItemItem.model_validate(item)
+    await session.commit()
+    return out
+
+
+async def delete_item(session: AsyncSession, item_id: int) -> None:
+    """电子表格单条删除样本（H2）
+
+    删除后回查 dataset_id 重算冗余 item_count，避免列表角标漂移。
+    """
+    row = (
+        await session.execute(select(DatasetItem).where(DatasetItem.id == item_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(ResultCode.Fail, message=f"dataset_item 不存在: {item_id}")
+    dataset_id = row.dataset_id
+    await session.execute(delete(DatasetItem).where(DatasetItem.id == item_id))
+    await session.flush()
+    ds = (
+        await session.execute(select(Dataset).where(Dataset.id == dataset_id))
+    ).scalar_one_or_none()
+    if ds is not None:
+        ds.item_count = await _count_items(session, dataset_id)
+    await session.commit()
 
 
 async def update_item(
@@ -718,3 +783,14 @@ async def _load_dataset(session: AsyncSession, dataset_id: int) -> Dataset:
     if row is None:
         raise BusinessError(ResultCode.Fail, message=f"dataset 不存在: {dataset_id}")
     return row
+
+
+async def _count_items(session: AsyncSession, dataset_id: int) -> int:
+    """重算某 dataset 当前 item 数（维护冗余 item_count 用）"""
+    return (
+        await session.execute(
+            select(func.count())
+            .select_from(DatasetItem)
+            .where(DatasetItem.dataset_id == dataset_id)
+        )
+    ).scalar_one()

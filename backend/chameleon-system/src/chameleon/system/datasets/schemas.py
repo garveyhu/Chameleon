@@ -91,6 +91,20 @@ class UpdateItemRequest(BaseModel):
     meta: dict[str, Any] | None = None
 
 
+class CreateItemRequest(BaseModel):
+    """电子表格「+新增行」单条样本入参（H2）
+
+    与 bulk-import 一致：默认 mask PII（手填可能含邮箱/手机号）。
+    input_payload 必填，expected_output / meta 可选。
+    """
+
+    input_payload: dict[str, Any]
+    expected_output: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
+    # 同 sample / bulk-import：mask（默认）/ drop / keep
+    pii_strategy: str = Field(default="mask", pattern="^(mask|drop|keep)$")
+
+
 class BulkImportItem(BaseModel):
     """手工 import 时单条 item 的入参（前端解析 CSV/JSONL 后构造）"""
 

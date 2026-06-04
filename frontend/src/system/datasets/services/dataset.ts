@@ -8,6 +8,7 @@ import type {
   CompareRunsResult,
   CreateDatasetRequest,
   CreateDatasetRunRequest,
+  CreateItemRequest,
   DatasetItem,
   DatasetItemRow,
   DatasetRunDetail,
@@ -45,14 +46,18 @@ export const datasetApi = {
   aiGenerate: (id: EntityId, req: AiGenerateRequest) =>
     post<AiGenerateResult>(`${BASE}/${id}/ai-generate`, req),
   /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 */
-  optimizeRun: (runId: EntityId) =>
-    post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
+  optimizeRun: (runId: EntityId) => post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
   /** H3：用优化后 Prompt 重跑整个 dataset，落新子 run（版本链） */
   applyOptimized: (runId: EntityId) =>
     post<DatasetRunDetail>(`${BASE}/runs/${runId}/apply-optimized`, {}),
   /** 人工标注：改某 item 的 expected_output / meta */
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),
+  /** H2 电子表格「+新增行」：单条样本入库（默认 mask PII）。 */
+  createItem: (datasetId: EntityId, req: CreateItemRequest) =>
+    post<DatasetItemRow>(`${BASE}/${datasetId}/items/create`, req),
+  /** H2 电子表格删行：删单条样本。 */
+  deleteItem: (itemId: EntityId) => post<void>(`${BASE}/items/${itemId}/delete`),
 
   // ── runs（实验运行）—— 接出已就绪的端点 ──
   /** 可用评分器列表（judge key 数组）。 */
@@ -60,11 +65,9 @@ export const datasetApi = {
   /** 手动发起运行（同步端点，跑完才返回，可能数十秒）。 */
   run: (id: EntityId, req: CreateDatasetRunRequest) =>
     post<DatasetRunDetail>(`${BASE}/${id}/run`, req),
-  listRuns: (datasetId: EntityId) =>
-    get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
+  listRuns: (datasetId: EntityId) => get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
   getRun: (runId: EntityId) => get<DatasetRunDetail>(`${BASE}/runs/${runId}`),
-  listRunItems: (runId: EntityId) =>
-    get<DatasetRunItemRow[]>(`${BASE}/runs/${runId}/items`),
+  listRunItems: (runId: EntityId) => get<DatasetRunItemRow[]>(`${BASE}/runs/${runId}/items`),
   compareRuns: (runIds: EntityId[]) =>
     post<CompareRunsResult>(`${BASE}/runs/compare`, { run_ids: runIds }),
   scoreDistribution: (runId: EntityId, threshold = 0.5, buckets = 10) =>

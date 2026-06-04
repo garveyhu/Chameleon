@@ -164,6 +164,14 @@ export interface UpdateItemRequest {
   meta?: Record<string, unknown> | null;
 }
 
+/** H2 电子表格「+新增行」：单条样本入参（input_payload 必填）。 */
+export interface CreateItemRequest {
+  input_payload: Record<string, unknown>;
+  expected_output?: Record<string, unknown> | null;
+  meta?: Record<string, unknown> | null;
+  pii_strategy?: PiiStrategy;
+}
+
 /** H2：AI 扩样 —— 任务描述 + 生成数量 */
 export interface AiGenerateRequest {
   task_description: string;

@@ -23,6 +23,7 @@ from chameleon.system.datasets.schemas import (
     CompareRunsRequest,
     CompareRunsResult,
     CreateDatasetRequest,
+    CreateItemRequest,
     DatasetDetail,
     DatasetItem,
     DatasetItemItem,
@@ -165,6 +166,20 @@ async def list_items(
     return Result.ok(items)
 
 
+@router.post(
+    "/{dataset_id}/items/create", response_model=Result[DatasetItemItem]
+)
+async def create_item(
+    dataset_id: int,
+    req: CreateItemRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[DatasetItemItem]:
+    """H2 电子表格「+新增行」：单条样本入库 + 维护 item_count"""
+    item = await ds_service.create_item(session, dataset_id, req)
+    return Result.ok(item)
+
+
 @router.post("/items/{item_id}/update", response_model=Result[DatasetItemItem])
 async def update_item(
     item_id: int,
@@ -174,6 +189,17 @@ async def update_item(
 ) -> Result[DatasetItemItem]:
     item = await ds_service.update_item(session, item_id, req)
     return Result.ok(item)
+
+
+@router.post("/items/{item_id}/delete", response_model=Result[None])
+async def delete_item(
+    item_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:delete")),
+) -> Result[None]:
+    """H2 电子表格删行：删单条样本 + 维护 item_count"""
+    await ds_service.delete_item(session, item_id)
+    return Result.ok(None)
 
 
 # ── 一键采样 ──────────────────────────────────────────────

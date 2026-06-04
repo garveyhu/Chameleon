@@ -1,4 +1,6 @@
 /** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 开运行详情抽屉。 */
+import { useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -11,8 +13,6 @@ import {
   Sparkles,
   Upload,
 } from 'lucide-react';
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
@@ -25,17 +25,15 @@ import type { EntityId } from '@/core/types/api';
 import { AiGenerateModal } from '@/system/datasets/components/ai-generate-modal';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
+import { DatasetSpreadsheet } from '@/system/datasets/components/dataset-spreadsheet';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { RunStartModal } from '@/system/datasets/components/run-start-modal';
 import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import type { DatasetItemRow, DatasetRunRow } from '@/system/datasets/types/dataset';
 import { exportItems } from '@/system/datasets/utils/dataset-xlsx';
-import type {
-  DatasetItemRow,
-  DatasetRunRow,
-} from '@/system/datasets/types/dataset';
 
 type Tab = 'items' | 'runs';
 
@@ -64,9 +62,7 @@ const runOkTotal = (r: DatasetRunRow): string => {
   if (!s) return '—';
   const ok = s.ok ?? s.passed;
   const total = s.total ?? s.count;
-  return typeof ok === 'number' && typeof total === 'number'
-    ? `${ok}/${total}`
-    : '—';
+  return typeof ok === 'number' && typeof total === 'number' ? `${ok}/${total}` : '—';
 };
 
 export const DatasetDetailPage = () => {
@@ -78,6 +74,7 @@ export const DatasetDetailPage = () => {
   const [runId, setRunId] = useState<EntityId | null>(null);
   const [selRunIds, setSelRunIds] = useState<EntityId[]>([]);
   const [runsView, setRunsView] = useState<'list' | 'matrix'>('list');
+  const [itemsView, setItemsView] = useState<'table' | 'sheet'>('table');
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [aiGenOpen, setAiGenOpen] = useState(false);
@@ -133,9 +130,7 @@ export const DatasetDetailPage = () => {
           <span
             className={cn(
               'rounded px-1.5 py-0.5 text-[10.5px]',
-              isLog
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-indigo-50 text-indigo-700',
+              isLog ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700',
             )}
           >
             {isLog ? '日志采样' : '手工导入'}
@@ -159,9 +154,7 @@ export const DatasetDetailPage = () => {
       align: 'right',
       width: 160,
       render: it => (
-        <span className="text-[11px] text-stone-500">
-          {formatDateTime(String(sampledAt(it)))}
-        </span>
+        <span className="text-[11px] text-stone-500">{formatDateTime(String(sampledAt(it)))}</span>
       ),
     },
     {
@@ -228,10 +221,7 @@ export const DatasetDetailPage = () => {
       width: 84,
       sortable: true,
       render: r => (
-        <Badge
-          variant="outline"
-          className={cn('text-[10.5px]', statusBg(r.status))}
-        >
+        <Badge variant="outline" className={cn('text-[10.5px]', statusBg(r.status))}>
           {STATUS_LABEL[r.status] ?? r.status}
         </Badge>
       ),
@@ -251,9 +241,7 @@ export const DatasetDetailPage = () => {
       render: r => {
         const s = runScore(r);
         return (
-          <span className={cn('tnum', scoreColor(s))}>
-            {s != null ? formatScore(s) : '—'}
-          </span>
+          <span className={cn('tnum', scoreColor(s))}>{s != null ? formatScore(s) : '—'}</span>
         );
       },
     },
@@ -262,9 +250,7 @@ export const DatasetDetailPage = () => {
       header: '通过',
       align: 'right',
       width: 72,
-      render: r => (
-        <span className="tnum text-stone-500">{runOkTotal(r)}</span>
-      ),
+      render: r => <span className="tnum text-stone-500">{runOkTotal(r)}</span>,
     },
     {
       key: 'created_at',
@@ -273,9 +259,7 @@ export const DatasetDetailPage = () => {
       width: 150,
       sortable: true,
       render: r => (
-        <span className="text-[11px] text-stone-500">
-          {formatDateTime(r.created_at)}
-        </span>
+        <span className="text-[11px] text-stone-500">{formatDateTime(r.created_at)}</span>
       ),
     },
   ];
@@ -294,39 +278,23 @@ export const DatasetDetailPage = () => {
           <span className="text-[12.5px] text-stone-400">加载中…</span>
         ) : dsQ.data ? (
           <div className="flex flex-1 items-baseline gap-2">
-            <span className="text-[15px] font-medium text-stone-900">
-              {dsQ.data.name}
-            </span>
-            <span className="text-[11.5px] text-stone-500">
-              · {dsQ.data.item_count} 样本
-            </span>
+            <span className="text-[15px] font-medium text-stone-900">{dsQ.data.name}</span>
+            <span className="text-[11.5px] text-stone-500">· {dsQ.data.item_count} 样本</span>
             <span className="ml-auto" />
             <Button
               size="sm"
               variant="ghost"
               disabled={!itemsQ.data?.length}
               onClick={() =>
-                void exportItems(
-                  dsQ.data?.name ?? '评测样本',
-                  itemsQ.data ?? [],
-                  'xlsx',
-                )
+                void exportItems(dsQ.data?.name ?? '评测样本', itemsQ.data ?? [], 'xlsx')
               }
             >
               <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setImportOpen(true)}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
               <Upload className="mr-1 h-3.5 w-3.5" /> 手工导入
             </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => setAiGenOpen(true)}
-            >
+            <Button size="sm" variant="secondary" onClick={() => setAiGenOpen(true)}>
               <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
             </Button>
             <Button size="sm" onClick={() => setSampleOpen(true)}>
@@ -352,30 +320,44 @@ export const DatasetDetailPage = () => {
               onClick={() => setTab(k)}
               className={cn(
                 'rounded-md px-3 py-1 text-[13px] transition',
-                tab === k
-                  ? 'bg-stone-800 text-white'
-                  : 'text-stone-600 hover:bg-stone-100',
+                tab === k ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100',
               )}
             >
               {label}
             </button>
           ))}
         </div>
+        {tab === 'items' && (
+          <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
+            {(
+              [
+                ['table', '表格'],
+                ['sheet', '电子表格'],
+              ] as const
+            ).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setItemsView(k)}
+                className={cn(
+                  'rounded-md px-3 py-1 text-[12.5px] transition',
+                  itemsView === k ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {tab === 'runs' &&
           (runsView === 'matrix' ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setRunsView('list')}
-            >
+            <Button size="sm" variant="ghost" onClick={() => setRunsView('list')}>
               ← 返回运行列表
             </Button>
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-[11.5px] text-stone-400">
-                {selRunIds.length > 0
-                  ? `已选 ${selRunIds.length} 个`
-                  : '勾选 2+ 个运行可对比'}
+                {selRunIds.length > 0 ? `已选 ${selRunIds.length} 个` : '勾选 2+ 个运行可对比'}
               </span>
               <Button
                 size="sm"
@@ -386,11 +368,7 @@ export const DatasetDetailPage = () => {
                 <GitCompare className="mr-1 h-3.5 w-3.5" /> 对比所选
               </Button>
               {selRunIds.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setSelRunIds([])}
-                >
+                <Button size="sm" variant="ghost" onClick={() => setSelRunIds([])}>
                   清空
                 </Button>
               )}
@@ -402,23 +380,28 @@ export const DatasetDetailPage = () => {
       </div>
 
       {tab === 'items' ? (
-        <DataTable
-          columns={itemCols}
-          rows={itemsQ.data ?? []}
-          rowKey="id"
-          loading={itemsQ.isLoading}
-          emptyText="暂无样本，点右上「从日志采样」或「手工导入」开始"
-          minWidth={680}
-        />
+        itemsView === 'sheet' ? (
+          <DatasetSpreadsheet
+            items={itemsQ.data ?? []}
+            datasetId={dsId}
+            loading={itemsQ.isLoading}
+          />
+        ) : (
+          <DataTable
+            columns={itemCols}
+            rows={itemsQ.data ?? []}
+            rowKey="id"
+            loading={itemsQ.isLoading}
+            emptyText="暂无样本，点右上「从日志采样」或「手工导入」开始"
+            minWidth={680}
+          />
+        )
       ) : runsView === 'matrix' ? (
         <RunCompareMatrix runIds={selRunIds} />
       ) : (
         <div className="space-y-4">
           {(runsQ.data?.length ?? 0) > 0 && (
-            <RunStatsOverview
-              runs={runsQ.data ?? []}
-              itemCount={dsQ.data?.item_count ?? 0}
-            />
+            <RunStatsOverview runs={runsQ.data ?? []} itemCount={dsQ.data?.item_count ?? 0} />
           )}
           <DataTable
             columns={runCols}
@@ -522,11 +505,7 @@ function sortRuns(
 }
 
 const statusBar = (s: string): string =>
-  s === 'success'
-    ? 'bg-emerald-400'
-    : s === 'failed'
-      ? 'bg-rose-400'
-      : 'bg-stone-300';
+  s === 'success' ? 'bg-emerald-400' : s === 'failed' ? 'bg-rose-400' : 'bg-stone-300';
 
 function sampledAt(item: DatasetItemRow): unknown {
   const meta = item.meta as Record<string, unknown> | null;
