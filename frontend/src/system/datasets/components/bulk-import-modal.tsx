@@ -5,8 +5,8 @@
  */
 
 import { useMutation } from '@tanstack/react-query';
-import { HelpCircle, Loader2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { Download, FileSpreadsheet, HelpCircle, Loader2 } from 'lucide-react';
+import { type ChangeEvent, useMemo, useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
 import {
@@ -21,6 +21,10 @@ import { Tooltip } from '@/core/components/ui/tooltip';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import {
+  downloadSampleTemplate,
+  parseSpreadsheet,
+} from '@/system/datasets/utils/dataset-xlsx';
 import type { EntityId } from '@/core/types/api';
 import type {
   BulkImportItem,
@@ -80,6 +84,23 @@ export const BulkImportModal = ({ datasetId, onClose, onDone }: Props) => {
     onError: e => toast.error('导入失败：' + (e as Error).message),
   });
 
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = ''; // 允许重选同名文件
+    if (!f) return;
+    try {
+      const items = await parseSpreadsheet(f);
+      if (!items.length) {
+        toast.error('未从文件解析到样本行');
+        return;
+      }
+      setText(items.map(it => JSON.stringify(it)).join('\n'));
+      toast.success(`已解析 ${items.length} 条，确认后点导入`);
+    } catch (err) {
+      toast.error('文件解析失败：' + (err as Error).message);
+    }
+  };
+
   return (
     <Modal open onOpenChange={open => !open && onClose()}>
       <ModalContent>
@@ -88,12 +109,32 @@ export const BulkImportModal = ({ datasetId, onClose, onDone }: Props) => {
         </ModalHeader>
         <div className="space-y-3 px-4 py-3 text-[12.5px]">
           <div>
-            <label className="mb-1 block text-[11.5px] text-stone-600">
-              样本内容（JSONL 或 JSON 数组）
-            </label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <label className="text-[11.5px] text-stone-600">
+                样本内容（Excel/CSV 上传 或 JSONL 粘贴）
+              </label>
+              <div className="flex items-center gap-1.5">
+                <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] text-stone-600 transition hover:bg-stone-50">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={onFile}
+                  />
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> 上传 Excel/CSV
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void downloadSampleTemplate()}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-stone-500 transition hover:bg-stone-100"
+                >
+                  <Download className="h-3.5 w-3.5" /> 下载模板
+                </button>
+              </div>
+            </div>
             <p className="mb-1 text-[10.5px] leading-snug text-stone-400">
-              每行一个 JSON（JSONL），或粘贴整个 JSON 数组。每条至少包含「输入」
-              （input_payload，对象）；「预期输出」（expected_output）/ meta 可选。
+              上传 Excel/CSV（列：输入 / 理想回答 / 元数据），解析后可在下方预览
+              校对；也支持每行一个 JSON（JSONL）或整个 JSON 数组手工粘贴。
             </p>
             <Textarea
               value={text}

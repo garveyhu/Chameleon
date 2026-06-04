@@ -1,7 +1,14 @@
 /** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 开运行详情抽屉。 */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, GitCompare, Pencil, Upload } from 'lucide-react';
+import {
+  ArrowLeft,
+  Download,
+  FileSpreadsheet,
+  GitCompare,
+  Pencil,
+  Upload,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
@@ -19,6 +26,7 @@ import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matri
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import { exportItems } from '@/system/datasets/utils/dataset-xlsx';
 import type {
   DatasetItemRow,
   DatasetRunRow,
@@ -256,6 +264,20 @@ export const DatasetDetailPage = () => {
               · {dsQ.data.item_count} 样本
             </span>
             <span className="ml-auto" />
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!itemsQ.data?.length}
+              onClick={() =>
+                void exportItems(
+                  dsQ.data?.name ?? '评测样本',
+                  itemsQ.data ?? [],
+                  'xlsx',
+                )
+              }
+            >
+              <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
+            </Button>
             <Button
               size="sm"
               variant="secondary"
