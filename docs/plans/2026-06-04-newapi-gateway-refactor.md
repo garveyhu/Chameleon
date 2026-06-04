@@ -121,10 +121,10 @@ schema 迁移（models 加 3 列）+ ORM + `factory.py` 一行收口 + `provider
 
 ### P3 — 终化「打开网关」✅
 - 发现 `chameleon.json`/`model.json` 均 **gitignored**（仅 `example/` 模板入库）→ company qwen key 从未进 git；config 是本地/部署级。
-- dev 环境已**打开**：DB 永久建 `kind='gateway'` 的 `new-api` provider（加密 token）；本地 `chameleon.json` 设 `gateway.mode=newapi`；清空本地 `model.json` 冗余 api_key（newapi 模式不用）。
-- **已真跑验证**（读真实配置）：chat（deepseek-chat）+ embedding（text-embedding-v2@1536）全部经 new-api，返回正常。
-- 提交物：`chameleon.example.json` 增 `gateway` 块（模板默认 `direct`，部署按需 opt-in newapi）。**未删 direct 代码路径** —— `gateway.mode=direct` 一键回退直连，全程可逆。
-- 网关 provider 含 token 密钥，属运行时数据，经 admin UI（P4 Providers 页）/ env 创建，不入库；`inventory.llm_provider_credential` 保留（direct 模式仍用）。
+- **已真跑验证**：dev DB 永久建 `kind='gateway'` 的 `new-api` provider（加密 token）；临时设 `gateway.mode=newapi` 跑通 chat（deepseek-chat）+ embedding（text-embedding-v2@1536）全经 new-api，返回正常。
+- **共享配置保持 `direct`**：同一工作树有并发 eval /loop 在跑测试，故未把共享 `chameleon.json` 留在 newapi（避免影响其测试）。**打开 newapi = 一行**：`chameleon.json` 设 `gateway.mode=newapi`（gateway provider 已就绪），或经 admin UI / env。
+- 提交物：`chameleon.example.json` 增 `gateway` 块（默认 `direct`，按需 opt-in）。**direct 路径保留**，一键回退；`inventory.llm_provider_credential` 保留。
+- 网关 provider 含 token，属运行时数据，经 admin UI（P4 Providers 页）/ env 创建，不入库。
 
 ### P4 — 前端 + 角色槽位 + 部署模式开关
 - Providers 页坍缩成"单网关卡 + 外部 agent 平台分区"；Models 页加 upstream_name/能力/角色槽位指派；新增 rerank 角色槽。
