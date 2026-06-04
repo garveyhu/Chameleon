@@ -5,7 +5,7 @@
  * 每条 assistant 消息在 footer 提供 trace 入口（onOpenTrace），方便调试阶段查问题。
  */
 
-import { Bot, ListTree } from 'lucide-react';
+import { BookmarkPlus, Bot, ListTree } from 'lucide-react';
 import { useState } from 'react';
 
 import { MessageActions } from '@/core/components/chat';
@@ -20,6 +20,7 @@ import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { messagesOf, useChatStore } from '@/core/stores/chat';
+import { SaveAsSampleModal } from '@/system/playground/components/save-as-sample-modal';
 import type { PlaygroundMessage } from '@/system/playground/types/playground';
 
 const TRANSLATE_LANGUAGES: TranslateLanguage[] = [
@@ -63,10 +64,24 @@ export const MessageThread = ({
       className={cn('flex-1 px-4 pt-4', className)}
       itemClassName="pb-4"
       renderItem={m => (
-        <MessageBubble columnId={columnId} msg={m} onOpenTrace={onOpenTrace} />
+        <MessageBubble
+          columnId={columnId}
+          msg={m}
+          prevUserContent={prevUserOf(messages, m.id)}
+          onOpenTrace={onOpenTrace}
+        />
       )}
     />
   );
+};
+
+/** 找某条消息之前最近一条 user 消息文本（给「存为样本」预填输入） */
+const prevUserOf = (msgs: PlaygroundMessage[], id: string): string => {
+  const idx = msgs.findIndex(m => m.id === id);
+  for (let i = idx - 1; i >= 0; i--) {
+    if (msgs[i].role === 'user') return msgs[i].content;
+  }
+  return '';
 };
 
 const toActionMessage = (m: PlaygroundMessage): ChatActionMessage => ({
@@ -94,15 +109,18 @@ const TypingDots = () => (
 const MessageBubble = ({
   columnId,
   msg,
+  prevUserContent,
   onOpenTrace,
 }: {
   columnId: string;
   msg: PlaygroundMessage;
+  prevUserContent?: string;
   onOpenTrace?: (msg: PlaygroundMessage) => void;
 }) => {
   const isUser = msg.role === 'user';
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(msg.content);
+  const [saveOpen, setSaveOpen] = useState(false);
 
   const editMessage = useChatStore(s => s.editMessage);
   const regenerate = useChatStore(s => s.regenerate);
@@ -248,6 +266,24 @@ const MessageBubble = ({
                 <ListTree className="h-3 w-3" />
                 trace
               </button>
+            )}
+            {!isUser && (
+              <button
+                type="button"
+                title="存为评测样本（加入数据集）"
+                onClick={() => setSaveOpen(true)}
+                className="flex items-center gap-0.5 rounded px-1 py-0.5 text-stone-400 transition hover:bg-emerald-50 hover:text-emerald-600"
+              >
+                <BookmarkPlus className="h-3 w-3" />
+                存样本
+              </button>
+            )}
+            {saveOpen && (
+              <SaveAsSampleModal
+                defaultInput={prevUserContent ?? ''}
+                defaultExpected={msg.content}
+                onClose={() => setSaveOpen(false)}
+              />
             )}
             <MessageActions
               msg={toActionMessage(msg)}
