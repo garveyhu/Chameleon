@@ -23,7 +23,7 @@ from chameleon.system.datasets.schemas import (
     DatasetItem,
     DatasetItemItem,
     DatasetRunDetail,
-    DatasetRunItemRow,
+    DatasetRunItemDetail,
     DatasetRunRequest,
     DatasetRunRow,
     SampleFromLogsRequest,
@@ -246,13 +246,13 @@ async def get_run(
 
 @router.get(
     "/runs/{run_id}/items",
-    response_model=Result[list[DatasetRunItemRow]],
+    response_model=Result[list[DatasetRunItemDetail]],
 )
 async def list_run_items(
     run_id: int,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:read")),
-) -> Result[list[DatasetRunItemRow]]:
+) -> Result[list[DatasetRunItemDetail]]:
     items = await ds_service.list_run_items(session, run_id)
     return Result.ok(items)
 

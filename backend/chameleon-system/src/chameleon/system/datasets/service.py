@@ -38,6 +38,7 @@ from chameleon.system.datasets.schemas import (
     CreateDatasetRequest,
     DatasetItemItem,
     DatasetRunDetail,
+    DatasetRunItemDetail,
     DatasetRunItemRow,
     DatasetRunRow,
     MetricDistribution,
@@ -487,7 +488,13 @@ async def get_run(session: AsyncSession, run_id: int) -> DatasetRunDetail:
     return DatasetRunDetail.model_validate(row)
 
 
-async def list_run_items(session: AsyncSession, run_id: int) -> list[DatasetRunItemRow]:
+async def list_run_items(
+    session: AsyncSession, run_id: int
+) -> list[DatasetRunItemDetail]:
+    """逐样本明细，join dataset_item 带回 输入预览 / 完整输入 / 预期输出。
+
+    模块 E 运行详情抽屉据此渲染样本明细表 + 三栏对比，前端无需再拉全样本。
+    """
     rows = (
         (
             await session.execute(
@@ -499,7 +506,30 @@ async def list_run_items(session: AsyncSession, run_id: int) -> list[DatasetRunI
         .scalars()
         .all()
     )
-    return [DatasetRunItemRow.model_validate(r) for r in rows]
+    item_ids = {r.dataset_item_id for r in rows}
+    items_by_id: dict[int, DatasetItem] = {}
+    if item_ids:
+        items = (
+            (
+                await session.execute(
+                    select(DatasetItem).where(DatasetItem.id.in_(item_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        items_by_id = {it.id: it for it in items}
+
+    details: list[DatasetRunItemDetail] = []
+    for r in rows:
+        detail = DatasetRunItemDetail.model_validate(r)
+        item = items_by_id.get(r.dataset_item_id)
+        if item is not None:
+            detail.input_preview = _extract_preview(item.input_payload)
+            detail.input_payload = item.input_payload
+            detail.expected_output = item.expected_output
+        details.append(detail)
+    return details
 
 
 async def compare_runs(session: AsyncSession, run_ids: list[int]) -> CompareRunsResult:

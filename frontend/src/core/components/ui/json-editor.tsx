@@ -17,6 +17,8 @@ interface Props {
   className?: string;
   /** 顶部标签，如「输入」「预期输出」 */
   label?: string;
+  /** 长文本自动换行（只读展示场景用，避免横向滑动看不全） */
+  wrap?: boolean;
 }
 
 const editorTheme = EditorView.theme({
@@ -36,8 +38,12 @@ export const JsonEditor = ({
   maxHeight = '320px',
   className,
   label,
+  wrap,
 }: Props) => {
   const [error, setError] = useState<string | null>(null);
+  const extensions = wrap
+    ? [json(), editorTheme, EditorView.lineWrapping]
+    : [json(), editorTheme];
 
   const handleChange = (v: string) => {
     onChange(v);
@@ -82,7 +88,7 @@ export const JsonEditor = ({
         value={value}
         onChange={handleChange}
         editable={!readOnly}
-        extensions={[json(), editorTheme]}
+        extensions={extensions}
         minHeight={minHeight}
         maxHeight={maxHeight}
         basicSetup={{

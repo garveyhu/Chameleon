@@ -96,6 +96,12 @@ export interface DatasetRunItemRow {
   score: number | null;
   error: Record<string, unknown> | null;
   duration_ms: number | null;
+  // 运行详情明细 join 带回（compare 矩阵的 cells 不返，故可选）
+  input_preview?: string | null;
+  input_payload?: Record<string, unknown> | null;
+  expected_output?: Record<string, unknown> | null;
+  // 模块 G judge 升级后填评分理由；E 阶段后端暂不返 → undefined
+  score_reason?: string | null;
 }
 
 export interface CompareItemCell {

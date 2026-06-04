@@ -139,6 +139,18 @@ class DatasetRunItemRow(BaseModel):
     duration_ms: int | None = None
 
 
+class DatasetRunItemDetail(DatasetRunItemRow):
+    """运行详情逐样本明细：join dataset_item 带回输入/预期，省前端二次拉全样本。
+
+    模块 E 用于运行详情抽屉的样本明细表 + 三栏对比（理想/模型/理由）。
+    score_reason / field_scores 待模块 G 接入 judge 多模式后再补字段。
+    """
+
+    input_preview: str | None = None
+    input_payload: dict[str, Any] | None = None
+    expected_output: dict[str, Any] | None = None
+
+
 class DatasetRunRow(BaseModel):
     """列表项"""
 

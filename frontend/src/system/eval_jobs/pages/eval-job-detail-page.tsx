@@ -173,7 +173,11 @@ export const EvalJobDetailPage = () => {
         </CardContent>
       </Card>
 
-      <RunDetailDrawer runId={runId} onClose={() => setRunId(null)} />
+      <RunDetailDrawer
+        key={runId ?? '∅'}
+        runId={runId}
+        onClose={() => setRunId(null)}
+      />
 
       {editOpen && (
         <EvalJobFormModal

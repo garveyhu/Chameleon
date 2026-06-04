@@ -356,7 +356,11 @@ export const DatasetDetailPage = () => {
         />
       )}
 
-      <RunDetailDrawer runId={runId} onClose={() => setRunId(null)} />
+      <RunDetailDrawer
+        key={runId ?? '∅'}
+        runId={runId}
+        onClose={() => setRunId(null)}
+      />
 
       {editItem && (
         <DatasetItemEditorDrawer
