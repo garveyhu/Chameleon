@@ -34,6 +34,19 @@ def case_vision() -> str | None:
     return model_settings.get("cases.vision")
 
 
+def gateway_mode() -> str:
+    """模型上游模式：'direct'（各模型走自身 provider）| 'newapi'（统一走 gateway provider）
+
+    默认 direct —— 向后兼容：不部署 new-api 时维持各供应商直连。
+    """
+    return chameleon_settings.get("gateway.mode") or "direct"
+
+
+def gateway_provider_code() -> str:
+    """newapi 模式下作为统一上游的 provider.code"""
+    return chameleon_settings.get("gateway.provider_code") or "new-api"
+
+
 def llm_model_config(name: str) -> dict:
     for m in model_settings.get("models.llm", []) or []:
         if m.get("name") == name:

@@ -56,6 +56,10 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
     """
     global _DEFAULT_NAME
 
+    # 局部 import 避免 integrations → core.config 循环依赖
+    from chameleon.core.config import inventory
+
+    mode = inventory.gateway_mode()
     async with AsyncSessionLocal() as session:
         rows = (
             await session.execute(
@@ -71,18 +75,41 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
             )
         ).all()
 
+        # 部署模式开关：newapi → 所有模型统一走 gateway provider（一键切换，不动模型表）
+        gateway: Provider | None = None
+        if mode == "newapi":
+            gw_code = inventory.gateway_provider_code()
+            gateway = (
+                await session.execute(
+                    select(Provider).where(
+                        Provider.code == gw_code,
+                        Provider.enabled.is_(True),
+                        Provider.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if gateway is None:
+                logger.warning(
+                    "gateway.mode=newapi 但找不到 enabled gateway provider '{}'，本次回退各模型直连",
+                    gw_code,
+                )
+
     new_cache: dict[str, BaseLLM] = {}
     for model, provider in rows:
         try:
-            api_key = get_or_decrypt(provider.api_key_encrypted) or ""
-            api_base = provider.base_url or ""
+            # 有效 provider：newapi 模式且有网关 → 网关；否则模型自身 provider
+            eff = gateway if gateway is not None else provider
+            api_key = get_or_decrypt(eff.api_key_encrypted) or ""
+            api_base = eff.base_url or ""
             defaults = model.defaults or {}
             # S6：每个 cache 实例烧进 GenerationRecorder —— 任何路径
             # 拿到这个实例调 .ainvoke()/.astream() 都会自动记一条 generation
             # call_log（归属字段从 TraceContext / ContextVar 读，无 scope 兜底）
             instance = BaseLLM(
-                # 逻辑 code → 上游名（new-api 认 upstream_name）；NULL 回退 code
-                model=model.upstream_name or model.code,
+                # 走网关（eff 是 gateway）时用 upstream_name（new-api 认的名）；直连用 code
+                model=(model.upstream_name or model.code)
+                if eff.kind == "gateway"
+                else model.code,
                 api_key=api_key,
                 api_base=api_base,
                 temperature=defaults.get("temperature", 0.7),
@@ -102,8 +129,6 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
             _DEFAULT_NAME = default_name
         elif _DEFAULT_NAME is None and new_cache:
             # 没显式指定 → 用 inventory.case_llm() 的值（dev 友好）
-            from chameleon.core.config import inventory
-
             _DEFAULT_NAME = inventory.case_llm() or next(iter(new_cache), None)
 
     logger.info(
