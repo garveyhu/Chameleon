@@ -7,6 +7,7 @@ import type {
   BulkImportResult,
   CompareRunsResult,
   CreateDatasetRequest,
+  CreateDatasetRunRequest,
   DatasetItem,
   DatasetItemRow,
   DatasetRunDetail,
@@ -50,7 +51,12 @@ export const datasetApi = {
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),
 
-  // ── runs（实验运行）—— 接出已就绪的 5 个端点 ──
+  // ── runs（实验运行）—— 接出已就绪的端点 ──
+  /** 可用评分器列表（judge key 数组）。 */
+  listJudges: () => get<string[]>(`${BASE}/judges`),
+  /** 手动发起运行（同步端点，跑完才返回，可能数十秒）。 */
+  run: (id: EntityId, req: CreateDatasetRunRequest) =>
+    post<DatasetRunDetail>(`${BASE}/${id}/run`, req),
   listRuns: (datasetId: EntityId) =>
     get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
   getRun: (runId: EntityId) => get<DatasetRunDetail>(`${BASE}/runs/${runId}`),

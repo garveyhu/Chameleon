@@ -19,6 +19,7 @@ export interface EvalJobItem {
   model_override: string | null;
   prompt_override: string | null;
   judge: string;
+  judge_config: Record<string, unknown> | null;
   cron_expr: string;
   alert_config: AlertConfig | null;
   enabled: boolean;
@@ -38,6 +39,7 @@ export interface CreateEvalJobPayload {
   model_override?: string | null;
   prompt_override?: string | null;
   judge?: string;
+  judge_config?: Record<string, unknown> | null;
   cron_expr: string;
   alert_config?: AlertConfig | null;
   enabled?: boolean;
@@ -51,6 +53,7 @@ export interface UpdateEvalJobPayload {
   model_override?: string | null;
   prompt_override?: string | null;
   judge?: string;
+  judge_config?: Record<string, unknown> | null;
   cron_expr?: string;
   alert_config?: AlertConfig | null;
   enabled?: boolean;

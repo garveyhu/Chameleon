@@ -30,6 +30,12 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import type { EntityId, PageResult } from '@/core/types/api';
+import { JudgeConfigFields } from '@/system/datasets/components/judge-config-fields';
+import {
+  buildJudgeConfig,
+  JUDGE_META,
+  readCriteria,
+} from '@/system/datasets/utils/judge-meta';
 import type {
   AlertConfig,
   CreateEvalJobPayload,
@@ -40,22 +46,6 @@ import {
   CRON_CUSTOM_SENTINEL,
   CRON_PRESETS,
 } from '@/system/eval_jobs/types/eval-job';
-
-/** G2：评分方式中文名 + 说明（量纲提示）。GSB / DSL 模式待后续期加入下拉 */
-const JUDGE_META: Record<string, { label: string; desc: string }> = {
-  exact_match: {
-    label: '精确匹配',
-    desc: '模型回答与理想回答完全一致才算对（0 / 1 二值）',
-  },
-  contains: {
-    label: '包含匹配',
-    desc: '理想回答作为子串出现在模型回答里即算对（0 / 1 二值）',
-  },
-  llm_judge: {
-    label: 'AI 评分',
-    desc: '由大模型对比理想 / 实际回答打分并给出理由（语义级 0–1 连续分）',
-  },
-};
 
 interface DatasetItem {
   id: EntityId;
@@ -102,6 +92,9 @@ export const EvalJobFormModal = ({
     () => initial?.prompt_override ?? '',
   );
   const [judge, setJudge] = useState(() => initial?.judge ?? 'exact_match');
+  const [criteria, setCriteria] = useState(() =>
+    readCriteria(initial?.judge_config),
+  );
   const [cronPreset, setCronPreset] = useState(() => {
     if (!initial) return '0 9 * * *';
     const preset = CRON_PRESETS.find(
@@ -173,6 +166,7 @@ export const EvalJobFormModal = ({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    const judgeConfig = buildJudgeConfig(judge, criteria) ?? null;
     if (isEdit) {
       const payload: UpdateEvalJobPayload = {
         name: name.trim(),
@@ -182,6 +176,7 @@ export const EvalJobFormModal = ({
         model_override: modelOverride.trim() || null,
         prompt_override: promptOverride.trim() || null,
         judge,
+        judge_config: judgeConfig,
         cron_expr: finalCron,
         alert_config: buildAlert(),
       };
@@ -197,6 +192,7 @@ export const EvalJobFormModal = ({
         model_override: modelOverride.trim() || null,
         prompt_override: promptOverride.trim() || null,
         judge,
+        judge_config: judgeConfig,
         cron_expr: finalCron,
         alert_config: buildAlert(),
       };
@@ -294,6 +290,12 @@ export const EvalJobFormModal = ({
               )}
             </div>
           </div>
+
+          <JudgeConfigFields
+            judge={judge}
+            criteria={criteria}
+            onCriteriaChange={setCriteria}
+          />
 
           <div className="space-y-1.5">
             <Label>Cron 触发时间</Label>

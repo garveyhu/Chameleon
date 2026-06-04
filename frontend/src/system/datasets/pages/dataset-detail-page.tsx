@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   GitCompare,
   Pencil,
+  Play,
   Sparkles,
   Upload,
 } from 'lucide-react';
@@ -26,6 +27,7 @@ import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal'
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
+import { RunStartModal } from '@/system/datasets/components/run-start-modal';
 import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { datasetApi } from '@/system/datasets/services/dataset';
@@ -79,6 +81,7 @@ export const DatasetDetailPage = () => {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [aiGenOpen, setAiGenOpen] = useState(false);
+  const [runStartOpen, setRunStartOpen] = useState(false);
   const [editItem, setEditItem] = useState<DatasetItemRow | null>(null);
   const [runSort, setRunSort] = useState<{
     key: string;
@@ -102,6 +105,12 @@ export const DatasetDetailPage = () => {
     queryKey: ['datasets', dsId, 'runs'],
     queryFn: () => datasetApi.listRuns(dsId),
     enabled: !!dsId && tab === 'runs',
+  });
+  const judgesQ = useQuery({
+    queryKey: ['datasets', 'judges'],
+    queryFn: () => datasetApi.listJudges(),
+    enabled: tab === 'runs',
+    staleTime: 60_000,
   });
 
   const refreshAll = () => {
@@ -368,6 +377,9 @@ export const DatasetDetailPage = () => {
                   清空
                 </Button>
               )}
+              <Button size="sm" onClick={() => setRunStartOpen(true)}>
+                <Play className="mr-1 h-3.5 w-3.5" /> 新建运行
+              </Button>
             </div>
           ))}
       </div>
@@ -452,6 +464,14 @@ export const DatasetDetailPage = () => {
             refreshAll();
             setAiGenOpen(false);
           }}
+        />
+      )}
+      {runStartOpen && (
+        <RunStartModal
+          datasetId={dsId}
+          judges={judgesQ.data}
+          onClose={() => setRunStartOpen(false)}
+          onStarted={run => setRunId(run.id)}
         />
       )}
     </div>

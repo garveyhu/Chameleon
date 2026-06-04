@@ -3,7 +3,7 @@
  *  内部过滤/选中态随 runId remount 重置（调用方传 key={runId}）。 */
 
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Star } from 'lucide-react';
 import { useState } from 'react';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
@@ -43,6 +43,24 @@ const statusBg = (s: string): string =>
 
 const bucketColor = (low: number): string =>
   low < 0.5 ? 'bg-red-300' : low < 0.8 ? 'bg-amber-300' : 'bg-emerald-300';
+
+/** GSB verdict → 徽章配色 + 中文标签 */
+const VERDICT_META: Record<
+  string,
+  { label: string; variant: 'success' | 'warning' | 'danger' }
+> = {
+  G: { label: '好', variant: 'success' },
+  S: { label: '平', variant: 'warning' },
+  B: { label: '差', variant: 'danger' },
+};
+
+const verdictOf = (
+  fs: Record<string, number | string | null> | null | undefined,
+): { label: string; variant: 'success' | 'warning' | 'danger' } | null => {
+  const v = fs?.verdict;
+  if (typeof v !== 'string') return null;
+  return VERDICT_META[v] ?? null;
+};
 
 const noop = () => {};
 
@@ -140,14 +158,27 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
       key: 'score',
       header: '分数',
       align: 'right',
-      width: 72,
-      render: ri => (
-        <span
-          className={cn('rounded px-1.5 py-0.5 text-[10.5px]', scoreBg(ri.score))}
-        >
-          {ri.score != null ? formatScore(ri.score) : '—'}
-        </span>
-      ),
+      width: 96,
+      render: ri => {
+        const verdict = verdictOf(ri.field_scores);
+        return (
+          <span className="inline-flex items-center justify-end gap-1">
+            {verdict && (
+              <Badge variant={verdict.variant} className="px-1 py-0 text-[10px]">
+                {verdict.label}
+              </Badge>
+            )}
+            <span
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10.5px]',
+                scoreBg(ri.score),
+              )}
+            >
+              {ri.score != null ? formatScore(ri.score) : '—'}
+            </span>
+          </span>
+        );
+      },
     },
     {
       key: 'dur',
@@ -363,7 +394,12 @@ const ItemDetail = ({
       />
     </div>
 
-    <div className="mb-2 grid grid-cols-2 gap-2">
+    <div
+      className={cn(
+        'mb-2 grid gap-2',
+        ri.reference_output ? 'grid-cols-3' : 'grid-cols-2',
+      )}
+    >
       <div>
         <div className="mb-1 text-[10.5px] text-emerald-600">理想回答</div>
         <JsonEditor
@@ -388,7 +424,25 @@ const ItemDetail = ({
           maxHeight="200px"
         />
       </div>
+      {ri.reference_output && (
+        <div>
+          <div className="mb-1 text-[10.5px] text-violet-600">
+            参照回答（GSB 对照）
+          </div>
+          <JsonEditor
+            value={toText(ri.reference_output)}
+            onChange={noop}
+            readOnly
+            wrap
+            label="参照"
+            minHeight="56px"
+            maxHeight="200px"
+          />
+        </div>
+      )}
     </div>
+
+    <FieldScores fieldScores={ri.field_scores} score={ri.score} />
 
     <div>
       <div className="mb-1 text-[10.5px] text-stone-500">评分理由</div>
@@ -413,3 +467,75 @@ const ItemDetail = ({
     )}
   </div>
 );
+
+/** 评分器逐项原始分：raw_1_5 星级 / verdict 徽章 / 其它数值 label:value。
+ *  无 field_scores 则整块不渲染。 */
+const FieldScores = ({
+  fieldScores,
+  score,
+}: {
+  fieldScores: Record<string, number | string | null> | null | undefined;
+  score: number | null;
+}) => {
+  if (!fieldScores || Object.keys(fieldScores).length === 0) return null;
+
+  const raw = fieldScores.raw_1_5;
+  const verdict = verdictOf(fieldScores);
+  // 已专门渲染的 key 不再走兜底数值行
+  const rest = Object.entries(fieldScores).filter(
+    ([k]) => k !== 'raw_1_5' && k !== 'verdict',
+  );
+
+  return (
+    <div className="mb-2">
+      <div className="mb-1 text-[10.5px] text-stone-500">评分明细</div>
+      <div className="flex flex-wrap items-center gap-3 rounded border border-stone-200 bg-white px-2.5 py-2">
+        {typeof raw === 'number' && (
+          <div className="flex items-center gap-1.5">
+            <StarRating value={raw} />
+            <span className="text-[11px] text-stone-600">
+              {raw}/5
+              {score != null && (
+                <span className="text-stone-400"> · 归一 {formatScore(score)}</span>
+              )}
+            </span>
+          </div>
+        )}
+        {verdict && (
+          <div className="flex items-center gap-1.5">
+            <Badge variant={verdict.variant} className="text-[10.5px]">
+              {verdict.label}（{String(fieldScores.verdict)}）
+            </Badge>
+            <span className="text-[10.5px] text-stone-400">GSB 判定</span>
+          </div>
+        )}
+        {rest.map(([k, v]) => (
+          <div key={k} className="text-[11px] text-stone-600">
+            <span className="text-stone-400">{k}：</span>
+            {v == null ? '—' : String(v)}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+/** 1–5 档星级（整数填充，空星灰显） */
+const StarRating = ({ value }: { value: number }) => {
+  const filled = Math.max(0, Math.min(5, Math.round(value)));
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-label={`${value}/5`}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          className={cn(
+            'h-3.5 w-3.5',
+            i < filled
+              ? 'fill-amber-400 text-amber-400'
+              : 'fill-stone-200 text-stone-200',
+          )}
+        />
+      ))}
+    </span>
+  );
+};

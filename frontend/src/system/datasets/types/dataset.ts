@@ -75,6 +75,8 @@ export interface DatasetRunRow {
   name: string;
   model_override: string | null;
   judge: string;
+  judge_config: Record<string, unknown> | null;
+  agent_key: string | null;
   status: string;
   summary: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
@@ -84,8 +86,16 @@ export interface DatasetRunRow {
 }
 
 export interface DatasetRunDetail extends DatasetRunRow {
-  agent_key: string | null;
   prompt_override: string | null;
+}
+
+/** 手动发起运行入参 —— POST /v1/admin/datasets/{id}/run（同步，跑完才返回）。 */
+export interface CreateDatasetRunRequest {
+  name: string;
+  judge: string;
+  judge_config?: Record<string, unknown>;
+  model_override?: string;
+  agent_key?: string;
 }
 
 export interface DatasetRunItemRow {
@@ -102,6 +112,10 @@ export interface DatasetRunItemRow {
   expected_output?: Record<string, unknown> | null;
   // 模块 G judge 升级后填评分理由；E 阶段后端暂不返 → undefined
   score_reason?: string | null;
+  // 评分器逐项原始分：llm_score → {raw_1_5:n}；gsb → {verdict:'G'|'S'|'B'}
+  field_scores?: Record<string, number | string | null> | null;
+  // gsb 对照用的参照回答（原文 dict）
+  reference_output?: Record<string, unknown> | null;
 }
 
 export interface CompareItemCell {
