@@ -42,6 +42,24 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
   if (!data) return null;
   const { runs, rows } = data;
 
+  // win/tie/loss：以第一个运行为基准，其余逐样本比较分数（GSB 雏形）
+  const baseId = runs.length ? String(runs[0].id) : '';
+  const compare = runs.slice(1).map(run => {
+    const rid = String(run.id);
+    let win = 0;
+    let tie = 0;
+    let loss = 0;
+    for (const row of rows) {
+      const a = row.cells[rid]?.score;
+      const b = row.cells[baseId]?.score;
+      if (typeof a !== 'number' || typeof b !== 'number') continue;
+      if (a > b) win += 1;
+      else if (a < b) loss += 1;
+      else tie += 1;
+    }
+    return { run, win, tie, loss };
+  });
+
   const selRow = sel
     ? rows.find(r => String(r.dataset_item_id) === sel.itemId)
     : null;
@@ -50,6 +68,50 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
 
   return (
     <div className="space-y-3">
+      {compare.length > 0 && (
+        <div className="rounded-lg border border-stone-200 bg-stone-50/40 p-3">
+          <div className="mb-2 text-[11.5px] text-stone-500">
+            对比基准{' '}
+            <span className="font-medium text-stone-700">{runs[0].name}</span>
+            ，其余运行逐样本胜负
+          </div>
+          <div className="space-y-1.5">
+            {compare.map(({ run, win, tie, loss }) => {
+              const total = win + tie + loss || 1;
+              return (
+                <div
+                  key={String(run.id)}
+                  className="flex items-center gap-2.5 text-[11.5px]"
+                >
+                  <span
+                    className="min-w-[110px] max-w-[150px] truncate text-stone-700"
+                    title={run.name}
+                  >
+                    {run.name}
+                  </span>
+                  <span className="tnum text-emerald-600">胜 {win}</span>
+                  <span className="tnum text-stone-400">平 {tie}</span>
+                  <span className="tnum text-rose-600">负 {loss}</span>
+                  <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
+                    <div
+                      className="bg-emerald-400"
+                      style={{ width: `${(win / total) * 100}%` }}
+                    />
+                    <div
+                      className="bg-stone-300"
+                      style={{ width: `${(tie / total) * 100}%` }}
+                    />
+                    <div
+                      className="bg-rose-400"
+                      style={{ width: `${(loss / total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="overflow-auto rounded-lg border border-stone-200">
         <table className="w-full border-collapse text-[11.5px]">
           <thead>

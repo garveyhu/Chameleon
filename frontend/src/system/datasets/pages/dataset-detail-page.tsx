@@ -24,6 +24,7 @@ import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal'
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
+import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import { exportItems } from '@/system/datasets/utils/dataset-xlsx';
@@ -76,6 +77,10 @@ export const DatasetDetailPage = () => {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editItem, setEditItem] = useState<DatasetItemRow | null>(null);
+  const [runSort, setRunSort] = useState<{
+    key: string;
+    order: 'asc' | 'desc';
+  }>({ key: 'created_at', order: 'desc' });
 
   const toggleRun = (rid: EntityId) =>
     setSelRunIds(p => (p.includes(rid) ? p.filter(x => x !== rid) : [...p, rid]));
@@ -192,6 +197,7 @@ export const DatasetDetailPage = () => {
       key: 'status',
       header: '状态',
       width: 84,
+      sortable: true,
       render: r => (
         <Badge
           variant="outline"
@@ -212,6 +218,7 @@ export const DatasetDetailPage = () => {
       header: '平均分',
       align: 'right',
       width: 84,
+      sortable: true,
       render: r => {
         const s = runScore(r);
         return (
@@ -235,6 +242,7 @@ export const DatasetDetailPage = () => {
       header: '时间',
       align: 'right',
       width: 150,
+      sortable: true,
       render: r => (
         <span className="text-[11px] text-stone-500">
           {formatDateTime(r.created_at)}
@@ -366,16 +374,27 @@ export const DatasetDetailPage = () => {
       ) : runsView === 'matrix' ? (
         <RunCompareMatrix runIds={selRunIds} />
       ) : (
-        <DataTable
-          columns={runCols}
-          rows={runsQ.data ?? []}
-          rowKey="id"
-          leftBar={r => statusBar(r.status)}
-          loading={runsQ.isLoading}
-          onRowClick={r => setRunId(r.id)}
-          emptyText="还没有运行；在 Playground 或评测任务里跑一次会出现在这里"
-          minWidth={620}
-        />
+        <div className="space-y-4">
+          {(runsQ.data?.length ?? 0) > 0 && (
+            <RunStatsOverview
+              runs={runsQ.data ?? []}
+              itemCount={dsQ.data?.item_count ?? 0}
+            />
+          )}
+          <DataTable
+            columns={runCols}
+            rows={sortRuns(runsQ.data ?? [], runSort)}
+            rowKey="id"
+            leftBar={r => statusBar(r.status)}
+            loading={runsQ.isLoading}
+            onRowClick={r => setRunId(r.id)}
+            sortKey={runSort.key}
+            sortOrder={runSort.order}
+            onSortChange={(key, order) => setRunSort({ key, order })}
+            emptyText="还没有运行；在 Playground 或评测任务里跑一次会出现在这里"
+            minWidth={620}
+          />
+        </div>
       )}
 
       <RunDetailDrawer
@@ -418,6 +437,26 @@ export const DatasetDetailPage = () => {
     </div>
   );
 };
+
+function sortRuns(
+  rows: DatasetRunRow[],
+  sort: { key: string; order: 'asc' | 'desc' },
+): DatasetRunRow[] {
+  const dir = sort.order === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    let c: number;
+    if (sort.key === 'score') {
+      c = (runScore(a) ?? -1) - (runScore(b) ?? -1);
+    } else if (sort.key === 'status') {
+      c = a.status.localeCompare(b.status);
+    } else if (sort.key === 'name') {
+      c = a.name.localeCompare(b.name);
+    } else {
+      c = a.created_at.localeCompare(b.created_at);
+    }
+    return c * dir;
+  });
+}
 
 const statusBar = (s: string): string =>
   s === 'success'
