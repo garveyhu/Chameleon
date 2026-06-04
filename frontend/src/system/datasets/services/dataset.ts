@@ -12,6 +12,7 @@ import type {
   DatasetRunDetail,
   DatasetRunItemRow,
   DatasetRunRow,
+  OptimizeResult,
   SampleFromLogsRequest,
   SampleResult,
   ScoreDistributionResult,
@@ -42,6 +43,9 @@ export const datasetApi = {
   /** H2：AI 扩样 —— 种子样本 + 任务描述 → LLM 批量生成新样本 */
   aiGenerate: (id: EntityId, req: AiGenerateRequest) =>
     post<AiGenerateResult>(`${BASE}/${id}/ai-generate`, req),
+  /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 */
+  optimizeRun: (runId: EntityId) =>
+    post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
   /** 人工标注：改某 item 的 expected_output / meta */
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),

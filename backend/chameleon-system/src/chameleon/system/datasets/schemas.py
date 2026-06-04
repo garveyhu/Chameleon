@@ -123,6 +123,16 @@ class AiGenerateResult(BaseModel):
     added: int
 
 
+class OptimizeResult(BaseModel):
+    """H3 智能优化产出：低分共性 → 重写 prompt + 报告"""
+
+    run_id: int
+    original_prompt: str
+    optimized_prompt: str
+    report: str
+    weak_count: int
+
+
 # ── DatasetRun（PR #25） ──────────────────────────────────
 
 

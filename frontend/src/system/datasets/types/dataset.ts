@@ -154,3 +154,12 @@ export interface AiGenerateResult {
   dataset_id: EntityId;
   added: number;
 }
+
+/** H3：智能优化产出 —— 重写 prompt + 报告 + 前后对比 */
+export interface OptimizeResult {
+  run_id: EntityId;
+  original_prompt: string;
+  optimized_prompt: string;
+  report: string;
+  weak_count: number;
+}

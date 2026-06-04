@@ -3,6 +3,7 @@
  *  内部过滤/选中态随 runId remount 重置（调用方传 key={runId}）。 */
 
 import { useQuery } from '@tanstack/react-query';
+import { Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
@@ -18,6 +19,7 @@ import {
 import { cn } from '@/core/lib/cn';
 import { formatScore, scoreBg } from '@/core/lib/score';
 import type { EntityId } from '@/core/types/api';
+import { OptimizeModal } from '@/system/datasets/components/optimize-modal';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
   DatasetRunItemRow,
@@ -81,6 +83,7 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
   const open = !!runId;
   const [bucket, setBucket] = useState<ScoreBucket | null>(null);
   const [sel, setSel] = useState<DatasetRunItemRow | null>(null);
+  const [optimizeOpen, setOptimizeOpen] = useState(false);
 
   const runQ = useQuery({
     queryKey: ['ds-run', runId],
@@ -187,6 +190,13 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
                 {STATUS_LABEL[runQ.data.status] ?? runQ.data.status}
               </Badge>
               <span>评分器 {runQ.data.judge}</span>
+              <button
+                type="button"
+                onClick={() => setOptimizeOpen(true)}
+                className="ml-auto inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-700 transition hover:bg-violet-100"
+              >
+                <Sparkles className="h-3.5 w-3.5" /> 智能优化
+              </button>
             </div>
           )}
         </SheetHeader>
@@ -247,6 +257,12 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
             />
           </section>
         </SheetBody>
+        {optimizeOpen && (
+          <OptimizeModal
+            runId={runId as EntityId}
+            onClose={() => setOptimizeOpen(false)}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );

@@ -11,6 +11,7 @@ from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.datasets import ai_generate as ds_ai_generate
+from chameleon.system.datasets import optimizer as ds_optimizer
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets import service as ds_service
 from chameleon.system.datasets.judges import list_judges
@@ -29,6 +30,7 @@ from chameleon.system.datasets.schemas import (
     DatasetRunItemDetail,
     DatasetRunRequest,
     DatasetRunRow,
+    OptimizeResult,
     SampleFromLogsRequest,
     SampleResult,
     ScoreDistributionResult,
@@ -306,3 +308,14 @@ async def score_distribution(
         session, run_id, threshold=threshold, bucket_count=buckets
     )
     return Result.ok(result)
+
+
+@router.post("/runs/{run_id}/optimize", response_model=Result[OptimizeResult])
+async def optimize_run(
+    run_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[OptimizeResult]:
+    """H3：低分样本共性 → LLM 重写 Prompt + 优化报告（走 eval 渠道）"""
+    data = await ds_optimizer.optimize_run_prompt(session, run_id)
+    return Result.ok(OptimizeResult(**data))
