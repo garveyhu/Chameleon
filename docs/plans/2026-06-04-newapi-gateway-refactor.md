@@ -114,9 +114,10 @@ schema 迁移（models 加 3 列）+ ORM + `factory.py` 一行收口 + `provider
 脚本/管理 API 写入：一行 `kind='gateway'` 的 new-api provider（token 从 `~/.agents/resources.json` / env 读，加密入库）+ 把 chat 模型 row 指向它并设 `upstream_name`。
 验证：Playground 发 `deepseek-chat`/`qwen-plus` → 经 Chameleon → new-api → 上游跑通；`call_logs` 落一条 generation，token/cost 正确。
 
-### P2 — embedding + rerank 切网关
-`embedding/factory.py` 切 DB 网关凭证；rerank registry 加 gateway 分支。
-**embedding_dim 铁律**：现全局 1536，`text-embedding-v3`=**1024**。老 KB 维持 1536 不动，**只有新建 KB 才用 v3**，dim 随 collection 走（不可全局一刀切）。
+### P2 — embedding 切网关 ✅ / rerank 暂缓
+- **embedding ✅**：LLM 工厂 reload 时把网关凭证暂存 `_GATEWAY_CRED`（`gateway_credential()` 同步暴露）；`embedding/factory.py` 在 `gateway.mode=newapi` 时改用网关凭证（否则 model.json 直连）。**用现有 `text-embedding-v2`（new-api 实测 dim=1536），同模型同维度，现有 KB 零影响**。已真跑验证。
+- **embedding_dim 铁律**：现全局 1536。`text-embedding-v3`=**1024**，故本期**不**切 v3——v3 留给未来 per-KB 维度（KB 层任务，超出模型供应范围）：老 KB 维持 1536，只有新建 KB 才用 v3，dim 随 collection 走。
+- **rerank 暂缓**：rerank 是**按 KB 配置**（KB.config 的 base_url/api_key/model），无全局默认；且 DashScope 个人账号对 `gte-rerank` 返回 403（账号未开通）。new-api 的 `/rerank` 路由可转发，但上游账号受限。结论：rerank 维持各 KB 直连配置；将来有可用 rerank 模型时，照 embedding 同样模式给 `rerankers/registry.py` 加 gateway 分支。
 
 ### P3 — 凭证单源化
 删 model.json 的 `providers.*` 明文 key（尤其 company qwen key）+ 禁用老 provider 行 + 删 `inventory.llm_provider_credential` 调用。此步前全程可回退。

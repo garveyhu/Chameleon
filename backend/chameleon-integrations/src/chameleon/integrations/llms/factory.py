@@ -30,6 +30,8 @@ from chameleon.integrations.observe import GenerationRecorder
 # 进程内 cache（启动期一次性 load）
 _CACHE: dict[str, BaseLLM] = {}
 _DEFAULT_NAME: str | None = None
+# newapi 模式网关凭证 (base_url, token)，随 reload 刷新，供 embedding 等 sync 路径复用
+_GATEWAY_CRED: tuple[str, str] | None = None
 _LOCK = threading.RLock()
 
 # 测试桩
@@ -54,7 +56,7 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
     Returns:
         cache 中的模型数量
     """
-    global _DEFAULT_NAME
+    global _DEFAULT_NAME, _GATEWAY_CRED
 
     # 局部 import 避免 integrations → core.config 循环依赖
     from chameleon.core.config import inventory
@@ -125,6 +127,11 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
     with _LOCK:
         _CACHE.clear()
         _CACHE.update(new_cache)
+        _GATEWAY_CRED = (
+            (gateway.base_url or "", get_or_decrypt(gateway.api_key_encrypted) or "")
+            if gateway is not None
+            else None
+        )
         if default_name:
             _DEFAULT_NAME = default_name
         elif _DEFAULT_NAME is None and new_cache:
@@ -141,6 +148,14 @@ def invalidate_llm(name: str) -> None:
     """单条失效（admin 删除 model 时调；下次需要先 reload_llm_cache）"""
     with _LOCK:
         _CACHE.pop(name, None)
+
+
+def gateway_credential() -> tuple[str, str] | None:
+    """newapi 模式下的网关 (base_url, token)；direct 或无网关时 None。
+
+    随 reload_llm_cache 刷新。供 embedding 工厂等 sync 路径复用，避免重复查 DB。
+    """
+    return _GATEWAY_CRED
 
 
 # ── 同步获取（业务热路径） ────────────────────────────────

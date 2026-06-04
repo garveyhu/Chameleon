@@ -49,7 +49,14 @@ def get_embedding_client(model: str | None = None) -> EmbeddingClient:
             message=f"embedding model {name} missing provider / dim in model.json",
         )
 
-    base_url, api_key = inventory.llm_provider_credential(provider)
+    # 网关模式：embedding 也收口到 new-api（同模型同维度）；否则按 model.json 直连
+    from chameleon.integrations.llms.factory import gateway_credential
+
+    gw = gateway_credential() if inventory.gateway_mode() == "newapi" else None
+    if gw is not None:
+        base_url, api_key = gw
+    else:
+        base_url, api_key = inventory.llm_provider_credential(provider)
     batch_size = cfg.get("batch_size")
     client = OpenAICompatEmbedding(
         base_url=base_url,
