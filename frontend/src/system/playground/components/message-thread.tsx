@@ -5,7 +5,7 @@
  * 每条 assistant 消息在 footer 提供 trace 入口（onOpenTrace），方便调试阶段查问题。
  */
 
-import { BookmarkPlus, Bot, ListTree } from 'lucide-react';
+import { BookmarkPlus, Bot, ListTree, Wand2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { MessageActions } from '@/core/components/chat';
@@ -20,6 +20,7 @@ import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { messagesOf, useChatStore } from '@/core/stores/chat';
+import { RewritePromptModal } from '@/system/playground/components/rewrite-prompt-modal';
 import { SaveAsSampleModal } from '@/system/playground/components/save-as-sample-modal';
 import type { PlaygroundMessage } from '@/system/playground/types/playground';
 
@@ -121,6 +122,7 @@ const MessageBubble = ({
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(msg.content);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [rewriteOpen, setRewriteOpen] = useState(false);
 
   const editMessage = useChatStore(s => s.editMessage);
   const regenerate = useChatStore(s => s.regenerate);
@@ -278,11 +280,29 @@ const MessageBubble = ({
                 存样本
               </button>
             )}
+            {!isUser && (
+              <button
+                type="button"
+                title="基于此回答改写 System Prompt（轻量）"
+                onClick={() => setRewriteOpen(true)}
+                className="flex items-center gap-0.5 rounded px-1 py-0.5 text-stone-400 transition hover:bg-violet-50 hover:text-violet-600"
+              >
+                <Wand2 className="h-3 w-3" />
+                改写提示词
+              </button>
+            )}
             {saveOpen && (
               <SaveAsSampleModal
                 defaultInput={prevUserContent ?? ''}
                 defaultExpected={msg.content}
                 onClose={() => setSaveOpen(false)}
+              />
+            )}
+            {rewriteOpen && (
+              <RewritePromptModal
+                columnId={columnId}
+                answer={msg.content}
+                onClose={() => setRewriteOpen(false)}
               />
             )}
             <MessageActions

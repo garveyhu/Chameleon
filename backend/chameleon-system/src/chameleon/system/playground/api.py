@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import ValidationError
+from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
 from chameleon.data.infra.db import get_session
 from chameleon.system.auth.dependencies import CurrentUser, require_permission
@@ -43,6 +44,21 @@ class PlaygroundInvokeRequest(BaseModel):
     kb_ids: list[int] | None = None
     # 是否把本轮配置写入会话快照；transient 调用（如翻译临时指令）传 false 不污染
     persist_config: bool = True
+
+
+class PromptRewriteRequest(BaseModel):
+    # 当前 System Prompt（可空，模板原文）
+    current_prompt: str = ""
+    # 触发改写的那条不理想模型回答
+    answer: str = ""
+    # 用户的改写诉求（非空）
+    instruction: str = Field(min_length=1)
+    # 指定改写用模型 code；None 走系统默认 chat 模型
+    model_code: str | None = None
+
+
+class PromptRewriteResponse(BaseModel):
+    rewritten_prompt: str
 
 
 router = APIRouter(prefix="/v1/admin/playground", tags=["admin:playground"])
@@ -78,3 +94,20 @@ async def invoke(
         ),
         log_label="playground:invoke",
     )
+
+
+@router.post("/prompt/rewrite", response_model=Result[PromptRewriteResponse])
+async def rewrite_prompt(
+    req: PromptRewriteRequest,
+    session: AsyncSession = Depends(get_session),
+    _: CurrentUser = Depends(require_permission("playground:invoke")),
+) -> Result[PromptRewriteResponse]:
+    """基于一条模型回答即时改写 System Prompt（非流式，业务全在 service）。"""
+    rewritten = await service.rewrite_prompt(
+        session,
+        current_prompt=req.current_prompt,
+        answer=req.answer,
+        instruction=req.instruction,
+        model_code=req.model_code,
+    )
+    return Result.ok(PromptRewriteResponse(rewritten_prompt=rewritten))

@@ -34,8 +34,10 @@ from chameleon.core.observe import (
     reset_trace_context,
     set_trace_context,
 )
+from chameleon.data.constants import Channel
 from chameleon.data.models import ChatSession, KnowledgeBase, LLMModel, Message
 from chameleon.data.utils.snowflake import next_session_id
+from chameleon.integrations.llms.factory import llm as get_llm
 from chameleon.integrations.llms.factory import resolve_llm
 from chameleon.integrations.observe.aspect import record_scope
 from chameleon.system.api_key.service import (
@@ -48,6 +50,9 @@ PLAYGROUND_APP_ID = "playground"
 PLAYGROUND_AGENT_KEY = "playground"
 PLAYGROUND_TOP_K = 3
 PLAYGROUND_CTX_HEADER = "以下是参考资料，请基于这些资料作答（无关时可忽略）：\n"
+
+# H1 rewrite：基于单条回答即时改写 System Prompt 的 channel='eval' 上下文锚点。
+EVAL_APP_ID = "__eval__"
 
 
 class SessionConfig(BaseModel):
@@ -486,3 +491,77 @@ async def _stream_llm(
         if u:
             usage = UsagePayload.from_dict(u)
     yield event_end(usage=usage)
+
+
+def _build_rewrite_prompt(
+    current_prompt: str, answer: str, instruction: str
+) -> str:
+    """组装「基于回答改写 System Prompt」的 LLM 提示词（强约束只回纯文本）。"""
+    base = current_prompt.strip() or "（当前没有 System Prompt）"
+    return (
+        "你是提示词工程助手。下面给你三样东西：\n"
+        "1) 当前的 System Prompt\n"
+        "2) 在该 System Prompt 下，模型对某次提问产出的一条不理想回答\n"
+        "3) 用户对回答的改写诉求\n\n"
+        "请基于这三者，改写出一个更好的 System Prompt，使模型按用户诉求作答。\n"
+        f"=== 当前 System Prompt ===\n{base}\n\n"
+        f"=== 这条不理想的模型回答 ===\n{answer.strip()}\n\n"
+        f"=== 用户的改写诉求 ===\n{instruction.strip()}\n\n"
+        "只输出改写后的完整 System Prompt 纯文本，"
+        "不要任何解释、前后缀、Markdown 代码块或 JSON 包裹。"
+    )
+
+
+async def rewrite_prompt(
+    session: AsyncSession,
+    *,
+    current_prompt: str,
+    answer: str,
+    instruction: str,
+    model_code: str | None = None,
+) -> str:
+    """单条/即时改写 System Prompt：当前 prompt + 一条回答 + 改写诉求 → 新 prompt 纯文本。
+
+    与 H3 optimizer（datasets/optimizer.py）的本质区分——别混淆：
+    - H1 rewrite（此处）：单条 / 即时 / 零数据集上下文 / 单次 LLM 调用 / 不落任何库，
+      结果直接回灌前端 ParamPanel。
+    - H3 optimizer：run 级 / 汇总整集低分样本共性缺陷 / 重型 / 落库版本链。
+    两者各自独立 service、不互相 import，仅共享 channel='eval' 的 TraceContext 范式。
+
+    Args:
+        session: DB 会话（仅满足 service 边界签名，本函数不落库）。
+        current_prompt: 当前 System Prompt（可空）。
+        answer: 触发改写的那条不理想模型回答。
+        instruction: 用户的改写诉求（非空）。
+        model_code: 指定改写用模型 code；None 走系统默认 chat 模型。
+
+    Returns:
+        改写后的完整 System Prompt 纯文本（已 strip）。
+
+    Raises:
+        BusinessError: LLM 返回空内容。
+    """
+    prompt = _build_rewrite_prompt(current_prompt, answer, instruction)
+
+    request_id = uuid.uuid4().hex
+    token = set_trace_context(
+        TraceContext(
+            request_id=request_id,
+            channel=Channel.EVAL.value,
+            app_id=EVAL_APP_ID,
+            session_id=f"eval-rewrite-{request_id[:8]}",
+        )
+    )
+    try:
+        client = get_llm(model_code)
+        ai = await client.ainvoke([HumanMessage(content=prompt)])
+        raw = ai.content if hasattr(ai, "content") else str(ai)
+    finally:
+        reset_trace_context(token)
+
+    rewritten = str(raw).strip()
+    if not rewritten:
+        raise BusinessError(
+            ResultCode.Fail, message="改写失败，请调整需求后重试"
+        )
+    return rewritten

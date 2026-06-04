@@ -18,6 +18,7 @@ import { toast } from '@/core/lib/toast';
 import { agentApi } from '@/system/agents/services/agent';
 import { kbApi } from '@/system/kbs/services/kb';
 import { modelApi } from '@/system/models/services/model';
+import { TemplateVarsPanel } from '@/system/playground/components/template-vars-panel';
 import type { PlaygroundParams } from '@/system/playground/types/playground';
 
 interface Props {
@@ -122,6 +123,12 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
           className="text-[12px]"
         />
       </div>
+
+      <TemplateVarsPanel
+        systemPrompt={params.system_prompt}
+        values={params.var_values ?? {}}
+        onChange={v => set('var_values', v)}
+      />
 
       <div className="space-y-3">
         <NumberField

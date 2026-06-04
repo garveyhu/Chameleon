@@ -28,6 +28,7 @@ import type {
   PlaygroundMessage,
   PlaygroundParams,
 } from '@/system/playground/types/playground';
+import { fillTemplate } from '@/system/playground/utils/template-vars';
 
 export interface ChatActions {
   setApiKeyId: (apiKeyId: EntityId | null) => void;
@@ -178,6 +179,11 @@ export const createChatActions: StateCreator<
   ) => {
     const params = paramsOf(columnId);
     if (!params) return;
+    // transient override（翻译等）走原文不模板化；正常发送把 {{var}} 替换成填值，
+    // 未填的保留原占位符。仅改请求体，不动 params.system_prompt 原文（模板需留存）。
+    const effectiveSystem: string | undefined =
+      overrides?.system_prompt ??
+      fillTemplate(params.system_prompt ?? '', params.var_values ?? {});
     const controller = new AbortController();
     aborters.set(columnId, controller);
     try {
@@ -187,8 +193,7 @@ export const createChatActions: StateCreator<
           session_id: get().columns.find(c => c.id === columnId)?.sessionId,
           bound_agent_key: params.bound_agent_key,
           model_id: params.model_id,
-          system_prompt:
-            overrides?.system_prompt ?? params.system_prompt ?? undefined,
+          system_prompt: effectiveSystem,
           temperature: params.temperature,
           top_p: params.top_p,
           max_tokens: params.max_tokens,

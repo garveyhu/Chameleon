@@ -54,6 +54,9 @@ export interface PlaygroundParams {
   top_p: number | null;
   max_tokens: number | null;
   kb_ids: EntityId[];
+  /** System Prompt 里 {{var}} 占位符的填值（会话级，跟 system_prompt 同生命周期）。
+   *  仅前端用于发送时拼实值，不进 InvokeRequest——后端无感知。 */
+  var_values?: Record<string, string>;
   /** 关联应用：本会话配置基于哪个应用预填（仅溯源记录，运行仍 model-direct） */
   bound_agent_key?: string | null;
 }

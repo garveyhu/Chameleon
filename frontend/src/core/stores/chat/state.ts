@@ -69,6 +69,7 @@ export const newParams = (): PlaygroundParams => ({
   top_p: 1,
   max_tokens: null,
   kb_ids: [],
+  var_values: {},
 });
 
 export const newColumn = (): ChatColumn => ({
