@@ -1,5 +1,5 @@
 /** 分数分布桶（复用） —— 每 metric 一条直方图，点柱子回调上层做样本筛选。
- *  从原 run-detail-drawer 的 MetricHist 提出，供运行详情整页复用。 */
+ *  供运行详情整页复用。 */
 
 import { cn } from '@/core/lib/cn';
 import type {

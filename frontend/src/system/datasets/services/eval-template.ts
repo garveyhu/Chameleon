@@ -4,6 +4,7 @@ import type {
   CreateEvalTemplateRequest,
   EvalTemplateItem,
   ScoreDistributionResult,
+  TemplateUsageCount,
   UpdateEvalTemplateRequest,
 } from '@/system/datasets/types/eval-template';
 
@@ -18,6 +19,9 @@ export const evalTemplateApi = {
     get<PageResult<EvalTemplateItem>>('/v1/admin/eval-templates', { params }),
   get: (id: EntityId) =>
     get<EvalTemplateItem>(`/v1/admin/eval-templates/${id}`),
+  /** 该模板被多少定时评测任务引用（评分方案库「应用数」badge）。 */
+  usageCount: (id: EntityId) =>
+    get<TemplateUsageCount>(`/v1/admin/eval-templates/${id}/usage-count`),
   create: (req: CreateEvalTemplateRequest) =>
     post<EvalTemplateItem>('/v1/admin/eval-templates', req),
   update: (id: EntityId, req: UpdateEvalTemplateRequest) =>

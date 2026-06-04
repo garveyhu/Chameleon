@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.data.models import Dataset, EvalJob, EvalJobRun
+from chameleon.data.models import Dataset, EvalJob, EvalJobRun, EvalTemplate
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets.judges import JUDGES
 from chameleon.system.eval_jobs.alert import maybe_send_alert
@@ -75,8 +75,13 @@ async def list_jobs(
 
     items = [EvalJobItem.model_validate(r) for r in rows]
     name_map = await _dataset_name_map(session, {r.dataset_id for r in rows})
+    tpl_map = await _template_name_map(
+        session, {r.template_id for r in rows if r.template_id is not None}
+    )
     for it in items:
         it.dataset_name = name_map.get(it.dataset_id)
+        if it.template_id is not None:
+            it.template_name = tpl_map.get(it.template_id)
     return PageResult(
         items=items, total=total, page=page.page, page_size=page.page_size
     )
@@ -87,6 +92,9 @@ async def get_job(session: AsyncSession, job_id: int) -> EvalJobItem:
     item = EvalJobItem.model_validate(row)
     name_map = await _dataset_name_map(session, {row.dataset_id})
     item.dataset_name = name_map.get(row.dataset_id)
+    if row.template_id is not None:
+        tpl_map = await _template_name_map(session, {row.template_id})
+        item.template_name = tpl_map.get(row.template_id)
     return item
 
 
@@ -103,11 +111,48 @@ async def _dataset_name_map(
     return {r.id: r.name for r in rows}
 
 
+async def _template_name_map(
+    session: AsyncSession, template_ids: set[int]
+) -> dict[int, str]:
+    if not template_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(EvalTemplate.id, EvalTemplate.name).where(
+                EvalTemplate.id.in_(template_ids)
+            )
+        )
+    ).all()
+    return {r.id: r.name for r in rows}
+
+
+async def _resolve_template_version(
+    session: AsyncSession, template_id: int
+) -> int:
+    """绑定模板时解析其 version 用于 freeze（模板不存在则拒绝）。"""
+    version = (
+        await session.execute(
+            select(EvalTemplate.version).where(EvalTemplate.id == template_id)
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise BusinessError(
+            ResultCode.Fail, message=f"eval_template 不存在: {template_id}"
+        )
+    return int(version)
+
+
 async def create_job(session: AsyncSession, req: CreateEvalJobRequest) -> EvalJobItem:
     await _validate_dataset(session, req.dataset_id)
     _validate_judge(req.judge)
     _validate_cron(req.cron_expr)
     await _validate_unique_key(session, req.job_key)
+
+    template_version_frozen: int | None = None
+    if req.template_id is not None:
+        template_version_frozen = await _resolve_template_version(
+            session, req.template_id
+        )
 
     row = EvalJob(
         job_key=req.job_key,
@@ -120,6 +165,8 @@ async def create_job(session: AsyncSession, req: CreateEvalJobRequest) -> EvalJo
         prompt_override=req.prompt_override,
         judge=req.judge,
         judge_config=req.judge_config,
+        template_id=req.template_id,
+        template_version_frozen=template_version_frozen,
         cron_expr=req.cron_expr,
         alert_config=req.alert_config,
         enabled=req.enabled,
@@ -129,6 +176,9 @@ async def create_job(session: AsyncSession, req: CreateEvalJobRequest) -> EvalJo
     await session.refresh(row)
     item = EvalJobItem.model_validate(row)
     await session.commit()
+    if item.template_id is not None:
+        tpl_map = await _template_name_map(session, {item.template_id})
+        item.template_name = tpl_map.get(item.template_id)
     logger.info("eval_job created | id={} | key={}", row.id, row.job_key)
     return item
 
@@ -154,6 +204,16 @@ async def update_job(
         row.judge = req.judge
     if req.judge_config is not None:
         row.judge_config = req.judge_config
+    if req.template_id is not None:
+        # 约定：template_id=0 解绑回内联 judge；>0 改绑并重新 freeze version
+        if req.template_id == 0:
+            row.template_id = None
+            row.template_version_frozen = None
+        else:
+            row.template_version_frozen = await _resolve_template_version(
+                session, req.template_id
+            )
+            row.template_id = req.template_id
     if req.cron_expr is not None:
         _validate_cron(req.cron_expr)
         row.cron_expr = req.cron_expr
@@ -165,6 +225,9 @@ async def update_job(
     await session.refresh(row)
     item = EvalJobItem.model_validate(row)
     await session.commit()
+    if item.template_id is not None:
+        tpl_map = await _template_name_map(session, {item.template_id})
+        item.template_name = tpl_map.get(item.template_id)
     return item
 
 

@@ -1,9 +1,9 @@
-/** EvalJob 创建 / 编辑 Modal —— cron preset + alert 配置
+/** EvalJob 创建 / 编辑 Modal —— 评分方案 + cron preset + alert 配置
  *
  * 复杂度集中三块：
- *  1) cron preset 切换（自定义 mode 时露出 raw 输入）
- *  2) alert_config 启用切换：关 → null；开 → {kind, target, threshold, silence}
- *  3) dataset 下拉 / judge 下拉 用 useQuery 拉 admin 接口
+ *  1) 评分方案选择器（选模板 or 自定义 judge）—— 用户最痛点（建了模板没法选）
+ *  2) cron preset 切换（自定义 mode 时露出 raw 输入）
+ *  3) alert_config 启用切换：关 → null；开 → {kind, target, threshold, silence}
  */
 
 import { useQuery } from '@tanstack/react-query';
@@ -30,13 +30,9 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import type { EntityId, PageResult } from '@/core/types/api';
-import { JudgeConfigFields } from '@/system/datasets/components/judge-config-fields';
-import {
-  buildJudgeConfig,
-  JUDGE_META,
-  readCriteria,
-  readDslText,
-} from '@/system/datasets/utils/judge-meta';
+import { ScoringSchemePicker } from '@/system/datasets/components/scoring-scheme-picker';
+import type { ScoringScheme } from '@/system/datasets/types/scoring-scheme';
+import { schemeToJobFields } from '@/system/datasets/utils/scoring-scheme-payload';
 import type {
   AlertConfig,
   CreateEvalJobPayload,
@@ -59,16 +55,31 @@ interface EvalJobFormModalProps {
   /** 传入 = 编辑模式；不传 = 创建 */
   initial?: EvalJobItem | null;
   loading: boolean;
+  /** 预设数据集（新建评估 wizard 注入时锁定，隐藏选择器） */
+  presetDatasetId?: EntityId;
   onClose: () => void;
   onSubmit: (
     payload: CreateEvalJobPayload | UpdateEvalJobPayload,
   ) => void;
 }
 
+/** 从已存 job 回填 ScoringScheme：绑了模板 → template 模式；否则 judge 模式。 */
+const initialScheme = (job?: EvalJobItem | null): ScoringScheme => {
+  if (job?.template_id != null) {
+    return { mode: 'template', templateId: job.template_id };
+  }
+  return {
+    mode: 'judge',
+    judge: job?.judge ?? 'exact_match',
+    judgeConfig: job?.judge_config ?? undefined,
+  };
+};
+
 export const EvalJobFormModal = ({
   open,
   initial,
   loading,
+  presetDatasetId,
   onClose,
   onSubmit,
 }: EvalJobFormModalProps) => {
@@ -80,7 +91,11 @@ export const EvalJobFormModal = ({
     () => initial?.description ?? '',
   );
   const [datasetId, setDatasetId] = useState<string>(() =>
-    initial ? String(initial.dataset_id) : '',
+    initial
+      ? String(initial.dataset_id)
+      : presetDatasetId != null
+        ? String(presetDatasetId)
+        : '',
   );
   const [targetKind] = useState<'agent' | 'graph'>(
     () => initial?.target_kind ?? 'agent',
@@ -92,12 +107,8 @@ export const EvalJobFormModal = ({
   const [promptOverride, setPromptOverride] = useState(
     () => initial?.prompt_override ?? '',
   );
-  const [judge, setJudge] = useState(() => initial?.judge ?? 'exact_match');
-  const [criteria, setCriteria] = useState(() =>
-    readCriteria(initial?.judge_config),
-  );
-  const [dslText, setDslText] = useState(() =>
-    readDslText(initial?.judge_config),
+  const [scheme, setScheme] = useState<ScoringScheme>(() =>
+    initialScheme(initial),
   );
   const [cronPreset, setCronPreset] = useState(() => {
     if (!initial) return '0 9 * * *';
@@ -129,13 +140,14 @@ export const EvalJobFormModal = ({
     String(initial?.alert_config?.silence_minutes ?? 60),
   );
 
+  const lockDataset = isEdit || presetDatasetId != null;
   const datasetsQ = useQuery({
     queryKey: ['eval-job-modal:datasets'],
     queryFn: () =>
       get<PageResult<DatasetItem>>('/v1/admin/datasets', {
         params: { page_size: 200 },
       }),
-    enabled: open,
+    enabled: open && !lockDataset,
     staleTime: 30_000,
   });
 
@@ -148,9 +160,12 @@ export const EvalJobFormModal = ({
 
   const isCustomCron = cronPreset === CRON_CUSTOM_SENTINEL;
   const finalCron = isCustomCron ? cronCustom.trim() : cronPreset;
+  const schemeReady =
+    scheme.mode === 'template' ? scheme.templateId != null : true;
   const canSubmit =
     !!finalCron &&
     !!datasetId &&
+    schemeReady &&
     (isEdit || !!jobKey.trim()) &&
     !!name.trim() &&
     !loading &&
@@ -170,7 +185,7 @@ export const EvalJobFormModal = ({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    const judgeConfig = buildJudgeConfig(judge, criteria, dslText) ?? null;
+    const schemeFields = schemeToJobFields(scheme);
     if (isEdit) {
       const payload: UpdateEvalJobPayload = {
         name: name.trim(),
@@ -179,8 +194,9 @@ export const EvalJobFormModal = ({
         target_key: targetKey.trim() || null,
         model_override: modelOverride.trim() || null,
         prompt_override: promptOverride.trim() || null,
-        judge,
-        judge_config: judgeConfig,
+        judge: schemeFields.judge,
+        judge_config: schemeFields.judge_config,
+        template_id: schemeFields.template_id,
         cron_expr: finalCron,
         alert_config: buildAlert(),
       };
@@ -195,8 +211,12 @@ export const EvalJobFormModal = ({
         target_key: targetKey.trim() || null,
         model_override: modelOverride.trim() || null,
         prompt_override: promptOverride.trim() || null,
-        judge,
-        judge_config: judgeConfig,
+        judge: schemeFields.judge,
+        judge_config: schemeFields.judge_config,
+        template_id:
+          schemeFields.template_id === (0 as unknown as EntityId)
+            ? null
+            : schemeFields.template_id,
         cron_expr: finalCron,
         alert_config: buildAlert(),
       };
@@ -208,7 +228,7 @@ export const EvalJobFormModal = ({
     <Modal open={open} onOpenChange={o => !o && onClose()}>
       <ModalContent size="lg">
         <ModalHeader>
-          <ModalTitle>{isEdit ? '编辑评测任务' : '新建评测任务'}</ModalTitle>
+          <ModalTitle>{isEdit ? '编辑定时任务' : '新建定时任务'}</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -251,16 +271,12 @@ export const EvalJobFormModal = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {!lockDataset && (
             <div className="space-y-1.5">
               <Label>
                 Dataset <span className="text-rose-500">*</span>
               </Label>
-              <Select
-                value={datasetId}
-                onValueChange={setDatasetId}
-                disabled={isEdit}
-              >
+              <Select value={datasetId} onValueChange={setDatasetId}>
                 <SelectTrigger>
                   <SelectValue placeholder="选择数据集…" />
                 </SelectTrigger>
@@ -273,34 +289,12 @@ export const EvalJobFormModal = ({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>评分方式</Label>
-              <Select value={judge} onValueChange={setJudge}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(judgesQ.data ?? ['exact_match']).map(j => (
-                    <SelectItem key={j} value={j}>
-                      {JUDGE_META[j]?.label ?? j}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {JUDGE_META[judge] && (
-                <p className="text-[10.5px] leading-snug text-stone-400">
-                  {JUDGE_META[judge].desc}
-                </p>
-              )}
-            </div>
-          </div>
+          )}
 
-          <JudgeConfigFields
-            judge={judge}
-            criteria={criteria}
-            onCriteriaChange={setCriteria}
-            dslText={dslText}
-            onDslTextChange={setDslText}
+          <ScoringSchemePicker
+            value={scheme}
+            onChange={setScheme}
+            judges={judgesQ.data}
           />
 
           <div className="space-y-1.5">

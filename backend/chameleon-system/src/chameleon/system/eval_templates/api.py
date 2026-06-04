@@ -12,6 +12,7 @@ from chameleon.system.eval_templates import service as et_service
 from chameleon.system.eval_templates.schemas import (
     CreateEvalTemplateRequest,
     EvalTemplateItem,
+    TemplateUsageCount,
     UpdateEvalTemplateRequest,
 )
 
@@ -46,6 +47,16 @@ async def get_template(
     _: object = Depends(require_permission("datasets:read")),
 ) -> Result[EvalTemplateItem]:
     return Result.ok(await et_service.get_template(session, template_id))
+
+
+@router.get("/{template_id}/usage-count", response_model=Result[TemplateUsageCount])
+async def get_template_usage_count(
+    template_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:read")),
+) -> Result[TemplateUsageCount]:
+    """绑定该模板的定时评测任务数（按 name 跨 version 聚合）。"""
+    return Result.ok(await et_service.count_template_usage(session, template_id))
 
 
 @router.post("", response_model=Result[EvalTemplateItem])

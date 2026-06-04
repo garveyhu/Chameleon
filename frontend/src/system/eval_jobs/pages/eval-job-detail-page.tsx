@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Pencil, Play } from 'lucide-react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
@@ -14,7 +14,6 @@ import { formatDateTime } from '@/core/lib/format';
 import { formatScore, parseScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
-import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { EvalJobFormModal } from '@/system/eval_jobs/components/eval-job-form-modal';
 import { evalJobApi } from '@/system/eval_jobs/services/eval-job';
 import {
@@ -56,8 +55,8 @@ export const EvalJobDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const jobId = id ?? '';
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
-  const [runId, setRunId] = useState<EntityId | null>(null);
 
   const jobQ = useQuery({
     queryKey: ['eval-job', jobId],
@@ -106,7 +105,7 @@ export const EvalJobDetailPage = () => {
           to="/eval-jobs"
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> 评测任务
+          <ArrowLeft className="h-3.5 w-3.5" /> 定时任务
         </Link>
         <span className="text-stone-300">/</span>
         {jobQ.isLoading ? (
@@ -168,16 +167,13 @@ export const EvalJobDetailPage = () => {
           <RunsTable
             runs={runs}
             loading={runsQ.isLoading && !runsQ.data}
-            onOpenRun={setRunId}
+            onOpenRun={runId =>
+              job &&
+              navigate(`/datasets/${job.dataset_id}/runs/${runId}`)
+            }
           />
         </CardContent>
       </Card>
-
-      <RunDetailDrawer
-        key={runId ?? '∅'}
-        runId={runId}
-        onClose={() => setRunId(null)}
-      />
 
       {editOpen && (
         <EvalJobFormModal
@@ -204,7 +200,16 @@ const InfoGrid = ({ job }: { job: EvalJobItem }) => {
         value: job.dataset_name ?? `#${job.dataset_id}`,
         mono: !job.dataset_name,
       },
-      { label: '评分器', value: job.judge },
+      {
+        label: '评分方案',
+        value: job.template_id
+          ? `模板 · ${job.template_name ?? `#${job.template_id}`}${
+              job.template_version_frozen != null
+                ? ` v${job.template_version_frozen}`
+                : ''
+            }`
+          : `judge · ${job.judge}`,
+      },
       {
         label: '被测对象',
         value: `${job.target_kind === 'graph' ? '工作流' : '智能体'} / ${job.target_key ?? '—'}`,

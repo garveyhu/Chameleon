@@ -1,8 +1,12 @@
-/** 评分模板列表页 —— 多 metric 加权评测模板的 CRUD 管理。 */
+/** 评分方案库 —— 多 metric 加权评测模板的 CRUD + onboarding + 应用数。
+ *
+ * 「评分方案」= 复用的多指标 / judge 打分配置；建好后在「新建评估」/「定时任务」里选它。
+ */
 
 import {
   keepPreviousData,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
@@ -22,6 +26,7 @@ import { formatDateTime } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { EvalTemplateFormModal } from '@/system/datasets/components/eval-template-form-modal';
+import { SchemeLibraryOnboarding } from '@/system/datasets/components/scheme-library-onboarding';
 import { evalTemplateApi } from '@/system/datasets/services/eval-template';
 import type {
   CreateEvalTemplateRequest,
@@ -60,6 +65,20 @@ export const EvalTemplatesPage = () => {
         order: sortOrder,
       }),
     placeholderData: keepPreviousData,
+  });
+
+  const visibleRows = listQ.data?.items ?? [];
+  const usageQueries = useQueries({
+    queries: visibleRows.map(t => ({
+      queryKey: ['eval-template-usage', String(t.id)],
+      queryFn: () => evalTemplateApi.usageCount(t.id),
+      staleTime: 30_000,
+    })),
+  });
+  const usageById = new Map<string, number>();
+  visibleRows.forEach((t, i) => {
+    const c = usageQueries[i]?.data?.job_count;
+    if (typeof c === 'number') usageById.set(String(t.id), c);
   });
 
   const invalidate = () =>
@@ -115,9 +134,9 @@ export const EvalTemplatesPage = () => {
 
   const handleDelete = async (t: EvalTemplateItem) => {
     const ok = await confirm({
-      title: `删除评分模板「${t.name}」？`,
+      title: `删除评分方案「${t.name}」？`,
       description:
-        '已绑定该模板的评测任务按版本 freeze 不受影响；此操作不可恢复。',
+        '已绑定该方案的评测任务按版本 freeze 不受影响；此操作不可恢复。',
       confirmText: '删除',
       danger: true,
     });
@@ -140,7 +159,7 @@ export const EvalTemplatesPage = () => {
   const cols: DataTableColumn<EvalTemplateItem>[] = [
     {
       key: 'name',
-      header: '模板',
+      header: '方案',
       sortable: true,
       render: t => (
         <div className="min-w-0">
@@ -190,6 +209,29 @@ export const EvalTemplatesPage = () => {
         ) : (
           <span className="text-stone-300">—</span>
         ),
+    },
+    {
+      key: 'usage',
+      header: '应用数',
+      align: 'right',
+      width: 76,
+      render: t => {
+        const count = usageById.get(String(t.id));
+        if (count === undefined) {
+          return <span className="text-[10.5px] text-stone-300">…</span>;
+        }
+        return count > 0 ? (
+          <Badge
+            variant="outline"
+            className="bg-emerald-50 text-[10.5px] text-emerald-700"
+            title="绑定该方案的定时评测任务数"
+          >
+            {count} 个任务
+          </Badge>
+        ) : (
+          <span className="text-[10.5px] text-stone-400">未使用</span>
+        );
+      },
     },
     {
       key: 'version',
@@ -254,11 +296,13 @@ export const EvalTemplatesPage = () => {
 
   return (
     <div>
+      <SchemeLibraryOnboarding total={total} loading={listQ.isLoading} />
+
       <TableToolbar
         title={
           <span className="flex items-center gap-2">
             <Ruler className="h-4 w-4 text-stone-500" />
-            评分模板
+            评分方案
             <span className="text-[11px] font-normal text-stone-400">
               {total} 个
             </span>
@@ -272,11 +316,11 @@ export const EvalTemplatesPage = () => {
             setKeyword(v);
             resetPage();
           },
-          placeholder: '搜索模板名称',
+          placeholder: '搜索方案名称',
         }}
         extra={
           <Button size="sm" onClick={openCreate}>
-            <Plus className="mr-1 h-3.5 w-3.5" /> 新建模板
+            <Plus className="mr-1 h-3.5 w-3.5" /> 新建方案
           </Button>
         }
       />
@@ -295,10 +339,10 @@ export const EvalTemplatesPage = () => {
         loading={listQ.isLoading && !listQ.data}
         refreshing={listQ.isFetching}
         onRowClick={openEdit}
-        emptyText="暂无评分模板，点右上「新建模板」开始"
+        emptyText="暂无评分方案，点右上「新建方案」开始；建好后在「新建评估」/「定时任务」里选它"
         emptyExtra={
           <Button size="sm" variant="secondary" onClick={openCreate}>
-            新建模板
+            新建方案
           </Button>
         }
       />

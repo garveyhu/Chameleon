@@ -1,6 +1,5 @@
 /** 运行详情整页（master-detail，URL 驱动）—— 路由 /datasets/:id/runs/:runId。
- *  左窄栏 run 列表 / 中主区 run 详情 / 右侧同屏最多 1 层覆盖物（样本详情 or 优化侧栏）。
- *  退役 run-detail-drawer 的「抽屉套娃 + modal 盖 drawer」。 */
+ *  左窄栏 run 列表 / 中主区 run 详情 / 右侧同屏最多 1 层覆盖物（样本详情 or 优化侧栏）。 */
 
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';

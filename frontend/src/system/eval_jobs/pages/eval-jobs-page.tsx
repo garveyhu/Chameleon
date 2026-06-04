@@ -234,7 +234,7 @@ export const EvalJobsPage = () => {
             onClick={async () => {
               if (
                 await confirm({
-                  title: '删除该评测任务？',
+                  title: '删除该定时任务？',
                   description: `任务「${r.name}」及其全部历史运行记录将被清除，不可恢复。`,
                   confirmText: '删除',
                   danger: true,
@@ -261,7 +261,7 @@ export const EvalJobsPage = () => {
         title={
           <span className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-stone-500" />
-            评测任务
+            定时任务
             <span className="text-[11px] font-normal text-stone-400">
               {total} 个
             </span>
@@ -294,7 +294,7 @@ export const EvalJobsPage = () => {
         extra={
           <Button size="sm" onClick={() => setCreateOpen(true)}>
             <Plus className="mr-1 h-3 w-3" />
-            新建评测任务
+            新建定时任务
           </Button>
         }
       />
@@ -314,14 +314,14 @@ export const EvalJobsPage = () => {
         loading={listQ.isLoading && !listQ.data}
         refreshing={listQ.isFetching}
         onRowClick={r => nav(`/eval-jobs/${r.id}`)}
-        emptyText="还没有评测任务"
+        emptyText="还没有定时任务；在数据集详情「新建评估」选「定时周期跑」可创建"
         emptyExtra={
           <Button
             size="sm"
             variant="secondary"
             onClick={() => setCreateOpen(true)}
           >
-            新建评测任务
+            新建定时任务
           </Button>
         }
       />

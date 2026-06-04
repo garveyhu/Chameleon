@@ -32,6 +32,11 @@ export interface UpdateEvalTemplateRequest {
   judge_provider?: string;
 }
 
+export interface TemplateUsageCount {
+  template_id: EntityId;
+  job_count: number;
+}
+
 // ── 评分分布 ────────────────────────────────────────────
 
 export interface ScoreBucket {

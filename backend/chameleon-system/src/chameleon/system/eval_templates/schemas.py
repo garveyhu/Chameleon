@@ -54,3 +54,10 @@ class UpdateEvalTemplateRequest(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     metrics: list[MetricSpec] | None = Field(default=None, min_length=1, max_length=20)
     judge_provider: str | None = Field(default=None, max_length=64)
+
+
+class TemplateUsageCount(BaseModel):
+    """模板被多少个定时评测任务引用（按 name 跨 version 聚合）。"""
+
+    template_id: int
+    job_count: int

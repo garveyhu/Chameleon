@@ -111,6 +111,8 @@ export interface CreateDatasetRunRequest {
   name: string;
   judge: string;
   judge_config?: Record<string, unknown>;
+  /** 评分方案「选模板」时透传：跑完按 template metrics 评分。 */
+  eval_template_id?: EntityId;
   model_override?: string;
   agent_key?: string;
 }

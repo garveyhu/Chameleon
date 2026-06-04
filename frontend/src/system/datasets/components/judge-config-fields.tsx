@@ -1,7 +1,7 @@
 /** 评分配置区 —— 按所选 judge 条件渲染配置输入。
  *
  * 受控组件：上层持有 criteria 字符串，本组件只出 UI。提交时上层用
- * buildJudgeConfig 组装 judge_config。run-start-modal 与 eval-job-form-modal 同用。
+ * buildJudgeConfig 组装 judge_config。由评分方案选择器（scoring-scheme-picker）复用。
  */
 
 import { Label } from '@/core/components/ui/label';

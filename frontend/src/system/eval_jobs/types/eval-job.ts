@@ -20,6 +20,10 @@ export interface EvalJobItem {
   prompt_override: string | null;
   judge: string;
   judge_config: Record<string, unknown> | null;
+  /** 评分方案绑定：绑了模板则非 null（template_name 跨 version 稳定）。 */
+  template_id: EntityId | null;
+  template_version_frozen: number | null;
+  template_name: string | null;
   cron_expr: string;
   alert_config: AlertConfig | null;
   enabled: boolean;
@@ -40,6 +44,8 @@ export interface CreateEvalJobPayload {
   prompt_override?: string | null;
   judge?: string;
   judge_config?: Record<string, unknown> | null;
+  /** 评分方案「选模板」：绑该模板 id（freeze 当前 version）。 */
+  template_id?: EntityId | null;
   cron_expr: string;
   alert_config?: AlertConfig | null;
   enabled?: boolean;
@@ -54,6 +60,8 @@ export interface UpdateEvalJobPayload {
   prompt_override?: string | null;
   judge?: string;
   judge_config?: Record<string, unknown> | null;
+  /** 改绑模板：传 id 改绑；传 0 解绑回内联 judge。 */
+  template_id?: EntityId | null;
   cron_expr?: string;
   alert_config?: AlertConfig | null;
   enabled?: boolean;

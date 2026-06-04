@@ -1,6 +1,6 @@
 /** 评分器（judge）共享元数据 —— 中文名 + 说明（量纲提示）+ 配置形态。
  *
- * 供 run-start-modal（手动运行）与 eval-job-form-modal（定时任务）同用，
+ * 供评分方案选择器（scoring-scheme-picker）与各评估表单同用，
  * 避免两份 JUDGE_META 漂移。后端 6 个 judge 见 GET /v1/admin/datasets/judges。
  */
 

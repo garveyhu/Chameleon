@@ -122,12 +122,12 @@ export const DOMAINS: NavDomain[] = [
         ],
       },
       {
-        i18nKey: 'menu.group.quality',
-        fallbackTitle: '质量 & 成本',
+        i18nKey: 'menu.group.evaluation',
+        fallbackTitle: '评估',
         children: [
           { to: '/datasets', icon: Database, i18nKey: 'menu.datasets', fallbackTitle: '数据集', perm: 'datasets:read' },
-          { to: '/eval-templates', icon: Ruler, i18nKey: 'menu.eval_templates', fallbackTitle: '评分模板', perm: 'datasets:read' },
-          { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '评测任务', perm: 'datasets:read' },
+          { to: '/eval-templates', icon: Ruler, i18nKey: 'menu.eval_templates', fallbackTitle: '评分方案', perm: 'datasets:read' },
+          { to: '/eval-jobs', icon: FlaskConical, i18nKey: 'menu.eval_jobs', fallbackTitle: '定时任务', perm: 'datasets:read' },
         ],
       },
       {

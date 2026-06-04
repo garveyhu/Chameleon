@@ -8,15 +8,16 @@
 from __future__ import annotations
 
 from loguru import logger
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
-from chameleon.data.models import EvalTemplate
+from chameleon.data.models import EvalJob, EvalTemplate
 from chameleon.system.eval_templates.schemas import (
     CreateEvalTemplateRequest,
     EvalTemplateItem,
+    TemplateUsageCount,
     UpdateEvalTemplateRequest,
 )
 
@@ -173,6 +174,34 @@ async def update_template(
         row.version,
     )
     return item
+
+
+async def count_template_usage(
+    session: AsyncSession, template_id: int
+) -> TemplateUsageCount:
+    """统计引用该模板的定时评测任务数。
+
+    EvalJob.template_id 指向某个 version 行；按 name 取该模板全部 version 行 id，
+    统计 template_id 落在其中的 job 数，使计数跨 version 稳定。
+    """
+    row = await _load(session, template_id)
+    version_ids = (
+        (
+            await session.execute(
+                select(EvalTemplate.id).where(EvalTemplate.name == row.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    job_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(EvalJob)
+            .where(EvalJob.template_id.in_(version_ids))
+        )
+    ).scalar_one()
+    return TemplateUsageCount(template_id=template_id, job_count=int(job_count))
 
 
 async def delete_template(session: AsyncSession, template_id: int) -> None:

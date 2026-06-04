@@ -24,6 +24,11 @@ class EvalJobItem(BaseModel):
     prompt_override: str | None = None
     judge: str
     judge_config: dict[str, Any] | None = None
+    # P21.2：可选绑定的评分模板（freeze 当前 version）。template_name 跨 version 稳定。
+    template_id: int | None = None
+    template_version_frozen: int | None = None
+    # service 补：所绑模板的展示名（删模板后为 None）
+    template_name: str | None = None
     cron_expr: str
     alert_config: dict[str, Any] | None = None
     enabled: bool
@@ -44,6 +49,8 @@ class CreateEvalJobRequest(BaseModel):
     prompt_override: str | None = None
     judge: str = "exact_match"
     judge_config: dict[str, Any] | None = None
+    # 评分方案二选一：绑模板（template_id）或内联 judge。设了 template_id 走模板评分。
+    template_id: int | None = None
     cron_expr: str = Field(min_length=1, max_length=64)
     alert_config: dict[str, Any] | None = None
     enabled: bool = True
@@ -58,6 +65,8 @@ class UpdateEvalJobRequest(BaseModel):
     prompt_override: str | None = None
     judge: str | None = None
     judge_config: dict[str, Any] | None = None
+    # 评分方案切换：传 template_id 改绑（重新 freeze version）；传 0 解绑回内联 judge。
+    template_id: int | None = None
     cron_expr: str | None = Field(default=None, max_length=64)
     alert_config: dict[str, Any] | None = None
     enabled: bool | None = None

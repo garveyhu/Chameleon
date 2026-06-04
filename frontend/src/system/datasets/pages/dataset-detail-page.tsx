@@ -29,7 +29,7 @@ import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal'
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { DatasetItemsSelectionBar } from '@/system/datasets/components/dataset-items-selection-bar';
 import { DatasetSpreadsheet } from '@/system/datasets/components/dataset-spreadsheet';
-import { RunStartModal } from '@/system/datasets/components/run-start-modal';
+import { NewEvaluationWizard } from '@/system/datasets/components/new-evaluation-wizard';
 import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { useDatasetItemMutations } from '@/system/datasets/hooks/useDatasetItemMutations';
@@ -79,7 +79,7 @@ export const DatasetDetailPage = () => {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [aiGenOpen, setAiGenOpen] = useState(false);
-  const [runStartOpen, setRunStartOpen] = useState(false);
+  const [evalOpen, setEvalOpen] = useState(false);
   const [editItem, setEditItem] = useState<DatasetItemRow | null>(null);
   const [itemPage, setItemPage] = useState(1);
   const [itemPageSize, setItemPageSize] = useState(50);
@@ -113,7 +113,6 @@ export const DatasetDetailPage = () => {
   const judgesQ = useQuery({
     queryKey: ['datasets', 'judges'],
     queryFn: () => datasetApi.listJudges(),
-    enabled: tab === 'runs',
     staleTime: 60_000,
   });
 
@@ -378,8 +377,11 @@ export const DatasetDetailPage = () => {
             <Button size="sm" variant="secondary" onClick={() => setAiGenOpen(true)}>
               <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
             </Button>
-            <Button size="sm" onClick={() => setSampleOpen(true)}>
+            <Button size="sm" variant="secondary" onClick={() => setSampleOpen(true)}>
               <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
+            </Button>
+            <Button size="sm" onClick={() => setEvalOpen(true)}>
+              <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
             </Button>
           </div>
         ) : (
@@ -452,8 +454,8 @@ export const DatasetDetailPage = () => {
                 清空
               </Button>
             )}
-            <Button size="sm" onClick={() => setRunStartOpen(true)}>
-              <Play className="mr-1 h-3.5 w-3.5" /> 新建运行
+            <Button size="sm" onClick={() => setEvalOpen(true)}>
+              <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
             </Button>
           </div>
         )}
@@ -514,7 +516,7 @@ export const DatasetDetailPage = () => {
             sortKey={runSort.key}
             sortOrder={runSort.order}
             onSortChange={(key, order) => setRunSort({ key, order })}
-            emptyText="还没有运行；在 Playground 或评测任务里跑一次会出现在这里"
+            emptyText="还没有运行；点右上「新建评估」跑一次会出现在这里"
             minWidth={620}
           />
         </div>
@@ -561,12 +563,15 @@ export const DatasetDetailPage = () => {
           }}
         />
       )}
-      {runStartOpen && (
-        <RunStartModal
-          datasetId={dsId}
+      {evalOpen && (
+        <NewEvaluationWizard
+          presetDatasetId={dsId}
           judges={judgesQ.data}
-          onClose={() => setRunStartOpen(false)}
-          onStarted={run => navigate(`/datasets/${dsId}/runs/${run.id}`)}
+          onClose={() => setEvalOpen(false)}
+          onRunStarted={(_dsId, run) =>
+            navigate(`/datasets/${dsId}/runs/${run.id}`)
+          }
+          onJobCreated={() => navigate('/eval-jobs')}
         />
       )}
     </div>

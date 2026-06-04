@@ -1,5 +1,5 @@
 /** 评分明细渲染（复用） —— 逐项原始分：raw_1_5 星级 / GSB verdict 徽章 / 其它数值。
- *  从原 run-detail-drawer 的 FieldScores / StarRating 提出，供样本详情侧栏 + 对比页复用。 */
+ *  供样本详情侧栏 + 对比页复用。 */
 
 import { Star } from 'lucide-react';
 
