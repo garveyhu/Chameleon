@@ -48,6 +48,17 @@ export interface SampleResult {
   added: number;
   skipped: number;
   dropped_pii: number;
+  /** A3：本次采样新建的 item id 列表，供「撤销这批采样」批量删 */
+  created_item_ids: EntityId[];
+}
+
+/** A2：批量删除样本入参 / 结果 */
+export interface BatchDeleteItemsRequest {
+  item_ids: EntityId[];
+}
+
+export interface BatchDeleteItemsResult {
+  deleted: number;
 }
 
 export interface BulkImportItem {

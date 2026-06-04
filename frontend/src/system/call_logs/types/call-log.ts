@@ -16,7 +16,14 @@ export type AgentSource = 'local' | 'graph' | 'dify' | 'fastgpt' | 'coze' | stri
 /** 工作流形态（source=graph 时 join graphs.kind） */
 export type GraphKind = 'chatflow' | 'workflow' | string;
 /** 调用渠道 */
-export type CallChannel = 'api' | 'openai' | 'embed' | 'playground' | 'internal' | string;
+export type CallChannel =
+  | 'api'
+  | 'openai'
+  | 'embed'
+  | 'playground'
+  | 'eval'
+  | 'internal'
+  | string;
 
 /** 会话（thread）列表项 —— 按 ChatSession 维度（多轮一条），区别于 trace（单次运行） */
 export interface SessionItem {

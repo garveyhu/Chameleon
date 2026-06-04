@@ -32,6 +32,11 @@ interface Props {
   items: DatasetItemRow[];
   datasetId: EntityId;
   loading?: boolean;
+  /** A2 多选（与表格视图共用同一份选中态，挂在父页）。 */
+  selectedIds?: ReadonlySet<EntityId>;
+  onToggle?: (id: EntityId) => void;
+  allPageSelected?: boolean;
+  onToggleAllPage?: () => void;
 }
 
 /** 单格行内文本编辑：惰性初始化 draft，失焦/Enter 提交，Esc 还原。 */
@@ -185,9 +190,18 @@ const Cell = ({
   );
 };
 
-export const DatasetSpreadsheet = ({ items, datasetId, loading }: Props) => {
+export const DatasetSpreadsheet = ({
+  items,
+  datasetId,
+  loading,
+  selectedIds,
+  onToggle,
+  allPageSelected,
+  onToggleAllPage,
+}: Props) => {
   const { update, create, remove } = useDatasetItemMutations(datasetId);
   const [pendingDelete, setPendingDelete] = useState<EntityId | null>(null);
+  const selectable = !!onToggle;
 
   const varKeys = useMemo(() => inferVarKeys(items), [items]);
   // 空 dataset 给一个默认占位列，让「+新增行」有处落值
@@ -215,8 +229,9 @@ export const DatasetSpreadsheet = ({ items, datasetId, loading }: Props) => {
   return (
     <div className="space-y-3">
       <div className="relative overflow-x-auto rounded-lg border border-stone-200/60">
-        <table className="w-full table-fixed" style={{ minWidth: 720 }}>
+        <table className="w-full table-fixed" style={{ minWidth: selectable ? 760 : 720 }}>
           <colgroup>
+            {selectable && <col style={{ width: 36 }} />}
             {columnKeys.map(k => (
               <col key={k} style={{ width: 180 }} />
             ))}
@@ -226,6 +241,17 @@ export const DatasetSpreadsheet = ({ items, datasetId, loading }: Props) => {
           </colgroup>
           <thead className="border-b border-stone-200/70 bg-[var(--color-warm-2)]/40">
             <tr className="text-[11px] font-medium text-stone-500">
+              {selectable && (
+                <th className="sticky top-0 px-3 py-2.5 text-left font-medium">
+                  <input
+                    type="checkbox"
+                    aria-label="全选本页"
+                    checked={!!allPageSelected}
+                    onChange={onToggleAllPage}
+                    className="h-3.5 w-3.5 accent-stone-700"
+                  />
+                </th>
+              )}
               {headers.map(h => (
                 <th key={h.key} className="sticky top-0 px-3 py-2.5 text-left font-medium">
                   <span className="block truncate" title={h.label}>
@@ -239,13 +265,27 @@ export const DatasetSpreadsheet = ({ items, datasetId, loading }: Props) => {
           <tbody className="divide-y divide-stone-100 text-[12.5px]">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={headers.length + 1} className="py-8 text-center text-stone-400">
+                <td
+                  colSpan={headers.length + (selectable ? 2 : 1)}
+                  className="py-8 text-center text-stone-400"
+                >
                   暂无样本，点下方「新增行」或右上「手工导入」开始
                 </td>
               </tr>
             ) : (
               items.map(item => (
                 <tr key={item.id} className="group hover:bg-stone-50">
+                  {selectable && (
+                    <td className="px-3 py-2 align-top">
+                      <input
+                        type="checkbox"
+                        aria-label="选择该样本"
+                        checked={!!selectedIds?.has(item.id)}
+                        onChange={() => onToggle?.(item.id)}
+                        className="mt-0.5 h-3.5 w-3.5 accent-stone-700"
+                      />
+                    </td>
+                  )}
                   {columnKeys.map(k => (
                     <td key={k} className="px-3 py-2 align-top">
                       <Cell

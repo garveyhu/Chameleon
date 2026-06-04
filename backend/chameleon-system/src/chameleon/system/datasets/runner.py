@@ -40,6 +40,10 @@ from chameleon.data.models import (
     EvalTemplate,
     Score,
 )
+from chameleon.system.api_key.service import (
+    aggregate_generation_rollup,
+    record_call,
+)
 from chameleon.system.datasets.judges import (
     JUDGES,
     LLM_JUDGES,
@@ -133,6 +137,7 @@ async def run_dataset(
                 session_id=f"eval-run-{run_id}",
             )
         )
+        item_ok = True
         try:
             if agent_key:
                 actual = await _invoke_via_agent(
@@ -165,6 +170,7 @@ async def run_dataset(
             reason = None
             field_scores = None
             err = {"type": type(e).__name__, "message": str(e)[:300]}
+            item_ok = False
             fail_count += 1
             logger.exception(
                 "dataset run item failed | run={} | item={}", run_id, item.id
@@ -187,6 +193,21 @@ async def run_dataset(
             duration_ms=dur_ms,
         )
         session.add(ri)
+
+        # 评测流量进 Trace 列表：补写 eval 根 trace 行（trace 列表只列 parent_id IS
+        # NULL 的根，缺它则被测 / judge 的 generation 子行无根可挂、列表里完全看不到）。
+        # token/cost/model 从本 item 的 generation 子行 SUM 回灌（参照 playground 根行）。
+        await _record_eval_trace_root(
+            session,
+            request_id=request_id,
+            run_id=run_id,
+            agent_key=agent_key,
+            success=item_ok,
+            duration_ms=dur_ms,
+            input_payload=item.input_payload,
+            actual=actual,
+            error=err,
+        )
 
         # mean_score 统计所有有分 item（含人工造样本，不依赖采样来源）
         if score is not None:
@@ -256,6 +277,57 @@ async def run_dataset(
         run.summary["mean_score"],
     )
     return run
+
+
+async def _record_eval_trace_root(
+    session: AsyncSession,
+    *,
+    request_id: str,
+    run_id: int,
+    agent_key: str | None,
+    success: bool,
+    duration_ms: int,
+    input_payload: dict[str, Any],
+    actual: dict[str, Any] | None,
+    error: dict[str, Any] | None,
+) -> None:
+    """补写 eval 根 trace 行（observation_type='trace'，parent_id=NULL）。
+
+    评测 LLM / 被测 agent 的 generation·embedding·retriever 子观测都挂在本 item 的
+    request_id 下，但此前没有任何入口为该 request_id 落根行——导致 Trace 列表
+    （只列 parent_id IS NULL 的根）完全看不到 eval 流量。这里 SUM 子 generation 的
+    token/cost/model 回灌根行，使评测在 Trace 页可筛、可看、列不为空。
+    """
+    try:
+        p, c, t, cost, model = await aggregate_generation_rollup(session, request_id)
+        answer = ""
+        if isinstance(actual, dict):
+            answer = str(actual.get("answer") or actual.get("value") or "")
+        await record_call(
+            session,
+            request_id=request_id,
+            app_id=EVAL_APP_ID,
+            agent_key=agent_key or "eval",
+            session_id=f"eval-run-{run_id}",
+            channel=Channel.EVAL.value,
+            stream=False,
+            success=success,
+            code=0 if success else 500,
+            error_message=(error or {}).get("message") if error else None,
+            duration_ms=duration_ms,
+            prompt_tokens=p,
+            completion_tokens=c,
+            total_tokens=t,
+            request_payload={"question": _extract_query_text(input_payload)[:1000]},
+            response_payload={"output": answer[:4000]} if answer else None,
+            observation_type="trace",
+            model_code=model,
+            cost_usd=cost,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "eval trace root record failed | run={} | rid={}", run_id, request_id
+        )
 
 
 async def _invoke_for_item(

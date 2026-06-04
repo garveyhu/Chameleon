@@ -3,6 +3,8 @@ import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   AiGenerateRequest,
   AiGenerateResult,
+  BatchDeleteItemsRequest,
+  BatchDeleteItemsResult,
   BulkImportRequest,
   BulkImportResult,
   CompareRunsResult,
@@ -36,8 +38,8 @@ export const datasetApi = {
   update: (id: EntityId, req: Partial<CreateDatasetRequest>) =>
     post<DatasetItem>(`${BASE}/${id}/update`, req),
   delete: (id: EntityId) => post<void>(`${BASE}/${id}/delete`),
-  listItems: (id: EntityId, limit = 200) =>
-    get<DatasetItemRow[]>(`${BASE}/${id}/items`, { params: { limit } }),
+  listItems: (id: EntityId, params?: { page?: number; page_size?: number }) =>
+    get<PageResult<DatasetItemRow>>(`${BASE}/${id}/items`, { params }),
   sampleFromLogs: (id: EntityId, req: SampleFromLogsRequest) =>
     post<SampleResult>(`${BASE}/${id}/sample-from-logs`, req),
   bulkImport: (id: EntityId, req: BulkImportRequest) =>
@@ -58,6 +60,9 @@ export const datasetApi = {
     post<DatasetItemRow>(`${BASE}/${datasetId}/items/create`, req),
   /** H2 电子表格删行：删单条样本。 */
   deleteItem: (itemId: EntityId) => post<void>(`${BASE}/items/${itemId}/delete`),
+  /** A2：批量删除样本（两视图删除已选 / A3 撤销采样共用），单次重算 item_count。 */
+  batchDeleteItems: (datasetId: EntityId, req: BatchDeleteItemsRequest) =>
+    post<BatchDeleteItemsResult>(`${BASE}/${datasetId}/items/batch-delete`, req),
 
   // ── runs（实验运行）—— 接出已就绪的端点 ──
   /** 可用评分器列表（judge key 数组）。 */

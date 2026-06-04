@@ -81,6 +81,18 @@ class SampleResult(BaseModel):
     skipped: int  # 已存在（同 source_call_log_id）跳过的数量
     # P21.1：因 PII drop 策略跳过的数量（与 skipped 区分）
     dropped_pii: int = 0
+    # A3：本次采样新建的 item id 列表，供前端「撤销这批采样」批量删
+    created_item_ids: list[int] = Field(default_factory=list)
+
+
+class BatchDeleteItemsRequest(BaseModel):
+    """A2：批量删除样本"""
+
+    item_ids: list[int] = Field(min_length=1, max_length=1000)
+
+
+class BatchDeleteItemsResult(BaseModel):
+    deleted: int
 
 
 class UpdateItemRequest(BaseModel):

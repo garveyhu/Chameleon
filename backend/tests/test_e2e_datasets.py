@@ -134,7 +134,7 @@ async def test_create_and_list_dataset(
         "/v1/admin/datasets",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert ds["id"] in [d["id"] for d in list_r.json()["data"]]
+    assert ds["id"] in [d["id"] for d in list_r.json()["data"]["items"]]
 
 
 async def test_update_and_delete_dataset(
@@ -189,7 +189,7 @@ async def test_sample_from_logs_redacts_input(
         f"/v1/admin/datasets/{did}/items",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    items = items_r.json()["data"]
+    items = items_r.json()["data"]["items"]
     assert len(items) == app_with_logs["log_count"]
     first = items[0]
     # _redacted 标记 + user_input 不是原始字符串
@@ -258,7 +258,7 @@ async def test_sample_pii_mask_in_preview(
             f"/v1/admin/datasets/{did}/items",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
-        items = items_r.json()["data"]
+        items = items_r.json()["data"]["items"]
         preview = items[0]["input_payload"]["user_input"]["preview"]
         assert "<EMAIL>" in preview
         assert "<PHONE>" in preview
@@ -461,7 +461,7 @@ async def test_sample_include_response_as_expected(
             f"/v1/admin/datasets/{did}/items",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
-    ).json()["data"]
+    ).json()["data"]["items"]
     # 每条 expected_output 是 dict（含 answer）
     for it in items:
         assert it["expected_output"] is not None
@@ -490,7 +490,7 @@ async def test_update_item_expected(
             f"/v1/admin/datasets/{did}/items",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
-    ).json()["data"]
+    ).json()["data"]["items"]
     item_id = items[0]["id"]
 
     ur = await client.post(

@@ -1,8 +1,8 @@
 /** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 开运行详情抽屉。 */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Download,
@@ -11,13 +11,15 @@ import {
   Pencil,
   Play,
   Sparkles,
+  Trash2,
   Upload,
 } from 'lucide-react';
 
-import { DataTable, type DataTableColumn } from '@/core/components/table';
+import { DataTable, type DataTableColumn, TablePagination } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { JsonCell } from '@/core/components/ui/json-cell';
+import { confirm } from '@/core/lib/confirm';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
@@ -25,12 +27,14 @@ import type { EntityId } from '@/core/types/api';
 import { AiGenerateModal } from '@/system/datasets/components/ai-generate-modal';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
+import { DatasetItemsSelectionBar } from '@/system/datasets/components/dataset-items-selection-bar';
 import { DatasetSpreadsheet } from '@/system/datasets/components/dataset-spreadsheet';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { RunStartModal } from '@/system/datasets/components/run-start-modal';
 import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
+import { useDatasetItemMutations } from '@/system/datasets/hooks/useDatasetItemMutations';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type { DatasetItemRow, DatasetRunRow } from '@/system/datasets/types/dataset';
 import { exportItems } from '@/system/datasets/utils/dataset-xlsx';
@@ -80,6 +84,9 @@ export const DatasetDetailPage = () => {
   const [aiGenOpen, setAiGenOpen] = useState(false);
   const [runStartOpen, setRunStartOpen] = useState(false);
   const [editItem, setEditItem] = useState<DatasetItemRow | null>(null);
+  const [itemPage, setItemPage] = useState(1);
+  const [itemPageSize, setItemPageSize] = useState(50);
+  const [selItemIds, setSelItemIds] = useState<EntityId[]>([]);
   const [runSort, setRunSort] = useState<{
     key: string;
     order: 'asc' | 'desc';
@@ -88,15 +95,18 @@ export const DatasetDetailPage = () => {
   const toggleRun = (rid: EntityId) =>
     setSelRunIds(p => (p.includes(rid) ? p.filter(x => x !== rid) : [...p, rid]));
 
+  const { batchRemove } = useDatasetItemMutations(dsId);
+
   const dsQ = useQuery({
     queryKey: ['datasets', dsId],
     queryFn: () => datasetApi.get(dsId),
     enabled: !!dsId,
   });
   const itemsQ = useQuery({
-    queryKey: ['datasets', dsId, 'items'],
-    queryFn: () => datasetApi.listItems(dsId, 200),
+    queryKey: ['datasets', dsId, 'items', itemPage, itemPageSize],
+    queryFn: () => datasetApi.listItems(dsId, { page: itemPage, page_size: itemPageSize }),
     enabled: !!dsId,
+    placeholderData: keepPreviousData,
   });
   const runsQ = useQuery({
     queryKey: ['datasets', dsId, 'runs'],
@@ -115,11 +125,74 @@ export const DatasetDetailPage = () => {
     qc.invalidateQueries({ queryKey: ['datasets', dsId, 'items'] });
   };
 
+  const items = useMemo(() => itemsQ.data?.items ?? [], [itemsQ.data]);
+  const itemsTotal = itemsQ.data?.total ?? 0;
+  const pageIds = useMemo(() => items.map(it => it.id), [items]);
+  const selectedSet = useMemo(() => new Set(selItemIds), [selItemIds]);
+  const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedSet.has(id));
+
+  const toggleItem = (id: EntityId) =>
+    setSelItemIds(p => (p.includes(id) ? p.filter(x => x !== id) : [...p, id]));
+  const toggleAllPage = () =>
+    setSelItemIds(p =>
+      allPageSelected
+        ? p.filter(id => !pageIds.includes(id))
+        : [...new Set([...p, ...pageIds])],
+    );
+
+  const handleDeleteOne = async (it: DatasetItemRow) => {
+    const ok = await confirm({
+      title: '删除样本',
+      description: '删除后不可恢复，确认删除这条样本？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    batchRemove.mutate([it.id], {
+      onSuccess: () => setSelItemIds(p => p.filter(id => id !== it.id)),
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    if (selItemIds.length === 0) return;
+    const ok = await confirm({
+      title: `删除已选 ${selItemIds.length} 条样本`,
+      description: '删除后不可恢复，确认批量删除？',
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
+    batchRemove.mutate([...selItemIds], { onSuccess: () => setSelItemIds([]) });
+  };
+
   if (!dsId) {
     return <div className="p-6 text-sm text-stone-500">非法的数据集编号</div>;
   }
 
   const itemCols: DataTableColumn<DatasetItemRow>[] = [
+    {
+      key: 'sel',
+      header: (
+        <input
+          type="checkbox"
+          aria-label="全选本页"
+          checked={allPageSelected}
+          onChange={toggleAllPage}
+          className="h-3.5 w-3.5 accent-stone-700"
+        />
+      ),
+      width: 36,
+      render: it => (
+        <input
+          type="checkbox"
+          aria-label="选择该样本"
+          checked={selectedSet.has(it.id)}
+          onClick={e => e.stopPropagation()}
+          onChange={() => toggleItem(it.id)}
+          className="h-3.5 w-3.5 accent-stone-700"
+        />
+      ),
+    },
     {
       key: 'source',
       header: '来源',
@@ -161,19 +234,32 @@ export const DatasetDetailPage = () => {
       key: 'annotate',
       header: '',
       align: 'right',
-      width: 48,
+      width: 76,
       render: it => (
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            setEditItem(it);
-          }}
-          title="编辑样本"
-          className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
+        <span className="inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              setEditItem(it);
+            }}
+            title="编辑样本"
+            className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              void handleDeleteOne(it);
+            }}
+            title="删除样本"
+            className="rounded p-1 text-stone-300 hover:bg-rose-50 hover:text-rose-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </span>
       ),
     },
   ];
@@ -284,10 +370,8 @@ export const DatasetDetailPage = () => {
             <Button
               size="sm"
               variant="ghost"
-              disabled={!itemsQ.data?.length}
-              onClick={() =>
-                void exportItems(dsQ.data?.name ?? '评测样本', itemsQ.data ?? [], 'xlsx')
-              }
+              disabled={items.length === 0}
+              onClick={() => void exportItems(dsQ.data?.name ?? '评测样本', items, 'xlsx')}
             >
               <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
             </Button>
@@ -380,22 +464,45 @@ export const DatasetDetailPage = () => {
       </div>
 
       {tab === 'items' ? (
-        itemsView === 'sheet' ? (
-          <DatasetSpreadsheet
-            items={itemsQ.data ?? []}
-            datasetId={dsId}
-            loading={itemsQ.isLoading}
+        <div className="space-y-3">
+          <DatasetItemsSelectionBar
+            selectedCount={selItemIds.length}
+            deleting={batchRemove.isPending}
+            onClear={() => setSelItemIds([])}
+            onDelete={() => void handleBatchDelete()}
           />
-        ) : (
-          <DataTable
-            columns={itemCols}
-            rows={itemsQ.data ?? []}
-            rowKey="id"
-            loading={itemsQ.isLoading}
-            emptyText="暂无样本，点右上「从日志采样」或「手工导入」开始"
-            minWidth={680}
+          {itemsView === 'sheet' ? (
+            <DatasetSpreadsheet
+              items={items}
+              datasetId={dsId}
+              loading={itemsQ.isLoading && !itemsQ.data}
+              selectedIds={selectedSet}
+              onToggle={toggleItem}
+              allPageSelected={allPageSelected}
+              onToggleAllPage={toggleAllPage}
+            />
+          ) : (
+            <DataTable
+              columns={itemCols}
+              rows={items}
+              rowKey="id"
+              loading={itemsQ.isLoading && !itemsQ.data}
+              refreshing={itemsQ.isFetching}
+              emptyText="暂无样本，点右上「从日志采样」或「手工导入」开始"
+              minWidth={720}
+            />
+          )}
+          <TablePagination
+            page={itemPage}
+            pageSize={itemPageSize}
+            total={itemsTotal}
+            onPageChange={setItemPage}
+            onPageSizeChange={s => {
+              setItemPageSize(s);
+              setItemPage(1);
+            }}
           />
-        )
+        </div>
       ) : runsView === 'matrix' ? (
         <RunCompareMatrix runIds={selRunIds} />
       ) : (

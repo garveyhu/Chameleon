@@ -18,6 +18,8 @@ from chameleon.system.datasets.judges import list_judges
 from chameleon.system.datasets.schemas import (
     AiGenerateRequest,
     AiGenerateResult,
+    BatchDeleteItemsRequest,
+    BatchDeleteItemsResult,
     BulkImportRequest,
     BulkImportResult,
     CompareRunsRequest,
@@ -155,15 +157,20 @@ async def delete_dataset(
 # ── Items ────────────────────────────────────────────────
 
 
-@router.get("/{dataset_id}/items", response_model=Result[list[DatasetItemItem]])
+@router.get(
+    "/{dataset_id}/items", response_model=Result[PageResult[DatasetItemItem]]
+)
 async def list_items(
     dataset_id: int,
-    limit: int = Query(default=200, ge=1, le=1000),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=1000),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:read")),
-) -> Result[list[DatasetItemItem]]:
-    items = await ds_service.list_items(session, dataset_id, limit=limit)
-    return Result.ok(items)
+) -> Result[PageResult[DatasetItemItem]]:
+    result = await ds_service.list_items(
+        session, dataset_id, PageParams(page=page, page_size=page_size)
+    )
+    return Result.ok(result)
 
 
 @router.post(
@@ -200,6 +207,21 @@ async def delete_item(
     """H2 电子表格删行：删单条样本 + 维护 item_count"""
     await ds_service.delete_item(session, item_id)
     return Result.ok(None)
+
+
+@router.post(
+    "/{dataset_id}/items/batch-delete",
+    response_model=Result[BatchDeleteItemsResult],
+)
+async def batch_delete_items(
+    dataset_id: int,
+    req: BatchDeleteItemsRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:delete")),
+) -> Result[BatchDeleteItemsResult]:
+    """A2：批量删除样本 + 单次重算 item_count（两视图删除已选 / A3 撤销采样共用）"""
+    deleted = await ds_service.batch_delete_items(session, dataset_id, req.item_ids)
+    return Result.ok(BatchDeleteItemsResult(deleted=deleted))
 
 
 # ── 一键采样 ──────────────────────────────────────────────

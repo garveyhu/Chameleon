@@ -185,22 +185,38 @@ async def delete_dataset(session: AsyncSession, dataset_id: int) -> None:
 
 
 async def list_items(
-    session: AsyncSession, dataset_id: int, *, limit: int = 200
-) -> list[DatasetItemItem]:
+    session: AsyncSession, dataset_id: int, page: PageParams
+) -> PageResult[DatasetItemItem]:
+    """分页列出某 dataset 的样本（按创建时间倒序）。
+
+    注意：电子表格视图的动态列推断只能基于【当前页】这批样本的 input_payload
+    顶层 key 并集；翻页可能出现新列。需要看全量列时调大 page_size。
+    """
     await _load_dataset(session, dataset_id)  # 校验存在
+    total = (
+        await session.execute(
+            select(func.count())
+            .select_from(DatasetItem)
+            .where(DatasetItem.dataset_id == dataset_id)
+        )
+    ).scalar_one()
     rows = (
         (
             await session.execute(
                 select(DatasetItem)
                 .where(DatasetItem.dataset_id == dataset_id)
                 .order_by(DatasetItem.created_at.desc())
-                .limit(limit)
+                .offset(page.offset)
+                .limit(page.limit)
             )
         )
         .scalars()
         .all()
     )
-    return [DatasetItemItem.model_validate(r) for r in rows]
+    items = [DatasetItemItem.model_validate(r) for r in rows]
+    return PageResult(
+        items=items, total=total, page=page.page, page_size=page.page_size
+    )
 
 
 async def create_item(
@@ -265,6 +281,30 @@ async def delete_item(session: AsyncSession, item_id: int) -> None:
     if ds is not None:
         ds.item_count = await _count_items(session, dataset_id)
     await session.commit()
+
+
+async def batch_delete_items(
+    session: AsyncSession, dataset_id: int, item_ids: list[int]
+) -> int:
+    """A2：批量删除某 dataset 下的多条样本，单次重算 item_count。
+
+    只删属于该 dataset 的 item（防跨集越权删）；删完回算冗余 item_count。
+
+    Returns:
+        实际删除的样本数。
+    """
+    ds = await _load_dataset(session, dataset_id)
+    result = await session.execute(
+        delete(DatasetItem).where(
+            DatasetItem.dataset_id == ds.id,
+            DatasetItem.id.in_(item_ids),
+        )
+    )
+    deleted = result.rowcount or 0
+    await session.flush()
+    ds.item_count = await _count_items(session, ds.id)
+    await session.commit()
+    return deleted
 
 
 async def update_item(
@@ -337,6 +377,7 @@ async def sample_from_logs(
     added = 0
     skipped = 0
     dropped_pii = 0
+    new_items: list[DatasetItem] = []
     for lg in logs:
         if lg.request_id in existing_set:
             skipped += 1
@@ -369,29 +410,14 @@ async def sample_from_logs(
             },
         )
         session.add(item)
+        new_items.append(item)
         added += 1
         existing_set.add(lg.request_id)
 
-    ds.item_count = (
-        (
-            await session.execute(
-                select(func.count())
-                .select_from(DatasetItem)
-                .where(DatasetItem.dataset_id == ds.id)
-            )
-        ).scalar_one()
-        + added
-        - 0
-    )  # 上面尚未 commit，手算
-    # 简化：让 commit 后 ORM 看到 added 行；先 flush 再 count
+    # flush 后 ORM 已分配 id；据此回算 item_count 并收集本次新建 id（供撤销）
     await session.flush()
-    ds.item_count = (
-        await session.execute(
-            select(func.count())
-            .select_from(DatasetItem)
-            .where(DatasetItem.dataset_id == ds.id)
-        )
-    ).scalar_one()
+    ds.item_count = await _count_items(session, ds.id)
+    created_item_ids = [it.id for it in new_items]
     await session.commit()
 
     return SampleResult(
@@ -399,6 +425,7 @@ async def sample_from_logs(
         added=added,
         skipped=skipped,
         dropped_pii=dropped_pii,
+        created_item_ids=created_item_ids,
     )
 
 

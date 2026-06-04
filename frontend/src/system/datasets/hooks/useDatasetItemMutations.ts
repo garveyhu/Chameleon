@@ -1,10 +1,11 @@
 /** 电子表格样本增删改的 mutation 集合（乐观更新 + 回滚 + item_count 维护）。
  *
- *  query key 约定：['datasets', dsId, 'items']（行数据）+ ['datasets', dsId]（item_count 角标）。 */
+ *  query key 约定：['datasets', dsId, 'items', ...]（分页行数据，含 page/pageSize）+
+ *  ['datasets', dsId]（item_count 角标）。乐观更新跨所有分页页缓存匹配。 */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { toast } from '@/core/lib/toast';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
   CreateItemRequest,
@@ -17,8 +18,11 @@ interface UpdateArgs {
   req: UpdateItemRequest;
 }
 
-interface UpdateContext {
-  prev: DatasetItemRow[] | undefined;
+type ItemsPage = PageResult<DatasetItemRow>;
+
+interface OptimisticContext {
+  /** 受影响的分页缓存快照（key 序列化 → 旧值），出错整体回滚。 */
+  snapshots: [readonly unknown[], ItemsPage | undefined][];
 }
 
 export const useDatasetItemMutations = (datasetId: EntityId) => {
@@ -26,17 +30,33 @@ export const useDatasetItemMutations = (datasetId: EntityId) => {
   const itemsKey = ['datasets', datasetId, 'items'] as const;
   const dsKey = ['datasets', datasetId] as const;
 
-  const invalidateCount = () => {
-    void qc.invalidateQueries({ queryKey: dsKey });
+  const invalidateItems = () => void qc.invalidateQueries({ queryKey: itemsKey });
+  const invalidateCount = () => void qc.invalidateQueries({ queryKey: dsKey });
+
+  /** 对所有分页页缓存（itemsKey 前缀）应用一个行变换函数。 */
+  const mutatePages = (
+    transform: (rows: DatasetItemRow[]) => DatasetItemRow[],
+  ): OptimisticContext['snapshots'] => {
+    const snapshots: OptimisticContext['snapshots'] = [];
+    const entries = qc.getQueriesData<ItemsPage>({ queryKey: itemsKey });
+    for (const [key, page] of entries) {
+      snapshots.push([key, page]);
+      if (!page) continue;
+      qc.setQueryData<ItemsPage>(key, { ...page, items: transform(page.items) });
+    }
+    return snapshots;
   };
 
-  const update = useMutation<DatasetItemRow, unknown, UpdateArgs, UpdateContext>({
+  const rollback = (snapshots: OptimisticContext['snapshots'] | undefined) => {
+    snapshots?.forEach(([key, prev]) => qc.setQueryData(key, prev));
+  };
+
+  const update = useMutation<DatasetItemRow, unknown, UpdateArgs, OptimisticContext>({
     mutationFn: ({ itemId, req }) => datasetApi.updateItem(itemId, req),
     onMutate: async ({ itemId, req }) => {
       await qc.cancelQueries({ queryKey: itemsKey });
-      const prev = qc.getQueryData<DatasetItemRow[]>(itemsKey);
-      qc.setQueryData<DatasetItemRow[]>(itemsKey, rows =>
-        (rows ?? []).map(r =>
+      const snapshots = mutatePages(rows =>
+        rows.map(r =>
           r.id === itemId
             ? {
                 ...r,
@@ -49,21 +69,21 @@ export const useDatasetItemMutations = (datasetId: EntityId) => {
             : r,
         ),
       );
-      return { prev };
+      return { snapshots };
     },
     onError: (e, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(itemsKey, ctx.prev);
+      rollback(ctx?.snapshots);
       toast.error((e as { message?: string })?.message || '保存失败');
     },
     onSuccess: () => toast.success('已保存'),
-    onSettled: () => void qc.invalidateQueries({ queryKey: itemsKey }),
+    onSettled: invalidateItems,
   });
 
   const create = useMutation<DatasetItemRow, unknown, CreateItemRequest>({
     mutationFn: req => datasetApi.createItem(datasetId, req),
     onError: (e: unknown) => toast.error((e as { message?: string })?.message || '新增失败'),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: itemsKey });
+      invalidateItems();
       invalidateCount();
     },
   });
@@ -73,10 +93,20 @@ export const useDatasetItemMutations = (datasetId: EntityId) => {
     onError: (e: unknown) => toast.error((e as { message?: string })?.message || '删除失败'),
     onSuccess: () => {
       toast.success('已删除');
-      void qc.invalidateQueries({ queryKey: itemsKey });
+      invalidateItems();
       invalidateCount();
     },
   });
 
-  return { update, create, remove };
+  const batchRemove = useMutation<{ deleted: number }, unknown, EntityId[]>({
+    mutationFn: itemIds => datasetApi.batchDeleteItems(datasetId, { item_ids: itemIds }),
+    onError: (e: unknown) => toast.error((e as { message?: string })?.message || '批量删除失败'),
+    onSuccess: data => {
+      toast.success(`已删除 ${data.deleted} 条样本`);
+      invalidateItems();
+      invalidateCount();
+    },
+  });
+
+  return { update, create, remove, batchRemove };
 };
