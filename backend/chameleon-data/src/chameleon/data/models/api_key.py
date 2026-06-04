@@ -103,8 +103,9 @@ class CallLog(Base):
     end_user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # model_code：实际命中的模型编码，cost dashboard 按模型聚合
     model_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # channel：调用来源渠道（api/openai/embed/playground/internal），入口处盖章；
-    # 会话账本按渠道筛选/溯源。NULL = 未标注（如图内部子观测）。
+    # channel：调用来源渠道（api/openai/embed/playground/eval/internal），入口处盖章；
+    # 会话账本按渠道筛选/溯源。取值集中登记见 data.constants.channels.Channel。
+    # NULL = 未标注（如图内部子观测）。
     channel: Mapped[str | None] = mapped_column(String(16), nullable=True)
     stream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)

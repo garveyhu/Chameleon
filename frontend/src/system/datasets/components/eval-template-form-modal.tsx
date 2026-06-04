@@ -4,6 +4,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { ModelPicker } from '@/core/components/common/model-picker';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -160,13 +161,16 @@ export const EvalTemplateFormModal = ({
               />
             </div>
             <div className="space-y-1.5">
-              <Label>评判模型 / Provider</Label>
-              <Input
+              <Label>评判模型（可选）</Label>
+              <ModelPicker
                 value={judgeProvider}
-                onChange={e => setJudgeProvider(e.target.value)}
-                placeholder="可选 · RAGAS 类算子用的 LLM"
-                maxLength={64}
+                onChange={setJudgeProvider}
+                placeholder="不指定 · 用默认模型"
+                width={232}
               />
+              <p className="text-[10.5px] leading-tight text-stone-400">
+                RAGAS 类算子打分时调用的大模型，留空用系统默认
+              </p>
             </div>
           </div>
 

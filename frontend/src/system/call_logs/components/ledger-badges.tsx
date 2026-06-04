@@ -21,6 +21,7 @@ const CHANNEL_META: Record<string, { label: string; cls: string }> = {
   openai: { label: 'OpenAI', cls: 'bg-emerald-50 text-emerald-700' },
   embed: { label: '嵌入', cls: 'bg-violet-50 text-violet-700' },
   playground: { label: 'Playground', cls: 'bg-amber-50 text-amber-700' },
+  eval: { label: '评测', cls: 'bg-rose-50 text-rose-700' },
   internal: { label: '内部', cls: 'bg-stone-100 text-stone-500' },
 };
 

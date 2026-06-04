@@ -75,7 +75,7 @@ class TraceContext:
     """
 
     request_id: str
-    channel: str = "api"  # api / openai / embed / playground / internal
+    channel: str = "api"  # api / openai / embed / playground / eval / internal
     app_id: str | None = None
     api_key_id: int | None = None
     agent_key: str | None = None

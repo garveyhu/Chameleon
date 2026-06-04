@@ -11,6 +11,7 @@ scores 表打通：每 item 评分同时写 chameleon.data.models.Score 行（so
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,6 +20,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.observe import (
+    TraceContext,
+    reset_trace_context,
+    set_trace_context,
+)
+from chameleon.data.constants import Channel
 from chameleon.data.models import (
     Dataset,
     DatasetItem,
@@ -29,6 +36,8 @@ from chameleon.data.models import (
 )
 from chameleon.system.datasets.judges import JUDGES
 from chameleon.system.datasets.template_scoring import score_run_with_template
+
+EVAL_APP_ID = "__eval__"
 
 _MAX_ITEMS_PER_RUN = 500  # 单次 run 上限
 
@@ -98,9 +107,23 @@ async def run_dataset(
 
     for item in items:
         item_started = datetime.now(timezone.utc)
+        # 评测流量进 Trace：每条 item 一个 request_id，绑定 channel='eval'，被测
+        # LLM / agent 内部 LLM 的 generation 行都以此渠道盖章（参照 playground 写法）。
+        request_id = uuid.uuid4().hex
+        trace_token = set_trace_context(
+            TraceContext(
+                request_id=request_id,
+                channel=Channel.EVAL.value,
+                app_id=EVAL_APP_ID,
+                agent_key=agent_key,
+                session_id=f"eval-run-{run_id}",
+            )
+        )
         try:
             if agent_key:
-                actual = await _invoke_via_agent(agent_key, item.input_payload)
+                actual = await _invoke_via_agent(
+                    agent_key, item.input_payload, request_id=request_id
+                )
             else:
                 actual = await _invoke_for_item(
                     item.input_payload,
@@ -118,6 +141,8 @@ async def run_dataset(
             logger.exception(
                 "dataset run item failed | run={} | item={}", run_id, item.id
             )
+        finally:
+            reset_trace_context(trace_token)
 
         item_finished = datetime.now(timezone.utc)
         dur_ms = int((item_finished - item_started).total_seconds() * 1000)
@@ -231,12 +256,19 @@ async def _invoke_for_item(
 
 
 async def _invoke_via_agent(
-    agent_key: str, input_payload: dict[str, Any]
+    agent_key: str,
+    input_payload: dict[str, Any],
+    *,
+    request_id: str,
 ) -> dict[str, Any]:
     """A3：经 agent（含 graph 编排的）跑单条 —— 走统一 Provider 路径。
 
     把整个工作流 agent 当被测对象做回归打分；两个 agent / 两个版本各跑一次
     dataset，再用 compare_runs 做 A/B 胜率对比。
+
+    `request_id` 由 run_dataset 外层连同 channel='eval' 的 TraceContext 一起 set；
+    传进 InvokeContext 让 graph provider 的 merged_tc 沿用同一 request_id 与 eval
+    渠道（provider 内部 LLM 节点的 generation 行随之盖章 channel='eval'）。
     """
     from chameleon.core.api.exceptions import BusinessError, ResultCode
     from chameleon.providers.base.registry import AGENTS, PROVIDERS
@@ -251,8 +283,8 @@ async def _invoke_via_agent(
         agent_def=adef,
         input=query,
         session_id=f"eval-{agent_key}",
-        app_id="__eval__",
-        request_id=f"eval-{agent_key}-{datetime.now(timezone.utc).timestamp():.0f}",
+        app_id=EVAL_APP_ID,
+        request_id=request_id,
         stream=False,
     )
     result = await prov.invoke(ctx)

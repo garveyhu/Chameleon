@@ -9,6 +9,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { ModelPicker } from '@/core/components/common/model-picker';
 import { get } from '@/core/lib/request';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -306,12 +307,12 @@ export const EvalJobFormModal = ({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Model override</Label>
-              <Input
+              <Label>覆盖模型</Label>
+              <ModelPicker
                 value={modelOverride}
-                onChange={e => setModelOverride(e.target.value)}
-                placeholder="可选 · 覆盖默认 model"
-                maxLength={64}
+                onChange={setModelOverride}
+                placeholder="不指定 · 用默认模型"
+                width={232}
               />
             </div>
             <div className="space-y-1.5">

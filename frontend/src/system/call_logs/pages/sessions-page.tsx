@@ -30,6 +30,7 @@ const CHANNEL_FILTER_OPTIONS = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'embed', label: '嵌入' },
   { value: 'playground', label: 'Playground' },
+  { value: 'eval', label: '评测' },
   { value: 'internal', label: '内部' },
 ];
 
