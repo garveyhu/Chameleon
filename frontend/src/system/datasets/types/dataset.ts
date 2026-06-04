@@ -143,3 +143,14 @@ export interface UpdateItemRequest {
   expected_output?: Record<string, unknown> | null;
   meta?: Record<string, unknown> | null;
 }
+
+/** H2：AI 扩样 —— 任务描述 + 生成数量 */
+export interface AiGenerateRequest {
+  task_description: string;
+  count?: number;
+}
+
+export interface AiGenerateResult {
+  dataset_id: EntityId;
+  added: number;
+}

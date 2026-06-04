@@ -7,6 +7,7 @@ import {
   FileSpreadsheet,
   GitCompare,
   Pencil,
+  Sparkles,
   Upload,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -20,6 +21,7 @@ import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
 import type { EntityId } from '@/core/types/api';
+import { AiGenerateModal } from '@/system/datasets/components/ai-generate-modal';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
@@ -76,6 +78,7 @@ export const DatasetDetailPage = () => {
   const [runsView, setRunsView] = useState<'list' | 'matrix'>('list');
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [aiGenOpen, setAiGenOpen] = useState(false);
   const [editItem, setEditItem] = useState<DatasetItemRow | null>(null);
   const [runSort, setRunSort] = useState<{
     key: string;
@@ -293,6 +296,13 @@ export const DatasetDetailPage = () => {
             >
               <Upload className="mr-1 h-3.5 w-3.5" /> 手工导入
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => setAiGenOpen(true)}
+            >
+              <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
+            </Button>
             <Button size="sm" onClick={() => setSampleOpen(true)}>
               <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
             </Button>
@@ -431,6 +441,16 @@ export const DatasetDetailPage = () => {
           onDone={() => {
             refreshAll();
             setImportOpen(false);
+          }}
+        />
+      )}
+      {aiGenOpen && (
+        <AiGenerateModal
+          datasetId={dsId}
+          onClose={() => setAiGenOpen(false)}
+          onDone={() => {
+            refreshAll();
+            setAiGenOpen(false);
           }}
         />
       )}

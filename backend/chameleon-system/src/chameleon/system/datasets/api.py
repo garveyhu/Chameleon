@@ -10,10 +10,13 @@ from chameleon.data.infra.db import get_session
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
+from chameleon.system.datasets import ai_generate as ds_ai_generate
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets import service as ds_service
 from chameleon.system.datasets.judges import list_judges
 from chameleon.system.datasets.schemas import (
+    AiGenerateRequest,
+    AiGenerateResult,
     BulkImportRequest,
     BulkImportResult,
     CompareRunsRequest,
@@ -198,6 +201,26 @@ async def bulk_import(
     """手工 CSV/JSONL 前端解析后批量入 items（PII 策略可选）"""
     result = await ds_service.bulk_import_items(session, dataset_id, req)
     return Result.ok(result)
+
+
+@router.post(
+    "/{dataset_id}/ai-generate",
+    response_model=Result[AiGenerateResult],
+)
+async def ai_generate(
+    dataset_id: int,
+    req: AiGenerateRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[AiGenerateResult]:
+    """AI 扩样：种子样本 + 任务描述 → LLM 批量生成新样本入库（走 eval 渠道）"""
+    added = await ds_ai_generate.ai_generate_items(
+        session,
+        dataset_id,
+        task_description=req.task_description,
+        count=req.count,
+    )
+    return Result.ok(AiGenerateResult(dataset_id=dataset_id, added=added))
 
 
 # ── DatasetRun（PR #25） ──────────────────────────────────

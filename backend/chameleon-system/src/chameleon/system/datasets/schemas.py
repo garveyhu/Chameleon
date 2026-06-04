@@ -111,6 +111,18 @@ class BulkImportResult(BaseModel):
     dropped_pii: int = 0
 
 
+class AiGenerateRequest(BaseModel):
+    """AI 扩样：任务描述 + 生成数量"""
+
+    task_description: str = Field(min_length=1, max_length=500)
+    count: int = Field(default=5, ge=1, le=50)
+
+
+class AiGenerateResult(BaseModel):
+    dataset_id: int
+    added: int
+
+
 # ── DatasetRun（PR #25） ──────────────────────────────────
 
 

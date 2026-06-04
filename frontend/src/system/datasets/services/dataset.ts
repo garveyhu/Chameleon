@@ -1,6 +1,8 @@
 import { get, post } from '@/core/lib/request';
 import type { EntityId, PageResult } from '@/core/types/api';
 import type {
+  AiGenerateRequest,
+  AiGenerateResult,
   BulkImportRequest,
   BulkImportResult,
   CompareRunsResult,
@@ -37,6 +39,9 @@ export const datasetApi = {
     post<SampleResult>(`${BASE}/${id}/sample-from-logs`, req),
   bulkImport: (id: EntityId, req: BulkImportRequest) =>
     post<BulkImportResult>(`${BASE}/${id}/items/bulk-import`, req),
+  /** H2：AI 扩样 —— 种子样本 + 任务描述 → LLM 批量生成新样本 */
+  aiGenerate: (id: EntityId, req: AiGenerateRequest) =>
+    post<AiGenerateResult>(`${BASE}/${id}/ai-generate`, req),
   /** 人工标注：改某 item 的 expected_output / meta */
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),
