@@ -175,13 +175,16 @@ export const EvalJobDetailPage = () => {
 
       <RunDetailDrawer runId={runId} onClose={() => setRunId(null)} />
 
-      <EvalJobFormModal
-        open={editOpen}
-        initial={job}
-        loading={updateMut.isPending}
-        onClose={() => setEditOpen(false)}
-        onSubmit={p => updateMut.mutate(p as UpdateEvalJobPayload)}
-      />
+      {editOpen && (
+        <EvalJobFormModal
+          key={job?.id ?? 'edit'}
+          open
+          initial={job}
+          loading={updateMut.isPending}
+          onClose={() => setEditOpen(false)}
+          onSubmit={p => updateMut.mutate(p as UpdateEvalJobPayload)}
+        />
+      )}
     </div>
   );
 };

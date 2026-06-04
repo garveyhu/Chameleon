@@ -1,11 +1,21 @@
 /** 评测任务列表页 —— DataTable + 新建 + 启停 + 手动触发 */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { FlaskConical, Play, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { DataTable, type DataTableColumn } from '@/core/components/table';
+import {
+  DataTable,
+  type DataTableColumn,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { cn } from '@/core/lib/cn';
@@ -34,12 +44,36 @@ export const EvalJobsPage = () => {
   const nav = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
-  const [sortKey, setSortKey] = useState('last_score');
+  const [sortKey, setSortKey] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [keyword, setKeyword] = useState('');
+  const [kwInput, setKwInput] = useState('');
+  const [enabledFilter, setEnabledFilter] = useState('all');
+  const resetPage = () => setPage(1);
 
   const listQ = useQuery({
-    queryKey: ['eval-jobs'],
-    queryFn: () => evalJobApi.list(),
+    queryKey: [
+      'eval-jobs',
+      'list',
+      page,
+      pageSize,
+      keyword,
+      sortKey,
+      sortOrder,
+      enabledFilter,
+    ],
+    queryFn: () =>
+      evalJobApi.list({
+        page,
+        page_size: pageSize,
+        keyword: keyword || undefined,
+        sort_by: sortKey,
+        order: sortOrder,
+        enabled: enabledFilter === 'all' ? undefined : enabledFilter === 'true',
+      }),
+    placeholderData: keepPreviousData,
   });
 
   const createMut = useMutation({
@@ -81,6 +115,7 @@ export const EvalJobsPage = () => {
     {
       key: 'name',
       header: '任务',
+      sortable: true,
       render: r => (
         <div className="min-w-0">
           <div className="truncate text-stone-800">{r.name}</div>
@@ -124,6 +159,7 @@ export const EvalJobsPage = () => {
       header: '最近运行',
       align: 'right',
       width: 150,
+      sortable: true,
       render: r => (
         <span className="text-[11px] text-stone-500">
           {r.last_run_at ? formatDateTime(r.last_run_at) : '—'}
@@ -216,32 +252,52 @@ export const EvalJobsPage = () => {
     },
   ];
 
-  const rows = [...(listQ.data ?? [])].sort((a, b) => {
-    if (sortKey === 'last_score') {
-      const va = parseScore(a.last_score) ?? -1;
-      const vb = parseScore(b.last_score) ?? -1;
-      return sortOrder === 'asc' ? va - vb : vb - va;
-    }
-    return 0;
-  });
+  const rows = listQ.data?.items ?? [];
+  const total = listQ.data?.total ?? 0;
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="flex items-center gap-1.5 text-[14px] font-medium text-stone-900">
+      <TableToolbar
+        title={
+          <span className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 text-stone-500" />
             评测任务
-          </h1>
-          <p className="mt-0.5 text-[11.5px] text-stone-500">
-            按计划自动跑数据集评测，分数明显回退时通知你
-          </p>
-        </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 h-3 w-3" />
-          新建评测任务
-        </Button>
-      </div>
+            <span className="text-[11px] font-normal text-stone-400">
+              {total} 个
+            </span>
+          </span>
+        }
+        onRefresh={() => listQ.refetch()}
+        search={{
+          value: kwInput,
+          onChange: setKwInput,
+          onSubmit: v => {
+            setKeyword(v);
+            resetPage();
+          },
+          placeholder: '搜索任务名称',
+        }}
+        filters={[
+          {
+            value: enabledFilter,
+            onChange: v => {
+              setEnabledFilter(v);
+              resetPage();
+            },
+            placeholder: '状态',
+            options: [
+              { value: 'true', label: '启用' },
+              { value: 'false', label: '停用' },
+            ],
+          },
+        ]}
+        extra={
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-3 w-3" />
+            新建评测任务
+          </Button>
+        }
+      />
 
       <DataTable
         columns={cols}
@@ -253,8 +309,10 @@ export const EvalJobsPage = () => {
         onSortChange={(k, o) => {
           setSortKey(k);
           setSortOrder(o);
+          resetPage();
         }}
-        loading={listQ.isLoading}
+        loading={listQ.isLoading && !listQ.data}
+        refreshing={listQ.isFetching}
         onRowClick={r => nav(`/eval-jobs/${r.id}`)}
         emptyText="还没有评测任务"
         emptyExtra={
@@ -268,12 +326,25 @@ export const EvalJobsPage = () => {
         }
       />
 
-      <EvalJobFormModal
-        open={createOpen}
-        loading={createMut.isPending}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={p => createMut.mutate(p as CreateEvalJobPayload)}
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={s => {
+          setPageSize(s);
+          resetPage();
+        }}
       />
+
+      {createOpen && (
+        <EvalJobFormModal
+          open
+          loading={createMut.isPending}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={p => createMut.mutate(p as CreateEvalJobPayload)}
+        />
+      )}
     </div>
   );
 };

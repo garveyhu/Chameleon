@@ -15,10 +15,11 @@ from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.api.response import PageParams, PageResult
 from chameleon.data.models import Dataset, EvalJob, EvalJobRun
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets.judges import JUDGES
@@ -33,18 +34,52 @@ from chameleon.system.eval_jobs.schemas import (
 
 # ── CRUD ────────────────────────────────────────────────
 
+_LIST_SORT_COLUMNS = {
+    "created_at": EvalJob.created_at,
+    "name": EvalJob.name,
+    "last_score": EvalJob.last_score,
+    "last_run_at": EvalJob.last_run_at,
+}
 
-async def list_jobs(session: AsyncSession) -> list[EvalJobItem]:
+
+async def list_jobs(
+    session: AsyncSession,
+    page: PageParams,
+    *,
+    keyword: str | None = None,
+    sort_by: str = "created_at",
+    order: str = "desc",
+    enabled: bool | None = None,
+) -> PageResult[EvalJobItem]:
+    stmt = select(EvalJob)
+    if keyword:
+        stmt = stmt.where(EvalJob.name.ilike(f"%{keyword}%"))
+    if enabled is not None:
+        stmt = stmt.where(EvalJob.enabled.is_(enabled))
+
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+
+    sort_col = _LIST_SORT_COLUMNS.get(sort_by, EvalJob.created_at)
+    order_expr = sort_col.asc() if order == "asc" else sort_col.desc()
     rows = (
-        (await session.execute(select(EvalJob).order_by(EvalJob.created_at.desc())))
+        (
+            await session.execute(
+                stmt.order_by(order_expr).offset(page.offset).limit(page.limit)
+            )
+        )
         .scalars()
         .all()
     )
+
     items = [EvalJobItem.model_validate(r) for r in rows]
     name_map = await _dataset_name_map(session, {r.dataset_id for r in rows})
     for it in items:
         it.dataset_name = name_map.get(it.dataset_id)
-    return items
+    return PageResult(
+        items=items, total=total, page=page.page, page_size=page.page_size
+    )
 
 
 async def get_job(session: AsyncSession, job_id: int) -> EvalJobItem:

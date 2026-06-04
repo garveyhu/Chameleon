@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.data.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.eval_jobs import scheduler, service
@@ -23,13 +23,26 @@ router = APIRouter(prefix="/v1/admin/eval-jobs", tags=["admin:eval-jobs"])
 # ── CRUD ────────────────────────────────────────────────
 
 
-@router.get("", response_model=Result[list[EvalJobItem]])
+@router.get("", response_model=Result[PageResult[EvalJobItem]])
 async def list_jobs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: str | None = Query(None),
+    sort_by: str = Query("created_at"),
+    order: str = Query("desc"),
+    enabled: bool | None = Query(None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:read")),
-) -> Result[list[EvalJobItem]]:
-    items = await service.list_jobs(session)
-    return Result.ok(items)
+) -> Result[PageResult[EvalJobItem]]:
+    result = await service.list_jobs(
+        session,
+        PageParams(page=page, page_size=page_size),
+        keyword=keyword,
+        sort_by=sort_by,
+        order=order,
+        enabled=enabled,
+    )
+    return Result.ok(result)
 
 
 @router.get("/{job_id}", response_model=Result[EvalJobItem])

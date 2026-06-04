@@ -1,10 +1,20 @@
 /** 评分模板列表页 —— 多 metric 加权评测模板的 CRUD 管理。 */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Pencil, Plus, Ruler, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { DataTable, type DataTableColumn } from '@/core/components/table';
+import {
+  DataTable,
+  type DataTableColumn,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { confirm } from '@/core/lib/confirm';
@@ -23,10 +33,33 @@ export const EvalTemplatesPage = () => {
   const qc = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<EvalTemplateItem | null>(null);
+  const [sortKey, setSortKey] = useState('updated_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [keyword, setKeyword] = useState('');
+  const [kwInput, setKwInput] = useState('');
+  const resetPage = () => setPage(1);
 
   const listQ = useQuery({
-    queryKey: ['eval-templates'],
-    queryFn: () => evalTemplateApi.list(),
+    queryKey: [
+      'eval-templates',
+      'list',
+      page,
+      pageSize,
+      keyword,
+      sortKey,
+      sortOrder,
+    ],
+    queryFn: () =>
+      evalTemplateApi.list({
+        page,
+        page_size: pageSize,
+        keyword: keyword || undefined,
+        sort_by: sortKey,
+        order: sortOrder,
+      }),
+    placeholderData: keepPreviousData,
   });
 
   const invalidate = () =>
@@ -108,6 +141,7 @@ export const EvalTemplatesPage = () => {
     {
       key: 'name',
       header: '模板',
+      sortable: true,
       render: t => (
         <div className="min-w-0">
           <div className="truncate font-medium text-stone-800">{t.name}</div>
@@ -162,6 +196,7 @@ export const EvalTemplatesPage = () => {
       header: '版本',
       align: 'right',
       width: 64,
+      sortable: true,
       render: t => (
         <Badge variant="outline" className="text-[10.5px] text-stone-500">
           v{t.version}
@@ -173,6 +208,7 @@ export const EvalTemplatesPage = () => {
       header: '更新时间',
       align: 'right',
       width: 160,
+      sortable: true,
       render: t => (
         <span className="text-[11.5px] text-stone-500">
           {formatDateTime(t.updated_at)}
@@ -213,26 +249,51 @@ export const EvalTemplatesPage = () => {
     },
   ];
 
+  const rows = listQ.data?.items ?? [];
+  const total = listQ.data?.total ?? 0;
+
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Ruler className="h-4 w-4 text-stone-500" />
-          <h1 className="text-[14px] font-medium text-stone-800">评分模板</h1>
-          <span className="text-[11px] text-stone-400">
-            {listQ.data?.length ?? '…'} 个
+      <TableToolbar
+        title={
+          <span className="flex items-center gap-2">
+            <Ruler className="h-4 w-4 text-stone-500" />
+            评分模板
+            <span className="text-[11px] font-normal text-stone-400">
+              {total} 个
+            </span>
           </span>
-        </div>
-        <Button size="sm" onClick={openCreate}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> 新建模板
-        </Button>
-      </div>
+        }
+        onRefresh={() => listQ.refetch()}
+        search={{
+          value: kwInput,
+          onChange: setKwInput,
+          onSubmit: v => {
+            setKeyword(v);
+            resetPage();
+          },
+          placeholder: '搜索模板名称',
+        }}
+        extra={
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> 新建模板
+          </Button>
+        }
+      />
 
       <DataTable
         columns={cols}
-        rows={listQ.data ?? []}
+        rows={rows}
         rowKey="id"
-        loading={listQ.isLoading}
+        sortKey={sortKey}
+        sortOrder={sortOrder}
+        onSortChange={(k, o) => {
+          setSortKey(k);
+          setSortOrder(o);
+          resetPage();
+        }}
+        loading={listQ.isLoading && !listQ.data}
+        refreshing={listQ.isFetching}
         onRowClick={openEdit}
         emptyText="暂无评分模板，点右上「新建模板」开始"
         emptyExtra={
@@ -240,6 +301,17 @@ export const EvalTemplatesPage = () => {
             新建模板
           </Button>
         }
+      />
+
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={s => {
+          setPageSize(s);
+          resetPage();
+        }}
       />
 
       {formOpen && (

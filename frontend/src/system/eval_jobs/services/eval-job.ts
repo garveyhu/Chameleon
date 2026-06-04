@@ -1,5 +1,5 @@
 import { get, post } from '@/core/lib/request';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   CreateEvalJobPayload,
   EvalJobItem,
@@ -8,25 +8,33 @@ import type {
   UpdateEvalJobPayload,
 } from '@/system/eval_jobs/types/eval-job';
 
-export const evalJobApi = {
-  list: () => get<EvalJobItem[]>('/v1/admin/eval-jobs'),
+const BASE = '/v1/admin/eval-jobs';
 
-  get: (id: EntityId) => get<EvalJobItem>(`/v1/admin/eval-jobs/${id}`),
+export const evalJobApi = {
+  list: (params?: {
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    sort_by?: string;
+    order?: string;
+    enabled?: boolean;
+  }) => get<PageResult<EvalJobItem>>(BASE, { params }),
+
+  get: (id: EntityId) => get<EvalJobItem>(`${BASE}/${id}`),
 
   create: (payload: CreateEvalJobPayload) =>
-    post<EvalJobItem>('/v1/admin/eval-jobs', payload),
+    post<EvalJobItem>(BASE, payload),
 
   update: (id: EntityId, payload: UpdateEvalJobPayload) =>
-    post<EvalJobItem>(`/v1/admin/eval-jobs/${id}/update`, payload),
+    post<EvalJobItem>(`${BASE}/${id}/update`, payload),
 
-  delete: (id: EntityId) =>
-    post<null>(`/v1/admin/eval-jobs/${id}/delete`, {}),
+  delete: (id: EntityId) => post<null>(`${BASE}/${id}/delete`, {}),
 
   trigger: (id: EntityId) =>
-    post<TriggerEvalJobResult>(`/v1/admin/eval-jobs/${id}/trigger`, {}),
+    post<TriggerEvalJobResult>(`${BASE}/${id}/trigger`, {}),
 
   listRuns: (id: EntityId, limit = 50) =>
-    get<EvalJobRunItem[]>(`/v1/admin/eval-jobs/${id}/runs`, {
+    get<EvalJobRunItem[]>(`${BASE}/${id}/runs`, {
       params: { limit },
     }),
 };

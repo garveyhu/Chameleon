@@ -7,7 +7,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { get } from '@/core/lib/request';
 import { Button } from '@/core/components/ui/button';
@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   AlertConfig,
   CreateEvalJobPayload,
@@ -57,34 +57,70 @@ interface EvalJobFormModalProps {
   ) => void;
 }
 
-export const EvalJobFormModal: React.FC<EvalJobFormModalProps> = ({
+export const EvalJobFormModal = ({
   open,
   initial,
   loading,
   onClose,
   onSubmit,
-}) => {
+}: EvalJobFormModalProps) => {
   const isEdit = !!initial;
-  const [jobKey, setJobKey] = useState('');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [datasetId, setDatasetId] = useState<string>('');
-  const [targetKind, setTargetKind] = useState<'agent' | 'graph'>('agent');
-  const [targetKey, setTargetKey] = useState('');
-  const [modelOverride, setModelOverride] = useState('');
-  const [promptOverride, setPromptOverride] = useState('');
-  const [judge, setJudge] = useState('exact_match');
-  const [cronPreset, setCronPreset] = useState('0 9 * * *');
-  const [cronCustom, setCronCustom] = useState('');
-  const [alertEnabled, setAlertEnabled] = useState(false);
-  const [alertKind, setAlertKind] = useState<'slack' | 'webhook'>('slack');
-  const [alertTarget, setAlertTarget] = useState('');
-  const [alertThreshold, setAlertThreshold] = useState('0.1');
-  const [alertSilence, setAlertSilence] = useState('60');
+  // 惰性初始化 + 父层 remount key（react-hooks/set-state-in-effect 禁副作用同步）
+  const [jobKey, setJobKey] = useState(() => initial?.job_key ?? '');
+  const [name, setName] = useState(() => initial?.name ?? '');
+  const [description, setDescription] = useState(
+    () => initial?.description ?? '',
+  );
+  const [datasetId, setDatasetId] = useState<string>(() =>
+    initial ? String(initial.dataset_id) : '',
+  );
+  const [targetKind] = useState<'agent' | 'graph'>(
+    () => initial?.target_kind ?? 'agent',
+  );
+  const [targetKey, setTargetKey] = useState(() => initial?.target_key ?? '');
+  const [modelOverride, setModelOverride] = useState(
+    () => initial?.model_override ?? '',
+  );
+  const [promptOverride, setPromptOverride] = useState(
+    () => initial?.prompt_override ?? '',
+  );
+  const [judge, setJudge] = useState(() => initial?.judge ?? 'exact_match');
+  const [cronPreset, setCronPreset] = useState(() => {
+    if (!initial) return '0 9 * * *';
+    const preset = CRON_PRESETS.find(
+      p => p.value === initial.cron_expr && p.value !== CRON_CUSTOM_SENTINEL,
+    );
+    return preset ? initial.cron_expr : CRON_CUSTOM_SENTINEL;
+  });
+  const [cronCustom, setCronCustom] = useState(() => {
+    if (!initial) return '';
+    const preset = CRON_PRESETS.find(
+      p => p.value === initial.cron_expr && p.value !== CRON_CUSTOM_SENTINEL,
+    );
+    return preset ? '' : initial.cron_expr;
+  });
+  const [alertEnabled, setAlertEnabled] = useState(
+    () => !!initial?.alert_config,
+  );
+  const [alertKind, setAlertKind] = useState<'slack' | 'webhook'>(
+    () => initial?.alert_config?.kind ?? 'slack',
+  );
+  const [alertTarget, setAlertTarget] = useState(
+    () => initial?.alert_config?.target ?? '',
+  );
+  const [alertThreshold, setAlertThreshold] = useState(() =>
+    String(initial?.alert_config?.regression_threshold ?? 0.1),
+  );
+  const [alertSilence, setAlertSilence] = useState(() =>
+    String(initial?.alert_config?.silence_minutes ?? 60),
+  );
 
   const datasetsQ = useQuery({
     queryKey: ['eval-job-modal:datasets'],
-    queryFn: () => get<DatasetItem[]>('/v1/admin/datasets'),
+    queryFn: () =>
+      get<PageResult<DatasetItem>>('/v1/admin/datasets', {
+        params: { page_size: 200 },
+      }),
     enabled: open,
     staleTime: 30_000,
   });
@@ -95,59 +131,6 @@ export const EvalJobFormModal: React.FC<EvalJobFormModalProps> = ({
     enabled: open,
     staleTime: 30_000,
   });
-
-  useEffect(() => {
-    if (!open) return;
-    if (initial) {
-      setJobKey(initial.job_key);
-      setName(initial.name);
-      setDescription(initial.description ?? '');
-      setDatasetId(String(initial.dataset_id));
-      setTargetKind(initial.target_kind);
-      setTargetKey(initial.target_key ?? '');
-      setModelOverride(initial.model_override ?? '');
-      setPromptOverride(initial.prompt_override ?? '');
-      setJudge(initial.judge);
-      const preset = CRON_PRESETS.find(
-        p => p.value === initial.cron_expr && p.value !== CRON_CUSTOM_SENTINEL,
-      );
-      if (preset) {
-        setCronPreset(initial.cron_expr);
-        setCronCustom('');
-      } else {
-        setCronPreset(CRON_CUSTOM_SENTINEL);
-        setCronCustom(initial.cron_expr);
-      }
-      if (initial.alert_config) {
-        setAlertEnabled(true);
-        setAlertKind(initial.alert_config.kind);
-        setAlertTarget(initial.alert_config.target);
-        setAlertThreshold(
-          String(initial.alert_config.regression_threshold ?? 0.1),
-        );
-        setAlertSilence(String(initial.alert_config.silence_minutes ?? 60));
-      } else {
-        setAlertEnabled(false);
-      }
-    } else {
-      setJobKey('');
-      setName('');
-      setDescription('');
-      setDatasetId('');
-      setTargetKind('agent');
-      setTargetKey('');
-      setModelOverride('');
-      setPromptOverride('');
-      setJudge('exact_match');
-      setCronPreset('0 9 * * *');
-      setCronCustom('');
-      setAlertEnabled(false);
-      setAlertKind('slack');
-      setAlertTarget('');
-      setAlertThreshold('0.1');
-      setAlertSilence('60');
-    }
-  }, [open, initial]);
 
   const isCustomCron = cronPreset === CRON_CUSTOM_SENTINEL;
   const finalCron = isCustomCron ? cronCustom.trim() : cronPreset;
@@ -265,7 +248,7 @@ export const EvalJobFormModal: React.FC<EvalJobFormModalProps> = ({
                   <SelectValue placeholder="选择数据集…" />
                 </SelectTrigger>
                 <SelectContent>
-                  {(datasetsQ.data ?? []).map(d => (
+                  {(datasetsQ.data?.items ?? []).map(d => (
                     <SelectItem key={d.id} value={String(d.id)}>
                       {d.name}（{d.item_count} items）
                     </SelectItem>

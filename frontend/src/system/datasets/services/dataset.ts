@@ -1,5 +1,5 @@
 import { get, post } from '@/core/lib/request';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   BulkImportRequest,
   BulkImportResult,
@@ -19,7 +19,13 @@ import type {
 const BASE = '/v1/admin/datasets';
 
 export const datasetApi = {
-  list: () => get<DatasetItem[]>(BASE),
+  list: (params?: {
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    sort_by?: string;
+    order?: string;
+  }) => get<PageResult<DatasetItem>>(BASE, { params }),
   get: (id: EntityId) => get<DatasetItem>(`${BASE}/${id}`),
   create: (req: CreateDatasetRequest) => post<DatasetItem>(BASE, req),
   update: (id: EntityId, req: Partial<CreateDatasetRequest>) =>

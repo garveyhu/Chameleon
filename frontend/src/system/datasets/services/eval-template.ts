@@ -1,5 +1,5 @@
 import { get, post } from '@/core/lib/request';
-import type { EntityId } from '@/core/types/api';
+import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   CreateEvalTemplateRequest,
   EvalTemplateItem,
@@ -8,7 +8,14 @@ import type {
 } from '@/system/datasets/types/eval-template';
 
 export const evalTemplateApi = {
-  list: () => get<EvalTemplateItem[]>('/v1/admin/eval-templates'),
+  list: (params?: {
+    page?: number;
+    page_size?: number;
+    keyword?: string;
+    sort_by?: string;
+    order?: string;
+  }) =>
+    get<PageResult<EvalTemplateItem>>('/v1/admin/eval-templates', { params }),
   get: (id: EntityId) =>
     get<EvalTemplateItem>(`/v1/admin/eval-templates/${id}`),
   create: (req: CreateEvalTemplateRequest) =>

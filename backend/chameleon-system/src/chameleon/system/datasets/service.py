@@ -17,6 +17,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
+from chameleon.core.api.response import PageParams, PageResult
 from chameleon.data.models import (
     CallLog,
     Dataset,
@@ -53,16 +54,50 @@ from chameleon.system.datasets.schemas import (
 
 _MAX_REDACTED_PREVIEW = 80  # 字符
 
+# sort_by 白名单：API 入参 → DB 列
+_DATASET_SORT_COLUMNS = {
+    "created_at": Dataset.created_at,
+    "name": Dataset.name,
+    "item_count": Dataset.item_count,
+}
+_DATASET_SORT_DEFAULT = "created_at"
 
-async def list_datasets(session: AsyncSession) -> list[DatasetItemDTO]:
+
+async def list_datasets(
+    session: AsyncSession,
+    page: PageParams,
+    *,
+    keyword: str | None = None,
+    sort_by: str = _DATASET_SORT_DEFAULT,
+    order: str = "desc",
+) -> PageResult[DatasetItemDTO]:
+    """分页列出 datasets，并对【当前页这批】补 run_count / last_run_score 聚合。"""
+    stmt = select(Dataset)
+    if keyword:
+        stmt = stmt.where(Dataset.name.ilike(f"%{keyword}%"))
+
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+
+    sort_col = _DATASET_SORT_COLUMNS.get(
+        sort_by, _DATASET_SORT_COLUMNS[_DATASET_SORT_DEFAULT]
+    )
+    sort_col = sort_col.asc() if order == "asc" else sort_col.desc()
     rows = (
-        (await session.execute(select(Dataset).order_by(Dataset.created_at.desc())))
+        (
+            await session.execute(
+                stmt.order_by(sort_col).offset(page.offset).limit(page.limit)
+            )
+        )
         .scalars()
         .all()
     )
     items = [DatasetItemDTO.model_validate(r) for r in rows]
     if not rows:
-        return items
+        return PageResult(
+            items=items, total=total, page=page.page, page_size=page.page_size
+        )
 
     ids = [r.id for r in rows]
     cnt_rows = (
@@ -90,7 +125,9 @@ async def list_datasets(session: AsyncSession) -> list[DatasetItemDTO]:
     for it in items:
         it.run_count = cnt_map.get(it.id, 0)
         it.last_run_score = last_score_map.get(it.id)
-    return items
+    return PageResult(
+        items=items, total=total, page=page.page, page_size=page.page_size
+    )
 
 
 def _extract_mean_score(summary: dict[str, Any] | None) -> float | None:

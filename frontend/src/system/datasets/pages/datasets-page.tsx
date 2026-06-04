@@ -1,11 +1,21 @@
 /** 数据集列表页 —— DataTable + 新建 + 删除 */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { Database, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { DataTable, type DataTableColumn } from '@/core/components/table';
+import {
+  DataTable,
+  type DataTableColumn,
+  TablePagination,
+  TableToolbar,
+} from '@/core/components/table';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import {
@@ -34,10 +44,23 @@ export const DatasetsPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [sortKey, setSortKey] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [keyword, setKeyword] = useState('');
+  const [kwInput, setKwInput] = useState('');
+  const resetPage = () => setPage(1);
 
   const listQ = useQuery({
-    queryKey: ['datasets'],
-    queryFn: () => datasetApi.list(),
+    queryKey: ['datasets', 'list', page, pageSize, keyword, sortKey, sortOrder],
+    queryFn: () =>
+      datasetApi.list({
+        page,
+        page_size: pageSize,
+        keyword: keyword || undefined,
+        sort_by: sortKey,
+        order: sortOrder,
+      }),
+    placeholderData: keepPreviousData,
   });
 
   const deleteMut = useMutation({
@@ -63,6 +86,7 @@ export const DatasetsPage = () => {
     {
       key: 'name',
       header: '名称',
+      sortable: true,
       render: r => (
         <div className="min-w-0">
           <div className="truncate font-medium text-stone-800">{r.name}</div>
@@ -126,6 +150,7 @@ export const DatasetsPage = () => {
       header: '创建时间',
       align: 'right',
       width: 168,
+      sortable: true,
       render: r => (
         <span className="text-[11.5px] text-stone-500">
           {formatDateTime(r.created_at)}
@@ -152,29 +177,37 @@ export const DatasetsPage = () => {
     },
   ];
 
-  const rows = [...(listQ.data ?? [])].sort((a, b) => {
-    if (sortKey === 'item_count') {
-      return sortOrder === 'asc'
-        ? a.item_count - b.item_count
-        : b.item_count - a.item_count;
-    }
-    return 0;
-  });
+  const rows = listQ.data?.items ?? [];
+  const total = listQ.data?.total ?? 0;
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Database className="h-4 w-4 text-stone-500" />
-          <h1 className="text-[14px] font-medium text-stone-800">数据集</h1>
-          <span className="text-[11px] text-stone-400">
-            {listQ.data?.length ?? '…'} 个
+      <TableToolbar
+        title={
+          <span className="flex items-center gap-2">
+            <Database className="h-4 w-4 text-stone-500" />
+            数据集
+            <span className="text-[11px] font-normal text-stone-400">
+              {total} 个
+            </span>
           </span>
-        </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> 新建数据集
-        </Button>
-      </div>
+        }
+        onRefresh={() => listQ.refetch()}
+        search={{
+          value: kwInput,
+          onChange: setKwInput,
+          onSubmit: v => {
+            setKeyword(v);
+            resetPage();
+          },
+          placeholder: '搜索数据集名称',
+        }}
+        extra={
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="mr-1 h-3.5 w-3.5" /> 新建数据集
+          </Button>
+        }
+      />
 
       <DataTable
         columns={cols}
@@ -185,8 +218,10 @@ export const DatasetsPage = () => {
         onSortChange={(k, o) => {
           setSortKey(k);
           setSortOrder(o);
+          resetPage();
         }}
-        loading={listQ.isLoading}
+        loading={listQ.isLoading && !listQ.data}
+        refreshing={listQ.isFetching}
         onRowClick={r => nav(`/datasets/${r.id}`)}
         emptyText="暂无数据集"
         emptyExtra={
@@ -198,6 +233,17 @@ export const DatasetsPage = () => {
             新建数据集
           </Button>
         }
+      />
+
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        total={total}
+        onPageChange={setPage}
+        onPageSizeChange={s => {
+          setPageSize(s);
+          resetPage();
+        }}
       />
 
       {createOpen && (

@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.data.infra.db import get_session
 from chameleon.system.auth.dependencies import require_permission
 from chameleon.system.eval_templates import service as et_service
@@ -15,17 +15,28 @@ from chameleon.system.eval_templates.schemas import (
     UpdateEvalTemplateRequest,
 )
 
-router = APIRouter(
-    prefix="/v1/admin/eval-templates", tags=["admin:eval-templates"]
-)
+router = APIRouter(prefix="/v1/admin/eval-templates", tags=["admin:eval-templates"])
 
 
-@router.get("", response_model=Result[list[EvalTemplateItem]])
+@router.get("", response_model=Result[PageResult[EvalTemplateItem]])
 async def list_templates(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: str | None = Query(None),
+    sort_by: str = Query("updated_at"),
+    order: str = Query("desc"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:read")),
-) -> Result[list[EvalTemplateItem]]:
-    return Result.ok(await et_service.list_templates(session))
+) -> Result[PageResult[EvalTemplateItem]]:
+    return Result.ok(
+        await et_service.list_templates(
+            session,
+            PageParams(page=page, page_size=page_size),
+            keyword=keyword,
+            sort_by=sort_by,
+            order=order,
+        )
+    )
 
 
 @router.get("/{template_id}", response_model=Result[EvalTemplateItem])
@@ -53,9 +64,7 @@ async def update_template(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[EvalTemplateItem]:
-    return Result.ok(
-        await et_service.update_template(session, template_id, req)
-    )
+    return Result.ok(await et_service.update_template(session, template_id, req))
 
 
 @router.post("/{template_id}/delete", response_model=Result[None])

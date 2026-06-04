@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.core.api.response import Result
+from chameleon.core.api.response import PageParams, PageResult, Result
 from chameleon.data.infra.db import get_session
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
@@ -39,13 +39,24 @@ router = APIRouter(prefix="/v1/admin/datasets", tags=["admin:datasets"])
 # ── Dataset CRUD ─────────────────────────────────────────
 
 
-@router.get("", response_model=Result[list[DatasetItem]])
+@router.get("", response_model=Result[PageResult[DatasetItem]])
 async def list_datasets(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: str | None = Query(None),
+    sort_by: str = Query("created_at"),
+    order: str = Query("desc"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:read")),
-) -> Result[list[DatasetItem]]:
-    items = await ds_service.list_datasets(session)
-    return Result.ok(items)
+) -> Result[PageResult[DatasetItem]]:
+    result = await ds_service.list_datasets(
+        session,
+        PageParams(page=page, page_size=page_size),
+        keyword=keyword,
+        sort_by=sort_by,
+        order=order,
+    )
+    return Result.ok(result)
 
 
 # 静态路径必须先于 /{dataset_id} 注册（FastAPI 按声明顺序匹配）
@@ -138,9 +149,7 @@ async def delete_dataset(
 # ── Items ────────────────────────────────────────────────
 
 
-@router.get(
-    "/{dataset_id}/items", response_model=Result[list[DatasetItemItem]]
-)
+@router.get("/{dataset_id}/items", response_model=Result[list[DatasetItemItem]])
 async def list_items(
     dataset_id: int,
     limit: int = Query(default=200, ge=1, le=1000),
@@ -151,9 +160,7 @@ async def list_items(
     return Result.ok(items)
 
 
-@router.post(
-    "/items/{item_id}/update", response_model=Result[DatasetItemItem]
-)
+@router.post("/items/{item_id}/update", response_model=Result[DatasetItemItem])
 async def update_item(
     item_id: int,
     req: UpdateItemRequest,
@@ -167,9 +174,7 @@ async def update_item(
 # ── 一键采样 ──────────────────────────────────────────────
 
 
-@router.post(
-    "/{dataset_id}/sample-from-logs", response_model=Result[SampleResult]
-)
+@router.post("/{dataset_id}/sample-from-logs", response_model=Result[SampleResult])
 async def sample_from_logs(
     dataset_id: int,
     req: SampleFromLogsRequest,
@@ -198,9 +203,7 @@ async def bulk_import(
 # ── DatasetRun（PR #25） ──────────────────────────────────
 
 
-@router.post(
-    "/{dataset_id}/run", response_model=Result[DatasetRunDetail]
-)
+@router.post("/{dataset_id}/run", response_model=Result[DatasetRunDetail])
 async def run_dataset(
     dataset_id: int,
     req: DatasetRunRequest,
@@ -221,9 +224,7 @@ async def run_dataset(
     return Result.ok(DatasetRunDetail.model_validate(run))
 
 
-@router.get(
-    "/{dataset_id}/runs", response_model=Result[list[DatasetRunRow]]
-)
+@router.get("/{dataset_id}/runs", response_model=Result[list[DatasetRunRow]])
 async def list_runs(
     dataset_id: int,
     session: AsyncSession = Depends(get_session),
