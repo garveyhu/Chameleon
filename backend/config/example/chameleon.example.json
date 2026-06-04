@@ -29,5 +29,10 @@
 
   "call_log": {
     "retention_days": null
+  },
+
+  "gateway": {
+    "mode": "direct",
+    "provider_code": "new-api"
   }
 }

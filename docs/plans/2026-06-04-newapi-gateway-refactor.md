@@ -119,8 +119,12 @@ schema 迁移（models 加 3 列）+ ORM + `factory.py` 一行收口 + `provider
 - **embedding_dim 铁律**：现全局 1536。`text-embedding-v3`=**1024**，故本期**不**切 v3——v3 留给未来 per-KB 维度（KB 层任务，超出模型供应范围）：老 KB 维持 1536，只有新建 KB 才用 v3，dim 随 collection 走。
 - **rerank 暂缓**：rerank 是**按 KB 配置**（KB.config 的 base_url/api_key/model），无全局默认；且 DashScope 个人账号对 `gte-rerank` 返回 403（账号未开通）。new-api 的 `/rerank` 路由可转发，但上游账号受限。结论：rerank 维持各 KB 直连配置；将来有可用 rerank 模型时，照 embedding 同样模式给 `rerankers/registry.py` 加 gateway 分支。
 
-### P3 — 凭证单源化
-删 model.json 的 `providers.*` 明文 key（尤其 company qwen key）+ 禁用老 provider 行 + 删 `inventory.llm_provider_credential` 调用。此步前全程可回退。
+### P3 — 终化「打开网关」✅
+- 发现 `chameleon.json`/`model.json` 均 **gitignored**（仅 `example/` 模板入库）→ company qwen key 从未进 git；config 是本地/部署级。
+- dev 环境已**打开**：DB 永久建 `kind='gateway'` 的 `new-api` provider（加密 token）；本地 `chameleon.json` 设 `gateway.mode=newapi`；清空本地 `model.json` 冗余 api_key（newapi 模式不用）。
+- **已真跑验证**（读真实配置）：chat（deepseek-chat）+ embedding（text-embedding-v2@1536）全部经 new-api，返回正常。
+- 提交物：`chameleon.example.json` 增 `gateway` 块（模板默认 `direct`，部署按需 opt-in newapi）。**未删 direct 代码路径** —— `gateway.mode=direct` 一键回退直连，全程可逆。
+- 网关 provider 含 token 密钥，属运行时数据，经 admin UI（P4 Providers 页）/ env 创建，不入库；`inventory.llm_provider_credential` 保留（direct 模式仍用）。
 
 ### P4 — 前端 + 角色槽位 + 部署模式开关
 - Providers 页坍缩成"单网关卡 + 外部 agent 平台分区"；Models 页加 upstream_name/能力/角色槽位指派；新增 rerank 角色槽。
