@@ -12,10 +12,6 @@ export type CellKind =
   | { kind: 'redacted'; preview: string } // 采样脱敏 {hash,preview} → 只读灰显
   | { kind: 'json'; text: string }; // 复杂对象/数组 → 点开 JSON 弹层编辑
 
-/** 固定尾列在 columnKeys 中的标识（不与 input_payload 的 var key 冲突，故加前缀）。 */
-export const EXPECTED_COL = '__expected__' as const;
-export const META_COL = '__meta__' as const;
-
 const EXPECTED_PREFER_KEYS = ['answer', 'output', 'text'] as const;
 
 /** 扫全部 items，并集所有 input_payload 顶层 key，按首次出现顺序排列。 */
