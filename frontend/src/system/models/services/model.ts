@@ -2,7 +2,11 @@ import { get, post } from '@/core/lib/request';
 import { streamSSE } from '@/core/lib/sse';
 import type { FlatSSEEvent } from '@/core/lib/sse-events';
 import type { EntityId } from '@/core/types/api';
-import type { CreateModelRequest, ModelItem } from '@/system/models/types/model';
+import type {
+  CreateModelRequest,
+  ModelCapabilities,
+  ModelItem,
+} from '@/system/models/types/model';
 
 /** model test 的流事件 —— 在 FlatSSEEvent 基础上 narrow meta 字段 + 注明 end 扩展字段 */
 export interface TestStreamChunk extends FlatSSEEvent {
@@ -22,7 +26,14 @@ export const modelApi = {
   create: (req: CreateModelRequest) => post<ModelItem>('/v1/admin/models', req),
   update: (
     id: EntityId,
-    req: { dim?: number; defaults?: Record<string, unknown>; enabled?: boolean },
+    req: {
+      dim?: number;
+      defaults?: Record<string, unknown>;
+      enabled?: boolean;
+      upstream_name?: string;
+      upstream_group?: string;
+      capabilities?: ModelCapabilities;
+    },
   ) => post<ModelItem>(`/v1/admin/models/${id}/update`, req),
   delete: (id: EntityId) => post<void>(`/v1/admin/models/${id}/delete`),
   test: (id: EntityId) =>
