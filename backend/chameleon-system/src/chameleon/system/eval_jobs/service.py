@@ -119,6 +119,7 @@ async def create_job(session: AsyncSession, req: CreateEvalJobRequest) -> EvalJo
         model_override=req.model_override,
         prompt_override=req.prompt_override,
         judge=req.judge,
+        judge_config=req.judge_config,
         cron_expr=req.cron_expr,
         alert_config=req.alert_config,
         enabled=req.enabled,
@@ -151,6 +152,8 @@ async def update_job(
     if req.judge is not None:
         _validate_judge(req.judge)
         row.judge = req.judge
+    if req.judge_config is not None:
+        row.judge_config = req.judge_config
     if req.cron_expr is not None:
         _validate_cron(req.cron_expr)
         row.cron_expr = req.cron_expr
@@ -213,6 +216,7 @@ async def trigger_job(
             model_override=job.model_override,
             prompt_override=job.prompt_override,
             judge=job.judge,
+            judge_config=job.judge_config,
             agent_key=job.target_key if job.target_kind == "agent" else None,
             eval_template_id=job.template_id,
         )

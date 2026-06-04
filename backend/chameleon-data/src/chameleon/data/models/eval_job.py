@@ -35,9 +35,7 @@ class EvalJob(Base, TimestampMixin):
     __tablename__ = "eval_jobs"
 
     id: Mapped[int] = snowflake_pk()
-    job_key: Mapped[str] = mapped_column(
-        String(64), nullable=False, unique=True
-    )
+    job_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -52,13 +50,13 @@ class EvalJob(Base, TimestampMixin):
     )
     target_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # model / prompt 透传给 runner
-    model_override: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    model_override: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prompt_override: Mapped[str | None] = mapped_column(Text, nullable=True)
     judge: Mapped[str] = mapped_column(
         String(32), nullable=False, default="exact_match"
     )
+    # 模块 G：judge 多模式参数（criteria / dsl 文本 / gsb 参照源开关等）；透传给 runner
+    judge_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # P21.2：可选 EvalTemplate 绑定（freeze 当前 version，老 job 不受 template 改动影响）
     template_id: Mapped[int | None] = mapped_column(
         BigInteger,
@@ -71,15 +69,11 @@ class EvalJob(Base, TimestampMixin):
     cron_expr: Mapped[str] = mapped_column(String(64), nullable=False)
     # PR #31 用：{ kind: slack|webhook, target, regression_threshold }
     alert_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_run_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_score: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 4), nullable=True
-    )
+    last_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
 
 
 class EvalJobRun(Base):
@@ -100,22 +94,12 @@ class EvalJobRun(Base):
     )
     # cron / manual / api
     triggered_by: Mapped[str] = mapped_column(String(16), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
-    mean_score: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 4), nullable=True
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    mean_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
     # 相比上次的 score 变化；PR #31 alert 用
-    delta_score: Mapped[Decimal | None] = mapped_column(
-        Numeric(5, 4), nullable=True
-    )
-    alert_sent: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
-    alert_target: Mapped[str | None] = mapped_column(
-        String(256), nullable=True
-    )
+    delta_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    alert_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    alert_target: Mapped[str | None] = mapped_column(String(256), nullable=True)
     error: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -126,6 +110,4 @@ class EvalJobRun(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    __table_args__ = (
-        Index("ix_eval_job_runs_job", "job_id", "created_at"),
-    )
+    __table_args__ = (Index("ix_eval_job_runs_job", "job_id", "created_at"),)

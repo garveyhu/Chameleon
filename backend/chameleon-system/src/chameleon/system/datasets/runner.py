@@ -3,8 +3,13 @@
 跑流程：
 1. 建 DatasetRun（status=running）
 2. 遍历 dataset_items：每条调 LLM（用 model_override / prompt_override）→ 拿 actual_output
-3. judge(expected, actual) → score → 写一条 dataset_run_items + score 行
+3. run_judge(judge, expected, actual, reference, config) → JudgeResult → 写一条
+   dataset_run_items（score / score_reason / field_scores / reference_output）+ score 行
 4. 终态 aggregate summary 写回 dataset_runs
+
+评分契约（模块 G）：统一走 run_judge 分发器返 JudgeResult（score 恒 [0,1]）。需 LLM 的
+judge（llm_judge / llm_score / gsb）在 channel='eval' TraceContext scope 内调 LLM；
+旧窄函数（exact_match / contains）经 _as_judge_result 适配；dsl 走 try-import 解析器。
 
 scores 表打通：每 item 评分同时写 chameleon.data.models.Score 行（source='eval'）
 """
@@ -34,7 +39,15 @@ from chameleon.data.models import (
     EvalTemplate,
     Score,
 )
-from chameleon.system.datasets.judges import JUDGES
+from chameleon.system.datasets.judges import (
+    JUDGES,
+    LLM_JUDGES,
+    JudgeResult,
+    build_gsb_prompt,
+    build_llm_score_prompt,
+    parse_gsb_result,
+    parse_score_result,
+)
 from chameleon.system.datasets.template_scoring import score_run_with_template
 
 EVAL_APP_ID = "__eval__"
@@ -50,6 +63,7 @@ async def run_dataset(
     model_override: str | None = None,
     prompt_override: str | None = None,
     judge: str = "exact_match",
+    judge_config: dict[str, Any] | None = None,
     eval_template_id: int | None = None,
     agent_key: str | None = None,
 ) -> DatasetRun:
@@ -99,7 +113,6 @@ async def run_dataset(
     await session.refresh(run)
     run_id = run.id
 
-    judge_fn = JUDGES[judge]
     ok_count = 0
     fail_count = 0
     score_sum = 0.0
@@ -130,20 +143,26 @@ async def run_dataset(
                     model_override=model_override,
                     prompt_override=prompt_override,
                 )
-            if judge == "llm_judge":
-                # AI 评分走 eval 渠道（在本 item 的 TraceContext scope 内），带理由
-                score, reason = await _llm_judge_score(
-                    item.expected_output, actual, model_override=model_override
-                )
-            else:
-                score = await judge_fn(item.expected_output, actual)
-                reason = None
+            # 统一走分发器：需 LLM 的 judge 在本 item 的 channel='eval' TraceContext
+            # scope 内调 LLM（成本/token 自动盖 eval 渠道章），否则旧函数 + 适配器。
+            result = await run_judge(
+                judge,
+                item.expected_output,
+                actual,
+                reference=item.reference_output,
+                config=judge_config,
+                model_override=model_override,
+            )
+            score = result.score
+            reason = result.reason
+            field_scores = result.field_scores
             err = None
             ok_count += 1
         except Exception as e:  # noqa: BLE001
             actual = None
             score = None
             reason = None
+            field_scores = None
             err = {"type": type(e).__name__, "message": str(e)[:300]}
             fail_count += 1
             logger.exception(
@@ -161,6 +180,8 @@ async def run_dataset(
             actual_output=_to_dict(actual),
             score=score,
             score_reason=reason,
+            field_scores=field_scores,
+            reference_output=item.reference_output if judge == "gsb" else None,
             error=err,
             duration_ms=dur_ms,
         )
@@ -264,61 +285,133 @@ async def _invoke_for_item(
     return {"answer": content}
 
 
-async def _llm_judge_score(
+def _as_judge_result(raw: float | JudgeResult | None) -> JudgeResult:
+    """把旧窄签名 judge（返 float | None）适配成 JudgeResult。
+
+    float → JudgeResult(score=raw)；JudgeResult → 透传；None → score=None。
+    """
+    if isinstance(raw, JudgeResult):
+        return raw
+    if raw is None:
+        return JudgeResult(score=None)
+    return JudgeResult(score=float(raw))
+
+
+async def run_judge(
+    judge_key: str,
     expected: Any,
     actual: Any,
     *,
+    reference: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
     model_override: str | None = None,
-) -> tuple[float | None, str | None]:
-    """LLM-as-judge：对比 期望/实际 输出 0-1 分 + 一句理由。
+) -> JudgeResult:
+    """评分分发器：按 judge_key 路由到旧窄函数（+适配器）或 LLM judge。
+
+    需 LLM 的 judge（LLM_JUDGES）走 _run_llm_judge（在调用方的 channel='eval'
+    TraceContext scope 内调 LLM）；dsl 走 _run_dsl_judge（try-import 解析器）；
+    其余走旧窄函数 + _as_judge_result 适配。
+
+    Args:
+        judge_key: judge 类型 key
+        expected: 金标准（DatasetItem.expected_output）
+        actual: 被测模型回答
+        reference: GSB 参照回答（DatasetItem.reference_output）
+        config: judge_config（criteria / dsl 文本等）
+        model_override: 评判模型覆盖
+
+    Returns:
+        JudgeResult；score 恒为 [0, 1] 或 None。
+    """
+    if judge_key == "dsl":
+        return await _run_dsl_judge(expected, actual, config=config)
+    if judge_key in LLM_JUDGES:
+        return await _run_llm_judge(
+            judge_key,
+            expected,
+            actual,
+            reference=reference,
+            config=config,
+            model_override=model_override,
+        )
+    judge_fn = JUDGES.get(judge_key)
+    if judge_fn is None:
+        return JudgeResult(score=None, reason=f"judge 未实现: {judge_key}")
+    return _as_judge_result(await judge_fn(expected, actual))
+
+
+async def _run_llm_judge(
+    judge_key: str,
+    expected: Any,
+    actual: Any,
+    *,
+    reference: dict[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+    model_override: str | None = None,
+) -> JudgeResult:
+    """LLM 评分编排：build prompt（纯函数）→ eval 渠道调 LLM → parse_score_result。
 
     在 run_dataset 的 channel='eval' TraceContext scope 内调用，judge LLM 调用
-    自动盖 eval 渠道章（成本 / token 进 Trace）。expected 缺失则返 (None, None)。
+    自动盖 eval 渠道章（成本 / token 进 Trace）。各模式优雅降级：
+    - llm_judge：无 criteria 的 llm_score 退化；expected 缺失返 score=None。
+    - llm_score：按 config['criteria'] 出 1-5 档；expected 可空（纯按 criteria 评）。
+    - gsb：按 reference 判 G/S/B；reference 缺失返 score=None（无参照不可评）。
     """
     from langchain_core.messages import HumanMessage
 
     from chameleon.integrations.llms.factory import llm as get_llm
     from chameleon.system.datasets.judges import _flatten_str
 
-    exp = _flatten_str(expected).strip()
-    act = _flatten_str(actual).strip()
-    if not exp:
-        return None, None
+    cfg = config or {}
+    criteria = cfg.get("criteria")
 
-    prompt = (
-        "你是严格的评测打分员。对比【期望答案】与【实际回答】的语义正确性与完整性，"
-        "给一个 0 到 1 的小数分（1=完全正确，0=完全错误，可取中间值），"
-        "并用一句话说明理由。\n\n"
-        f"【期望答案】\n{exp}\n\n【实际回答】\n{act}\n\n"
-        '只输出 JSON，不要多余文字：{"score": <0到1的小数>, "reason": "<一句话理由>"}'
+    if judge_key == "gsb":
+        if not _flatten_str(reference).strip():
+            return JudgeResult(score=None, reason="GSB 缺参照回答，跳过")
+        prompt = build_gsb_prompt(reference, actual, criteria)
+        raw = await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt)
+        return parse_gsb_result(raw)
+
+    if judge_key == "llm_score":
+        prompt = build_llm_score_prompt(expected, actual, criteria)
+        raw = await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt)
+        return parse_score_result(raw, scale="1-5")
+
+    # judge_key == "llm_judge"（基础 AI 评分）：无 criteria，expected 缺失不可评
+    if not _flatten_str(expected).strip():
+        return JudgeResult(score=None)
+    prompt = build_llm_score_prompt(expected, actual, criteria)
+    return parse_score_result(
+        await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt),
+        scale="1-5",
     )
+
+
+async def _ainvoke_llm(
+    get_llm: Any,
+    model_override: str | None,
+    human_message_cls: Any,
+    prompt: str,
+) -> str:
+    """单次 LLM 调用取文本（在 eval TraceContext scope 内）。"""
     client = get_llm(model_override)
-    ai = await client.ainvoke([HumanMessage(content=prompt)])
+    ai = await client.ainvoke([human_message_cls(content=prompt)])
     raw = ai.content if hasattr(ai, "content") else str(ai)
-    return _parse_judge_json(str(raw))
+    return str(raw)
 
 
-def _parse_judge_json(raw: str) -> tuple[float | None, str | None]:
-    """从 LLM 输出抽 {"score","reason"}，容错截取 JSON 段；失败则把原文当理由。"""
-    import json
-    import re
-
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not m:
-        return None, (raw.strip()[:300] or None)
+async def _run_dsl_judge(
+    expected: Any,
+    actual: Any,
+    *,
+    config: dict[str, Any] | None = None,
+) -> JudgeResult:
+    """DSL 评分：try-import dsl-parser 领域产出的 evaluate；未就位则降级。"""
     try:
-        data = json.loads(m.group(0))
-    except (ValueError, TypeError):
-        return None, (raw.strip()[:300] or None)
-    raw_score = data.get("score")
-    raw_reason = data.get("reason")
-    try:
-        s = float(raw_score) if raw_score is not None else None
-    except (ValueError, TypeError):
-        s = None
-    if s is not None:
-        s = max(0.0, min(1.0, s))
-    return s, (str(raw_reason)[:500] if raw_reason is not None else None)
+        from chameleon.system.datasets.dsl import evaluate as dsl_evaluate
+    except ImportError:
+        return JudgeResult(score=None, reason="DSL 解析器待接入")
+    return await dsl_evaluate(expected, actual, config=config)
 
 
 async def _invoke_via_agent(

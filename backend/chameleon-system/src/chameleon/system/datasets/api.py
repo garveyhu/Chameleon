@@ -243,6 +243,7 @@ async def run_dataset(
         model_override=req.model_override,
         prompt_override=req.prompt_override,
         judge=req.judge,
+        judge_config=req.judge_config,
         eval_template_id=req.eval_template_id,
         agent_key=req.agent_key,
     )

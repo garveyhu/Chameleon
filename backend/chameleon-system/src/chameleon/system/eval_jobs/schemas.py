@@ -23,6 +23,7 @@ class EvalJobItem(BaseModel):
     model_override: str | None = None
     prompt_override: str | None = None
     judge: str
+    judge_config: dict[str, Any] | None = None
     cron_expr: str
     alert_config: dict[str, Any] | None = None
     enabled: bool
@@ -42,6 +43,7 @@ class CreateEvalJobRequest(BaseModel):
     model_override: str | None = None
     prompt_override: str | None = None
     judge: str = "exact_match"
+    judge_config: dict[str, Any] | None = None
     cron_expr: str = Field(min_length=1, max_length=64)
     alert_config: dict[str, Any] | None = None
     enabled: bool = True
@@ -55,6 +57,7 @@ class UpdateEvalJobRequest(BaseModel):
     model_override: str | None = None
     prompt_override: str | None = None
     judge: str | None = None
+    judge_config: dict[str, Any] | None = None
     cron_expr: str | None = Field(default=None, max_length=64)
     alert_config: dict[str, Any] | None = None
     enabled: bool | None = None

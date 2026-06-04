@@ -59,6 +59,8 @@ class DatasetItem(Base, TimestampMixin):
     input_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     # 人工标注的预期输出（PR #25 dataset_runs 用这个对比）
     expected_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 模块 G：GSB 参照回答（区别 expected_output 金标准语义；gsb judge 用作对比基准）
+    reference_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 额外元数据（标签 / 难度 / 备注）
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 

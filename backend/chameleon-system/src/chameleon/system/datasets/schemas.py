@@ -47,6 +47,8 @@ class DatasetItemItem(BaseModel):
     source_call_log_id: str | None = None
     input_payload: dict[str, Any]
     expected_output: dict[str, Any] | None = None
+    # 模块 G：GSB 参照回答（区别 expected_output 金标准语义）
+    reference_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
     created_at: datetime
     updated_at: datetime
@@ -143,6 +145,8 @@ class DatasetRunRequest(BaseModel):
     model_override: str | None = Field(default=None, max_length=64)
     prompt_override: str | None = None
     judge: str = Field(default="exact_match", max_length=32)
+    # 模块 G：judge 多模式参数（criteria / dsl 文本 / gsb 参照源开关等）；按 judge 分派解析
+    judge_config: dict[str, Any] | None = None
     # P21.2：可选 EvalTemplate 联动；跑完后按 template metrics 评分
     eval_template_id: int | None = None
     # A3：被测对象设为 agent（含 graph 编排的）；设了则整条工作流当被测，忽略 model_override
