@@ -135,6 +135,10 @@ class DatasetRunItemRow(BaseModel):
     dataset_item_id: int
     actual_output: dict[str, Any] | None = None
     score: float | None = None
+    # 模块 G：评分理由 / 逐字段评分 / GSB 参照
+    score_reason: str | None = None
+    field_scores: dict[str, Any] | None = None
+    reference_output: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
     duration_ms: int | None = None
 

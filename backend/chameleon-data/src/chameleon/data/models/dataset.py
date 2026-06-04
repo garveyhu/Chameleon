@@ -39,9 +39,7 @@ class Dataset(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 冗余：item_count 由采样 / 添加时增 / 删除时减，避免每次 count(*)
-    item_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
 
 class DatasetItem(Base, TimestampMixin):
@@ -56,9 +54,7 @@ class DatasetItem(Base, TimestampMixin):
         nullable=False,
     )
     # 来源 call_log.request_id（采样而来）；人工添加则为 NULL
-    source_call_log_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    source_call_log_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 已脱敏的 input —— 推荐结构：{ "hash": "sha256:...", "length": 128, "token_count": 24 }
     input_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     # 人工标注的预期输出（PR #25 dataset_runs 用这个对比）
@@ -81,18 +77,14 @@ class DatasetRun(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     # 采用何种 invoke：模型直调（model_name）+ system_prompt 覆盖 + judge 类型
     agent_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    model_override: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    model_override: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prompt_override: Mapped[str | None] = mapped_column(Text, nullable=True)
     # exact_match / contains / llm_judge
     judge: Mapped[str] = mapped_column(
         String(32), nullable=False, default="exact_match"
     )
     # 内部状态：pending / running / success / failed / cancelled
-    status: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="pending"
-    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     # 聚合摘要：{"total":N, "ok":N, "fail":N, "mean_score":0.x}
     summary: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -135,12 +127,16 @@ class DatasetRunItem(Base):
     eval_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 模块 G：AI / DSL 评分理由（一句话或多行）
+    score_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 模块 G：逐字段评分（DSL 多字段），{field: score}
+    field_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 模块 G：GSB 参照回答（区别于 expected_output 金标准语义）
+    reference_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
 
-    __table_args__ = (
-        Index("ix_dataset_run_items_run", "dataset_run_id"),
-    )
+    __table_args__ = (Index("ix_dataset_run_items_run", "dataset_run_id"),)

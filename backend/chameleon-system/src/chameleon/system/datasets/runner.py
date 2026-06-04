@@ -130,12 +130,20 @@ async def run_dataset(
                     model_override=model_override,
                     prompt_override=prompt_override,
                 )
-            score = await judge_fn(item.expected_output, actual)
+            if judge == "llm_judge":
+                # AI 评分走 eval 渠道（在本 item 的 TraceContext scope 内），带理由
+                score, reason = await _llm_judge_score(
+                    item.expected_output, actual, model_override=model_override
+                )
+            else:
+                score = await judge_fn(item.expected_output, actual)
+                reason = None
             err = None
             ok_count += 1
         except Exception as e:  # noqa: BLE001
             actual = None
             score = None
+            reason = None
             err = {"type": type(e).__name__, "message": str(e)[:300]}
             fail_count += 1
             logger.exception(
@@ -152,6 +160,7 @@ async def run_dataset(
             dataset_item_id=item.id,
             actual_output=_to_dict(actual),
             score=score,
+            score_reason=reason,
             error=err,
             duration_ms=dur_ms,
         )
@@ -253,6 +262,63 @@ async def _invoke_for_item(
     ai = await client.ainvoke(msgs)
     content = ai.content if hasattr(ai, "content") else str(ai)
     return {"answer": content}
+
+
+async def _llm_judge_score(
+    expected: Any,
+    actual: Any,
+    *,
+    model_override: str | None = None,
+) -> tuple[float | None, str | None]:
+    """LLM-as-judge：对比 期望/实际 输出 0-1 分 + 一句理由。
+
+    在 run_dataset 的 channel='eval' TraceContext scope 内调用，judge LLM 调用
+    自动盖 eval 渠道章（成本 / token 进 Trace）。expected 缺失则返 (None, None)。
+    """
+    from langchain_core.messages import HumanMessage
+
+    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.system.datasets.judges import _flatten_str
+
+    exp = _flatten_str(expected).strip()
+    act = _flatten_str(actual).strip()
+    if not exp:
+        return None, None
+
+    prompt = (
+        "你是严格的评测打分员。对比【期望答案】与【实际回答】的语义正确性与完整性，"
+        "给一个 0 到 1 的小数分（1=完全正确，0=完全错误，可取中间值），"
+        "并用一句话说明理由。\n\n"
+        f"【期望答案】\n{exp}\n\n【实际回答】\n{act}\n\n"
+        '只输出 JSON，不要多余文字：{"score": <0到1的小数>, "reason": "<一句话理由>"}'
+    )
+    client = get_llm(model_override)
+    ai = await client.ainvoke([HumanMessage(content=prompt)])
+    raw = ai.content if hasattr(ai, "content") else str(ai)
+    return _parse_judge_json(str(raw))
+
+
+def _parse_judge_json(raw: str) -> tuple[float | None, str | None]:
+    """从 LLM 输出抽 {"score","reason"}，容错截取 JSON 段；失败则把原文当理由。"""
+    import json
+    import re
+
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return None, (raw.strip()[:300] or None)
+    try:
+        data = json.loads(m.group(0))
+    except (ValueError, TypeError):
+        return None, (raw.strip()[:300] or None)
+    raw_score = data.get("score")
+    raw_reason = data.get("reason")
+    try:
+        s = float(raw_score) if raw_score is not None else None
+    except (ValueError, TypeError):
+        s = None
+    if s is not None:
+        s = max(0.0, min(1.0, s))
+    return s, (str(raw_reason)[:500] if raw_reason is not None else None)
 
 
 async def _invoke_via_agent(
