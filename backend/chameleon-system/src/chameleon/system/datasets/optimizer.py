@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
@@ -63,6 +64,17 @@ async def optimize_run_prompt(session: AsyncSession, run_id: int) -> dict[str, A
     )
 
     result = await _llm_optimize(original, weak_block, len(rows))
+
+    # H3 落库（幂等覆盖）：优化产出挂在「被优化的 run」自身上，重复点覆盖上次
+    run.optimized_prompt = result.get("optimized_prompt", "")
+    run.optimization_report = {
+        "report": result.get("report", ""),
+        "weak_count": len(rows),
+        "threshold": LOW_SCORE_THRESHOLD,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await session.commit()
+
     return {
         "run_id": run_id,
         "original_prompt": original,
@@ -70,6 +82,64 @@ async def optimize_run_prompt(session: AsyncSession, run_id: int) -> dict[str, A
         "report": result.get("report", ""),
         "weak_count": len(rows),
     }
+
+
+async def apply_optimized_run(session: AsyncSession, run_id: int) -> DatasetRun:
+    """用父 run 的 optimized_prompt 重跑整个 dataset，落新子 run（版本链）。
+
+    完全复用现有 runner.run_dataset（零引擎改造）：把 optimized_prompt 当 prompt_override
+    传进去，跑完把 new_run.parent_run_id 指回父 run，形成 run→run 版本链。
+
+    Args:
+        session: DB 会话
+        run_id: 被优化的父 run id（其 optimized_prompt 非空）
+
+    Returns:
+        重跑得到的新子 run（parent_run_id 指向 run_id）。
+
+    Raises:
+        BusinessError: run 不存在 / 未优化 / agent 路径（prompt_override 不透传）。
+    """
+    from chameleon.system.datasets import runner as ds_runner
+
+    parent = (
+        await session.execute(select(DatasetRun).where(DatasetRun.id == run_id))
+    ).scalar_one_or_none()
+    if parent is None:
+        raise BusinessError(ResultCode.Fail, message=f"运行不存在: {run_id}")
+    if not (parent.optimized_prompt or "").strip():
+        raise BusinessError(
+            ResultCode.Fail, message="该运行尚未优化，先点智能优化"
+        )
+    if parent.agent_key is not None:
+        raise BusinessError(
+            ResultCode.Fail,
+            message="智能体运行的 Prompt 改写需在工作流编排里改，暂不支持一键应用",
+        )
+
+    # 默认版本号 n：父 run 已有子版本数 + 1（仅用于命名，不入列）
+    child_count = (
+        await session.execute(
+            select(func.count())
+            .select_from(DatasetRun)
+            .where(DatasetRun.parent_run_id == run_id)
+        )
+    ).scalar_one()
+    n = child_count + 1
+
+    new_run = await ds_runner.run_dataset(
+        session,
+        dataset_id=parent.dataset_id,
+        name=f"{parent.name} · 优化v{n}",
+        model_override=parent.model_override,
+        prompt_override=parent.optimized_prompt,
+        judge=parent.judge,
+        agent_key=None,
+    )
+    new_run.parent_run_id = run_id
+    await session.commit()
+    await session.refresh(new_run)
+    return new_run
 
 
 def _short(v: Any) -> str:

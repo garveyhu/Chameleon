@@ -81,6 +81,16 @@ class DatasetRun(Base):
     agent_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     model_override: Mapped[str | None] = mapped_column(String(64), nullable=True)
     prompt_override: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 模块 H3 版本链：优化产出落在「被优化的 run」上，重跑结果是「新子 run」。
+    #   - optimized_prompt / optimization_report 非空 = 本 run 被优化过（产出挂自身）
+    #   - parent_run_id 非空 = 本 run 是优化产物（用父 run 的 optimized_prompt 重跑而来）
+    optimized_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    optimization_report: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    parent_run_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("dataset_runs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     # exact_match / contains / llm_judge
     judge: Mapped[str] = mapped_column(
         String(32), nullable=False, default="exact_match"

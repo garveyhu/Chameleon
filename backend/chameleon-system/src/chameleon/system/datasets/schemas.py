@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class DatasetItem(BaseModel):
@@ -182,7 +182,11 @@ class DatasetRunItemDetail(DatasetRunItemRow):
 
 
 class DatasetRunRow(BaseModel):
-    """列表项"""
+    """列表项
+
+    H3 版本链：透 parent_run_id（是否优化产物）+ has_optimization 轻量标记
+    （是否被优化过）；完整 optimized_prompt 不进列表，仅 DatasetRunDetail 返。
+    """
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -197,13 +201,26 @@ class DatasetRunRow(BaseModel):
     started_at: datetime | None = None
     finished_at: datetime | None = None
     created_at: datetime
+    # H3：本 run 由哪个 run 优化而来（自引用版本链；父 run 已删则为 None）
+    parent_run_id: int | None = None
+    # 从 ORM 读 optimized_prompt 仅用于推导 has_optimization，不进 JSON（exclude）
+    optimized_prompt: str | None = Field(default=None, exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def has_optimization(self) -> bool:
+        """本 run 是否被优化过（optimized_prompt 非空）。"""
+        return bool((self.optimized_prompt or "").strip())
 
 
 class DatasetRunDetail(DatasetRunRow):
-    """详情（含 prompt_override）"""
+    """详情（含 prompt_override + 优化全文）"""
 
     agent_key: str | None = None
     prompt_override: str | None = None
+    # 详情透优化全文 + 报告（覆盖列表的 exclude，列表只透 has_optimization 标记）
+    optimized_prompt: str | None = None
+    optimization_report: dict[str, Any] | None = None
 
 
 class CompareRunsRequest(BaseModel):

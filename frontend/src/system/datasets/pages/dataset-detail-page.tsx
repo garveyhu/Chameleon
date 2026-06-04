@@ -203,7 +203,24 @@ export const DatasetDetailPage = () => {
     {
       key: 'name',
       header: '运行',
-      render: r => <span className="text-stone-800">{r.name}</span>,
+      render: r => (
+        <span className="flex items-center gap-1.5">
+          <span className="text-stone-800">{r.name}</span>
+          {r.parent_run_id != null && (
+            <Badge
+              variant="outline"
+              className="bg-violet-50 px-1 py-0 text-[9.5px] text-violet-700"
+            >
+              优化产物
+            </Badge>
+          )}
+          {r.has_optimization && (
+            <span title="已生成优化 Prompt">
+              <Sparkles className="h-3 w-3 text-violet-400" />
+            </span>
+          )}
+        </span>
+      ),
     },
     {
       key: 'status',
@@ -423,6 +440,12 @@ export const DatasetDetailPage = () => {
         key={runId ?? '∅'}
         runId={runId}
         onClose={() => setRunId(null)}
+        onCompare={ids => {
+          setTab('runs');
+          setSelRunIds(ids);
+          setRunsView('matrix');
+          setRunId(null);
+        }}
       />
 
       {editItem && (

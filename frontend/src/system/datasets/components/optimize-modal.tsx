@@ -1,7 +1,7 @@
 /** 智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 + 前后对比。H3。 */
 
-import { useMutation } from '@tanstack/react-query';
-import { Loader2, Sparkles } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Play, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
@@ -19,10 +19,12 @@ import type { OptimizeResult } from '@/system/datasets/types/dataset';
 
 interface Props {
   runId: EntityId;
+  datasetId: EntityId;
   onClose: () => void;
 }
 
-export const OptimizeModal = ({ runId, onClose }: Props) => {
+export const OptimizeModal = ({ runId, datasetId, onClose }: Props) => {
+  const qc = useQueryClient();
   const [result, setResult] = useState<OptimizeResult | null>(null);
 
   const mut = useMutation({
@@ -30,6 +32,17 @@ export const OptimizeModal = ({ runId, onClose }: Props) => {
     onSuccess: setResult,
     onError: (e: unknown) =>
       toast.error((e as { message?: string })?.message || '优化失败'),
+  });
+
+  const applyMut = useMutation({
+    mutationFn: () => datasetApi.applyOptimized(runId),
+    onSuccess: run => {
+      toast.success(`已用优化 Prompt 跑出新一轮「${run.name}」`);
+      qc.invalidateQueries({ queryKey: ['datasets', datasetId, 'runs'] });
+      onClose();
+    },
+    onError: (e: unknown) =>
+      toast.error((e as { message?: string })?.message || '应用失败'),
   });
 
   return (
@@ -102,6 +115,30 @@ export const OptimizeModal = ({ runId, onClose }: Props) => {
                     </pre>
                   </div>
                 </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-stone-100 pt-3">
+                <p className="mr-auto text-[10.5px] text-stone-400">
+                  用优化后的 Prompt 重跑整个数据集，落为新一轮运行（同步评测，数十秒）
+                </p>
+                <Button
+                  size="sm"
+                  disabled={
+                    applyMut.isPending || !result.optimized_prompt?.trim()
+                  }
+                  onClick={() => applyMut.mutate()}
+                >
+                  {applyMut.isPending ? (
+                    <>
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />{' '}
+                      评测进行中…数十秒
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-1 h-3.5 w-3.5" /> 用优化后 Prompt
+                      跑新一轮
+                    </>
+                  )}
+                </Button>
               </div>
             </>
           )}

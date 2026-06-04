@@ -83,10 +83,16 @@ export interface DatasetRunRow {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  // H3 版本链：本 run 由哪个 run 优化而来（父已删则 null）；是否被优化过的轻量标记
+  parent_run_id?: EntityId | null;
+  has_optimization?: boolean;
 }
 
 export interface DatasetRunDetail extends DatasetRunRow {
   prompt_override: string | null;
+  // H3：详情带优化全文 + 报告（列表只透 has_optimization 标记）
+  optimized_prompt?: string | null;
+  optimization_report?: Record<string, unknown> | null;
 }
 
 /** 手动发起运行入参 —— POST /v1/admin/datasets/{id}/run（同步，跑完才返回）。 */

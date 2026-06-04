@@ -47,6 +47,9 @@ export const datasetApi = {
   /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 */
   optimizeRun: (runId: EntityId) =>
     post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
+  /** H3：用优化后 Prompt 重跑整个 dataset，落新子 run（版本链） */
+  applyOptimized: (runId: EntityId) =>
+    post<DatasetRunDetail>(`${BASE}/runs/${runId}/apply-optimized`, {}),
   /** 人工标注：改某 item 的 expected_output / meta */
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),

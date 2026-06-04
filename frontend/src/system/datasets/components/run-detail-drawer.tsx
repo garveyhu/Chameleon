@@ -3,7 +3,7 @@
  *  内部过滤/选中态随 runId remount 重置（调用方传 key={runId}）。 */
 
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles, Star } from 'lucide-react';
+import { GitCompare, Sparkles, Star } from 'lucide-react';
 import { useState } from 'react';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
@@ -95,9 +95,11 @@ const inputPreview = (ri: DatasetRunItemRow): string => {
 interface Props {
   runId: EntityId | null;
   onClose: () => void;
+  /** 「对比上一版本」：把 [parentRunId, runId] 喂进运行对比矩阵（父已删则不渲染按钮）。 */
+  onCompare?: (runIds: EntityId[]) => void;
 }
 
-export const RunDetailDrawer = ({ runId, onClose }: Props) => {
+export const RunDetailDrawer = ({ runId, onClose, onCompare }: Props) => {
   const open = !!runId;
   const [bucket, setBucket] = useState<ScoreBucket | null>(null);
   const [sel, setSel] = useState<DatasetRunItemRow | null>(null);
@@ -213,7 +215,7 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
             {runQ.data?.name ?? '运行详情'}
           </SheetTitle>
           {runQ.data && (
-            <div className="flex items-center gap-2 text-[11.5px] text-stone-500">
+            <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-stone-500">
               <Badge
                 variant="outline"
                 className={cn('text-[10.5px]', statusBg(runQ.data.status))}
@@ -221,13 +223,37 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
                 {STATUS_LABEL[runQ.data.status] ?? runQ.data.status}
               </Badge>
               <span>评分器 {runQ.data.judge}</span>
-              <button
-                type="button"
-                onClick={() => setOptimizeOpen(true)}
-                className="ml-auto inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-700 transition hover:bg-violet-100"
-              >
-                <Sparkles className="h-3.5 w-3.5" /> 智能优化
-              </button>
+              {runQ.data.parent_run_id != null && (
+                <Badge
+                  variant="outline"
+                  className="bg-violet-50 text-[10.5px] text-violet-700"
+                >
+                  ← 优化自上一版本
+                </Badge>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                {runQ.data.parent_run_id != null && onCompare && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onCompare([
+                        runQ.data!.parent_run_id as EntityId,
+                        runQ.data!.id,
+                      ])
+                    }
+                    className="inline-flex items-center gap-1 rounded-md bg-stone-50 px-2 py-1 text-[11px] text-stone-700 transition hover:bg-stone-100"
+                  >
+                    <GitCompare className="h-3.5 w-3.5" /> 对比上一版本
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setOptimizeOpen(true)}
+                  className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-700 transition hover:bg-violet-100"
+                >
+                  <Sparkles className="h-3.5 w-3.5" /> 智能优化
+                </button>
+              </div>
             </div>
           )}
         </SheetHeader>
@@ -288,9 +314,10 @@ export const RunDetailDrawer = ({ runId, onClose }: Props) => {
             />
           </section>
         </SheetBody>
-        {optimizeOpen && (
+        {optimizeOpen && runQ.data && (
           <OptimizeModal
             runId={runId as EntityId}
+            datasetId={runQ.data.dataset_id}
             onClose={() => setOptimizeOpen(false)}
           />
         )}

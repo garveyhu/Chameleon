@@ -317,6 +317,19 @@ async def optimize_run(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[OptimizeResult]:
-    """H3：低分样本共性 → LLM 重写 Prompt + 优化报告（走 eval 渠道）"""
+    """H3：低分样本共性 → LLM 重写 Prompt + 优化报告（走 eval 渠道，产出落库）"""
     data = await ds_optimizer.optimize_run_prompt(session, run_id)
     return Result.ok(OptimizeResult(**data))
+
+
+@router.post(
+    "/runs/{run_id}/apply-optimized", response_model=Result[DatasetRunDetail]
+)
+async def apply_optimized_run(
+    run_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[DatasetRunDetail]:
+    """H3：用父 run 的优化 Prompt 重跑整个 dataset，落新子 run（版本链）"""
+    new_run = await ds_optimizer.apply_optimized_run(session, run_id)
+    return Result.ok(DatasetRunDetail.model_validate(new_run))
