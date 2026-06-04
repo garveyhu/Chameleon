@@ -24,10 +24,10 @@ from chameleon.core.api.sse_events import (
     event_error,
     event_meta,
 )
-from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.data.models import LLMModel, Provider
-from chameleon.data.utils.crypto import get_or_decrypt
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
+from chameleon.integrations.llms.factory import resolve_upstream
 
 PING_PROMPT = "请用一句话简短自我介绍。"
 DEFAULT_STREAM_MAX_TOKENS = 128
@@ -66,22 +66,23 @@ async def stream_test(
     """
     m, p = await _load_model_and_provider(session, model_id)
 
-    yield event_meta(kind=m.kind, model=m.code, provider=p.code)
+    # 与工厂同口径解析有效上游（newapi 模式走网关）
+    base_url, api_key, upstream_model = await resolve_upstream(session, m, p)
+    yield event_meta(kind=m.kind, model=upstream_model, provider=p.code)
 
-    if not p.base_url:
+    if not base_url:
         yield event_error("ConfigError", f"provider {p.code} 未配置 base_url")
         return
 
-    api_key = get_or_decrypt(p.api_key_encrypted) or ""
     start = time.monotonic()
 
     try:
         if m.kind == "chat":
             defaults = m.defaults or {}
             llm = BaseLLM(
-                model=m.code,
+                model=upstream_model,
                 api_key=api_key,
-                api_base=p.base_url,
+                api_base=base_url,
                 temperature=defaults.get("temperature", 0.7),
                 max_tokens=defaults.get("max_tokens", DEFAULT_STREAM_MAX_TOKENS),
             )
@@ -102,9 +103,9 @@ async def stream_test(
         elif m.kind == "embedding":
             dim = m.dim or 1536
             client = OpenAICompatEmbedding(
-                base_url=p.base_url,
+                base_url=base_url,
                 api_key=api_key,
-                model=m.code,
+                model=upstream_model,
                 dim=int(dim),
             )
             vectors = await client.embed(["hello"])

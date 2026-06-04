@@ -18,12 +18,11 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
-from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import LLMModel, Provider
-from chameleon.data.utils.crypto import get_or_decrypt
+from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
-from chameleon.integrations.llms.factory import reload_llm_cache
+from chameleon.integrations.llms.factory import reload_llm_cache, resolve_upstream
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
@@ -40,6 +39,9 @@ class ModelItem(BaseModel):
     kind: str
     dim: int | None = None
     defaults: dict | None = None
+    upstream_name: str | None = None
+    upstream_group: str | None = None
+    capabilities: dict | None = None
     enabled: bool
     created_at: datetime
     updated_at: datetime
@@ -48,15 +50,21 @@ class ModelItem(BaseModel):
 class CreateModelRequest(BaseModel):
     provider_id: int
     code: str = Field(min_length=1, max_length=128)
-    kind: str = Field(pattern="^(chat|embedding)$")
+    kind: str = Field(pattern="^(chat|embedding|rerank)$")
     dim: int | None = None
     defaults: dict | None = None
+    upstream_name: str | None = Field(default=None, max_length=128)
+    upstream_group: str | None = Field(default=None, max_length=64)
+    capabilities: dict | None = None
 
 
 class UpdateModelRequest(BaseModel):
     dim: int | None = None
     defaults: dict | None = None
     enabled: bool | None = None
+    upstream_name: str | None = None
+    upstream_group: str | None = None
+    capabilities: dict | None = None
 
 
 def _to_item(m: LLMModel, provider_code: str | None = None) -> ModelItem:
@@ -68,6 +76,9 @@ def _to_item(m: LLMModel, provider_code: str | None = None) -> ModelItem:
         kind=m.kind,
         dim=m.dim,
         defaults=m.defaults,
+        upstream_name=m.upstream_name,
+        upstream_group=m.upstream_group,
+        capabilities=m.capabilities,
         enabled=m.enabled,
         created_at=m.created_at,
         updated_at=m.updated_at,
@@ -133,6 +144,9 @@ async def create_model(
         kind=req.kind,
         dim=req.dim,
         defaults=req.defaults,
+        upstream_name=req.upstream_name,
+        upstream_group=req.upstream_group,
+        capabilities=req.capabilities,
         enabled=True,
     )
     session.add(m)
@@ -179,6 +193,12 @@ async def update_model(
         m.defaults = req.defaults
     if req.enabled is not None:
         m.enabled = req.enabled
+    if req.upstream_name is not None:
+        m.upstream_name = req.upstream_name
+    if req.upstream_group is not None:
+        m.upstream_group = req.upstream_group
+    if req.capabilities is not None:
+        m.capabilities = req.capabilities
     await session.flush()
     await write_audit_log(
         session,
@@ -228,20 +248,21 @@ async def test_model(
         )
     m, p = row
 
-    if not p.base_url:
+    # 与工厂同口径解析有效上游（newapi 模式走网关）：保证「测试」== 实际调用
+    base_url, api_key, upstream_model = await resolve_upstream(session, m, p)
+    if not base_url:
         return Result.ok(
             TestModelResult(ok=False, latency_ms=0, sample="", detail="provider.base_url 未配置")
         )
 
-    api_key = get_or_decrypt(p.api_key_encrypted) or ""
     start = time.monotonic()
     try:
         if m.kind == "chat":
             defaults = m.defaults or {}
             client = BaseLLM(
-                model=m.code,
+                model=upstream_model,
                 api_key=api_key,
-                api_base=p.base_url,
+                api_base=base_url,
                 temperature=defaults.get("temperature", 0.7),
                 max_tokens=5,
             )
@@ -251,9 +272,9 @@ async def test_model(
         elif m.kind == "embedding":
             dim = m.dim or 1536
             client = OpenAICompatEmbedding(
-                base_url=p.base_url,
+                base_url=base_url,
                 api_key=api_key,
-                model=m.code,
+                model=upstream_model,
                 dim=int(dim),
             )
             vectors = await client.embed(["hello"])

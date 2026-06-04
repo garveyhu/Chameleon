@@ -158,6 +158,36 @@ def gateway_credential() -> tuple[str, str] | None:
     return _GATEWAY_CRED
 
 
+async def resolve_upstream(
+    session: AsyncSession, model: LLMModel, provider: Provider
+) -> tuple[str, str, str]:
+    """解析模型有效上游 (base_url, api_key, upstream_model)，与 reload_llm_cache 同口径。
+
+    newapi 模式且存在 enabled gateway provider → 走网关（base_url/token 取网关，
+    model 名用 upstream_name or code）；否则走模型自身 provider（model 名用 code）。
+    供 test / stream-test 等即时构建路径复用，保证「测试」与「实际调用」走同一条腿。
+    """
+    from chameleon.core.config import inventory
+
+    eff = provider
+    if inventory.gateway_mode() == "newapi":
+        gw = (
+            await session.execute(
+                select(Provider).where(
+                    Provider.code == inventory.gateway_provider_code(),
+                    Provider.enabled.is_(True),
+                    Provider.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if gw is not None:
+            eff = gw
+    upstream_model = (
+        (model.upstream_name or model.code) if eff.kind == "gateway" else model.code
+    )
+    return eff.base_url or "", get_or_decrypt(eff.api_key_encrypted) or "", upstream_model
+
+
 # ── 同步获取（业务热路径） ────────────────────────────────
 
 
