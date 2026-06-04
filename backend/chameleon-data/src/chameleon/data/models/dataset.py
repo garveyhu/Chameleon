@@ -131,6 +131,10 @@ class DatasetRunItem(Base):
         ForeignKey("dataset_items.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # Phase C：本 item 这次执行的 request_id —— 评测 LLM / 被测 agent 的 generation·
+    # embedding·retriever 子观测均以此盖章（channel='eval'），也是 eval 根 trace 行的
+    # request_id。落库后样本可按它直达 /traces/{request_id} 看真实 LLM 调用。
+    request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # 实际 invoke 结果 → 用于 judge 与 expected_output 对比
     actual_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # judge 评分（0 / 1 / 0.5 等）

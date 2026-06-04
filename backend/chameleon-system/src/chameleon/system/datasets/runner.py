@@ -184,6 +184,7 @@ async def run_dataset(
         ri = DatasetRunItem(
             dataset_run_id=run_id,
             dataset_item_id=item.id,
+            request_id=request_id,
             actual_output=_to_dict(actual),
             score=score,
             score_reason=reason,

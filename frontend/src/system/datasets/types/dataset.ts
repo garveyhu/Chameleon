@@ -119,6 +119,9 @@ export interface DatasetRunItemRow {
   id: EntityId;
   dataset_run_id: EntityId;
   dataset_item_id: EntityId;
+  /** Phase C：本 item 这次执行的 request_id，样本详情据此下钻到真实 LLM 调用 trace
+   *  （/traces/{request_id}）；迁移前的旧运行为 null。 */
+  request_id?: string | null;
   actual_output: Record<string, unknown> | null;
   score: number | null;
   error: Record<string, unknown> | null;

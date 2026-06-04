@@ -1,6 +1,6 @@
-/** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 开运行详情抽屉。 */
+/** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 跳运行详情整页。 */
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,8 +29,6 @@ import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal'
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { DatasetItemsSelectionBar } from '@/system/datasets/components/dataset-items-selection-bar';
 import { DatasetSpreadsheet } from '@/system/datasets/components/dataset-spreadsheet';
-import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
-import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { RunStartModal } from '@/system/datasets/components/run-start-modal';
 import { RunStatsOverview } from '@/system/datasets/components/run-stats-overview';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
@@ -74,10 +72,9 @@ export const DatasetDetailPage = () => {
   // ⚠️ dsId 保留 string —— snowflake 64-bit 超 MAX_SAFE_INTEGER，Number() 会精度丢失
   const dsId = id ?? '';
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>('items');
-  const [runId, setRunId] = useState<EntityId | null>(null);
   const [selRunIds, setSelRunIds] = useState<EntityId[]>([]);
-  const [runsView, setRunsView] = useState<'list' | 'matrix'>('list');
   const [itemsView, setItemsView] = useState<'table' | 'sheet'>('table');
   const [sampleOpen, setSampleOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -433,34 +430,33 @@ export const DatasetDetailPage = () => {
             ))}
           </div>
         )}
-        {tab === 'runs' &&
-          (runsView === 'matrix' ? (
-            <Button size="sm" variant="ghost" onClick={() => setRunsView('list')}>
-              ← 返回运行列表
+        {tab === 'runs' && (
+          <div className="flex items-center gap-2">
+            <span className="text-[11.5px] text-stone-400">
+              {selRunIds.length > 0 ? `已选 ${selRunIds.length} 个` : '勾选 2+ 个运行可对比'}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={selRunIds.length < 2}
+              onClick={() =>
+                navigate(
+                  `/datasets/${dsId}/runs/compare?ids=${selRunIds.map(String).join(',')}`,
+                )
+              }
+            >
+              <GitCompare className="mr-1 h-3.5 w-3.5" /> 对比所选
             </Button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <span className="text-[11.5px] text-stone-400">
-                {selRunIds.length > 0 ? `已选 ${selRunIds.length} 个` : '勾选 2+ 个运行可对比'}
-              </span>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={selRunIds.length < 2}
-                onClick={() => setRunsView('matrix')}
-              >
-                <GitCompare className="mr-1 h-3.5 w-3.5" /> 对比所选
+            {selRunIds.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setSelRunIds([])}>
+                清空
               </Button>
-              {selRunIds.length > 0 && (
-                <Button size="sm" variant="ghost" onClick={() => setSelRunIds([])}>
-                  清空
-                </Button>
-              )}
-              <Button size="sm" onClick={() => setRunStartOpen(true)}>
-                <Play className="mr-1 h-3.5 w-3.5" /> 新建运行
-              </Button>
-            </div>
-          ))}
+            )}
+            <Button size="sm" onClick={() => setRunStartOpen(true)}>
+              <Play className="mr-1 h-3.5 w-3.5" /> 新建运行
+            </Button>
+          </div>
+        )}
       </div>
 
       {tab === 'items' ? (
@@ -503,8 +499,6 @@ export const DatasetDetailPage = () => {
             }}
           />
         </div>
-      ) : runsView === 'matrix' ? (
-        <RunCompareMatrix runIds={selRunIds} />
       ) : (
         <div className="space-y-4">
           {(runsQ.data?.length ?? 0) > 0 && (
@@ -516,7 +510,7 @@ export const DatasetDetailPage = () => {
             rowKey="id"
             leftBar={r => statusBar(r.status)}
             loading={runsQ.isLoading}
-            onRowClick={r => setRunId(r.id)}
+            onRowClick={r => navigate(`/datasets/${dsId}/runs/${r.id}`)}
             sortKey={runSort.key}
             sortOrder={runSort.order}
             onSortChange={(key, order) => setRunSort({ key, order })}
@@ -525,18 +519,6 @@ export const DatasetDetailPage = () => {
           />
         </div>
       )}
-
-      <RunDetailDrawer
-        key={runId ?? '∅'}
-        runId={runId}
-        onClose={() => setRunId(null)}
-        onCompare={ids => {
-          setTab('runs');
-          setSelRunIds(ids);
-          setRunsView('matrix');
-          setRunId(null);
-        }}
-      />
 
       {editItem && (
         <DatasetItemEditorDrawer
@@ -584,7 +566,7 @@ export const DatasetDetailPage = () => {
           datasetId={dsId}
           judges={judgesQ.data}
           onClose={() => setRunStartOpen(false)}
-          onStarted={run => setRunId(run.id)}
+          onStarted={run => navigate(`/datasets/${dsId}/runs/${run.id}`)}
         />
       )}
     </div>

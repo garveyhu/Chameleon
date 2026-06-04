@@ -185,6 +185,9 @@ class DatasetRunItemRow(BaseModel):
     id: int
     dataset_run_id: int
     dataset_item_id: int
+    # Phase C：本 item 这次执行的 request_id —— 样本详情据此下钻到真实 LLM 调用
+    # trace（/traces/{request_id}）。旧数据为 None（迁移前未落库）。
+    request_id: str | None = None
     actual_output: dict[str, Any] | None = None
     score: float | None = None
     # 模块 G：评分理由 / 逐字段评分 / GSB 参照
