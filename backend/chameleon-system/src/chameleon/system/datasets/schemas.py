@@ -82,8 +82,9 @@ class SampleResult(BaseModel):
 
 
 class UpdateItemRequest(BaseModel):
-    """人工标注：改 expected_output / meta"""
+    """样本编辑：改 input_payload / expected_output / meta"""
 
+    input_payload: dict[str, Any] | None = None
     expected_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
 

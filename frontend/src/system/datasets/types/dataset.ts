@@ -131,8 +131,9 @@ export interface ScoreDistributionResult {
   metrics: MetricDistribution[];
 }
 
-/** 人工标注：改 expected_output / meta */
+/** 样本编辑：改 input_payload / expected_output / meta */
 export interface UpdateItemRequest {
+  input_payload?: Record<string, unknown> | null;
   expected_output?: Record<string, unknown> | null;
   meta?: Record<string, unknown> | null;
 }

@@ -209,6 +209,8 @@ async def update_item(
     ).scalar_one_or_none()
     if row is None:
         raise BusinessError(ResultCode.Fail, message=f"dataset_item 不存在: {item_id}")
+    if req.input_payload is not None:
+        row.input_payload = req.input_payload
     if req.expected_output is not None:
         row.expected_output = req.expected_output
     if req.meta is not None:

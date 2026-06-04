@@ -1,6 +1,6 @@
 /** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 开运行详情抽屉。 */
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, GitCompare, Pencil, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -9,20 +9,12 @@ import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { JsonCell } from '@/core/components/ui/json-cell';
-import {
-  Modal,
-  ModalContent,
-  ModalFooter,
-  ModalHeader,
-  ModalTitle,
-} from '@/core/components/ui/modal';
-import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
-import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
+import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { RunDetailDrawer } from '@/system/datasets/components/run-detail-drawer';
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
@@ -30,7 +22,6 @@ import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
   DatasetItemRow,
   DatasetRunRow,
-  UpdateItemRequest,
 } from '@/system/datasets/types/dataset';
 
 type Tab = 'items' | 'runs';
@@ -160,7 +151,7 @@ export const DatasetDetailPage = () => {
             e.stopPropagation();
             setEditItem(it);
           }}
-          title="标注预期输出"
+          title="编辑样本"
           className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
         >
           <Pencil className="h-3.5 w-3.5" />
@@ -368,7 +359,7 @@ export const DatasetDetailPage = () => {
       <RunDetailDrawer runId={runId} onClose={() => setRunId(null)} />
 
       {editItem && (
-        <EditExpectedModal
+        <DatasetItemEditorDrawer
           item={editItem}
           onClose={() => setEditItem(null)}
           onSaved={() => {
@@ -399,78 +390,6 @@ export const DatasetDetailPage = () => {
         />
       )}
     </div>
-  );
-};
-
-const EditExpectedModal = ({
-  item,
-  onClose,
-  onSaved,
-}: {
-  item: DatasetItemRow;
-  onClose: () => void;
-  onSaved: () => void;
-}) => {
-  const [text, setText] = useState(() =>
-    item.expected_output != null
-      ? JSON.stringify(item.expected_output, null, 2)
-      : '',
-  );
-  const mut = useMutation({
-    mutationFn: (req: UpdateItemRequest) => datasetApi.updateItem(item.id, req),
-    onSuccess: () => {
-      toast.success('已保存标注');
-      onSaved();
-    },
-  });
-
-  const save = () => {
-    const t = text.trim();
-    if (!t) {
-      mut.mutate({ expected_output: null });
-      return;
-    }
-    let parsed: Record<string, unknown>;
-    try {
-      const j: unknown = JSON.parse(t);
-      parsed =
-        j !== null && typeof j === 'object' && !Array.isArray(j)
-          ? (j as Record<string, unknown>)
-          : { value: j };
-    } catch {
-      parsed = { value: t }; // 纯文本兜底，包成 dict
-    }
-    mut.mutate({ expected_output: parsed });
-  };
-
-  return (
-    <Modal open onOpenChange={open => !open && onClose()}>
-      <ModalContent>
-        <ModalHeader>
-          <ModalTitle>标注预期输出</ModalTitle>
-        </ModalHeader>
-        <div className="space-y-2 px-4 py-3">
-          <p className="text-[11.5px] text-stone-500">
-            人工修正这条样本的「金标准」答案，用于评测打分。可填 JSON 对象或纯文本，留空表示无预期。
-          </p>
-          <Textarea
-            value={text}
-            onChange={e => setText(e.target.value)}
-            rows={10}
-            placeholder={'例如 {"answer": "正确答案"}'}
-            className="font-mono text-[12px]"
-          />
-        </div>
-        <ModalFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            取消
-          </Button>
-          <Button size="sm" disabled={mut.isPending} onClick={save}>
-            {mut.isPending ? '保存中…' : '保存'}
-          </Button>
-        </ModalFooter>
-      </ModalContent>
-    </Modal>
   );
 };
 
