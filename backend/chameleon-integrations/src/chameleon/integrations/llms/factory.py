@@ -81,7 +81,8 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
             # 拿到这个实例调 .ainvoke()/.astream() 都会自动记一条 generation
             # call_log（归属字段从 TraceContext / ContextVar 读，无 scope 兜底）
             instance = BaseLLM(
-                model=model.code,
+                # 逻辑 code → 上游名（new-api 认 upstream_name）；NULL 回退 code
+                model=model.upstream_name or model.code,
                 api_key=api_key,
                 api_base=api_base,
                 temperature=defaults.get("temperature", 0.7),

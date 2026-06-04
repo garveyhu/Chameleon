@@ -75,7 +75,7 @@ def _to_item(p: Provider) -> ProviderItem:
 
 class CreateProviderRequest(BaseModel):
     code: str = Field(min_length=1, max_length=64)
-    kind: str = Field(pattern="^(llm|embedding|dify|fastgpt|coze)$")
+    kind: str = Field(pattern="^(llm|embedding|gateway|dify|fastgpt|coze)$")
     name: str = Field(min_length=1, max_length=128)
     base_url: str | None = None
     api_key: str | None = None

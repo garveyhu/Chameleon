@@ -34,10 +34,15 @@ class LLMModel(Base, TimestampMixin, SoftDeleteMixin):
         BigInteger, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False
     )
     code: Mapped[str] = mapped_column(String(128), nullable=False)
-    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # chat / embedding
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # chat / embedding / rerank
     dim: Mapped[int | None] = mapped_column(Integer, nullable=True)
     defaults: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # ── new-api 网关收口：逻辑模型(code) 与 上游模型名 解耦 ──
+    # upstream_name 为 NULL 时工厂回退用 code（向后兼容）
+    upstream_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    upstream_group: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    capabilities: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (
         Index("uq_models_provider_code", "provider_id", "code", unique=True),
