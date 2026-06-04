@@ -34,17 +34,17 @@ class KbRetriever(BaseRetriever):
         self, query: str, *, run_manager: CallbackManagerForRetrieverRun
     ) -> list[Document]:
         # 检索是 async（DB）—— 本类只支持 .ainvoke() / .search()
-        raise NotImplementedError("KbRetriever 仅支持异步检索：用 .ainvoke() 或 .search()")
+        raise NotImplementedError(
+            "KbRetriever 仅支持异步检索：用 .ainvoke() 或 .search()"
+        )
 
     async def _aget_relevant_documents(
         self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun
     ) -> list[Document]:
         del run_manager
         # lazy import 破环（knowledge.search_kb → retrievers → knowledge）
-        from chameleon.integrations.knowledge import (
-            KnowledgeBaseNotFoundError,
-            get_kb_meta,
-        )
+        from chameleon.core.api.exceptions import KnowledgeBaseNotFoundError
+        from chameleon.integrations.knowledge import get_kb_meta
 
         meta = await get_kb_meta(self.kb_key)
         if meta is None:

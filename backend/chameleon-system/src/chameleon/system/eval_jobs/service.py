@@ -178,6 +178,8 @@ async def trigger_job(
             model_override=job.model_override,
             prompt_override=job.prompt_override,
             judge=job.judge,
+            agent_key=job.target_key if job.target_kind == "agent" else None,
+            eval_template_id=job.template_id,
         )
         mean_score = _to_decimal(
             (dataset_run.summary or {}).get("mean_score")

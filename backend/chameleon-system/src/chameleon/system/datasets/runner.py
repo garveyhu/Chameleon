@@ -52,14 +52,10 @@ async def run_dataset(
         )
 
     ds = (
-        await session.execute(
-            select(Dataset).where(Dataset.id == dataset_id)
-        )
+        await session.execute(select(Dataset).where(Dataset.id == dataset_id))
     ).scalar_one_or_none()
     if ds is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"dataset 不存在: {dataset_id}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"dataset 不存在: {dataset_id}")
 
     items = (
         (
@@ -136,21 +132,23 @@ async def run_dataset(
         )
         session.add(ri)
 
-        # scores 表打通：source='eval'，trace_id 借用 dataset_item.source_call_log_id
-        if score is not None and item.source_call_log_id:
-            session.add(
-                Score(
-                    call_log_id=item.source_call_log_id,
-                    trace_id=item.source_call_log_id,
-                    name=f"dataset_run:{judge}",
-                    value=float(score),
-                    data_type="numeric",
-                    source="eval",
-                    comment=f"dataset_run_id={run_id}",
-                )
-            )
+        # mean_score 统计所有有分 item（含人工造样本，不依赖采样来源）
+        if score is not None:
             score_sum += float(score)
             score_count += 1
+            # Score 表回写仅对采样来源（有 call_log_id 锚点）的 item
+            if item.source_call_log_id:
+                session.add(
+                    Score(
+                        call_log_id=item.source_call_log_id,
+                        trace_id=item.source_call_log_id,
+                        name=f"dataset_run:{judge}",
+                        value=float(score),
+                        data_type="numeric",
+                        source="eval",
+                        comment=f"dataset_run_id={run_id}",
+                    )
+                )
 
     run.status = "success" if fail_count == 0 else "failed"
     run.finished_at = datetime.now(timezone.utc)
@@ -246,9 +244,7 @@ async def _invoke_via_agent(
 
     adef = AGENTS.get(agent_key)
     if adef is None:
-        raise BusinessError(
-            ResultCode.Fail, message=f"eval agent 未注册: {agent_key}"
-        )
+        raise BusinessError(ResultCode.Fail, message=f"eval agent 未注册: {agent_key}")
     prov = PROVIDERS[adef.provider]
     query = _extract_query_text(input_payload)
     ctx = InvokeContext(
