@@ -1,7 +1,7 @@
 /** 手动发起运行 Modal —— 运行名称 + judge + 评分配置 + 被测对象（模型 / 智能体二选一）。
  *
  * 复杂度集中三块：
- *  1) judge 下拉拉 /judges，按 judge 条件渲染评分配置区（criteria / reference / upcoming）
+ *  1) judge 下拉拉 /judges，按 judge 条件渲染评分配置区（criteria / reference / dsl）
  *  2) 被测对象互斥：model_override（ModelPicker）或 agent_key（AgentPicker）二选一
  *  3) 提交走同步端点 datasetApi.run（跑完才返回，loading 期间禁用 + spinner + 文案）
  */
@@ -42,7 +42,6 @@ import type {
 import {
   buildJudgeConfig,
   JUDGE_META,
-  judgeConfigKind,
 } from '@/system/datasets/utils/judge-meta';
 
 type TargetKind = 'model' | 'agent';
@@ -74,6 +73,7 @@ export const RunStartModal = ({
   const [name, setName] = useState(() => defaultRunName());
   const [judge, setJudge] = useState('exact_match');
   const [criteria, setCriteria] = useState('');
+  const [dslText, setDslText] = useState('');
   const [targetKind, setTargetKind] = useState<TargetKind>('model');
   const [modelOverride, setModelOverride] = useState('');
   const [agentKey, setAgentKey] = useState('');
@@ -92,16 +92,14 @@ export const RunStartModal = ({
   });
 
   const judgeOptions = judges?.length ? judges : ['exact_match'];
-  const isUpcoming = judgeConfigKind(judge) === 'upcoming';
-  const canSubmit =
-    !!name.trim() && !isUpcoming && !runMut.isPending;
+  const canSubmit = !!name.trim() && !runMut.isPending;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     const req: CreateDatasetRunRequest = {
       name: name.trim(),
       judge,
-      judge_config: buildJudgeConfig(judge, criteria),
+      judge_config: buildJudgeConfig(judge, criteria, dslText),
       model_override: targetKind === 'model' ? modelOverride || undefined : undefined,
       agent_key: targetKind === 'agent' ? agentKey || undefined : undefined,
     };
@@ -152,6 +150,8 @@ export const RunStartModal = ({
             judge={judge}
             criteria={criteria}
             onCriteriaChange={setCriteria}
+            dslText={dslText}
+            onDslTextChange={setDslText}
           />
 
           <div className="space-y-2">

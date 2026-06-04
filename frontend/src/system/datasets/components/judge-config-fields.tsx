@@ -8,17 +8,24 @@ import { Label } from '@/core/components/ui/label';
 import { Textarea } from '@/core/components/ui/textarea';
 import { judgeConfigKind } from '@/system/datasets/utils/judge-meta';
 
+const DSL_PLACEHOLDER = 'answer: contains\n> 回答需专业无事实错误 *2';
+
 interface JudgeConfigFieldsProps {
   judge: string;
   /** llm_score 的 criteria 文本（多行） */
   criteria: string;
   onCriteriaChange: (value: string) => void;
+  /** dsl 的规则 DSL 文本（多行） */
+  dslText?: string;
+  onDslTextChange?: (value: string) => void;
 }
 
 export const JudgeConfigFields = ({
   judge,
   criteria,
   onCriteriaChange,
+  dslText = '',
+  onDslTextChange,
 }: JudgeConfigFieldsProps) => {
   const kind = judgeConfigKind(judge);
   if (kind === 'none') return null;
@@ -54,10 +61,23 @@ export const JudgeConfigFields = ({
         </p>
       )}
 
-      {kind === 'upcoming' && (
-        <p className="text-[11.5px] leading-relaxed text-amber-600">
-          规则 DSL 评分即将上线（解析器尚未接入），暂不可用，请先选用其它评分方式。
-        </p>
+      {kind === 'dsl' && (
+        <div className="space-y-1.5">
+          <Label>评分规则 DSL</Label>
+          <Textarea
+            value={dslText}
+            onChange={e => onDslTextChange?.(e.target.value)}
+            placeholder={DSL_PLACEHOLDER}
+            rows={5}
+            className="font-mono text-[12px]"
+          />
+          <p className="text-[10.5px] leading-snug text-stone-400">
+            <span className="font-mono">#</span> 注释 ·{' '}
+            <span className="font-mono">field: func: args</span> 逐字段规则 ·{' '}
+            <span className="font-mono">&gt;</span> 自然语言规则，行尾{' '}
+            <span className="font-mono">*权重</span> 可选
+          </p>
+        </div>
       )}
     </div>
   );

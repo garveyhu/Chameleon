@@ -8,9 +8,9 @@
  *  - none      → 无配置（exact_match / contains / llm_judge）
  *  - criteria  → 多行 criteria 文本（llm_score）
  *  - reference → 只读说明，对照 reference_output（gsb）
- *  - upcoming  → 即将上线，灰显提示（dsl，解析器未接入）
+ *  - dsl       → 多行 DSL 文本（规则 DSL，逐字段 + 自然语言规则）
  */
-export type JudgeConfigKind = 'none' | 'criteria' | 'reference' | 'upcoming';
+export type JudgeConfigKind = 'none' | 'criteria' | 'reference' | 'dsl';
 
 export interface JudgeMeta {
   label: string;
@@ -46,8 +46,8 @@ export const JUDGE_META: Record<string, JudgeMeta> = {
   },
   dsl: {
     label: '规则 DSL',
-    desc: '用规则 DSL 表达式评分（解析器即将上线）',
-    config: 'upcoming',
+    desc: '用规则 DSL 逐字段 + 自然语言规则打分，加权归一为 0–1 分',
+    config: 'dsl',
   },
 };
 
@@ -61,19 +61,25 @@ export const judgeLabel = (judge: string): string =>
 
 /** 把表单态组装成提交用的 judge_config。
  *  - criteria（llm_score）→ { criteria }（空则空对象）
- *  - reference / upcoming → {}
+ *  - dsl → { dsl }（空文本则空对象）
+ *  - reference → {}
  *  - none → undefined（不传）
  */
 export const buildJudgeConfig = (
   judge: string,
   criteria: string,
+  dslText = '',
 ): Record<string, unknown> | undefined => {
   const kind = judgeConfigKind(judge);
   if (kind === 'criteria') {
     const trimmed = criteria.trim();
     return trimmed ? { criteria: trimmed } : {};
   }
-  if (kind === 'reference' || kind === 'upcoming') return {};
+  if (kind === 'dsl') {
+    const trimmed = dslText.trim();
+    return trimmed ? { dsl: trimmed } : {};
+  }
+  if (kind === 'reference') return {};
   return undefined;
 };
 
@@ -83,4 +89,12 @@ export const readCriteria = (
 ): string => {
   const c = judgeConfig?.criteria;
   return typeof c === 'string' ? c : '';
+};
+
+/** 从已存的 judge_config 回填 DSL 文本（编辑场景）。 */
+export const readDslText = (
+  judgeConfig: Record<string, unknown> | null | undefined,
+): string => {
+  const d = judgeConfig?.dsl;
+  return typeof d === 'string' ? d : '';
 };

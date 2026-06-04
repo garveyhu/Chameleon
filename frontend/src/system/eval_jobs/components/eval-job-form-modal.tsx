@@ -35,6 +35,7 @@ import {
   buildJudgeConfig,
   JUDGE_META,
   readCriteria,
+  readDslText,
 } from '@/system/datasets/utils/judge-meta';
 import type {
   AlertConfig,
@@ -94,6 +95,9 @@ export const EvalJobFormModal = ({
   const [judge, setJudge] = useState(() => initial?.judge ?? 'exact_match');
   const [criteria, setCriteria] = useState(() =>
     readCriteria(initial?.judge_config),
+  );
+  const [dslText, setDslText] = useState(() =>
+    readDslText(initial?.judge_config),
   );
   const [cronPreset, setCronPreset] = useState(() => {
     if (!initial) return '0 9 * * *';
@@ -166,7 +170,7 @@ export const EvalJobFormModal = ({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
-    const judgeConfig = buildJudgeConfig(judge, criteria) ?? null;
+    const judgeConfig = buildJudgeConfig(judge, criteria, dslText) ?? null;
     if (isEdit) {
       const payload: UpdateEvalJobPayload = {
         name: name.trim(),
@@ -295,6 +299,8 @@ export const EvalJobFormModal = ({
             judge={judge}
             criteria={criteria}
             onCriteriaChange={setCriteria}
+            dslText={dslText}
+            onDslTextChange={setDslText}
           />
 
           <div className="space-y-1.5">

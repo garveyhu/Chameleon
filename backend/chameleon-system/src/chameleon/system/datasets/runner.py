@@ -9,7 +9,8 @@
 
 评分契约（模块 G）：统一走 run_judge 分发器返 JudgeResult（score 恒 [0,1]）。需 LLM 的
 judge（llm_judge / llm_score / gsb）在 channel='eval' TraceContext scope 内调 LLM；
-旧窄函数（exact_match / contains）经 _as_judge_result 适配；dsl 走 try-import 解析器。
+旧窄函数（exact_match / contains）经 _as_judge_result 适配；dsl 走 datasets.dsl
+解析器（parse → evaluate，NL 规则复用同一 eval 渠道 LLM）。
 
 scores 表打通：每 item 评分同时写 chameleon.data.models.Score 行（source='eval'）
 """
@@ -324,7 +325,9 @@ async def run_judge(
         JudgeResult；score 恒为 [0, 1] 或 None。
     """
     if judge_key == "dsl":
-        return await _run_dsl_judge(expected, actual, config=config)
+        return await _run_dsl_judge(
+            expected, actual, config=config, model_override=model_override
+        )
     if judge_key in LLM_JUDGES:
         return await _run_llm_judge(
             judge_key,
@@ -405,13 +408,32 @@ async def _run_dsl_judge(
     actual: Any,
     *,
     config: dict[str, Any] | None = None,
+    model_override: str | None = None,
 ) -> JudgeResult:
-    """DSL 评分：try-import dsl-parser 领域产出的 evaluate；未就位则降级。"""
-    try:
-        from chameleon.system.datasets.dsl import evaluate as dsl_evaluate
-    except ImportError:
-        return JudgeResult(score=None, reason="DSL 解析器待接入")
-    return await dsl_evaluate(expected, actual, config=config)
+    """DSL 评分：parse(config['dsl']) → evaluate（NL 规则用注入的 eval 渠道 LLM）。
+
+    无规则 / 解析全错时返 score=None（reason 带解析错误摘要）；有规则则把 get_llm
+    取的客户端注入 evaluate（item 的 channel='eval' TraceContext 已在 run_dataset 外层
+    set，evaluator 内不再自建，复用同一 eval 渠道）。
+    """
+    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.system.datasets.dsl import evaluate as dsl_evaluate
+    from chameleon.system.datasets.dsl import parse as parse_dsl
+
+    cfg = config or {}
+    text = cfg.get("dsl")
+    if not isinstance(text, str) or not text.strip():
+        return JudgeResult(score=None, scale="1-5", reason="DSL 规则为空")
+
+    spec, errors = parse_dsl(text)
+    if spec.is_empty():
+        detail = "；".join(errors[:3]) if errors else "无有效规则"
+        return JudgeResult(score=None, scale="1-5", reason=f"DSL 无可用规则：{detail}")
+
+    # 仅在有自然语言规则时才取 LLM —— 纯 field 规则 DSL 不需要 LLM，避免未配默认
+    # 模型时 LLMFactory 误抛 BusinessError（evaluate 支持 llm=None，仅 NL 规则用 llm）。
+    llm = get_llm(model_override) if spec.nl_rules else None
+    return await dsl_evaluate(spec, expected, actual, llm=llm)
 
 
 async def _invoke_via_agent(
