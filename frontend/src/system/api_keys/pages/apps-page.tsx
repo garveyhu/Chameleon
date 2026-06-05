@@ -36,8 +36,7 @@ import {
 import { Textarea } from '@/core/components/ui/textarea';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
-import { KeyCard } from '@/system/api_keys/components/key-card';
-import { SCOPE } from '@/system/api_keys/scope';
+import { KeyRow } from '@/system/api_keys/components/key-row';
 import { apiKeyApi } from '@/system/api_keys/services/app';
 import type {
   ApiKeyCreated,
@@ -46,11 +45,7 @@ import type {
   CreateApiKeyRequest,
 } from '@/system/api_keys/types/app';
 
-const GROUPS: { scope: ApiKeyScopeType; label: string }[] = [
-  { scope: 'app', label: '应用密钥' },
-  { scope: 'kb', label: '知识库密钥' },
-  { scope: 'global', label: '通用密钥' },
-];
+const SCOPE_ORDER: Record<string, number> = { app: 0, kb: 1, global: 2 };
 
 export const AppsPage = () => {
   const { t } = useTranslation();
@@ -83,10 +78,11 @@ export const AppsPage = () => {
   });
 
   const keys = listQ.data?.items ?? [];
-  const groups = GROUPS.map(g => ({
-    ...g,
-    items: keys.filter(k => k.scope_type === g.scope),
-  })).filter(g => g.items.length > 0);
+  const sortedKeys = [...keys].sort(
+    (a, b) =>
+      (SCOPE_ORDER[a.scope_type] ?? 9) - (SCOPE_ORDER[b.scope_type] ?? 9) ||
+      a.name.localeCompare(b.name),
+  );
 
   return (
     <div className="space-y-6">
@@ -127,12 +123,9 @@ export const AppsPage = () => {
       </div>
 
       {listQ.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-[180px] animate-pulse rounded-xl border border-stone-200 bg-stone-50"
-            />
+            <div key={i} className="h-12 animate-pulse bg-stone-50" />
           ))}
         </div>
       ) : keys.length === 0 ? (
@@ -146,25 +139,11 @@ export const AppsPage = () => {
           }
         />
       ) : (
-        groups.map(g => {
-          const Icon = SCOPE[g.scope].icon;
-          return (
-            <section key={g.scope} className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-stone-400" />
-                <h2 className="text-[13px] font-medium text-stone-700">{g.label}</h2>
-                <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-medium text-stone-500">
-                  {g.items.length}
-                </span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {g.items.map(k => (
-                  <KeyCard key={String(k.id)} apiKey={k} onRevoke={() => setRevokeKey(k)} />
-                ))}
-              </div>
-            </section>
-          );
-        })
+        <div className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200 bg-[var(--color-paper)]">
+          {sortedKeys.map(k => (
+            <KeyRow key={String(k.id)} apiKey={k} onRevoke={() => setRevokeKey(k)} />
+          ))}
+        </div>
       )}
 
       <CreateKeyModal

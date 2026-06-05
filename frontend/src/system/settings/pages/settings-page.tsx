@@ -12,11 +12,13 @@ import {
   MessagesSquare,
   Palette,
   Save,
+  ShieldCheck,
   Sparkles,
   Upload,
+  Users2,
   Waves,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { setLanguage } from '@/core/i18n';
@@ -43,12 +45,20 @@ import { confirm } from '@/core/lib/confirm';
 import { getRaw, postForm } from '@/core/lib/request';
 import { toast } from '@/core/lib/toast';
 import { modelApi } from '@/system/models/services/model';
+import { RolesPage } from '@/system/roles/pages/roles-page';
 import { AppearanceTab } from '@/system/settings/components/appearance-tab';
 import { SettingsField } from '@/system/settings/components/settings-field';
 import { settingsApi } from '@/system/settings/services/settings';
+import { UsersPage } from '@/system/users/pages/users-page';
 
 type SettingGroup = 'general' | 'session' | 'knowledge' | 'stream' | 'timeout' | 'call_log';
-type TabKey = SettingGroup | 'model_defaults' | 'export_import' | 'appearance';
+type TabKey =
+  | SettingGroup
+  | 'model_defaults'
+  | 'export_import'
+  | 'appearance'
+  | 'users'
+  | 'roles';
 
 interface TabDef {
   key: TabKey;
@@ -66,6 +76,8 @@ const TABS: TabDef[] = [
   { key: 'model_defaults', label: '默认模型', icon: <Sparkles className="h-3.5 w-3.5" /> },
   { key: 'appearance', label: '外观', icon: <Palette className="h-3.5 w-3.5" /> },
   { key: 'export_import', label: '导入导出', icon: <Download className="h-3.5 w-3.5" /> },
+  { key: 'users', label: '用户管理', icon: <Users2 className="h-3.5 w-3.5" /> },
+  { key: 'roles', label: '角色管理', icon: <ShieldCheck className="h-3.5 w-3.5" /> },
 ];
 
 export const SettingsPage = () => {
@@ -97,11 +109,13 @@ export const SettingsPage = () => {
           {(['general', 'session', 'knowledge', 'stream', 'timeout', 'call_log'] as const).includes(
             activeTab as SettingGroup,
           ) ? (
-            <SystemSettingsTab group={activeTab as SettingGroup} />
+            <SystemSettingsTab key={activeTab} group={activeTab as SettingGroup} />
           ) : null}
           {activeTab === 'model_defaults' ? <ModelDefaultsTab /> : null}
           {activeTab === 'appearance' ? <AppearanceTab /> : null}
           {activeTab === 'export_import' ? <ExportImportTab /> : null}
+          {activeTab === 'users' ? <UsersPage /> : null}
+          {activeTab === 'roles' ? <RolesPage /> : null}
         </div>
       </div>
     </SectionCard>
@@ -119,10 +133,8 @@ const SystemSettingsTab = ({ group }: { group: SettingGroup }) => {
     [q.data, group],
   );
 
+  // 切 group 时由父级 key={activeTab} remount 自然清空 draft（不用 useEffect 同步）
   const [draft, setDraft] = useState<Record<string, unknown>>({});
-  useEffect(() => {
-    setDraft({}); // 切 group 时清 draft
-  }, [group]);
 
   const liveValues = useMemo(() => {
     const out: Record<string, unknown> = {};

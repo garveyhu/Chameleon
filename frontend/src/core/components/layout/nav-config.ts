@@ -22,11 +22,9 @@ import {
   Puzzle,
   Ruler,
   Settings,
-  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Telescope,
-  Users2,
 } from 'lucide-react';
 
 type Icon = ComponentType<{ className?: string }>;
@@ -154,17 +152,15 @@ export const DOMAINS: NavDomain[] = [
         children: [
           { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
           { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
-          { to: '/plugins', icon: Puzzle, i18nKey: 'menu.plugins', fallbackTitle: '插件', perm: 'plugins:read' },
-          { to: '/marketplace', icon: ShoppingBag, i18nKey: 'menu.marketplace', fallbackTitle: '插件市场', perm: 'plugins:read' },
+          { to: '/api-keys', icon: KeySquare, i18nKey: 'menu.api_keys', fallbackTitle: 'Key', perm: 'api_keys:read' },
         ],
       },
       {
-        i18nKey: 'menu.group.access',
-        fallbackTitle: '访问',
+        i18nKey: 'menu.group.plugins',
+        fallbackTitle: '插件',
         children: [
-          { to: '/api-keys', icon: KeySquare, i18nKey: 'menu.api_keys', fallbackTitle: 'Key 管理', perm: 'api_keys:read' },
-          { to: '/users', icon: Users2, i18nKey: 'menu.users', fallbackTitle: '用户管理', perm: 'users:read' },
-          { to: '/roles', icon: ShieldCheck, i18nKey: 'menu.roles', fallbackTitle: '角色管理', perm: 'roles:read' },
+          { to: '/plugins', icon: Puzzle, i18nKey: 'menu.plugins', fallbackTitle: '插件', perm: 'plugins:read' },
+          { to: '/marketplace', icon: ShoppingBag, i18nKey: 'menu.marketplace', fallbackTitle: '插件市场', perm: 'plugins:read' },
         ],
       },
       {
