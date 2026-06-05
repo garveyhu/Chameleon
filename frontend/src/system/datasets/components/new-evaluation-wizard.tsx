@@ -121,7 +121,7 @@ export const NewEvaluationWizard = ({
     queryFn: () =>
       get<PageResult<{ id: EntityId; name: string; key_prefix: string }>>(
         '/v1/admin/api-keys',
-        { params: { page_size: 200 } },
+        { params: { page_size: 100 } },
       ),
     staleTime: 30_000,
   });
