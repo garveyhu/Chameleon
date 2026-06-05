@@ -218,7 +218,11 @@ export const ModelsPage = () => {
         onCancel={() => setDelModel(null)}
       />
       <TestModelModal model={testModel} onClose={() => setTestModel(null)} />
-      <ModelConfigSheet model={configModel} onClose={() => setConfigModel(null)} />
+      <ModelConfigSheet
+        model={configModel}
+        providers={providersQ.data || []}
+        onClose={() => setConfigModel(null)}
+      />
     </div>
   );
 };

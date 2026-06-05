@@ -60,6 +60,7 @@ class CreateModelRequest(BaseModel):
 
 
 class UpdateModelRequest(BaseModel):
+    provider_id: int | None = None
     dim: int | None = None
     defaults: dict | None = None
     enabled: bool | None = None
@@ -191,6 +192,17 @@ async def update_model(
         raise BusinessError(
             ResultCode.AgentNotFound, message=f"model 不存在: {model_id}"
         )
+    if req.provider_id is not None and req.provider_id != m.provider_id:
+        prov = (
+            await session.execute(
+                select(Provider).where(
+                    Provider.id == req.provider_id, Provider.deleted_at.is_(None)
+                )
+            )
+        ).scalar_one_or_none()
+        if prov is None:
+            raise ValidationError(message=f"provider 不存在: {req.provider_id}")
+        m.provider_id = req.provider_id
     if req.dim is not None:
         m.dim = req.dim
     if req.defaults is not None:

@@ -15,6 +15,13 @@ import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { ParamSlider } from '@/core/components/ui/param-slider';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
+import {
   Sheet,
   SheetBody,
   SheetContent,
@@ -25,35 +32,55 @@ import {
 } from '@/core/components/ui/sheet';
 import { Switch } from '@/core/components/ui/switch';
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelCapabilities, ModelItem } from '@/system/models/types/model';
 
+type ProviderOpt = { id: EntityId; code: string };
+
 interface Props {
   model: ModelItem | null;
+  providers: ProviderOpt[];
   onClose: () => void;
 }
 
 const numOr = (v: unknown, fallback: number): number =>
   typeof v === 'number' ? v : fallback;
 
-export const ModelConfigSheet = ({ model, onClose }: Props) => (
+const KIND_LABEL: Record<string, string> = {
+  chat: '对话',
+  embedding: '向量',
+  rerank: '重排',
+};
+
+export const ModelConfigSheet = ({ model, providers, onClose }: Props) => (
   <Sheet open={!!model} onOpenChange={o => !o && onClose()}>
     <SheetContent>
-      {model && <ModelConfigForm key={model.id} model={model} onClose={onClose} />}
+      {model && (
+        <ModelConfigForm
+          key={model.id}
+          model={model}
+          providers={providers}
+          onClose={onClose}
+        />
+      )}
     </SheetContent>
   </Sheet>
 );
 
 const ModelConfigForm = ({
   model,
+  providers,
   onClose,
 }: {
   model: ModelItem;
+  providers: ProviderOpt[];
   onClose: () => void;
 }) => {
   const qc = useQueryClient();
   const d = model.defaults || {};
   const c = model.capabilities || {};
+  const [providerId, setProviderId] = useState(String(model.provider_id));
   const [temperature, setTemperature] = useState(numOr(d.temperature, 0.7));
   const [topP, setTopP] = useState(numOr(d.top_p, 1));
   const [maxTokens, setMaxTokens] = useState(numOr(d.max_tokens, 0));
@@ -84,6 +111,7 @@ const ModelConfigForm = ({
       };
       if (contextWindow) capabilities.context_window = Number(contextWindow);
       return modelApi.update(model.id, {
+        provider_id: providerId,
         defaults,
         dim: model.kind === 'embedding' && dim ? Number(dim) : undefined,
         enabled,
@@ -103,14 +131,31 @@ const ModelConfigForm = ({
       <SheetHeader>
         <SheetTitle className="flex items-center gap-2">
           <span className="font-mono text-[15px]">{model.code}</span>
-          <Badge variant="primary">{model.kind}</Badge>
+          <Badge variant="primary">{KIND_LABEL[model.kind] ?? model.kind}</Badge>
         </SheetTitle>
-        <SheetDescription>
-          provider: {model.provider_code || '?'} · 配置运行参数与启用状态
-        </SheetDescription>
+        <SheetDescription>配置供应商、运行参数与启用状态</SheetDescription>
       </SheetHeader>
 
       <SheetBody className="space-y-5">
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-medium text-stone-700">供应商</label>
+          <Select value={providerId} onValueChange={setProviderId}>
+            <SelectTrigger>
+              <SelectValue placeholder="选择供应商" />
+            </SelectTrigger>
+            <SelectContent>
+              {providers.map(p => (
+                <SelectItem key={p.id} value={String(p.id)}>
+                  {p.code}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[10.5px] leading-snug text-stone-500">
+            模型归属的上游供应商；base_url / 凭证来自该供应商
+          </p>
+        </div>
+
         {model.kind === 'chat' ? (
           <>
             <ParamSlider

@@ -27,6 +27,7 @@ export const modelApi = {
   update: (
     id: EntityId,
     req: {
+      provider_id?: EntityId;
       dim?: number;
       defaults?: Record<string, unknown>;
       enabled?: boolean;
