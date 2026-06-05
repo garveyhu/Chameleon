@@ -1,6 +1,6 @@
 /** 数据集详情页 —— 样本 Items / 运行 Runs 两 tab；点 run 跳运行详情整页。 */
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -81,7 +81,16 @@ export const DatasetDetailPage = () => {
   const dsId = id ?? '';
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('items');
+  // 样本 / 运行 tab 同步到 URL（?tab=runs），切换走 history push，浏览器回退能直接
+  // 退回上一个 tab 而非离开整个详情页。items 为默认态、不写 query 保持地址干净。
+  const [tabParams, setTabParams] = useSearchParams();
+  const tab: Tab = tabParams.get('tab') === 'runs' ? 'runs' : 'items';
+  const setTab = (t: Tab) => {
+    const next = new URLSearchParams(tabParams);
+    if (t === 'items') next.delete('tab');
+    else next.set('tab', t);
+    setTabParams(next);
+  };
   const [selRunIds, setSelRunIds] = useState<EntityId[]>([]);
   const [itemsView, setItemsView] = useState<'table' | 'sheet'>('table');
   const [sampleOpen, setSampleOpen] = useState(false);

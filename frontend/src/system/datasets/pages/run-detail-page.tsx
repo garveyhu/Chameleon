@@ -52,25 +52,25 @@ export const RunDetailPage = () => {
   const goRun = (nextRunId: EntityId) =>
     navigate(`/datasets/${dsId}/runs/${nextRunId}`);
 
-  // push（非 replace）：切样本/优化态各进一条历史，浏览器回退能逐级区分回到上一个
-  // 样本 / 收起覆盖物，而非一退就离开整个运行详情页。
+  // 样本 / 优化态覆盖物用 replace：同一运行详情页内的浮层切换不污染浏览器历史
+  // （URL 仍带 ?item= 便于刷新/分享定位，但回退不在样本间逐级跳）。
   const openSample = (itemId: EntityId) => {
     const next = new URLSearchParams(params);
     next.delete('optimize');
     next.set('item', String(itemId));
-    setParams(next);
+    setParams(next, { replace: true });
   };
   const closeOverlay = () => {
     const next = new URLSearchParams(params);
     next.delete('item');
     next.delete('optimize');
-    setParams(next);
+    setParams(next, { replace: true });
   };
   const openOptimize = () => {
     const next = new URLSearchParams(params);
     next.delete('item');
     next.set('optimize', '1');
-    setParams(next);
+    setParams(next, { replace: true });
   };
 
   const goCompare = (ids: EntityId[]) =>
