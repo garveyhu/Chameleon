@@ -4,6 +4,7 @@ import type {
   ApiKeyCreated,
   ApiKeyItem,
   CreateApiKeyRequest,
+  UpdateApiKeyRequest,
 } from '@/system/api_keys/types/app';
 
 export const apiKeyApi = {
@@ -15,5 +16,7 @@ export const apiKeyApi = {
     scope_type?: string;
   }) => get<PageResult<ApiKeyItem>>('/v1/admin/api-keys', { params }),
   create: (req: CreateApiKeyRequest) => post<ApiKeyCreated>('/v1/admin/api-keys', req),
+  update: (id: EntityId, req: UpdateApiKeyRequest) =>
+    post<ApiKeyItem>(`/v1/admin/api-keys/${id}/update`, req),
   revoke: (id: EntityId) => post<ApiKeyItem>(`/v1/admin/api-keys/${id}/revoke`),
 };

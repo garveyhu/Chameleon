@@ -34,6 +34,12 @@ export interface CreateApiKeyRequest {
   qpd_limit?: number;
 }
 
+export interface UpdateApiKeyRequest {
+  /** 不传则不改；描述传空串=清空 */
+  name?: string;
+  description?: string;
+}
+
 export interface ApiKeyCreated extends ApiKeyItem {
   plain_key: string; // 仅一次回显
 }

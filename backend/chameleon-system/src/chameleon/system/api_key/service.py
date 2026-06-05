@@ -150,6 +150,34 @@ async def revoke_api_key(session: AsyncSession, key_id: int) -> ApiKeyItem:
     return ApiKeyItem.model_validate(row)
 
 
+async def update_api_key(
+    session: AsyncSession,
+    key_id: int,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> ApiKeyItem:
+    """更新 key 的可编辑元信息（名称 / 描述）。描述传空串视为清空。"""
+    row = (
+        await session.execute(select(ApiKey).where(ApiKey.id == key_id))
+    ).scalar_one_or_none()
+    if row is None:
+        raise BusinessError(
+            ResultCode.AgentNotFound, message=f"api_key 不存在: {key_id}"
+        )
+
+    if name is not None:
+        row.name = name.strip()
+    if description is not None:
+        row.description = description.strip() or None
+
+    await session.flush()
+    await session.refresh(row)
+
+    logger.info("api_key updated | id={} | app_id={}", row.id, row.app_id)
+    return ApiKeyItem.model_validate(row)
+
+
 # ── call_log helpers（被 agent 模块使用） ─────────────────
 
 

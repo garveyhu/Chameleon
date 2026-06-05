@@ -1,8 +1,9 @@
 /** KeyDetailDialog —— 点击列表行弹出的密钥详情。
  *
- * 列表外不暴露密钥；只有在此弹窗里可预览(显示/隐藏)与复制明文，并可撤销。
+ * 名称与描述可在此编辑保存；密钥明文仅此处可预览(显示/隐藏)与复制，并可撤销。
  */
 
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, Copy, Eye, EyeOff } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -16,9 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/core/components/ui/dialog';
+import { Input } from '@/core/components/ui/input';
+import { Label } from '@/core/components/ui/label';
+import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime, formatRelative } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import { scopeMeta } from '@/system/api_keys/scope';
+import { apiKeyApi } from '@/system/api_keys/services/app';
 import type { ApiKeyItem } from '@/system/api_keys/types/app';
 
 interface Props {
@@ -44,8 +50,29 @@ export const KeyDetailDialog = ({ apiKey, onClose, onRevoke }: Props) => (
 
 const Body = ({ k, onRevoke }: { k: ApiKeyItem; onRevoke: () => void }) => {
   const meta = scopeMeta(k.scope_type);
+  const qc = useQueryClient();
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [baseName, setBaseName] = useState(k.name);
+  const [baseDesc, setBaseDesc] = useState(k.description ?? '');
+  const [name, setName] = useState(k.name);
+  const [desc, setDesc] = useState(k.description ?? '');
+
+  const dirty = name.trim() !== baseName || desc.trim() !== baseDesc;
+  const canSave = dirty && name.trim().length > 0;
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      apiKeyApi.update(k.id, { name: name.trim(), description: desc.trim() }),
+    onSuccess: () => {
+      toast.success('已保存');
+      setBaseName(name.trim());
+      setBaseDesc(desc.trim());
+      qc.invalidateQueries({ queryKey: ['api-keys'] });
+      qc.invalidateQueries({ queryKey: ['api-keys-stats'] });
+    },
+  });
+
   const copy = () => {
     if (!k.plain_key) return;
     void navigator.clipboard.writeText(k.plain_key).then(() => {
@@ -61,9 +88,9 @@ const Body = ({ k, onRevoke }: { k: ApiKeyItem; onRevoke: () => void }) => {
           <span className={cn('inline-flex rounded px-1.5 py-0.5 text-[11px] font-medium', meta.chip)}>
             {meta.label}
           </span>
-          {k.name}
+          {name.trim() || k.name}
         </DialogTitle>
-        <DialogDescription>密钥详情 —— 仅此处可预览与复制明文</DialogDescription>
+        <DialogDescription>名称与描述可编辑 —— 密钥仅此处可预览与复制</DialogDescription>
       </DialogHeader>
 
       <div className="bg-warm-2/40 overflow-hidden rounded-lg border border-stone-200/80">
@@ -99,7 +126,23 @@ const Body = ({ k, onRevoke }: { k: ApiKeyItem; onRevoke: () => void }) => {
         </pre>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
+      <div className="mt-4 space-y-3">
+        <div className="space-y-1">
+          <Label className="text-[11px] text-stone-500">名称</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-stone-500">描述</Label>
+          <Textarea
+            value={desc}
+            onChange={e => setDesc(e.target.value)}
+            rows={2}
+            placeholder="给这个密钥加点说明…"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-stone-100 pt-4">
         <Fact label="作用域">{meta.label}</Fact>
         <Fact label="目标">{k.scope_ref || '—'}</Fact>
         <Fact label="来源标签">
@@ -109,17 +152,14 @@ const Body = ({ k, onRevoke }: { k: ApiKeyItem; onRevoke: () => void }) => {
         <Fact label="创建时间">
           <span className="tnum font-mono text-[11.5px]">{formatDateTime(k.created_at)}</span>
         </Fact>
-        {k.description && (
-          <div className="col-span-2">
-            <div className="text-[10px] tracking-wide text-stone-400 uppercase">描述</div>
-            <div className="mt-0.5 text-[12.5px] leading-snug text-stone-700">{k.description}</div>
-          </div>
-        )}
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" className="text-red-600" onClick={onRevoke}>
+      <DialogFooter className="items-center">
+        <Button variant="outline" className="mr-auto text-red-600" onClick={onRevoke}>
           <Ban className="h-4 w-4" /> 撤销密钥
+        </Button>
+        <Button variant="primary" disabled={!canSave || saveMut.isPending} onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? '保存中…' : '保存'}
         </Button>
       </DialogFooter>
     </>

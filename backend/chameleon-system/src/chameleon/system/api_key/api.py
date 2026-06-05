@@ -14,6 +14,7 @@ from chameleon.system.api_key.schemas import (
     ApiKeyCreated,
     ApiKeyItem,
     CreateApiKeyRequest,
+    UpdateApiKeyRequest,
 )
 from chameleon.system.auth.dependencies import require_permission
 
@@ -48,6 +49,19 @@ async def list_api_keys(
         scope_type=scope_type,
     )
     return Result.ok(result)
+
+
+@router.post("/{key_id}/update", response_model=Result[ApiKeyItem])
+async def update_api_key(
+    key_id: int,
+    req: UpdateApiKeyRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("api_keys:write")),
+) -> Result[ApiKeyItem]:
+    item = await service.update_api_key(
+        session, key_id, name=req.name, description=req.description
+    )
+    return Result.ok(item)
 
 
 @router.post("/{key_id}/revoke", response_model=Result[ApiKeyItem])

@@ -29,6 +29,13 @@ class CreateApiKeyRequest(BaseModel):
     qpd_limit: int | None = Field(default=None, ge=0)
 
 
+class UpdateApiKeyRequest(BaseModel):
+    """更新可编辑元信息：名称 / 描述（不传则不改；描述传空串=清空）"""
+
+    name: str | None = Field(default=None, min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=512)
+
+
 class ApiKeyItem(BaseModel):
     id: int
     app_id: str
