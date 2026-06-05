@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Bot, GitBranch } from 'lucide-react';
 import { useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { JsonViewer } from '@/core/components/common/json-viewer';
 import { SectionCard } from '@/core/components/table';
@@ -19,7 +19,15 @@ import { traceApi } from '@/system/traces/services/trace';
 
 export const TraceDetailPage = () => {
   const { requestId } = useParams<{ requestId: string }>();
+  const navigate = useNavigate();
   const rid = requestId ?? '';
+
+  // SPA 感知返回：有历史就退回上一界面（如运行详情），直链落地无历史时兜回 Trace 列表。
+  // 旧实现用 href="javascript:history.back()"，会被 CSP 拦且非路由感知，导致返回无效。
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/traces');
+  };
   const selectedId = useTraceStore(s => s.selectedId);
   const select = useTraceStore(s => s.select);
   const reset = useTraceStore(s => s.reset);
@@ -51,12 +59,13 @@ export const TraceDetailPage = () => {
   return (
     <div className="space-y-3">
       <header className="flex items-center gap-3">
-        <a
-          href="javascript:history.back()"
+        <button
+          type="button"
+          onClick={goBack}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> 返回
-        </a>
+        </button>
         <span className="text-stone-300">/</span>
         <div className="flex flex-1 items-baseline gap-2">
           <GitBranch className="h-3.5 w-3.5 text-stone-500" />

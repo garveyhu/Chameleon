@@ -304,7 +304,7 @@ const TraceBody = ({ requestId }: { requestId: string }) => {
             <ObservationTree
               key={treeCollapsed ? 'collapsed' : 'expanded'}
               root={treeQ.data}
-              selectedId={effectiveId}
+              selectedId={effectiveId ?? undefined}
               defaultCollapsed={treeCollapsed}
               onSelect={(n: TraceTreeNode) => setPicked(String(n.id))}
             />

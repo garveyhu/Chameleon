@@ -454,9 +454,6 @@ export const DatasetDetailPage = () => {
                 清空
               </Button>
             )}
-            <Button size="sm" onClick={() => setEvalOpen(true)}>
-              <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
-            </Button>
           </div>
         )}
       </div>

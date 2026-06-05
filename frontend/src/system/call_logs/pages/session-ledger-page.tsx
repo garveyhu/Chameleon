@@ -10,7 +10,14 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { CheckCircle2, MessagesSquare, ScrollText, Timer, XCircle } from 'lucide-react';
+import {
+  CheckCircle2,
+  FlaskConical,
+  MessagesSquare,
+  ScrollText,
+  Timer,
+  XCircle,
+} from 'lucide-react';
 
 import { AgentPicker } from '@/core/components/common/agent-picker';
 import { DateRangePicker, type DateRange } from '@/core/components/common/date-range-picker';
@@ -77,9 +84,24 @@ const CHANNEL_FILTER_OPTIONS = [
   { value: 'internal', label: '内部' },
 ];
 
-/** 会话型判定：有 session_id 且属于对话类（代码 / 对话编排 / Playground）→ 可直达对话详情 */
+/** 评测流量判定：channel=eval / app_id=__eval__ / session_id 以 eval-run- 开头
+ * 三者任一命中即视为评测——评测没有真 ChatSession，不能链到对话详情。 */
+const isEvalRow = (l: CallLogItem): boolean =>
+  l.channel === 'eval' ||
+  l.app_id === '__eval__' ||
+  (l.session_id?.startsWith('eval-run-') ?? false);
+
+/** 从 eval 行的 session_id（eval-run-{run_id}）抽取运行 id，无法抽取返回 null */
+const evalRunId = (l: CallLogItem): string | null => {
+  const sid = l.session_id ?? '';
+  return sid.startsWith('eval-run-') ? sid.slice('eval-run-'.length) : null;
+};
+
+/** 会话型判定：有 session_id 且属于对话类（代码 / 对话编排 / Playground）→ 可直达对话详情
+ * 评测流量虽带 session_id 但非真会话，显式排除。 */
 const isConversational = (l: CallLogItem): boolean =>
   !!l.session_id &&
+  !isEvalRow(l) &&
   (l.channel === 'playground' ||
     l.source === 'local' ||
     (l.source === 'graph' && l.kind === 'chatflow'));
@@ -188,8 +210,25 @@ export const SessionLedgerPage = () => {
       key: 'session',
       header: '会话',
       width: 200,
-      render: l =>
-        l.session_id ? (
+      render: l => {
+        // 评测流量没有真 ChatSession：显示「评测运行」+ 运行 id 纯文本，不链对话详情
+        if (isEvalRow(l)) {
+          const runId = evalRunId(l);
+          return (
+            <div className="flex min-w-0 items-center gap-1.5">
+              <FlaskConical className="h-3.5 w-3.5 shrink-0 text-rose-400" />
+              <div className="min-w-0">
+                <div className="truncate text-[12px] text-stone-800">评测运行</div>
+                {runId && (
+                  <div className="truncate font-mono text-[10px] text-stone-400" title={runId}>
+                    {runId}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+        return l.session_id ? (
           <div className="flex min-w-0 items-center gap-1.5">
             <div className="min-w-0">
               <div className="truncate text-[12px] text-stone-800">
@@ -215,7 +254,8 @@ export const SessionLedgerPage = () => {
           </div>
         ) : (
           <span className="text-stone-400">—</span>
-        ),
+        );
+      },
     },
     {
       key: 'input',
@@ -251,14 +291,32 @@ export const SessionLedgerPage = () => {
       key: 'key',
       header: 'Key / 来源',
       width: 150,
-      render: l => (
-        <div className="min-w-0">
-          <div className="truncate text-[11.5px] text-stone-700">
-            {l.api_key_name ?? <span className="text-stone-400">—</span>}
+      render: l => {
+        // 评测行无 api_key：优先标注被测智能体，否则回退「评测」标签，不空「—」
+        if (isEvalRow(l)) {
+          return (
+            <div className="min-w-0">
+              <span className="inline-flex rounded bg-rose-50 px-1.5 py-0.5 text-[10.5px] text-rose-700">
+                评测
+              </span>
+              <div
+                className="mt-0.5 truncate font-mono text-[10px] text-stone-400"
+                title={l.agent_key || l.app_id}
+              >
+                {l.agent_key || l.app_id}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="min-w-0">
+            <div className="truncate text-[11.5px] text-stone-700">
+              {l.api_key_name ?? <span className="text-stone-400">—</span>}
+            </div>
+            <div className="truncate font-mono text-[10px] text-stone-400">{l.app_id}</div>
           </div>
-          <div className="truncate font-mono text-[10px] text-stone-400">{l.app_id}</div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'channel',

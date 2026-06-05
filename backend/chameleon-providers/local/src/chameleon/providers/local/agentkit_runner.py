@@ -20,7 +20,11 @@ from typing import Any
 
 from chameleon.agentkit import AgentRun, RuntimeTransport
 from chameleon.agentkit._spec import Doc, ModelSlot
-from chameleon.core.observe.context import observe
+from chameleon.core.observe.context import (
+    current_observation_id,
+    current_trace_context,
+    observe,
+)
 from chameleon.integrations.components import llm, llm_by_name, search_kb
 from chameleon.integrations.knowledge import list_linked_kb_metas
 from chameleon.providers.base.types import (
@@ -29,6 +33,28 @@ from chameleon.providers.base.types import (
     StreamEvent,
     StreamEventType,
 )
+
+
+def _scoped_observation_id(name: str) -> str | None:
+    """把 agentkit span 锚到当前 trace 根，沿用图引擎 `{root}.{seg}` 命名约定。
+
+    GenerationRecorder 落 generation 时取 `current_observation_id()` 当 parent；
+    而根行 rollup（aggregate_generation_rollup）只认 `parent_id == root` 或
+    `parent_id LIKE 'root.%'`。agentkit 的 `ctx.stream/.complete` 会在 LLM 调用外
+    套一层 span，若该 span 用裸 uuid，则其下 generation 的 parent 既不等于根、也不
+    以 `root.` 开头 → rollup 漏掉 token/cost/model（评测 agent 路径根行因此全 None）。
+
+    解决：让 span id 以当前 trace 根 request_id 为前缀。已在嵌套 span 内（且该 span
+    已是 `root.*` 形态）时挂其下继续延伸；否则直接挂根。无 TraceContext（裸路径）
+    返回 None，交回 observe 默认生成 uuid（兜底落 internal，不影响计费正确性）。
+    """
+    tc = current_trace_context()
+    root = tc.request_id if tc else None
+    if not root:
+        return None
+    current = current_observation_id()
+    base = current if (current and current.startswith(f"{root}.")) else root
+    return f"{base}.{name}"
 
 
 class InProcessTransport(RuntimeTransport):
@@ -82,7 +108,11 @@ class InProcessTransport(RuntimeTransport):
             return []
 
         merged = []
-        async with observe(observation_type="retrieval", name="kb.search"):
+        async with observe(
+            observation_type="retrieval",
+            name="kb.search",
+            request_id=_scoped_observation_id("kb.search"),
+        ):
             for kb_key in kb_keys:
                 hits = await search_kb(
                     kb_key, query, top_k=top_k, min_score=min_score
@@ -116,7 +146,11 @@ class InProcessTransport(RuntimeTransport):
         return docs
 
     def span(self, name: str, *, type: str = "span") -> Any:
-        return observe(observation_type=type, name=name)
+        return observe(
+            observation_type=type,
+            name=name,
+            request_id=_scoped_observation_id(name),
+        )
 
     def emit(self, event: StreamEvent) -> None:
         self._pending.append(event)
