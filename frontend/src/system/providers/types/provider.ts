@@ -2,7 +2,7 @@ import type { EntityId } from '@/core/types/api';
 export interface ProviderItem {
   id: EntityId;
   code: string;
-  kind: 'llm' | 'embedding' | 'dify' | 'fastgpt' | 'coze';
+  kind: 'llm' | 'embedding' | 'gateway' | 'dify' | 'fastgpt' | 'coze';
   name: string;
   base_url: string | null;
   has_api_key: boolean;

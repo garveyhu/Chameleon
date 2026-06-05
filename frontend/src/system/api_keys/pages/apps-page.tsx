@@ -1,20 +1,11 @@
-/** Key 管理：扁平 API Key 列表 + 新建 / 撤销 */
+/** Key 管理：按作用域分组的现代卡片 + 新建 / 撤销 */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Copy, KeyRound, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Eye, EyeOff, KeyRound, Plus } from 'lucide-react';
-
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
-import {
-  DataTable,
-  type DataTableColumn,
-  SectionCard,
-  TablePagination,
-  TableToolbar,
-} from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import {
   Dialog,
@@ -42,9 +33,10 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import { Textarea } from '@/core/components/ui/textarea';
-import type { EntityId } from '@/core/types/api';
-import { formatRelative } from '@/core/lib/format';
 import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
+import { KeyCard } from '@/system/api_keys/components/key-card';
+import { SCOPE } from '@/system/api_keys/scope';
 import { apiKeyApi } from '@/system/api_keys/services/app';
 import type {
   ApiKeyCreated,
@@ -53,28 +45,22 @@ import type {
   CreateApiKeyRequest,
 } from '@/system/api_keys/types/app';
 
-// scope 中文标签 + 徽标配色
-const SCOPE_META: Record<ApiKeyScopeType, { label: string; variant: 'primary' | 'success' | 'warning' }> = {
-  global: { label: '通用', variant: 'primary' },
-  app: { label: '应用', variant: 'success' },
-  kb: { label: '知识库', variant: 'warning' },
-};
-
-const scopeMeta = (t: string) =>
-  SCOPE_META[(t as ApiKeyScopeType) in SCOPE_META ? (t as ApiKeyScopeType) : 'global'];
+const GROUPS: { scope: ApiKeyScopeType; label: string }[] = [
+  { scope: 'app', label: '应用密钥' },
+  { scope: 'kb', label: '知识库密钥' },
+  { scope: 'global', label: '通用密钥' },
+];
 
 export const AppsPage = () => {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [revokeKey, setRevokeKey] = useState<ApiKeyItem | null>(null);
   const [plain, setPlain] = useState<ApiKeyCreated | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['api-keys', page, pageSize],
-    queryFn: () => apiKeyApi.list({ page, page_size: pageSize, include_revoked: true }),
+    queryKey: ['api-keys'],
+    queryFn: () => apiKeyApi.list({ page: 1, page_size: 100, include_revoked: true }),
   });
 
   const createMut = useMutation({
@@ -95,131 +81,68 @@ export const AppsPage = () => {
     },
   });
 
-  const columns: DataTableColumn<ApiKeyItem>[] = [
-    {
-      key: 'name',
-      header: t('common.name'),
-      render: k => <span className="font-medium text-stone-900">{k.name}</span>,
-    },
-    {
-      key: 'scope',
-      header: '作用域',
-      width: 80,
-      render: k => {
-        const m = scopeMeta(k.scope_type);
-        return <Badge variant={m.variant}>{m.label}</Badge>;
-      },
-    },
-    {
-      key: 'scope_ref',
-      header: '目标',
-      render: k =>
-        k.scope_ref ? (
-          <span className="font-mono text-[11.5px] text-stone-600">{k.scope_ref}</span>
-        ) : (
-          <span className="text-stone-300">—</span>
-        ),
-    },
-    {
-      key: 'key',
-      header: '密钥',
-      width: 220,
-      render: k => <KeyCopyCell prefix={k.key_prefix} plain={k.plain_key} />,
-    },
-    {
-      key: 'app_id',
-      header: '来源标签',
-      render: k => <span className="font-mono text-[11px] text-stone-400">{k.app_id}</span>,
-    },
-    {
-      key: 'limits',
-      header: '配额',
-      width: 150,
-      render: k => (
-        <span className="tnum font-mono text-[11.5px] text-stone-500">
-          QPM {k.qpm_limit ?? '∞'} · QPD {k.qpd_limit ?? '∞'}
-        </span>
-      ),
-    },
-    {
-      key: 'status',
-      header: t('common.status'),
-      width: 80,
-      render: k =>
-        k.revoked_at ? (
-          <Badge variant="danger">已撤销</Badge>
-        ) : (
-          <Badge variant="success">活跃</Badge>
-        ),
-    },
-    {
-      key: 'last_used_at',
-      header: '最近使用',
-      width: 120,
-      render: k => (
-        <span className="tnum font-mono text-[11.5px] text-stone-500">
-          {k.last_used_at ? formatRelative(k.last_used_at) : '从未'}
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: t('common.actions'),
-      align: 'right',
-      width: 90,
-      render: k =>
-        k.revoked_at ? null : (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-red-600"
-            onClick={() => setRevokeKey(k)}
-          >
-            撤销
-          </Button>
-        ),
-    },
-  ];
+  const keys = listQ.data?.items ?? [];
+  const groups = GROUPS.map(g => ({
+    ...g,
+    items: keys.filter(k => k.scope_type === g.scope),
+  })).filter(g => g.items.length > 0);
 
   return (
-    <div>
-      <SectionCard>
-        <TableToolbar
-          title={t('page.api_keys_title')}
-          extra={
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[16px] font-semibold text-stone-900">
+            {t('page.api_keys_title')}
+          </h1>
+          <p className="mt-0.5 text-[12px] text-stone-500">
+            对外签发的访问密钥 —— 作用域、配额与状态在此管理
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+        </Button>
+      </header>
+
+      {listQ.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[180px] animate-pulse rounded-xl border border-stone-200 bg-stone-50"
+            />
+          ))}
+        </div>
+      ) : keys.length === 0 ? (
+        <EmptyState
+          icon={<KeyRound strokeWidth={1.5} />}
+          title={t('empty.api_keys')}
+          action={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable
-          columns={columns}
-          rows={listQ.data?.items || []}
-          rowKey="id"
-          loading={listQ.isLoading}
-          emptyText={
-            <EmptyState
-              icon={<KeyRound strokeWidth={1.5} />}
-              title={t('empty.api_keys')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
-                </Button>
-              }
-            />
-          }
-        />
-        <TablePagination
-          page={page}
-          pageSize={pageSize}
-          total={listQ.data?.total || 0}
-          onPageChange={setPage}
-          onPageSizeChange={s => {
-            setPageSize(s);
-            setPage(1);
-          }}
-        />
-      </SectionCard>
+      ) : (
+        groups.map(g => {
+          const Icon = SCOPE[g.scope].icon;
+          return (
+            <section key={g.scope} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Icon className="h-4 w-4 text-stone-400" />
+                <h2 className="text-[13px] font-medium text-stone-700">{g.label}</h2>
+                <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-medium text-stone-500">
+                  {g.items.length}
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {g.items.map(k => (
+                  <KeyCard key={String(k.id)} apiKey={k} onRevoke={() => setRevokeKey(k)} />
+                ))}
+              </div>
+            </section>
+          );
+        })
+      )}
 
       <CreateKeyModal
         open={createOpen}
@@ -423,49 +346,5 @@ const PlainKeyDialog = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-};
-
-/** 密钥单元格：默认掩码，点眼睛展开全文，点复制拷全文（老数据无明文只显前缀） */
-const KeyCopyCell = ({ prefix, plain }: { prefix: string; plain: string | null }) => {
-  const [shown, setShown] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    if (!plain) return;
-    void navigator.clipboard.writeText(plain).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
-  };
-  return (
-    <div className="flex items-center gap-1.5">
-      <code className="font-mono text-xs text-stone-600">
-        {plain ? (shown ? plain : `${prefix}${'•'.repeat(8)}`) : `${prefix}...`}
-      </code>
-      {plain && (
-        <>
-          <button
-            type="button"
-            onClick={() => setShown(s => !s)}
-            title={shown ? '隐藏' : '显示'}
-            className="text-stone-400 transition hover:text-stone-700"
-          >
-            {shown ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={copy}
-            title="复制"
-            className="text-stone-400 transition hover:text-stone-700"
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-500" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </button>
-        </>
-      )}
-    </div>
   );
 };
