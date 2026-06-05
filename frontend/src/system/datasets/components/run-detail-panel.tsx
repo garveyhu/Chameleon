@@ -12,6 +12,7 @@ import { formatScore, scoreBg } from '@/core/lib/score';
 import type { EntityId } from '@/core/types/api';
 import { RunScoreDistribution } from '@/system/datasets/components/run-score-distribution';
 import { datasetApi } from '@/system/datasets/services/dataset';
+import { judgeLabel } from '@/system/datasets/utils/judge-meta';
 import { verdictOf } from '@/system/datasets/utils/verdict';
 import type {
   DatasetRunDetail,
@@ -204,7 +205,7 @@ export const RunDetailPanel = ({
           <Badge variant="outline" className={cn('text-[10.5px]', statusBg(run.status))}>
             {STATUS_LABEL[run.status] ?? run.status}
           </Badge>
-          <span>评分器 {run.judge}</span>
+          <span>评分器 {judgeLabel(run.judge)}</span>
           {run.model_override && <span>· 模型 {run.model_override}</span>}
           {mean != null && (
             <span>

@@ -14,6 +14,7 @@ import { formatDateTime } from '@/core/lib/format';
 import { formatScore, parseScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { judgeLabel } from '@/system/datasets/utils/judge-meta';
 import { EvalJobFormModal } from '@/system/eval_jobs/components/eval-job-form-modal';
 import { evalJobApi } from '@/system/eval_jobs/services/eval-job';
 import {
@@ -208,7 +209,7 @@ const InfoGrid = ({ job }: { job: EvalJobItem }) => {
                 ? ` v${job.template_version_frozen}`
                 : ''
             }`
-          : `judge · ${job.judge}`,
+          : `评分器 · ${judgeLabel(job.judge)}`,
       },
       {
         label: '被测对象',

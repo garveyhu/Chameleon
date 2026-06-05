@@ -6,6 +6,7 @@ import type {
   DatasetItemRow,
   DatasetRunRow,
 } from '@/system/datasets/types/dataset';
+import { judgeLabel } from '@/system/datasets/utils/judge-meta';
 
 const TEMPLATE_HEADERS = ['输入', '理想回答', '元数据(JSON)'] as const;
 
@@ -150,7 +151,7 @@ export const exportRuns = async (
     aoa.push([
       r.name,
       r.agent_key || r.model_override || '默认模型',
-      r.judge,
+      judgeLabel(r.judge),
       r.status,
       score != null ? Number(score.toFixed(4)) : '',
       ok != null && total != null ? `${ok}/${total}` : '',

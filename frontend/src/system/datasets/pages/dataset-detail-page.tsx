@@ -25,6 +25,7 @@ import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
 import type { EntityId } from '@/core/types/api';
 import { AiGenerateStudio } from '@/system/datasets/components/ai-generate-studio';
+import { judgeLabel } from '@/system/datasets/utils/judge-meta';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { DatasetItemsSelectionBar } from '@/system/datasets/components/dataset-items-selection-bar';
@@ -325,7 +326,7 @@ export const DatasetDetailPage = () => {
       key: 'judge',
       header: '评分器',
       width: 120,
-      render: r => <span className="text-stone-600">{r.judge}</span>,
+      render: r => <span className="text-stone-600">{judgeLabel(r.judge)}</span>,
     },
     {
       key: 'score',
