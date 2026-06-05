@@ -145,7 +145,7 @@ export const SampleFromLogsModal = ({ datasetId, onClose, onDone }: Props) => {
 
   return (
     <Modal open onOpenChange={open => !open && onClose()}>
-      <ModalContent className={stage === 'review' ? 'sm:max-w-3xl' : undefined}>
+      <ModalContent size="xl">
         <ModalHeader>
           <ModalTitle>从调用日志采样</ModalTitle>
         </ModalHeader>

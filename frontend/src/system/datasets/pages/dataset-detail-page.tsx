@@ -46,6 +46,14 @@ const STATUS_LABEL: Record<string, string> = {
   failed: '失败',
   cancelled: '已取消',
 };
+
+/** 样本来源徽标：按 meta.source 区分 AI 扩样 / 日志采样 / 手工导入 / 手动新增。 */
+const ITEM_SOURCE_META: Record<string, { label: string; klass: string }> = {
+  ai_generate: { label: 'AI 扩样', klass: 'bg-violet-50 text-violet-700' },
+  log_sample: { label: '日志采样', klass: 'bg-emerald-50 text-emerald-700' },
+  manual_import: { label: '手工导入', klass: 'bg-indigo-50 text-indigo-700' },
+  manual_add: { label: '手动新增', klass: 'bg-stone-100 text-stone-600' },
+};
 const statusBg = (s: string): string =>
   s === 'success'
     ? 'bg-emerald-50 text-emerald-700'
@@ -194,16 +202,12 @@ export const DatasetDetailPage = () => {
       header: '来源',
       width: 96,
       render: it => {
-        const isLog = !!it.source_call_log_id;
+        const src =
+          (it.meta as { source?: string } | null)?.source ??
+          (it.source_call_log_id ? 'log_sample' : 'manual_import');
+        const m = ITEM_SOURCE_META[src] ?? ITEM_SOURCE_META.manual_import;
         return (
-          <span
-            className={cn(
-              'rounded px-1.5 py-0.5 text-[10.5px]',
-              isLog ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700',
-            )}
-          >
-            {isLog ? '日志采样' : '手工导入'}
-          </span>
+          <span className={cn('rounded px-1.5 py-0.5 text-[10.5px]', m.klass)}>{m.label}</span>
         );
       },
     },
