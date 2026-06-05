@@ -85,6 +85,23 @@ class SampleResult(BaseModel):
     created_item_ids: list[int] = Field(default_factory=list)
 
 
+class SampleCandidate(BaseModel):
+    """采样预览候选：脱敏后的 input/expected 纯文本 + 来源/元信息，供前端评审编辑。"""
+
+    source_call_log_id: str
+    user_input: str
+    answer: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
+
+
+class SamplePreviewResult(BaseModel):
+    """采样预览结果：候选列表（不落库）+ 跳过统计。挑选/编辑后走 bulk-import 入库。"""
+
+    candidates: list[SampleCandidate] = Field(default_factory=list)
+    skipped: int = 0
+    dropped_pii: int = 0
+
+
 class BatchDeleteItemsRequest(BaseModel):
     """A2：批量删除样本"""
 

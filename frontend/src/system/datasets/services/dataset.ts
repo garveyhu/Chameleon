@@ -20,6 +20,7 @@ import type {
   RefineCandidateRequest,
   RefinedCandidate,
   SampleFromLogsRequest,
+  SamplePreviewResult,
   SampleResult,
   ScoreDistributionResult,
   UpdateItemRequest,
@@ -49,6 +50,9 @@ export const datasetApi = {
     get<PageResult<DatasetItemRow>>(`${BASE}/${id}/items`, { params }),
   sampleFromLogs: (id: EntityId, req: SampleFromLogsRequest) =>
     post<SampleResult>(`${BASE}/${id}/sample-from-logs`, req),
+  /** 采样预览：按 filter 收集候选返回评审（不落库），挑选/编辑后再 bulkImport。 */
+  previewSampleFromLogs: (id: EntityId, req: SampleFromLogsRequest) =>
+    post<SamplePreviewResult>(`${BASE}/${id}/sample-from-logs/preview`, req),
   bulkImport: (id: EntityId, req: BulkImportRequest) =>
     post<BulkImportResult>(`${BASE}/${id}/items/bulk-import`, req),
   /** 流式 AI 扩样 —— SSE 边生成边吐字 + 逐条候选；不落库，候选进评审区。 */

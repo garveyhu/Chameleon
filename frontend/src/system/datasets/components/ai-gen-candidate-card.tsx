@@ -11,6 +11,8 @@ interface Props {
   index: number;
   /** optimize / regenerate 进行中（按钮转圈 + 禁用整卡操作）。 */
   refining: boolean;
+  /** 是否显示「重新生成」（采样评审无 task 可重生，置 false 隐藏）。默认 true。 */
+  showRegenerate?: boolean;
   onToggle: (cid: string) => void;
   onChangeInput: (cid: string, value: string) => void;
   onChangeAnswer: (cid: string, value: string) => void;
@@ -23,6 +25,7 @@ export const AiGenCandidateCard = ({
   candidate,
   index,
   refining,
+  showRegenerate = true,
   onToggle,
   onChangeInput,
   onChangeAnswer,
@@ -64,15 +67,17 @@ export const AiGenCandidateCard = ({
           >
             <Sparkles className="h-3 w-3" /> AI 优化
           </button>
-          <button
-            type="button"
-            disabled={refining}
-            onClick={() => onRegenerate(cid)}
-            title="重新生成（同主题另起一条不同候选）"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px] text-stone-500 hover:bg-stone-100 disabled:opacity-50"
-          >
-            <RefreshCw className="h-3 w-3" /> 重新生成
-          </button>
+          {showRegenerate && (
+            <button
+              type="button"
+              disabled={refining}
+              onClick={() => onRegenerate(cid)}
+              title="重新生成（同主题另起一条不同候选）"
+              className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[10.5px] text-stone-500 hover:bg-stone-100 disabled:opacity-50"
+            >
+              <RefreshCw className="h-3 w-3" /> 重新生成
+            </button>
+          )}
           <button
             type="button"
             disabled={refining}

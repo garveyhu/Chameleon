@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -43,7 +44,9 @@ from chameleon.system.datasets.schemas import (
     DatasetRunItemRow,
     DatasetRunRow,
     MetricDistribution,
+    SampleCandidate,
     SampleFromLogsRequest,
+    SamplePreviewResult,
     SampleResult,
     ScoreBucket,
     ScoreDistributionResult,
@@ -331,18 +334,19 @@ async def update_item(
 # ── 一键采样 ──────────────────────────────────────────────
 
 
-async def sample_from_logs(
+async def _collect_sample_candidates(
     session: AsyncSession,
-    dataset_id: int,
+    ds: Dataset,
     req: SampleFromLogsRequest,
-) -> SampleResult:
-    """按 filter 从 call_logs 批量采样 → dataset_items（脱敏）
+) -> tuple[list[dict[str, Any]], int, int]:
+    """按 filter 从 call_logs 收集候选样本（脱敏），**不落库**。
 
-    幂等：同一个 source_call_log_id 在同 dataset 内只 采一次。
+    幂等：同 dataset 已采过的 source_call_log_id 跳过。
+    返回 (candidates, skipped, dropped_pii)；candidate 含
+    source_call_log_id / input_payload(脱敏) / expected_output / meta。
+    sample_from_logs（直接导入）与 preview_sample_from_logs（评审预览）共用此收集逻辑，
+    确保脱敏 / 去重 / 字段口径不分叉。
     """
-    ds = await _load_dataset(session, dataset_id)
-
-    # 已采过的 source_call_log_id 集合（去重）
     existing = (
         (
             await session.execute(
@@ -374,10 +378,9 @@ async def sample_from_logs(
     logs = (await session.execute(stmt)).scalars().all()
     pii_strategy: PiiStrategy = req.pii_strategy  # type: ignore[assignment]
 
-    added = 0
+    candidates: list[dict[str, Any]] = []
     skipped = 0
     dropped_pii = 0
-    new_items: list[DatasetItem] = []
     for lg in logs:
         if lg.request_id in existing_set:
             skipped += 1
@@ -395,24 +398,48 @@ async def sample_from_logs(
                 continue
         else:
             expected = None
+        candidates.append(
+            {
+                "source_call_log_id": lg.request_id,
+                "input_payload": redacted_input,
+                "expected_output": expected,
+                "meta": {
+                    "agent_key": lg.agent_key,
+                    "app_id": lg.app_id,
+                    "success": lg.success,
+                    "duration_ms": lg.duration_ms,
+                    "pii_strategy": pii_strategy,
+                    "sampled_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+        )
+        existing_set.add(lg.request_id)
+    return candidates, skipped, dropped_pii
+
+
+async def sample_from_logs(
+    session: AsyncSession,
+    dataset_id: int,
+    req: SampleFromLogsRequest,
+) -> SampleResult:
+    """按 filter 从 call_logs 批量采样 → dataset_items（脱敏，直接入库）。
+
+    幂等：同一个 source_call_log_id 在同 dataset 内只采一次。
+    """
+    ds = await _load_dataset(session, dataset_id)
+    candidates, skipped, dropped_pii = await _collect_sample_candidates(session, ds, req)
+
+    new_items: list[DatasetItem] = []
+    for c in candidates:
         item = DatasetItem(
             dataset_id=ds.id,
-            source_call_log_id=lg.request_id,
-            input_payload=redacted_input,
-            expected_output=expected,
-            meta={
-                "agent_key": lg.agent_key,
-                "app_id": lg.app_id,
-                "success": lg.success,
-                "duration_ms": lg.duration_ms,
-                "pii_strategy": pii_strategy,
-                "sampled_at": datetime.now(timezone.utc).isoformat(),
-            },
+            source_call_log_id=c["source_call_log_id"],
+            input_payload=c["input_payload"],
+            expected_output=c["expected_output"],
+            meta=c["meta"],
         )
         session.add(item)
         new_items.append(item)
-        added += 1
-        existing_set.add(lg.request_id)
 
     # flush 后 ORM 已分配 id；据此回算 item_count 并收集本次新建 id（供撤销）
     await session.flush()
@@ -422,10 +449,77 @@ async def sample_from_logs(
 
     return SampleResult(
         dataset_id=ds.id,
-        added=added,
+        added=len(new_items),
         skipped=skipped,
         dropped_pii=dropped_pii,
         created_item_ids=created_item_ids,
+    )
+
+
+def _value_text(v: Any) -> str | None:
+    """单个值 → 可读文本：字符串直取；脱敏结构 {hash,length,preview,...} 取 preview。"""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, dict) and isinstance(v.get("preview"), str):
+        return v["preview"]
+    return None
+
+
+def _candidate_text(obj: dict[str, Any] | None, prefer: list[str]) -> str:
+    """候选 input/expected 的 dict → 给评审卡片展示/编辑的纯文本。
+
+    优先脱敏 preview / 字符串值；脱敏 mask 后字段是
+    {_redacted: true, <field>: {hash,length,token_count_approx,preview}}，
+    需取内层 preview 才可读，否则会把整坨脱敏 JSON 喂给用户。
+    单字段直取；多字段优先 prefer 键；都不命中回退紧凑 JSON。
+    """
+    if not obj:
+        return ""
+    # 脱敏包装：{_redacted: true, <字段>: {...preview...}}
+    if obj.get("_redacted"):
+        for k, v in obj.items():
+            if k == "_redacted":
+                continue
+            t = _value_text(v)
+            if t is not None:
+                return t
+    keys = list(obj.keys())
+    if len(keys) == 1:
+        t = _value_text(obj[keys[0]])
+        return t if t is not None else json.dumps(obj[keys[0]], ensure_ascii=False)
+    for k in prefer:
+        t = _value_text(obj.get(k))
+        if t is not None:
+            return t
+    return json.dumps(obj, ensure_ascii=False)
+
+
+async def preview_sample_from_logs(
+    session: AsyncSession,
+    dataset_id: int,
+    req: SampleFromLogsRequest,
+) -> SamplePreviewResult:
+    """采样预览：按 filter 收集候选返回前端评审，**不落库**。
+
+    用户在评审组件里挑选 / 编辑 / AI 优化后，再走 bulk-import 正式入库。
+    """
+    ds = await _load_dataset(session, dataset_id)
+    candidates, skipped, dropped_pii = await _collect_sample_candidates(session, ds, req)
+    out = [
+        SampleCandidate(
+            source_call_log_id=str(c["source_call_log_id"]),
+            user_input=_candidate_text(
+                c["input_payload"],
+                ["user_input", "query", "question", "input", "text"],
+            ),
+            answer=_candidate_text(c["expected_output"], ["answer", "output", "value", "text"])
+            or None,
+            meta=c["meta"],
+        )
+        for c in candidates
+    ]
+    return SamplePreviewResult(
+        candidates=out, skipped=skipped, dropped_pii=dropped_pii
     )
 
 

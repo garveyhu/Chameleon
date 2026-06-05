@@ -37,6 +37,7 @@ from chameleon.system.datasets.schemas import (
     RefineCandidateRequest,
     RefinedCandidate,
     SampleFromLogsRequest,
+    SamplePreviewResult,
     SampleResult,
     ScoreDistributionResult,
     UpdateDatasetRequest,
@@ -237,6 +238,21 @@ async def sample_from_logs(
     _: object = Depends(require_permission("datasets:write")),
 ) -> Result[SampleResult]:
     result = await ds_service.sample_from_logs(session, dataset_id, req)
+    return Result.ok(result)
+
+
+@router.post(
+    "/{dataset_id}/sample-from-logs/preview",
+    response_model=Result[SamplePreviewResult],
+)
+async def sample_from_logs_preview(
+    dataset_id: int,
+    req: SampleFromLogsRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[SamplePreviewResult]:
+    """采样预览：按 filter 收集候选返回评审（不落库），挑选/编辑后再 bulk-import。"""
+    result = await ds_service.preview_sample_from_logs(session, dataset_id, req)
     return Result.ok(result)
 
 

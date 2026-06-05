@@ -52,6 +52,21 @@ export interface SampleResult {
   created_item_ids: EntityId[];
 }
 
+/** 采样预览候选：脱敏后的纯文本 + 来源/元信息，供评审组件编辑。 */
+export interface SampleCandidate {
+  source_call_log_id: string;
+  user_input: string;
+  answer: string | null;
+  meta: Record<string, unknown>;
+}
+
+/** 采样预览结果：候选列表（不落库）+ 跳过统计。 */
+export interface SamplePreviewResult {
+  candidates: SampleCandidate[];
+  skipped: number;
+  dropped_pii: number;
+}
+
 /** A2：批量删除样本入参 / 结果 */
 export interface BatchDeleteItemsRequest {
   item_ids: EntityId[];
