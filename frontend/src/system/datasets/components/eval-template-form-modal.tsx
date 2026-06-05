@@ -22,7 +22,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/core/components/ui/select';
 import { cn } from '@/core/lib/cn';
 import type {
@@ -292,8 +291,19 @@ export const EvalTemplateFormModal = ({
                         value={r.algorithm}
                         onValueChange={v => changeAlgo(r._id, v)}
                       >
+                        {/* 触发器显示直接从本行 state 算，不靠 Radix SelectValue 按 value
+                            匹配 item 内容（多行同算子时它会偶发匹配不上显示空）。 */}
                         <SelectTrigger>
-                          <SelectValue placeholder="选 RAGAS 算子…" />
+                          {algo ? (
+                            <span className="flex items-baseline gap-1.5 truncate">
+                              {algo.zh}
+                              <span className="font-mono text-[10px] text-stone-400">
+                                {algo.key}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-stone-400">选 RAGAS 算子…</span>
+                          )}
                         </SelectTrigger>
                         <SelectContent>
                           {RAGAS_ALGOS.map(a => (
