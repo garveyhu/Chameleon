@@ -3,7 +3,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, GitCompare } from 'lucide-react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
 import { datasetApi } from '@/system/datasets/services/dataset';
@@ -20,9 +20,17 @@ const parseIds = (raw: string | null): EntityId[] => {
 export const RunComparePage = () => {
   // ⚠️ dsId / run ids 保留 string —— snowflake 64-bit 超 MAX_SAFE_INTEGER
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const dsId = id ?? '';
   const [params] = useSearchParams();
   const runIds = parseIds(params.get('ids'));
+
+  // 对比页是从运行详情 / 运行 tab 进来的叶子页，面包屑做真·上一步回退，
+  // 直链落地无历史时兜回数据集运行 tab，而非写死目标。
+  const goBack = () => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate(`/datasets/${dsId}?tab=runs`);
+  };
 
   const dsQ = useQuery({
     queryKey: ['datasets', dsId],
@@ -33,12 +41,13 @@ export const RunComparePage = () => {
   return (
     <div className="space-y-3">
       <header className="flex items-center gap-2">
-        <Link
-          to={`/datasets/${dsId}?tab=runs`}
+        <button
+          type="button"
+          onClick={goBack}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> {dsQ.data?.name ?? '数据集'}
-        </Link>
+        </button>
         <span className="text-stone-300">/</span>
         <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-stone-900">
           <GitCompare className="h-3.5 w-3.5 text-stone-500" /> 运行对比
