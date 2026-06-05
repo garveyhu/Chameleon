@@ -1,11 +1,12 @@
 /** Key 管理：按作用域分组的现代卡片 + 新建 / 撤销 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, KeyRound, Plus } from 'lucide-react';
+import { Bot, Copy, Globe, KeyRound, Plus, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
+import { MiniStat } from '@/core/components/common/mini-stat';
 import { Button } from '@/core/components/ui/button';
 import {
   Dialog,
@@ -102,6 +103,28 @@ export const AppsPage = () => {
           <Plus className="h-3.5 w-3.5" /> {t('common.create')}
         </Button>
       </header>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MiniStat label="密钥总数" value={keys.length} icon={KeyRound} tone="primary" />
+        <MiniStat
+          label="活跃"
+          value={keys.filter(k => !k.revoked_at).length}
+          icon={ShieldCheck}
+          tone="success"
+        />
+        <MiniStat
+          label="应用密钥"
+          value={keys.filter(k => k.scope_type === 'app').length}
+          icon={Bot}
+          tone="violet"
+        />
+        <MiniStat
+          label="通用密钥"
+          value={keys.filter(k => k.scope_type === 'global').length}
+          icon={Globe}
+          tone="sky"
+        />
+      </div>
 
       {listQ.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

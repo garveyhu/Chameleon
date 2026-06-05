@@ -1,11 +1,12 @@
 /** models 管理页 —— 按用途分组的现代卡片网格 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownUp, Boxes, Cpu, MessageSquare, Plus } from 'lucide-react';
+import { ArrowDownUp, Boxes, Cpu, MessageSquare, Plus, Power } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
+import { MiniStat } from '@/core/components/common/mini-stat';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -104,6 +105,28 @@ export const ModelsPage = () => {
           <Plus className="h-3.5 w-3.5" /> {t('common.create')}
         </Button>
       </header>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MiniStat label="模型总数" value={models.length} icon={Cpu} tone="primary" />
+        <MiniStat
+          label="对话模型"
+          value={models.filter(m => m.kind === 'chat').length}
+          icon={MessageSquare}
+          tone="primary"
+        />
+        <MiniStat
+          label="向量模型"
+          value={models.filter(m => m.kind === 'embedding').length}
+          icon={Boxes}
+          tone="violet"
+        />
+        <MiniStat
+          label="已启用"
+          value={models.filter(m => m.enabled).length}
+          icon={Power}
+          tone="success"
+        />
+      </div>
 
       {listQ.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

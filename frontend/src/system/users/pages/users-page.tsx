@@ -1,26 +1,17 @@
-/** 用户管理页 */
+/** 用户管理页 —— 现代卡片网格 */
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { KeyRound, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
+import { Plus, UserCheck, Users as UsersIcon, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { toast } from '@/core/lib/toast';
 import { z } from 'zod';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
-import {
-  DataTable,
-  type DataTableColumn,
-  SectionCard,
-  TablePagination,
-  TableToolbar,
-} from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
+import { MiniStat } from '@/core/components/common/mini-stat';
 import { Button } from '@/core/components/ui/button';
-import { StatusBadge } from '@/core/components/ui/status-badge';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
 import {
@@ -31,7 +22,9 @@ import {
   ModalHeader,
   ModalTitle,
 } from '@/core/components/ui/modal';
-import { formatDateTime } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
+import type { EntityId } from '@/core/types/api';
+import { UserCard } from '@/system/users/components/user-card';
 import { userApi } from '@/system/users/services/user';
 import type { UserItem } from '@/system/users/types/user';
 
@@ -52,15 +45,13 @@ type ResetForm = z.infer<typeof resetSchema>;
 export const UsersPage = () => {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
   const [createOpen, setCreateOpen] = useState(false);
   const [resetUser, setResetUser] = useState<UserItem | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserItem | null>(null);
 
   const listQ = useQuery({
-    queryKey: ['users', page, pageSize],
-    queryFn: () => userApi.list({ page, page_size: pageSize }),
+    queryKey: ['users'],
+    queryFn: () => userApi.list({ page: 1, page_size: 100 }),
   });
 
   const createMut = useMutation({
@@ -85,7 +76,7 @@ export const UsersPage = () => {
   });
 
   const resetMut = useMutation({
-    mutationFn: (args: { id: import('@/core/types/api').EntityId; req: ResetForm }) =>
+    mutationFn: (args: { id: EntityId; req: ResetForm }) =>
       userApi.resetPassword(args.id, { new_password: args.req.new_password }),
     onSuccess: () => {
       toast.success('密码已重置');
@@ -94,7 +85,7 @@ export const UsersPage = () => {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: import('@/core/types/api').EntityId) => userApi.delete(id),
+    mutationFn: (id: EntityId) => userApi.delete(id),
     onSuccess: () => {
       toast.success('用户已删除');
       qc.invalidateQueries({ queryKey: ['users'] });
@@ -102,134 +93,60 @@ export const UsersPage = () => {
     },
   });
 
-  const columns: DataTableColumn<UserItem>[] = [
-    {
-      key: 'user',
-      header: t('table.username'),
-      render: u => {
-        const title = u.display_name || u.username;
-        const sub = [u.display_name ? `@${u.username}` : null, u.email]
-          .filter(Boolean)
-          .join(' · ');
-        return (
-          <div className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-stone-100 text-[11px] font-medium text-stone-600">
-              {title.slice(0, 1).toUpperCase()}
-            </span>
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-stone-900">{title}</div>
-              {sub && <div className="truncate text-[11px] text-stone-400">{sub}</div>}
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: 'roles',
-      header: t('table.roles'),
-      width: 220,
-      render: u => (
-        <div className="flex flex-wrap gap-1">
-          {u.role_codes.length ? (
-            u.role_codes.map(r => (
-              <Badge key={r} variant="primary">
-                {r}
-              </Badge>
-            ))
-          ) : (
-            <span className="text-[11px] text-stone-400">—</span>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      header: t('common.status'),
-      width: 96,
-      render: u =>
-        u.status === 'active' ? (
-          <StatusBadge tone="success">{t('common.active')}</StatusBadge>
-        ) : (
-          <StatusBadge tone="neutral">{t('common.disabled')}</StatusBadge>
-        ),
-    },
-    {
-      key: 'last_login_at',
-      header: t('table.last_login'),
-      width: 160,
-      render: u => <span className="tnum font-mono text-[11.5px] text-stone-500">{formatDateTime(u.last_login_at)}</span>,
-    },
-    {
-      key: 'actions',
-      header: t('common.actions'),
-      align: 'right',
-      width: 100,
-      render: u => (
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            title="重置密码"
-            className="rounded p-1 text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setResetUser(u)}
-          >
-            <KeyRound className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
-            onClick={() => setDeleteUser(u)}
-            disabled={u.username === 'admin'}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const users = listQ.data?.items || [];
+  const activeCount = users.filter(u => u.status === 'active').length;
 
   return (
-    <div>
-      <SectionCard>
-        <TableToolbar
-          title={t('page.users_title')}
-          extra={
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[16px] font-semibold text-stone-900">
+            {t('page.users_title')}
+          </h1>
+          <p className="mt-0.5 text-[12px] text-stone-500">平台账号 —— 角色、状态与密码在此管理</p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+        </Button>
+      </header>
+
+      <div className="grid grid-cols-3 gap-3">
+        <MiniStat label="用户总数" value={users.length} icon={UsersIcon} tone="primary" />
+        <MiniStat label="活跃" value={activeCount} icon={UserCheck} tone="success" />
+        <MiniStat label="停用" value={users.length - activeCount} icon={UserX} tone="neutral" />
+      </div>
+
+      {listQ.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[148px] animate-pulse rounded-xl border border-stone-200 bg-stone-50"
+            />
+          ))}
+        </div>
+      ) : users.length === 0 ? (
+        <EmptyState
+          icon={<UsersIcon strokeWidth={1.5} />}
+          title={t('empty.users')}
+          action={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-
-        <DataTable
-          columns={columns}
-          rows={listQ.data?.items || []}
-          rowKey="id"
-          loading={listQ.isLoading}
-          leftBar={u => (u.status === 'active' ? 'bg-emerald-400' : 'bg-stone-300')}
-          emptyText={
-            <EmptyState
-              icon={<UsersIcon strokeWidth={1.5} />}
-              title={t('empty.users')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
-                </Button>
-              }
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {users.map(u => (
+            <UserCard
+              key={String(u.id)}
+              user={u}
+              onReset={() => setResetUser(u)}
+              onDelete={() => setDeleteUser(u)}
             />
-          }
-        />
-
-        <TablePagination
-          page={page}
-          pageSize={pageSize}
-          total={listQ.data?.total || 0}
-          onPageChange={setPage}
-          onPageSizeChange={s => {
-            setPageSize(s);
-            setPage(1);
-          }}
-        />
-      </SectionCard>
+          ))}
+        </div>
+      )}
 
       <CreateUserModal
         open={createOpen}
@@ -241,13 +158,10 @@ export const UsersPage = () => {
       <ResetPasswordModal
         user={resetUser}
         onClose={() => setResetUser(null)}
-        onSubmit={data =>
-          resetUser && resetMut.mutate({ id: resetUser.id, req: data })
-        }
+        onSubmit={data => resetUser && resetMut.mutate({ id: resetUser.id, req: data })}
         loading={resetMut.isPending}
       />
 
-      {/* 删除确认 */}
       <ConfirmDialog
         open={!!deleteUser}
         title="删除用户"

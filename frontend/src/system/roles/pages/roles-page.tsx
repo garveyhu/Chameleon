@@ -1,20 +1,12 @@
-/** 角色管理页 */
+/** 角色管理页 —— 现代卡片网格 */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Shield, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Shield, ShieldCheck, Trash2 } from 'lucide-react';
-
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
-import {
-  DataTable,
-  type DataTableColumn,
-  SectionCard,
-  TablePagination,
-  TableToolbar,
-} from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
+import { MiniStat } from '@/core/components/common/mini-stat';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -35,8 +27,8 @@ import {
   SheetTitle,
 } from '@/core/components/ui/sheet';
 import { Textarea } from '@/core/components/ui/textarea';
-import { useClientPagination } from '@/core/hooks/use-client-pagination';
 import { toast } from '@/core/lib/toast';
+import { RoleCard } from '@/system/roles/components/role-card';
 import { permissionApi, roleApi } from '@/system/roles/services/role';
 import type { RoleItem } from '@/system/roles/types/role';
 
@@ -48,7 +40,6 @@ export const RolesPage = () => {
   const [delRole, setDelRole] = useState<RoleItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['roles'], queryFn: roleApi.list });
-  const pg = useClientPagination(listQ.data ?? []);
 
   const createMut = useMutation({
     mutationFn: roleApi.create,
@@ -68,120 +59,60 @@ export const RolesPage = () => {
     },
   });
 
-  const columns: DataTableColumn<RoleItem>[] = [
-    {
-      key: 'role',
-      header: t('common.name'),
-      render: r => (
-        <div className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-500">
-            {r.is_system ? (
-              <ShieldCheck className="h-3.5 w-3.5" />
-            ) : (
-              <Shield className="h-3.5 w-3.5" />
-            )}
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-[13px] font-medium text-stone-900">{r.name}</div>
-            <div className="truncate font-mono text-[11px] text-stone-400">{r.code}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'description',
-      header: t('common.description'),
-      render: r =>
-        r.description ? (
-          <span className="text-[12px] text-stone-600">{r.description}</span>
-        ) : (
-          <span className="text-stone-400">—</span>
-        ),
-    },
-    {
-      key: 'is_system',
-      header: t('common.type'),
-      width: 90,
-      render: r =>
-        r.is_system ? <Badge variant="primary">内置</Badge> : <Badge variant="outline">自建</Badge>,
-    },
-    {
-      key: 'perms',
-      header: t('table.perm_count'),
-      width: 110,
-      align: 'right',
-      render: r => (
-        <span className="inline-flex items-center rounded-md bg-stone-100 px-2 py-0.5 font-mono text-[11px] text-stone-600">
-          {r.permission_codes.length} 项
-        </span>
-      ),
-    },
-    {
-      key: 'actions',
-      header: t('common.actions'),
-      align: 'right',
-      width: 110,
-      render: r => (
-        <div className="inline-flex items-center gap-0.5">
-          <button
-            type="button"
-            title="权限"
-            className="inline-flex items-center gap-1 rounded px-1.5 py-1 text-[11.5px] text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setPermRole(r)}
-          >
-            <ShieldCheck className="h-3.5 w-3.5" /> 权限
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600 disabled:opacity-30 disabled:hover:bg-transparent"
-            disabled={r.is_system}
-            onClick={() => setDelRole(r)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const roles = listQ.data ?? [];
+  const systemCount = roles.filter(r => r.is_system).length;
 
   return (
-    <div>
-      <SectionCard>
-        <TableToolbar
-          title={t('page.roles_title')}
-          extra={
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[16px] font-semibold text-stone-900">
+            {t('page.roles_title')}
+          </h1>
+          <p className="mt-0.5 text-[12px] text-stone-500">权限角色 —— 内置 / 自建及其权限项在此管理</p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+        </Button>
+      </header>
+
+      <div className="grid grid-cols-3 gap-3">
+        <MiniStat label="角色总数" value={roles.length} icon={Shield} tone="primary" />
+        <MiniStat label="内置" value={systemCount} icon={ShieldCheck} tone="sky" />
+        <MiniStat label="自建" value={roles.length - systemCount} icon={Shield} tone="neutral" />
+      </div>
+
+      {listQ.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[156px] animate-pulse rounded-xl border border-stone-200 bg-stone-50"
+            />
+          ))}
+        </div>
+      ) : roles.length === 0 ? (
+        <EmptyState
+          icon={<Shield strokeWidth={1.5} />}
+          title={t('empty.roles')}
+          action={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable
-          columns={columns}
-          rows={pg.rows}
-          rowKey="id"
-          loading={listQ.isLoading}
-          leftBar={r => (r.is_system ? 'bg-sky-400' : 'bg-stone-300')}
-          emptyText={
-            <EmptyState
-              icon={<Shield strokeWidth={1.5} />}
-              title={t('empty.roles')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
-                </Button>
-              }
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {roles.map(r => (
+            <RoleCard
+              key={String(r.id)}
+              role={r}
+              onPerms={() => setPermRole(r)}
+              onDelete={() => setDelRole(r)}
             />
-          }
-        />
-        <TablePagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          total={pg.total}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-        />
-      </SectionCard>
+          ))}
+        </div>
+      )}
 
       <CreateRoleModal
         open={createOpen}
