@@ -38,6 +38,7 @@ from chameleon.data.infra.jwt import init_jwt
 from chameleon.data.infra.logger import setup_logger
 from chameleon.data.infra.object_store import get_object_store
 from chameleon.data.utils.crypto import init_crypto
+from chameleon.integrations.embedding.factory import reload_embedding_cache
 from chameleon.integrations.llms.factory import reload_llm_cache
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.system.admin import admin_router
@@ -95,8 +96,9 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # DB 空 → seed 默认 admin / 角色 / 权限 / 模型 / agents（幂等）
     await run_seed_if_empty()
 
-    # 从 DB 加载 LLM cache（业务热路径同步取）
+    # 从 DB 加载 LLM / embedding cache（业务热路径同步取）
     await reload_llm_cache()
+    await reload_embedding_cache()
 
     # 从 DB 加载 AGENTS / PROVIDERS dict
     await init_registry()

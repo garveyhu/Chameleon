@@ -26,6 +26,13 @@ DEFAULT_PRICING: list[tuple[str, float, float]] = [
     ("qwen-turbo", 0.0000428, 0.000114),
     ("qwen-max", 0.000286, 0.000857),
     ("deepseek-chat", 0.00014, 0.00028),
+    # embedding（仅输入计费，completion_per_1k=0）
+    ("text-embedding-3-small", 0.00002, 0.0),
+    ("text-embedding-3-large", 0.00013, 0.0),
+    ("text-embedding-ada-002", 0.0001, 0.0),
+    ("text-embedding-v1", 0.0001, 0.0),
+    ("text-embedding-v2", 0.0001, 0.0),
+    ("text-embedding-v3", 0.00007, 0.0),
 ]
 
 

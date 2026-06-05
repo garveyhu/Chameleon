@@ -23,6 +23,7 @@ from chameleon.core.schema import get as get_schema
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import Provider
 from chameleon.data.utils.crypto import encrypt
+from chameleon.integrations.embedding.factory import reload_embedding_cache
 from chameleon.integrations.llms.factory import reload_llm_cache
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
@@ -157,6 +158,7 @@ async def create_provider(
     )
     await session.commit()  # 提早 commit 让 reload 读到
     await reload_llm_cache()
+    await reload_embedding_cache()
     return Result.ok(_to_item(p))
 
 
@@ -219,6 +221,7 @@ async def update_provider(
     )
     await session.commit()
     await reload_llm_cache()
+    await reload_embedding_cache()
     return Result.ok(_to_item(p))
 
 
@@ -258,4 +261,5 @@ async def delete_provider(
     )
     await session.commit()
     await reload_llm_cache()
+    await reload_embedding_cache()
     return Result.ok(None)

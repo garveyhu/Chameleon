@@ -34,12 +34,16 @@ class OpenAICompatEmbedding:
         api_key: str,
         model: str,
         dim: int,
+        model_code: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         batch_size: int = _DEFAULT_BATCH_SIZE,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        # model = 打给上游的模型名（网关模式下是 upstream_name）；
+        # model_code = 逻辑模型 code，trace 归属与计费（calc_cost）按它走。
         self.model = model
+        self.model_code = model_code or model
         self.dim = dim
         self.timeout = timeout
         self.batch_size = max(1, batch_size)
@@ -56,13 +60,15 @@ class OpenAICompatEmbedding:
         )
 
         if current_trace_context() is None:
-            return await self._embed_all(texts)
+            results, _, _ = await self._embed_all(texts)
+            return results
 
         from chameleon.integrations.observe.aspect import record_scope
 
         async with record_scope(
             observation_type=ObservationType.EMBEDDING,
             name=self.model,
+            model_code=self.model_code,
             request_payload={
                 "model": self.model,
                 "dim": self.dim,
@@ -73,10 +79,16 @@ class OpenAICompatEmbedding:
                 "texts_preview": [t[:200] for t in texts[:3]],
             },
         ) as scope:
-            results = await self._embed_all(texts)
+            results, prompt_tokens, total_tokens = await self._embed_all(texts)
+            # embedding 只有输入 token（无 completion）；填到 scope，sink 按 model_code
+            # 价目自动算 cost_usd（与 generation 同一条计费路径）。
+            scope.prompt_tokens = prompt_tokens or None
+            scope.total_tokens = total_tokens or None
             scope.response_payload = {
                 "count": len(results),
                 "dim": self.dim,
+                "prompt_tokens": prompt_tokens,
+                "total_tokens": total_tokens,
                 # 首条向量前 8 维做 sanity check（非全零/NaN），不存全量 1536 维。
                 "vector_preview": (
                     [round(float(x), 6) for x in results[0][:8]] if results else None
@@ -84,14 +96,22 @@ class OpenAICompatEmbedding:
             }
             return results
 
-    async def _embed_all(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_all(self, texts: list[str]) -> tuple[list[list[float]], int, int]:
+        """返回 (向量列表, prompt_tokens 合计, total_tokens 合计)。"""
         results: list[list[float]] = []
+        prompt_tokens = 0
+        total_tokens = 0
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i : i + self.batch_size]
-            results.extend(await self._embed_batch(batch))
-        return results
+            vecs, pt, tt = await self._embed_batch(batch)
+            results.extend(vecs)
+            prompt_tokens += pt
+            total_tokens += tt
+        return results, prompt_tokens, total_tokens
 
-    async def _embed_batch(self, batch: list[str]) -> list[list[float]]:
+    async def _embed_batch(
+        self, batch: list[str]
+    ) -> tuple[list[list[float]], int, int]:
         url = f"{self.base_url}/embeddings"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -125,6 +145,10 @@ class OpenAICompatEmbedding:
         data = resp.json()
         items = data.get("data") or []
         vectors = [item["embedding"] for item in items]
+        # OpenAI / DashScope 兼容响应带 usage.{prompt_tokens,total_tokens}；缺失则 0。
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or usage.get("total_tokens") or 0)
+        total_tokens = int(usage.get("total_tokens") or prompt_tokens or 0)
         if len(vectors) != len(batch):
             raise ProviderInternalError(
                 message=f"embedding length mismatch: expected {len(batch)}, got {len(vectors)}"
@@ -136,4 +160,4 @@ class OpenAICompatEmbedding:
                     f"actual {len(vectors[0])}"
                 )
             )
-        return vectors
+        return vectors, prompt_tokens, total_tokens

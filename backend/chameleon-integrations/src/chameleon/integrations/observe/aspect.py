@@ -29,12 +29,22 @@ from chameleon.core.observe.context import (
 class ObservationScope:
     """record_scope yield 的句柄：业务在 with 块内填 response_payload / 标记失败。"""
 
-    def __init__(self, request_payload: dict[str, Any] | None) -> None:
+    def __init__(
+        self,
+        request_payload: dict[str, Any] | None,
+        model_code: str | None = None,
+    ) -> None:
         self.request_payload: dict[str, Any] | None = request_payload
         self.response_payload: dict[str, Any] | None = None
         self.success: bool = True
         self.code: int = 0
         self.error_message: str | None = None
+        # 计费/用量：组件在 with 块内回填（如 embedding 从 API usage 取），
+        # 退出时连同 model_code 一起落 call_log，sink 按价目自动算 cost_usd。
+        self.model_code: str | None = model_code
+        self.prompt_tokens: int | None = None
+        self.completion_tokens: int | None = None
+        self.total_tokens: int | None = None
 
 
 @asynccontextmanager
@@ -43,6 +53,7 @@ async def record_scope(
     observation_type: str | ObservationType,
     name: str | None = None,
     request_payload: dict[str, Any] | None = None,
+    model_code: str | None = None,
 ):
     """开一个会自动落库的观测段。
 
@@ -58,7 +69,7 @@ async def record_scope(
     退出时：start→end 计时 + 经 sink 落一行（parent = 当前嵌套父）。异常时标记失败并
     继续抛。无 sink / 无 TraceContext 仍记（兜底 internal channel）。
     """
-    scope = ObservationScope(request_payload)
+    scope = ObservationScope(request_payload, model_code=model_code)
     start = time.perf_counter()
     rid = uuid.uuid4().hex
     async with observe(observation_type=observation_type, name=name, request_id=rid) as obs:
@@ -112,6 +123,10 @@ async def _persist(
                 duration_ms=duration_ms,
                 request_payload=scope.request_payload,
                 response_payload=scope.response_payload,
+                model_code=scope.model_code,
+                prompt_tokens=scope.prompt_tokens,
+                completion_tokens=scope.completion_tokens,
+                total_tokens=scope.total_tokens,
                 parent_id=effective_parent,
                 observation_type=observation_type,
                 channel=(tc.channel if tc else "internal"),

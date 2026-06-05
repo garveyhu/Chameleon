@@ -20,6 +20,7 @@ from chameleon.core.api.response import Result
 from chameleon.core.api.sse import sse_response
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import LLMModel, Provider
+from chameleon.integrations.embedding.factory import reload_embedding_cache
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import reload_llm_cache, resolve_upstream
@@ -164,8 +165,13 @@ async def create_model(
         request_id=audit.request_id,
     )
     await session.commit()
+    # commit 后 updated_at（server onupdate）会过期；在 async 上下文 refresh 后再读，
+    # 避免 _to_item 同步访问触发懒加载 → MissingGreenlet。reload 放到取完值之后。
+    await session.refresh(m)
+    item = _to_item(m, provider.code)
     await reload_llm_cache()
-    return Result.ok(_to_item(m, provider.code))
+    await reload_embedding_cache()
+    return Result.ok(item)
 
 
 @router.post("/{model_id}/update", response_model=Result[ModelItem])
@@ -213,8 +219,13 @@ async def update_model(
         request_id=audit.request_id,
     )
     await session.commit()
+    # commit 后 updated_at（server onupdate）会过期；在 async 上下文 refresh 后再读，
+    # 避免 _to_item 同步访问触发懒加载 → MissingGreenlet。reload 放到取完值之后。
+    await session.refresh(m)
+    item = _to_item(m)
     await reload_llm_cache()
-    return Result.ok(_to_item(m))
+    await reload_embedding_cache()
+    return Result.ok(item)
 
 
 class TestModelResult(BaseModel):
@@ -275,6 +286,7 @@ async def test_model(
                 base_url=base_url,
                 api_key=api_key,
                 model=upstream_model,
+                model_code=m.code,
                 dim=int(dim),
             )
             vectors = await client.embed(["hello"])
@@ -350,4 +362,5 @@ async def delete_model(
     await session.flush()
     await session.commit()
     await reload_llm_cache()
+    await reload_embedding_cache()
     return Result.ok(None)

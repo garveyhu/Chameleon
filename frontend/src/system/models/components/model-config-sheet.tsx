@@ -58,6 +58,9 @@ const ModelConfigForm = ({
   const [topP, setTopP] = useState(numOr(d.top_p, 1));
   const [maxTokens, setMaxTokens] = useState(numOr(d.max_tokens, 0));
   const [dim, setDim] = useState(model.dim != null ? String(model.dim) : '');
+  const [batchSize, setBatchSize] = useState(
+    d.batch_size != null ? String(d.batch_size) : '',
+  );
   const [enabled, setEnabled] = useState(model.enabled);
   const [upstreamName, setUpstreamName] = useState(model.upstream_name || '');
   const [upstreamGroup, setUpstreamGroup] = useState(model.upstream_group || '');
@@ -70,8 +73,11 @@ const ModelConfigForm = ({
 
   const saveMut = useMutation({
     mutationFn: () => {
-      const defaults: Record<string, unknown> = { temperature, top_p: topP };
-      if (maxTokens > 0) defaults.max_tokens = maxTokens;
+      const isChat = model.kind === 'chat';
+      // chat 存运行参数；embedding 存 batch_size —— 各存各的，不互相污染 defaults
+      const defaults: Record<string, unknown> = isChat
+        ? { temperature, top_p: topP, ...(maxTokens > 0 ? { max_tokens: maxTokens } : {}) }
+        : { ...(batchSize ? { batch_size: Number(batchSize) } : {}) };
       const capabilities: ModelCapabilities = {
         vision,
         tool_call: toolCall,
@@ -84,7 +90,7 @@ const ModelConfigForm = ({
         enabled,
         upstream_name: upstreamName.trim(),
         upstream_group: upstreamGroup.trim(),
-        capabilities: model.kind === 'chat' ? capabilities : undefined,
+        capabilities: isChat ? capabilities : undefined,
       });
     },
     onSuccess: () => {
@@ -139,21 +145,38 @@ const ModelConfigForm = ({
             />
           </>
         ) : (
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-medium text-stone-700">
-              向量维度 (dim)
-            </label>
-            <Input
-              type="number"
-              value={dim}
-              onChange={e => setDim(e.target.value)}
-              placeholder="1536"
-              className="font-mono"
-            />
-            <p className="text-[10.5px] leading-snug text-stone-500">
-              embedding 向量维度，需与 KB 配置一致
-            </p>
-          </div>
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-medium text-stone-700">
+                向量维度 (dim)
+              </label>
+              <Input
+                type="number"
+                value={dim}
+                onChange={e => setDim(e.target.value)}
+                placeholder="1536"
+                className="font-mono"
+              />
+              <p className="text-[10.5px] leading-snug text-stone-500">
+                embedding 向量维度，需与 KB 配置一致
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-medium text-stone-700">
+                批量大小 (batch_size)
+              </label>
+              <Input
+                type="number"
+                value={batchSize}
+                onChange={e => setBatchSize(e.target.value)}
+                placeholder="25"
+                className="font-mono"
+              />
+              <p className="text-[10.5px] leading-snug text-stone-500">
+                单次请求最多 embed 多少条；留空用默认 25（DashScope 上限）
+              </p>
+            </div>
+          </>
         )}
 
         <div className="space-y-1.5">
