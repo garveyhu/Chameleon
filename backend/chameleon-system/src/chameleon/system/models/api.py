@@ -41,7 +41,6 @@ class ModelItem(BaseModel):
     dim: int | None = None
     defaults: dict | None = None
     upstream_name: str | None = None
-    upstream_group: str | None = None
     capabilities: dict | None = None
     enabled: bool
     created_at: datetime
@@ -55,7 +54,6 @@ class CreateModelRequest(BaseModel):
     dim: int | None = None
     defaults: dict | None = None
     upstream_name: str | None = Field(default=None, max_length=128)
-    upstream_group: str | None = Field(default=None, max_length=64)
     capabilities: dict | None = None
 
 
@@ -64,7 +62,6 @@ class UpdateModelRequest(BaseModel):
     defaults: dict | None = None
     enabled: bool | None = None
     upstream_name: str | None = None
-    upstream_group: str | None = None
     capabilities: dict | None = None
 
 
@@ -78,7 +75,6 @@ def _to_item(m: LLMModel, provider_code: str | None = None) -> ModelItem:
         dim=m.dim,
         defaults=m.defaults,
         upstream_name=m.upstream_name,
-        upstream_group=m.upstream_group,
         capabilities=m.capabilities,
         enabled=m.enabled,
         created_at=m.created_at,
@@ -146,7 +142,6 @@ async def create_model(
         dim=req.dim,
         defaults=req.defaults,
         upstream_name=req.upstream_name,
-        upstream_group=req.upstream_group,
         capabilities=req.capabilities,
         enabled=True,
     )
@@ -201,8 +196,6 @@ async def update_model(
         m.enabled = req.enabled
     if req.upstream_name is not None:
         m.upstream_name = req.upstream_name
-    if req.upstream_group is not None:
-        m.upstream_group = req.upstream_group
     if req.capabilities is not None:
         m.capabilities = req.capabilities
     await session.flush()

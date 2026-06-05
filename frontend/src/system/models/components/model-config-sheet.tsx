@@ -1,7 +1,7 @@
 /** 模型配置抽屉 —— 编辑模型的运行参数 / 向量维度 / 上游映射 / 能力 / 启用状态。
  *
  * chat：temperature / top_p / max_tokens 三滑块 + 能力（vision/tool/json/ctx）；
- * embedding：dim。所有模型：upstream_name / upstream_group（经 new-api 网关时用）。
+ * embedding：dim + batch_size。所有模型：upstream_name（经 new-api 网关时用）。
  *
  * 表单主体抽成 ModelConfigForm，按 model.id remount（key）+ 状态从 model 初始化，
  * 避免 useEffect 同步 props（react-hooks/set-state-in-effect）。外层 Sheet 保持挂载做开合动画。
@@ -63,7 +63,6 @@ const ModelConfigForm = ({
   );
   const [enabled, setEnabled] = useState(model.enabled);
   const [upstreamName, setUpstreamName] = useState(model.upstream_name || '');
-  const [upstreamGroup, setUpstreamGroup] = useState(model.upstream_group || '');
   const [vision, setVision] = useState(!!c.vision);
   const [toolCall, setToolCall] = useState(!!c.tool_call);
   const [jsonMode, setJsonMode] = useState(!!c.json_mode);
@@ -89,7 +88,6 @@ const ModelConfigForm = ({
         dim: model.kind === 'embedding' && dim ? Number(dim) : undefined,
         enabled,
         upstream_name: upstreamName.trim(),
-        upstream_group: upstreamGroup.trim(),
         capabilities: isChat ? capabilities : undefined,
       });
     },
@@ -192,18 +190,6 @@ const ModelConfigForm = ({
           <p className="text-[10.5px] leading-snug text-stone-500">
             经网关(new-api)时打给上游的模型名；留空用 code「{model.code}」
           </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[12px] font-medium text-stone-700">
-            网关分组 (upstream_group)
-          </label>
-          <Input
-            value={upstreamGroup}
-            onChange={e => setUpstreamGroup(e.target.value)}
-            placeholder="留空 = 默认组"
-            className="font-mono"
-          />
         </div>
 
         {model.kind === 'chat' && (

@@ -41,7 +41,6 @@ class LLMModel(Base, TimestampMixin, SoftDeleteMixin):
     # ── new-api 网关收口：逻辑模型(code) 与 上游模型名 解耦 ──
     # upstream_name 为 NULL 时工厂回退用 code（向后兼容）
     upstream_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    upstream_group: Mapped[str | None] = mapped_column(String(64), nullable=True)
     capabilities: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     __table_args__ = (

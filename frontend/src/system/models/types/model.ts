@@ -16,7 +16,6 @@ export interface ModelItem {
   dim: number | null;
   defaults: Record<string, unknown> | null;
   upstream_name: string | null;
-  upstream_group: string | null;
   capabilities: ModelCapabilities | null;
   enabled: boolean;
   created_at: string;
@@ -30,6 +29,5 @@ export interface CreateModelRequest {
   dim?: number;
   defaults?: Record<string, unknown>;
   upstream_name?: string;
-  upstream_group?: string;
   capabilities?: ModelCapabilities;
 }

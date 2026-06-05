@@ -31,7 +31,6 @@ export const modelApi = {
       defaults?: Record<string, unknown>;
       enabled?: boolean;
       upstream_name?: string;
-      upstream_group?: string;
       capabilities?: ModelCapabilities;
     },
   ) => post<ModelItem>(`/v1/admin/models/${id}/update`, req),
