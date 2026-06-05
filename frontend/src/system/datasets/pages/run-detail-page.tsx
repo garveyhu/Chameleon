@@ -83,8 +83,9 @@ export const RunDetailPage = () => {
   return (
     <div className="flex h-[calc(100vh-130px)] flex-col gap-3">
       <header className="flex items-center gap-2">
+        {/* 运行详情从数据集「运行」tab 进入，面包屑回到运行 tab（?tab=runs）而非默认样本 tab。 */}
         <Link
-          to={`/datasets/${dsId}`}
+          to={`/datasets/${dsId}?tab=runs`}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12.5px] text-stone-500 hover:bg-stone-100 hover:text-stone-800"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> {dsQ.data?.name ?? '数据集'}
