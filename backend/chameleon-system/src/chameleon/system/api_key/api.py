@@ -35,6 +35,8 @@ async def list_api_keys(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     include_revoked: bool = Query(False),
+    q: str | None = Query(None, description="模糊搜索：名称 / 来源标签 / 目标"),
+    scope_type: str | None = Query(None, description="作用域过滤：app / kb / global"),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("api_keys:read")),
 ) -> Result[PageResult[ApiKeyItem]]:
@@ -42,6 +44,8 @@ async def list_api_keys(
         session,
         PageParams(page=page, page_size=page_size),
         include_revoked=include_revoked,
+        q=q,
+        scope_type=scope_type,
     )
     return Result.ok(result)
 

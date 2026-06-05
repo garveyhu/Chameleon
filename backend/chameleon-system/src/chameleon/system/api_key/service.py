@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
@@ -83,10 +83,23 @@ async def list_api_keys(
     page: PageParams,
     *,
     include_revoked: bool = False,
+    q: str | None = None,
+    scope_type: str | None = None,
 ) -> PageResult[ApiKeyItem]:
     stmt = select(ApiKey)
     if not include_revoked:
         stmt = stmt.where(ApiKey.revoked_at.is_(None))
+    if scope_type:
+        stmt = stmt.where(ApiKey.scope_type == scope_type)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                ApiKey.name.ilike(like),
+                ApiKey.app_id.ilike(like),
+                ApiKey.scope_ref.ilike(like),
+            )
+        )
 
     total = (
         await session.execute(select(func.count()).select_from(stmt.subquery()))
@@ -95,7 +108,10 @@ async def list_api_keys(
     rows = (
         (
             await session.execute(
-                stmt.order_by(ApiKey.created_at.desc())
+                stmt.order_by(
+                    ApiKey.last_used_at.desc().nullslast(),
+                    ApiKey.created_at.desc(),
+                )
                 .offset(page.offset)
                 .limit(page.limit)
             )

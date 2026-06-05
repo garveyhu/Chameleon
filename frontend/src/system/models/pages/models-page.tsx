@@ -237,10 +237,10 @@ const CreateModelModal = ({
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Provider</Label>
+            <Label>供应商</Label>
             <Select value={providerId} onValueChange={setProviderId}>
               <SelectTrigger>
-                <SelectValue placeholder="选择 provider" />
+                <SelectValue placeholder="选择供应商" />
               </SelectTrigger>
               <SelectContent>
                 {providers.map(p => (
@@ -252,24 +252,24 @@ const CreateModelModal = ({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>模型 code</Label>
+            <Label>模型标识 (code)</Label>
             <Input value={code} onChange={e => setCode(e.target.value)} placeholder="qwen-plus" />
           </div>
           <div className="space-y-1.5">
-            <Label>kind</Label>
+            <Label>类型</Label>
             <Select value={kind} onValueChange={v => setKind(v as 'chat' | 'embedding')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="chat">chat（LLM）</SelectItem>
-                <SelectItem value="embedding">embedding</SelectItem>
+                <SelectItem value="chat">对话 (chat)</SelectItem>
+                <SelectItem value="embedding">向量 (embedding)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {kind === 'embedding' && (
             <div className="space-y-1.5">
-              <Label>维度</Label>
+              <Label>向量维度</Label>
               <Input
                 type="number"
                 value={dim}
