@@ -142,7 +142,7 @@ const ModelConfigForm = ({
               hint="单次回复最大 token，0 = 不限"
             />
           </>
-        ) : (
+        ) : model.kind === 'embedding' ? (
           <>
             <div className="space-y-1.5">
               <label className="text-[12px] font-medium text-stone-700">
@@ -175,7 +175,7 @@ const ModelConfigForm = ({
               </p>
             </div>
           </>
-        )}
+        ) : null}
 
         <div className="space-y-1.5">
           <label className="text-[12px] font-medium text-stone-700">

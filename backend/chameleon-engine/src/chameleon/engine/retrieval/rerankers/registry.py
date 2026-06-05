@@ -78,6 +78,17 @@ def build_reranker(
         )
         return make_client_reranker(client, keep_top_k=top_n)
 
+    if rtype in ("registry", "model"):
+        # 走 model_def 注册的 rerank 模型：base_url/key/上游名由工厂按网关模式解析，
+        # 不在 KB config 里写死。client 鸭子兼容 RerankScore（.index/.score）。
+        model = config.get("model")
+        if not model:
+            raise ValueError("reranker type=registry 需要 model（rerank 模型 code）")
+        from chameleon.integrations.rerank import get_reranker
+
+        client = get_reranker(model)
+        return make_client_reranker(client, keep_top_k=top_n)
+
     if rtype == "local_dedupe":
         threshold = float(config.get("dedupe_threshold") or 0.85)
         return make_dedupe_reranker(dedupe_threshold=threshold)

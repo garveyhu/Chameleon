@@ -74,6 +74,19 @@ def embedding(name: str | None = None):
     return get_embedding_client(name)
 
 
+# ── Reranker ────────────────────────────────────────────
+
+
+def rerank(name: str | None = None):
+    """获取 rerank 客户端（DB 驱动 + 网关，与 llm/embedding 同口径）
+
+    name=None → 用默认 rerank 模型。返回的 client 有 `.rerank(query, documents, top_n)`。
+    """
+    from chameleon.integrations.rerank.factory import get_reranker
+
+    return get_reranker(name)
+
+
 # ── Vector Store ────────────────────────────────────────
 
 

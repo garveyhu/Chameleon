@@ -17,6 +17,7 @@ from chameleon.integrations.components.inventory import (
     embedding,
     llm,
     llm_by_name,
+    rerank,
     search_kb,
     vector,
 )
@@ -26,6 +27,7 @@ __all__ = [
     "embedding",
     "llm",
     "llm_by_name",
+    "rerank",
     "search_kb",
     "vector",
 ]

@@ -128,10 +128,14 @@ async def _seed_models(
     inserted = 0
 
     for kind, items in models.items():
-        if kind not in ("llm", "embedding"):
+        if kind not in ("llm", "embedding", "rerank"):
             logger.warning("seed: 未知 model kind '{}' 跳过", kind)
             continue
-        normalized_kind = "chat" if kind == "llm" else "embedding"
+        normalized_kind = {
+            "llm": "chat",
+            "embedding": "embedding",
+            "rerank": "rerank",
+        }[kind]
 
         for item in items:
             code = item.get("name")

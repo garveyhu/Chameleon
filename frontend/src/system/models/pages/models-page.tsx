@@ -208,14 +208,14 @@ const CreateModelModal = ({
   onSubmit: (req: {
     provider_id: EntityId;
     code: string;
-    kind: 'chat' | 'embedding';
+    kind: 'chat' | 'embedding' | 'rerank';
     dim?: number;
   }) => void;
   loading: boolean;
 }) => {
   const [providerId, setProviderId] = useState<string>('');
   const [code, setCode] = useState('');
-  const [kind, setKind] = useState<'chat' | 'embedding'>('chat');
+  const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank'>('chat');
   const [dim, setDim] = useState<string>('');
 
   return (
@@ -257,13 +257,14 @@ const CreateModelModal = ({
           </div>
           <div className="space-y-1.5">
             <Label>类型</Label>
-            <Select value={kind} onValueChange={v => setKind(v as 'chat' | 'embedding')}>
+            <Select value={kind} onValueChange={v => setKind(v as 'chat' | 'embedding' | 'rerank')}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="chat">对话 (chat)</SelectItem>
                 <SelectItem value="embedding">向量 (embedding)</SelectItem>
+                <SelectItem value="rerank">重排 (rerank)</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -24,6 +24,7 @@ from chameleon.integrations.embedding.factory import reload_embedding_cache
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import reload_llm_cache, resolve_upstream
+from chameleon.integrations.rerank.factory import reload_rerank_cache
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
@@ -166,6 +167,7 @@ async def create_model(
     item = _to_item(m, provider.code)
     await reload_llm_cache()
     await reload_embedding_cache()
+    await reload_rerank_cache()
     return Result.ok(item)
 
 
@@ -218,6 +220,7 @@ async def update_model(
     item = _to_item(m)
     await reload_llm_cache()
     await reload_embedding_cache()
+    await reload_rerank_cache()
     return Result.ok(item)
 
 
@@ -356,4 +359,5 @@ async def delete_model(
     await session.commit()
     await reload_llm_cache()
     await reload_embedding_cache()
+    await reload_rerank_cache()
     return Result.ok(None)
