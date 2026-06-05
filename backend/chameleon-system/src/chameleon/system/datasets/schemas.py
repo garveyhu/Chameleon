@@ -195,6 +195,10 @@ class DatasetRunRequest(BaseModel):
     eval_template_id: int | None = None
     # A3：被测对象设为 agent（含 graph 编排的）；设了则整条工作流当被测，忽略 model_override
     agent_key: str | None = Field(default=None, max_length=64)
+    # 可选「归属 Key」：把本次评测的 token/成本/trace 计到该 API Key 名下单独统计。
+    # 评测本是后台内部流量、不经 Key，传入仅用于归属盖章（前端按雪花精度以字符串传，
+    # Pydantic 自动转 int，服务端无精度问题）。
+    api_key_id: int | None = None
 
 
 class DatasetRunItemRow(BaseModel):

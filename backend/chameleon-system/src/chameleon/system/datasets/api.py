@@ -319,6 +319,7 @@ async def run_dataset(
         judge_config=req.judge_config,
         eval_template_id=req.eval_template_id,
         agent_key=req.agent_key,
+        api_key_id=req.api_key_id,
     )
     return Result.ok(DatasetRunDetail.model_validate(run))
 

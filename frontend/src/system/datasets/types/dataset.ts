@@ -115,6 +115,8 @@ export interface CreateDatasetRunRequest {
   eval_template_id?: EntityId;
   model_override?: string;
   agent_key?: string;
+  /** 可选「归属 Key」：评测 token/成本/trace 计到该 Key 名下。雪花 id 以字符串传，禁 Number()。 */
+  api_key_id?: EntityId;
 }
 
 export interface DatasetRunItemRow {

@@ -98,6 +98,8 @@ export const NewEvaluationWizard = ({
   const [targetKind, setTargetKind] = useState<TargetKind>('model');
   const [modelOverride, setModelOverride] = useState('');
   const [agentKey, setAgentKey] = useState('');
+  // 归属 Key（雪花 id 以字符串存，'' = 不归属/内部评测）
+  const [apiKeyId, setApiKeyId] = useState('');
   // 定时专属
   const [jobKey, setJobKey] = useState('');
   const [cronPreset, setCronPreset] = useState('0 9 * * *');
@@ -112,6 +114,18 @@ export const NewEvaluationWizard = ({
     enabled: !lockDataset,
     staleTime: 30_000,
   });
+
+  // 归属 Key 候选：评测本不经 Key，仅作 token/成本/trace 的归属盖章用
+  const keysQ = useQuery({
+    queryKey: ['new-eval:api-keys'],
+    queryFn: () =>
+      get<PageResult<{ id: EntityId; name: string; key_prefix: string }>>(
+        '/v1/admin/api-keys',
+        { params: { page_size: 200 } },
+      ),
+    staleTime: 30_000,
+  });
+  const keyOptions = keysQ.data?.items ?? [];
 
   const runMut = useMutation({
     mutationFn: (req: CreateDatasetRunRequest) =>
@@ -163,6 +177,7 @@ export const NewEvaluationWizard = ({
         model_override:
           targetKind === 'model' ? modelOverride || undefined : undefined,
         agent_key: targetKind === 'agent' ? agentKey || undefined : undefined,
+        api_key_id: apiKeyId || undefined,
       };
       runMut.mutate(req);
     } else {
@@ -261,6 +276,36 @@ export const NewEvaluationWizard = ({
               )}
             </div>
           </div>
+
+          {runMode === 'now' && (
+            <div className="space-y-1.5">
+              <Label>归属 Key（可选）</Label>
+              <Select
+                value={apiKeyId || 'none'}
+                onValueChange={v => setApiKeyId(v === 'none' ? '' : v)}
+              >
+                <SelectTrigger className="w-[300px]">
+                  <SelectValue placeholder="不归属 · 内部评测" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">不归属 · 内部评测</SelectItem>
+                  {keyOptions.map(k => (
+                    <SelectItem key={String(k.id)} value={String(k.id)}>
+                      {k.name}
+                      <span className="ml-1.5 font-mono text-[10px] text-stone-400">
+                        {k.key_prefix}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10.5px] leading-snug text-stone-400">
+                评测本是内部流量、不经 Key。选一个后，本次评测的 token / 成本 / trace
+                会计到该 Key 名下，Trace 列表的「Key / 来源」显示其名，便于按 Key
+                单独统计评测花销。
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label>执行方式</Label>

@@ -71,8 +71,14 @@ async def run_dataset(
     judge_config: dict[str, Any] | None = None,
     eval_template_id: int | None = None,
     agent_key: str | None = None,
+    api_key_id: int | None = None,
 ) -> DatasetRun:
-    """跑一次 dataset，持久化结果"""
+    """跑一次 dataset，持久化结果。
+
+    api_key_id：可选「归属 Key」。评测本是后台内部流量、不经 API Key，但用户常希望把
+    评测的 token/成本/trace 计到某个专用 Key 名下单独统计——传入则写进每条 item 的
+    TraceContext + eval 根行，Trace 列表据此 join 出真实 Key 名。
+    """
     if judge not in JUDGES:
         raise BusinessError(
             ResultCode.Fail,
@@ -134,6 +140,7 @@ async def run_dataset(
                 channel=Channel.EVAL.value,
                 app_id=EVAL_APP_ID,
                 agent_key=agent_key,
+                api_key_id=api_key_id,
                 session_id=f"eval-run-{run_id}",
             )
         )
@@ -203,6 +210,7 @@ async def run_dataset(
             request_id=request_id,
             run_id=run_id,
             agent_key=agent_key,
+            api_key_id=api_key_id,
             success=item_ok,
             duration_ms=dur_ms,
             input_payload=item.input_payload,
@@ -286,6 +294,7 @@ async def _record_eval_trace_root(
     request_id: str,
     run_id: int,
     agent_key: str | None,
+    api_key_id: int | None,
     success: bool,
     duration_ms: int,
     input_payload: dict[str, Any],
@@ -309,6 +318,7 @@ async def _record_eval_trace_root(
             request_id=request_id,
             app_id=EVAL_APP_ID,
             agent_key=agent_key or "eval",
+            api_key_id=api_key_id,
             session_id=f"eval-run-{run_id}",
             channel=Channel.EVAL.value,
             stream=False,

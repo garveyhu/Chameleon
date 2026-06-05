@@ -292,13 +292,24 @@ export const SessionLedgerPage = () => {
       header: 'Key / 来源',
       width: 150,
       render: l => {
-        // 评测行无 api_key：优先标注被测智能体，否则回退「评测」标签，不空「—」
+        // 评测行：选了「归属 Key」→ 显示真实 Key 名(如普通行) + 评测小标；
+        // 没选则评测是纯内部流量，显示「内部评测 · 被测 agent」老实标签，不假装是 Key。
         if (isEvalRow(l)) {
+          if (l.api_key_name) {
+            return (
+              <div className="min-w-0">
+                <div className="truncate text-[11.5px] text-stone-700">
+                  {l.api_key_name}
+                </div>
+                <div className="mt-0.5 truncate text-[10px] text-rose-400">
+                  评测 · {l.agent_key || l.app_id}
+                </div>
+              </div>
+            );
+          }
           return (
             <div className="min-w-0">
-              <span className="inline-flex rounded bg-rose-50 px-1.5 py-0.5 text-[10.5px] text-rose-700">
-                评测
-              </span>
+              <span className="text-[11.5px] text-stone-500">内部评测</span>
               <div
                 className="mt-0.5 truncate font-mono text-[10px] text-stone-400"
                 title={l.agent_key || l.app_id}
