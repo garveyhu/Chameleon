@@ -1,20 +1,11 @@
-/** models 管理页 */
+/** models 管理页 —— 按用途分组的现代卡片网格 */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowDownUp, Boxes, Cpu, MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cpu, Plus, SlidersHorizontal, Trash2, Zap } from 'lucide-react';
-
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
-import {
-  DataTable,
-  type DataTableColumn,
-  SectionCard,
-  TablePagination,
-  TableToolbar,
-} from '@/core/components/table';
-import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -33,15 +24,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
-import { Switch } from '@/core/components/ui/switch';
-import { useClientPagination } from '@/core/hooks/use-client-pagination';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { ModelCard } from '@/system/models/components/model-card';
 import { ModelConfigSheet } from '@/system/models/components/model-config-sheet';
 import { TestModelModal } from '@/system/models/components/test-model-modal';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
+
+const GROUPS = [
+  { kind: 'chat', label: '对话模型', icon: MessageSquare },
+  { kind: 'embedding', label: '向量模型', icon: Boxes },
+  { kind: 'rerank', label: '重排模型', icon: ArrowDownUp },
+] as const;
 
 export const ModelsPage = () => {
   const { t } = useTranslation();
@@ -52,7 +48,6 @@ export const ModelsPage = () => {
   const [configModel, setConfigModel] = useState<ModelItem | null>(null);
 
   const listQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
-  const pg = useClientPagination(listQ.data ?? []);
   const providersQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
 
   const createMut = useMutation({
@@ -71,7 +66,6 @@ export const ModelsPage = () => {
       setDelModel(null);
     },
   });
-
   const toggleMut = useMutation({
     mutationFn: (args: { id: EntityId; enabled: boolean }) =>
       modelApi.update(args.id, { enabled: args.enabled }),
@@ -89,137 +83,73 @@ export const ModelsPage = () => {
     onSettled: () => qc.invalidateQueries({ queryKey: ['models'] }),
   });
 
-  const columns: DataTableColumn<ModelItem>[] = [
-    {
-      key: 'code',
-      header: t('table.code'),
-      render: m => (
-        <span className="font-mono text-[12px] font-medium text-stone-900">{m.code}</span>
-      ),
-    },
-    {
-      key: 'provider_code',
-      header: t('table.provider'),
-      width: 120,
-      render: m => <Badge variant="primary">{m.provider_code || '?'}</Badge>,
-    },
-    { key: 'kind', header: t('common.type'), width: 100, render: m => <Badge>{m.kind}</Badge> },
-    {
-      key: 'dim',
-      header: t('table.dim'),
-      width: 80,
-      align: 'right',
-      render: m => <span className="tnum font-mono text-[11.5px]">{m.dim ?? '—'}</span>,
-    },
-    {
-      key: 'defaults',
-      header: t('table.defaults'),
-      render: m => {
-        const d = m.defaults || {};
-        const chips: string[] = [];
-        if (typeof d.temperature === 'number') chips.push(`temp ${d.temperature}`);
-        if (typeof d.top_p === 'number') chips.push(`top_p ${d.top_p}`);
-        if (typeof d.max_tokens === 'number') chips.push(`max ${d.max_tokens}`);
-        return chips.length ? (
-          <div className="flex flex-wrap gap-1">
-            {chips.map(c => (
-              <span
-                key={c}
-                className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[10.5px] text-stone-600"
-              >
-                {c}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <span className="text-[11.5px] text-stone-400">默认</span>
-        );
-      },
-    },
-    {
-      key: 'enabled',
-      header: t('common.enabled'),
-      width: 70,
-      render: m => (
-        <Switch
-          checked={m.enabled}
-          onCheckedChange={c => toggleMut.mutate({ id: m.id, enabled: c })}
-        />
-      ),
-    },
-    {
-      key: 'actions',
-      header: t('common.actions'),
-      align: 'right',
-      width: 184,
-      render: m => (
-        <div className="inline-flex items-center justify-end gap-0.5">
-          <button
-            type="button"
-            title="配置参数"
-            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11.5px] whitespace-nowrap text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setConfigModel(m)}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" /> 配置
-          </button>
-          <button
-            type="button"
-            title={t('common.test')}
-            className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-[11.5px] whitespace-nowrap text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-            onClick={() => setTestModel(m)}
-          >
-            <Zap className="h-3.5 w-3.5" /> {t('common.test')}
-          </button>
-          <button
-            type="button"
-            title="删除"
-            className="shrink-0 rounded p-1 text-stone-600 hover:bg-red-100 hover:text-red-600"
-            onClick={() => setDelModel(m)}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ),
-    },
-  ];
+  const models = listQ.data ?? [];
+  const groups = GROUPS.map(g => ({
+    ...g,
+    items: models.filter(m => m.kind === g.kind),
+  })).filter(g => g.items.length > 0);
 
   return (
-    <div>
-      <SectionCard>
-        <TableToolbar
-          title={t('page.models_title')}
-          extra={
+    <div className="space-y-6">
+      <header className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[16px] font-semibold text-stone-900">
+            {t('page.models_title')}
+          </h1>
+          <p className="mt-0.5 text-[12px] text-stone-500">
+            逻辑模型目录 —— 能力、上游映射与运行参数在此管理
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+        </Button>
+      </header>
+
+      {listQ.isLoading ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[132px] animate-pulse rounded-xl border border-stone-200 bg-stone-50"
+            />
+          ))}
+        </div>
+      ) : models.length === 0 ? (
+        <EmptyState
+          icon={<Cpu strokeWidth={1.5} />}
+          title={t('empty.models')}
+          action={
             <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> {t('common.create')}
             </Button>
           }
         />
-        <DataTable
-          columns={columns}
-          rows={pg.rows}
-          rowKey="id"
-          loading={listQ.isLoading}
-          leftBar={m => (m.enabled ? 'bg-emerald-400' : 'bg-stone-300')}
-          emptyText={
-            <EmptyState
-              icon={<Cpu strokeWidth={1.5} />}
-              title={t('empty.models')}
-              action={
-                <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" /> {t('common.create')}
-                </Button>
-              }
-            />
-          }
-        />
-        <TablePagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          total={pg.total}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-        />
-      </SectionCard>
+      ) : (
+        groups.map(g => (
+          <section key={g.kind} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <g.icon className="h-4 w-4 text-stone-400" strokeWidth={1.75} />
+              <h2 className="text-[13px] font-medium text-stone-700">{g.label}</h2>
+              <span className="rounded-full bg-stone-100 px-1.5 py-0.5 text-[10.5px] font-medium text-stone-500">
+                {g.items.length}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {g.items.map(m => (
+                <ModelCard
+                  key={String(m.id)}
+                  model={m}
+                  onConfig={() => setConfigModel(m)}
+                  onTest={() => setTestModel(m)}
+                  onDelete={() => setDelModel(m)}
+                  onToggle={c => toggleMut.mutate({ id: m.id, enabled: c })}
+                />
+              ))}
+            </div>
+          </section>
+        ))
+      )}
+
       <CreateModelModal
         open={createOpen}
         providers={providersQ.data || []}
