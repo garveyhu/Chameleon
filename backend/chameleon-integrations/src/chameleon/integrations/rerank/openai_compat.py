@@ -62,14 +62,20 @@ class OpenAICompatReranker:
     ) -> list[RerankResult]:
         if not documents:
             return []
+        # DashScope 原生 rerank 不在 /compatible-mode，单独走原生端点 →
+        # 直连 qwen（不引入 new-api）也能用；其余走 OpenAI/Jina/Cohere 兼容 /rerank。
+        if "dashscope.aliyuncs.com" in self.base_url:
+            return await self._rerank_dashscope(query, documents, top_n)
+        return await self._rerank_compat(query, documents, top_n)
+
+    async def _rerank_compat(
+        self, query: str, documents: list[str], top_n: int | None
+    ) -> list[RerankResult]:
         url = (
             self.base_url
             if self.base_url.endswith("/rerank")
             else f"{self.base_url}/rerank"
         )
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
         payload: dict[str, Any] = {
             "model": self.model,
             "query": query,
@@ -79,7 +85,34 @@ class OpenAICompatReranker:
         }
         if top_n:
             payload["top_n"] = top_n
+        data = await self._post(url, payload)
+        return _to_results(data.get("results") or data.get("data") or [])
 
+    async def _rerank_dashscope(
+        self, query: str, documents: list[str], top_n: int | None
+    ) -> list[RerankResult]:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(self.base_url)
+        url = (
+            f"{parsed.scheme}://{parsed.netloc}"
+            "/api/v1/services/rerank/text-rerank/text-rerank"
+        )
+        parameters: dict[str, Any] = {"return_documents": False}
+        if top_n:
+            parameters["top_n"] = top_n
+        payload = {
+            "model": self.model,
+            "input": {"query": query, "documents": documents},
+            "parameters": parameters,
+        }
+        data = await self._post(url, payload)
+        return _to_results((data.get("output") or {}).get("results") or [])
+
+    async def _post(self, url: str, payload: dict[str, Any]) -> Any:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 resp = await client.post(url, headers=headers, json=payload)
@@ -102,13 +135,11 @@ class OpenAICompatReranker:
             raise ProviderInternalError(
                 message=f"rerank http {resp.status_code}: {body}"
             )
+        return resp.json()
 
-        return _parse_rerank_response(resp.json())
 
-
-def _parse_rerank_response(data: Any) -> list[RerankResult]:
-    """容忍 Cohere/Jina（results）与部分服务（data）两种形态。"""
-    items = data.get("results") or data.get("data") or []
+def _to_results(items: list[dict[str, Any]]) -> list[RerankResult]:
+    """归一化 Cohere/Jina（results）/ data / DashScope（output.results）条目。"""
     out: list[RerankResult] = []
     for it in items:
         idx = it.get("index")

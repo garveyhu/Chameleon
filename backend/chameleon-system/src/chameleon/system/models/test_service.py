@@ -28,6 +28,7 @@ from chameleon.data.models import LLMModel, Provider
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import resolve_upstream
+from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
 
 PING_PROMPT = "请用一句话简短自我介绍。"
 DEFAULT_STREAM_MAX_TOKENS = 128
@@ -120,6 +121,32 @@ async def stream_test(
             yield event_end(
                 usage=None, latency_ms=latency_ms, sample=f"dim={real_dim}"
             )
+        elif m.kind == "rerank":
+            reranker = OpenAICompatReranker(
+                base_url=base_url,
+                api_key=api_key,
+                model=upstream_model,
+                model_code=m.code,
+            )
+            results = await reranker.rerank(
+                "什么是机器学习？",
+                ["机器学习是人工智能的一个分支。", "今天天气晴朗，适合出门散步。"],
+            )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            if results:
+                ranking = "、".join(
+                    f"#{r.index}={r.score:.4f}"
+                    for r in sorted(results, key=lambda r: r.score, reverse=True)
+                )
+                top = max(results, key=lambda r: r.score)
+                yield event_delta(
+                    f"重排得分: {ranking}\n命中 #{top.index}（应为机器学习文档）\n"
+                )
+                sample = f"top#{top.index} {top.score:.4f}"
+            else:
+                yield event_delta("(空结果)\n")
+                sample = "(空)"
+            yield event_end(usage=None, latency_ms=latency_ms, sample=sample)
         else:
             yield event_error("UnsupportedKind", f"未支持的 model.kind: {m.kind}")
     except Exception as e:  # noqa: BLE001

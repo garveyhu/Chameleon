@@ -25,6 +25,7 @@ from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import reload_llm_cache, resolve_upstream
 from chameleon.integrations.rerank.factory import reload_rerank_cache
+from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
 from chameleon.system.audit_logs import write_audit_log
 from chameleon.system.audit_logs.context import AuditContext, get_audit_context
 from chameleon.system.auth.dependencies import require_permission
@@ -287,6 +288,22 @@ async def test_model(
             )
             vectors = await client.embed(["hello"])
             sample = f"vector[dim={len(vectors[0])}]"
+        elif m.kind == "rerank":
+            reranker = OpenAICompatReranker(
+                base_url=base_url,
+                api_key=api_key,
+                model=upstream_model,
+                model_code=m.code,
+            )
+            results = await reranker.rerank(
+                "什么是机器学习？",
+                ["机器学习是人工智能的一个分支。", "今天天气晴朗，适合出门散步。"],
+            )
+            if results:
+                top = max(results, key=lambda r: r.score)
+                sample = f"命中 #{top.index} 分数 {round(top.score, 4)}"
+            else:
+                sample = "(空结果)"
         else:
             return Result.ok(
                 TestModelResult(
