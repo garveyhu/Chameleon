@@ -35,7 +35,7 @@ import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-lo
 import { useDatasetItemMutations } from '@/system/datasets/hooks/useDatasetItemMutations';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type { DatasetItemRow, DatasetRunRow } from '@/system/datasets/types/dataset';
-import { exportItems } from '@/system/datasets/utils/dataset-xlsx';
+import { exportItems, exportRuns } from '@/system/datasets/utils/dataset-xlsx';
 
 type Tab = 'items' | 'runs';
 
@@ -363,9 +363,9 @@ export const DatasetDetailPage = () => {
             <span className="text-[15px] font-medium text-stone-900">{dsQ.data.name}</span>
             <span className="text-[11.5px] text-stone-500">· {dsQ.data.item_count} 样本</span>
             <span className="ml-auto" />
-            {/* 样本操作（导出/导入/扩样/采样）只在「样本」tab 显示；「运行」tab 只留
-                新建评估，避免无关按钮干扰。新建评估跨 tab 常驻（数据集的主行动）。 */}
-            {tab === 'items' && (
+            {/* 按 tab 区分头部操作：样本 tab = 样本管理（导出/导入/扩样/采样）；
+                运行 tab = 导出运行 + 新建评估（评估属于运行，在此发起更顺）。 */}
+            {tab === 'items' ? (
               <>
                 <Button
                   size="sm"
@@ -387,10 +387,23 @@ export const DatasetDetailPage = () => {
                   <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
                 </Button>
               </>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={(runsQ.data?.length ?? 0) === 0}
+                  onClick={() =>
+                    void exportRuns(dsQ.data?.name ?? '评测运行', runsQ.data ?? [], 'xlsx')
+                  }
+                >
+                  <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
+                </Button>
+                <Button size="sm" onClick={() => setEvalOpen(true)}>
+                  <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
+                </Button>
+              </>
             )}
-            <Button size="sm" onClick={() => setEvalOpen(true)}>
-              <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
-            </Button>
           </div>
         ) : (
           <span className="text-[12.5px] text-stone-400">未找到</span>

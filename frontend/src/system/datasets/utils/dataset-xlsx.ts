@@ -4,6 +4,7 @@
 import type {
   BulkImportItem,
   DatasetItemRow,
+  DatasetRunRow,
 } from '@/system/datasets/types/dataset';
 
 const TEMPLATE_HEADERS = ['输入', '理想回答', '元数据(JSON)'] as const;
@@ -119,4 +120,55 @@ export const exportItems = async (
   XLSX.utils.book_append_sheet(wb, ws, '样本');
   const safe = datasetName.replace(/[\\/:*?"<>|]/g, '_') || '评测样本';
   XLSX.writeFile(wb, `${safe}.${format}`);
+};
+
+const RUN_HEADERS = [
+  '运行名',
+  '被测对象',
+  '评分器',
+  '状态',
+  '平均分',
+  '通过/总数',
+  '创建时间',
+] as const;
+
+const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+
+/** 运行列表导出为 Excel/CSV —— 运行 tab 的汇总表。 */
+export const exportRuns = async (
+  datasetName: string,
+  runs: DatasetRunRow[],
+  format: 'xlsx' | 'csv' = 'xlsx',
+): Promise<void> => {
+  const XLSX = await loadXLSX();
+  const aoa: (string | number)[][] = [[...RUN_HEADERS]];
+  for (const r of runs) {
+    const s = r.summary ?? {};
+    const score = num(s.mean_score ?? s.mean ?? s.avg_score);
+    const ok = num(s.ok ?? s.ok_count ?? s.passed);
+    const total = num(s.total ?? s.count ?? s.item_count);
+    aoa.push([
+      r.name,
+      r.agent_key || r.model_override || '默认模型',
+      r.judge,
+      r.status,
+      score != null ? Number(score.toFixed(4)) : '',
+      ok != null && total != null ? `${ok}/${total}` : '',
+      r.created_at,
+    ]);
+  }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [
+    { wch: 28 },
+    { wch: 20 },
+    { wch: 14 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 20 },
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '运行');
+  const safe = datasetName.replace(/[\\/:*?"<>|]/g, '_') || '评测运行';
+  XLSX.writeFile(wb, `${safe}-运行.${format}`);
 };
