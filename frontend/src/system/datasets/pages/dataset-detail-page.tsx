@@ -363,23 +363,31 @@ export const DatasetDetailPage = () => {
             <span className="text-[15px] font-medium text-stone-900">{dsQ.data.name}</span>
             <span className="text-[11.5px] text-stone-500">· {dsQ.data.item_count} 样本</span>
             <span className="ml-auto" />
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={items.length === 0}
-              onClick={() => void exportItems(dsQ.data?.name ?? '评测样本', items, 'xlsx')}
-            >
-              <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
-              <Upload className="mr-1 h-3.5 w-3.5" /> 手工导入
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setAiGenOpen(true)}>
-              <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
-            </Button>
-            <Button size="sm" variant="secondary" onClick={() => setSampleOpen(true)}>
-              <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
-            </Button>
+            {/* 样本操作（导出/导入/扩样/采样）只在「样本」tab 显示；「运行」tab 只留
+                新建评估，避免无关按钮干扰。新建评估跨 tab 常驻（数据集的主行动）。 */}
+            {tab === 'items' && (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={items.length === 0}
+                  onClick={() =>
+                    void exportItems(dsQ.data?.name ?? '评测样本', items, 'xlsx')
+                  }
+                >
+                  <FileSpreadsheet className="mr-1 h-3.5 w-3.5" /> 导出
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setImportOpen(true)}>
+                  <Upload className="mr-1 h-3.5 w-3.5" /> 手工导入
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setAiGenOpen(true)}>
+                  <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setSampleOpen(true)}>
+                  <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
+                </Button>
+              </>
+            )}
             <Button size="sm" onClick={() => setEvalOpen(true)}>
               <Play className="mr-1 h-3.5 w-3.5" /> 新建评估
             </Button>
