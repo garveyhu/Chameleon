@@ -188,15 +188,38 @@ export interface CreateItemRequest {
   pii_strategy?: PiiStrategy;
 }
 
-/** H2：AI 扩样 —— 任务描述 + 生成数量 */
-export interface AiGenerateRequest {
-  task_description: string;
-  count?: number;
+/** 流式 AI 扩样：候选评审区的单条候选（本地态）。
+ *  cid 为前端自增派生的稳定渲染键（非雪花 id）。 */
+export interface AiGenCandidate {
+  cid: string;
+  user_input: string;
+  answer: string;
+  selected: boolean;
 }
 
-export interface AiGenerateResult {
-  dataset_id: EntityId;
-  added: number;
+/** SSE 流式扩样 chunk：delta 累加原文 / candidate 落卡片 / done 收尾 / error 兜底。 */
+export interface AiGenStreamChunk {
+  type: 'delta' | 'candidate' | 'done' | 'error';
+  data: unknown;
+}
+
+/** 单条 AI 优化 / 重新生成入参。
+ *  optimize：在原候选基础上按 instruction 改写；
+ *  regenerate：按 task_description 另起一条同主题不同候选。 */
+export interface RefineCandidateRequest {
+  task_description: string;
+  candidate: {
+    user_input: string;
+    answer: string;
+  };
+  instruction?: string;
+  mode: 'optimize' | 'regenerate';
+}
+
+/** refine 端点返回的单条候选（answer 可空，后端 str | None）。 */
+export interface RefinedCandidate {
+  user_input: string;
+  answer: string | null;
 }
 
 /** H3：智能优化产出 —— 重写 prompt + 报告 + 前后对比 */

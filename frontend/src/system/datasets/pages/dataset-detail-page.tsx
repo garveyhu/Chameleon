@@ -24,7 +24,7 @@ import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
 import type { EntityId } from '@/core/types/api';
-import { AiGenerateModal } from '@/system/datasets/components/ai-generate-modal';
+import { AiGenerateStudio } from '@/system/datasets/components/ai-generate-studio';
 import { BulkImportModal } from '@/system/datasets/components/bulk-import-modal';
 import { DatasetItemEditorDrawer } from '@/system/datasets/components/dataset-item-editor-drawer';
 import { DatasetItemsSelectionBar } from '@/system/datasets/components/dataset-items-selection-bar';
@@ -551,13 +551,10 @@ export const DatasetDetailPage = () => {
         />
       )}
       {aiGenOpen && (
-        <AiGenerateModal
+        <AiGenerateStudio
           datasetId={dsId}
           onClose={() => setAiGenOpen(false)}
-          onDone={() => {
-            refreshAll();
-            setAiGenOpen(false);
-          }}
+          onDone={refreshAll}
         />
       )}
       {evalOpen && (

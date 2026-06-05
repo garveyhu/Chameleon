@@ -139,16 +139,34 @@ class BulkImportResult(BaseModel):
     dropped_pii: int = 0
 
 
-class AiGenerateRequest(BaseModel):
-    """AI 扩样：任务描述 + 生成数量"""
+class AiGenStreamRequest(BaseModel):
+    """流式 AI 扩样：任务描述 + 生成数量"""
 
     task_description: str = Field(min_length=1, max_length=500)
     count: int = Field(default=5, ge=1, le=50)
 
 
-class AiGenerateResult(BaseModel):
-    dataset_id: int
-    added: int
+class CandidatePayload(BaseModel):
+    """单条候选载荷（流式产出 / 单条优化入参的 candidate 内联）"""
+
+    user_input: str
+    answer: str | None = None
+
+
+class RefineCandidateRequest(BaseModel):
+    """单条 AI 优化 / 重新生成"""
+
+    task_description: str = Field(min_length=1, max_length=500)
+    candidate: CandidatePayload
+    instruction: str | None = Field(default=None, max_length=500)
+    mode: str = Field(pattern="^(optimize|regenerate)$")
+
+
+class RefinedCandidate(BaseModel):
+    """单条优化 / 重新生成产出"""
+
+    user_input: str
+    answer: str | None = None
 
 
 class OptimizeResult(BaseModel):

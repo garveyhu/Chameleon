@@ -1,8 +1,8 @@
 import { get, post } from '@/core/lib/request';
+import { streamSSE } from '@/core/lib/sse';
 import type { EntityId, PageResult } from '@/core/types/api';
 import type {
-  AiGenerateRequest,
-  AiGenerateResult,
+  AiGenStreamChunk,
   BatchDeleteItemsRequest,
   BatchDeleteItemsResult,
   BulkImportRequest,
@@ -17,11 +17,18 @@ import type {
   DatasetRunItemRow,
   DatasetRunRow,
   OptimizeResult,
+  RefineCandidateRequest,
+  RefinedCandidate,
   SampleFromLogsRequest,
   SampleResult,
   ScoreDistributionResult,
   UpdateItemRequest,
 } from '@/system/datasets/types/dataset';
+
+interface AiGenerateStreamOptions {
+  signal?: AbortSignal;
+  onChunk: (chunk: AiGenStreamChunk) => void;
+}
 
 const BASE = '/v1/admin/datasets';
 
@@ -44,9 +51,20 @@ export const datasetApi = {
     post<SampleResult>(`${BASE}/${id}/sample-from-logs`, req),
   bulkImport: (id: EntityId, req: BulkImportRequest) =>
     post<BulkImportResult>(`${BASE}/${id}/items/bulk-import`, req),
-  /** H2：AI 扩样 —— 种子样本 + 任务描述 → LLM 批量生成新样本 */
-  aiGenerate: (id: EntityId, req: AiGenerateRequest) =>
-    post<AiGenerateResult>(`${BASE}/${id}/ai-generate`, req),
+  /** 流式 AI 扩样 —— SSE 边生成边吐字 + 逐条候选；不落库，候选进评审区。 */
+  aiGenerateStream: (
+    id: EntityId,
+    body: { task_description: string; count: number },
+    { signal, onChunk }: AiGenerateStreamOptions,
+  ): Promise<void> =>
+    streamSSE<AiGenStreamChunk>(`${BASE}/${id}/ai-generate/stream`, {
+      body,
+      signal,
+      onChunk,
+    }),
+  /** 单条候选 AI 优化 / 重新生成（非流式，原地替换该卡片）。 */
+  refineCandidate: (id: EntityId, req: RefineCandidateRequest) =>
+    post<RefinedCandidate>(`${BASE}/${id}/ai-generate/refine`, req),
   /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 */
   optimizeRun: (runId: EntityId) => post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
   /** H3：用优化后 Prompt 重跑整个 dataset，落新子 run（版本链） */

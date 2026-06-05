@@ -464,8 +464,9 @@ async def bulk_import_items(
             input_payload=masked_input or {},
             expected_output=masked_expected,
             meta={
+                # 尊重调用方显式来源（如 AI 扩样的 ai_generate），缺省才记手工导入。
+                "source": (raw.meta or {}).get("source", "manual_import"),
                 **(raw.meta or {}),
-                "source": "manual_import",
                 "pii_strategy": pii_strategy,
                 "imported_at": datetime.now(timezone.utc).isoformat(),
             },
