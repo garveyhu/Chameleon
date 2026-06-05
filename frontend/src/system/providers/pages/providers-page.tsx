@@ -210,26 +210,26 @@ const CreateProviderModal = ({
     >
       <ModalContent size="lg">
         <ModalHeader>
-          <ModalTitle>新建 Provider</ModalTitle>
+          <ModalTitle>新建供应商</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
           <div className="space-y-1.5">
-            <Label>code（唯一标识）</Label>
+            <Label>供应商标识 (code)</Label>
             <Input value={code} onChange={e => setCode(e.target.value)} placeholder="qwen" />
           </div>
           <div className="space-y-1.5">
-            <Label>kind</Label>
+            <Label>类型</Label>
             <Select value={kind} onValueChange={v => setKind(v as ProviderItem['kind'])}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="llm">llm</SelectItem>
-                <SelectItem value="embedding">embedding</SelectItem>
-                <SelectItem value="gateway">gateway（new-api 统一网关）</SelectItem>
-                <SelectItem value="dify">dify</SelectItem>
-                <SelectItem value="fastgpt">fastgpt</SelectItem>
-                <SelectItem value="coze">coze</SelectItem>
+                <SelectItem value="llm">对话 (LLM)</SelectItem>
+                <SelectItem value="embedding">向量 (embedding)</SelectItem>
+                <SelectItem value="gateway">网关（new-api 统一）</SelectItem>
+                <SelectItem value="dify">Dify</SelectItem>
+                <SelectItem value="fastgpt">FastGPT</SelectItem>
+                <SelectItem value="coze">Coze</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -238,7 +238,7 @@ const CreateProviderModal = ({
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="通义千问" />
           </div>
           <div className="space-y-1.5">
-            <Label>base_url</Label>
+            <Label>基础地址 (base_url)</Label>
             <Input
               value={baseUrl}
               onChange={e => setBaseUrl(e.target.value)}
