@@ -22,7 +22,7 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.config import inventory
 from chameleon.core.embedding.base import EmbeddingClient
 from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import LLMModel, Provider
+from chameleon.data.models import LLMModel, ModelDefault, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
 
@@ -82,6 +82,18 @@ async def reload_embedding_cache(default_name: str | None = None) -> int:
                     gw_code,
                 )
 
+        # 默认模型：优先 DB model_defaults（卡片设的），回退 model.json cases.embedding
+        default_from_db = (
+            await session.execute(
+                select(LLMModel.code)
+                .join(ModelDefault, ModelDefault.model_id == LLMModel.id)
+                .where(
+                    ModelDefault.case_name == "embedding",
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+
     new_cache: dict[str, EmbeddingClient] = {}
     for model, provider in rows:
         try:
@@ -118,8 +130,12 @@ async def reload_embedding_cache(default_name: str | None = None) -> int:
         _CACHE.update(new_cache)
         if default_name:
             _DEFAULT_NAME = default_name
-        elif _DEFAULT_NAME is None and new_cache:
-            _DEFAULT_NAME = inventory.case_embedding() or next(iter(new_cache), None)
+        elif new_cache:
+            _DEFAULT_NAME = (
+                (default_from_db if default_from_db in new_cache else None)
+                or inventory.case_embedding()
+                or next(iter(new_cache), None)
+            )
 
     logger.info(
         "embedding cache reloaded: {} models, default={}",

@@ -21,7 +21,7 @@ export interface SystemSettingsResponse {
 }
 
 export interface ModelDefaultItem {
-  case_name: 'llm' | 'embedding' | 'vision';
+  case_name: 'llm' | 'embedding' | 'vision' | 'rerank';
   model_id: EntityId | null;
   model_code: string | null;
   model_kind: string | null;

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.config import inventory
 from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import LLMModel, Provider
+from chameleon.data.models import LLMModel, ModelDefault, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
 from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
 
@@ -72,6 +72,18 @@ async def reload_rerank_cache(default_name: str | None = None) -> int:
                     gw_code,
                 )
 
+        # 默认模型：优先 DB model_defaults（卡片设的）；rerank 无 model.json case 兜底
+        default_from_db = (
+            await session.execute(
+                select(LLMModel.code)
+                .join(ModelDefault, ModelDefault.model_id == LLMModel.id)
+                .where(
+                    ModelDefault.case_name == "rerank",
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+
     new_cache: dict[str, OpenAICompatReranker] = {}
     for model, provider in rows:
         try:
@@ -98,8 +110,10 @@ async def reload_rerank_cache(default_name: str | None = None) -> int:
         _CACHE.update(new_cache)
         if default_name:
             _DEFAULT_NAME = default_name
-        elif _DEFAULT_NAME is None and new_cache:
-            _DEFAULT_NAME = next(iter(new_cache), None)
+        elif new_cache:
+            _DEFAULT_NAME = (
+                default_from_db if default_from_db in new_cache else None
+            ) or next(iter(new_cache), None)
 
     logger.info(
         "rerank cache reloaded: {} models, default={}", len(new_cache), _DEFAULT_NAME

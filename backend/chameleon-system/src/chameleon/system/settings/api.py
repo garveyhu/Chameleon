@@ -25,6 +25,9 @@ from chameleon.core.config.system_settings_schema import (
 )
 from chameleon.data.infra.db import get_session
 from chameleon.data.models import LLMModel, ModelDefault, Setting
+from chameleon.integrations.embedding.factory import reload_embedding_cache
+from chameleon.integrations.llms.factory import reload_llm_cache
+from chameleon.integrations.rerank.factory import reload_rerank_cache
 from chameleon.system.auth.dependencies import (
     CurrentUser,
     require_permission,
@@ -294,7 +297,7 @@ async def update_model_default(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("settings:write")),
 ) -> Result[ModelDefaultItem]:
-    if case_name not in ("llm", "embedding", "vision"):
+    if case_name not in ("llm", "embedding", "vision", "rerank"):
         raise ValidationError(message=f"未知 case_name: {case_name}")
     model_code: str | None = None
     model_kind: str | None = None
@@ -310,6 +313,16 @@ async def update_model_default(
             )
         model_code = m.code
         model_kind = m.kind
+        expected_kind = {
+            "llm": "chat",
+            "embedding": "embedding",
+            "rerank": "rerank",
+            "vision": "chat",
+        }[case_name]
+        if model_kind != expected_kind:
+            raise ValidationError(
+                message=f"默认 {case_name} 需 {expected_kind} 类型模型，实际为 {model_kind}"
+            )
 
     existing = (
         await session.execute(
@@ -322,6 +335,14 @@ async def update_model_default(
         existing.model_id = req.model_id
     await session.commit()
     logger.info("model_default updated: {} = {}", case_name, req.model_id)
+    # 让工厂默认即时生效（卡片设默认 → 工厂从 model_defaults 读）
+    reloaders = {
+        "llm": reload_llm_cache,
+        "embedding": reload_embedding_cache,
+        "rerank": reload_rerank_cache,
+    }
+    if case_name in reloaders:
+        await reloaders[case_name]()
     return Result.ok(
         ModelDefaultItem(
             case_name=case_name,

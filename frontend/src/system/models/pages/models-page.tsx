@@ -33,12 +33,20 @@ import { TestModelModal } from '@/system/models/components/test-model-modal';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
+import { settingsApi } from '@/system/settings/services/settings';
 
 const GROUPS = [
   { kind: 'chat', label: '对话模型', icon: MessageSquare },
   { kind: 'embedding', label: '向量模型', icon: Boxes },
   { kind: 'rerank', label: '重排模型', icon: ArrowDownUp },
 ] as const;
+
+// 卡片「设为默认」按 kind 写对应 model_defaults case
+const KIND_TO_CASE: Record<string, string> = {
+  chat: 'llm',
+  embedding: 'embedding',
+  rerank: 'rerank',
+};
 
 export const ModelsPage = () => {
   const { t } = useTranslation();
@@ -50,6 +58,10 @@ export const ModelsPage = () => {
 
   const listQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
   const providersQ = useQuery({ queryKey: ['providers'], queryFn: providerApi.list });
+  const defaultsQ = useQuery({
+    queryKey: ['model-defaults'],
+    queryFn: settingsApi.listModelDefaults,
+  });
 
   const createMut = useMutation({
     mutationFn: modelApi.create,
@@ -83,8 +95,22 @@ export const ModelsPage = () => {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['models'] }),
   });
+  const setDefaultMut = useMutation({
+    mutationFn: (m: ModelItem) =>
+      settingsApi.updateModelDefault(KIND_TO_CASE[m.kind], m.id),
+    onSuccess: () => {
+      toast.success('已设为默认');
+      qc.invalidateQueries({ queryKey: ['model-defaults'] });
+      qc.invalidateQueries({ queryKey: ['models'] });
+    },
+  });
 
   const models = listQ.data ?? [];
+  const defaultIds = new Set(
+    (defaultsQ.data ?? [])
+      .filter(d => d.model_id != null)
+      .map(d => String(d.model_id)),
+  );
   const groups = GROUPS.map(g => ({
     ...g,
     items: models.filter(m => m.kind === g.kind),
@@ -162,10 +188,12 @@ export const ModelsPage = () => {
                 <ModelCard
                   key={String(m.id)}
                   model={m}
+                  isDefault={defaultIds.has(String(m.id))}
                   onConfig={() => setConfigModel(m)}
                   onTest={() => setTestModel(m)}
                   onDelete={() => setDelModel(m)}
                   onToggle={c => toggleMut.mutate({ id: m.id, enabled: c })}
+                  onSetDefault={() => setDefaultMut.mutate(m)}
                 />
               ))}
             </div>

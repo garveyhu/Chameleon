@@ -9,6 +9,7 @@ import {
   Braces,
   Eye,
   SlidersHorizontal,
+  Star,
   Trash2,
   Wrench,
   Zap,
@@ -22,10 +23,12 @@ import type { ModelItem } from '@/system/models/types/model';
 
 interface Props {
   model: ModelItem;
+  isDefault: boolean;
   onConfig: () => void;
   onTest: () => void;
   onDelete: () => void;
   onToggle: (enabled: boolean) => void;
+  onSetDefault: () => void;
 }
 
 const CHIP_TONE = {
@@ -77,7 +80,15 @@ const ActionBtn = ({
   </button>
 );
 
-export const ModelCard = ({ model, onConfig, onTest, onDelete, onToggle }: Props) => {
+export const ModelCard = ({
+  model,
+  isDefault,
+  onConfig,
+  onTest,
+  onDelete,
+  onToggle,
+  onSetDefault,
+}: Props) => {
   const orphan = (model.provider_code || '').startsWith('__deleted');
   const caps = model.capabilities || {};
   const d = model.defaults || {};
@@ -119,6 +130,11 @@ export const ModelCard = ({ model, onConfig, onTest, onDelete, onToggle }: Props
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
+        {isDefault && (
+          <Chip tone="primary" icon={Star}>
+            默认
+          </Chip>
+        )}
         {model.kind === 'chat' && typeof caps.context_window === 'number' && (
           <Chip tone="primary">{fmtCtx(caps.context_window)} ctx</Chip>
         )}
@@ -146,6 +162,9 @@ export const ModelCard = ({ model, onConfig, onTest, onDelete, onToggle }: Props
         <div className="flex items-center gap-0.5">
           <ActionBtn icon={SlidersHorizontal} label="配置" onClick={onConfig} />
           <ActionBtn icon={Zap} label="测试" onClick={onTest} />
+          {!isDefault && model.enabled && (
+            <ActionBtn icon={Star} label="设为默认" onClick={onSetDefault} />
+          )}
         </div>
         <button
           type="button"

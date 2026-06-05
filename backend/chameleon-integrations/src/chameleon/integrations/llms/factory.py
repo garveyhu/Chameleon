@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import LLMModel, Provider
+from chameleon.data.models import LLMModel, ModelDefault, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.observe import GenerationRecorder
@@ -96,6 +96,18 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
                     gw_code,
                 )
 
+        # 默认模型：优先 DB model_defaults（卡片设的），回退 model.json cases.llm
+        default_from_db = (
+            await session.execute(
+                select(LLMModel.code)
+                .join(ModelDefault, ModelDefault.model_id == LLMModel.id)
+                .where(
+                    ModelDefault.case_name == "llm",
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+
     new_cache: dict[str, BaseLLM] = {}
     for model, provider in rows:
         try:
@@ -134,9 +146,13 @@ async def reload_llm_cache(default_name: str | None = None) -> int:
         )
         if default_name:
             _DEFAULT_NAME = default_name
-        elif _DEFAULT_NAME is None and new_cache:
-            # 没显式指定 → 用 inventory.case_llm() 的值（dev 友好）
-            _DEFAULT_NAME = inventory.case_llm() or next(iter(new_cache), None)
+        elif new_cache:
+            # 每次 reload 重算：DB 默认（卡片设）→ model.json cases.llm → 首个
+            _DEFAULT_NAME = (
+                (default_from_db if default_from_db in new_cache else None)
+                or inventory.case_llm()
+                or next(iter(new_cache), None)
+            )
 
     logger.info(
         "LLM cache reloaded: {} models, default={}", len(new_cache), _DEFAULT_NAME

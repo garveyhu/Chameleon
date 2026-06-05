@@ -13,7 +13,6 @@ import {
   Palette,
   Save,
   ShieldCheck,
-  Sparkles,
   Upload,
   Users2,
   Waves,
@@ -44,7 +43,6 @@ import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
 import { getRaw, postForm } from '@/core/lib/request';
 import { toast } from '@/core/lib/toast';
-import { modelApi } from '@/system/models/services/model';
 import { RolesPage } from '@/system/roles/pages/roles-page';
 import { AppearanceTab } from '@/system/settings/components/appearance-tab';
 import { SettingsField } from '@/system/settings/components/settings-field';
@@ -54,7 +52,6 @@ import { UsersPage } from '@/system/users/pages/users-page';
 type SettingGroup = 'general' | 'session' | 'knowledge' | 'stream' | 'timeout' | 'call_log';
 type TabKey =
   | SettingGroup
-  | 'model_defaults'
   | 'export_import'
   | 'appearance'
   | 'users'
@@ -73,7 +70,6 @@ const TABS: TabDef[] = [
   { key: 'stream', label: '流式', icon: <Waves className="h-3.5 w-3.5" /> },
   { key: 'timeout', label: '超时', icon: <Hourglass className="h-3.5 w-3.5" /> },
   { key: 'call_log', label: '调用日志', icon: <FileText className="h-3.5 w-3.5" /> },
-  { key: 'model_defaults', label: '默认模型', icon: <Sparkles className="h-3.5 w-3.5" /> },
   { key: 'appearance', label: '外观', icon: <Palette className="h-3.5 w-3.5" /> },
   { key: 'export_import', label: '导入导出', icon: <Download className="h-3.5 w-3.5" /> },
   { key: 'users', label: '用户管理', icon: <Users2 className="h-3.5 w-3.5" /> },
@@ -111,7 +107,6 @@ export const SettingsPage = () => {
           ) ? (
             <SystemSettingsTab key={activeTab} group={activeTab as SettingGroup} />
           ) : null}
-          {activeTab === 'model_defaults' ? <ModelDefaultsTab /> : null}
           {activeTab === 'appearance' ? <AppearanceTab /> : null}
           {activeTab === 'export_import' ? <ExportImportTab /> : null}
           {activeTab === 'users' ? <UsersPage /> : null}
@@ -263,105 +258,6 @@ const ClientPreferencesBlock = () => {
     </div>
   );
 };
-
-// ── model defaults tab ─────────────────────────────────────────
-
-const ModelDefaultsTab = () => {
-  const qc = useQueryClient();
-  const defaultsQ = useQuery({
-    queryKey: ['model-defaults'],
-    queryFn: settingsApi.listModelDefaults,
-  });
-  const modelsQ = useQuery({ queryKey: ['models'], queryFn: () => modelApi.list() });
-
-  const updateMut = useMutation({
-    mutationFn: (args: { case_name: string; model_id: import('@/core/types/api').EntityId | null }) =>
-      settingsApi.updateModelDefault(args.case_name, args.model_id),
-    onSuccess: () => {
-      toast.success('已更新');
-      qc.invalidateQueries({ queryKey: ['model-defaults'] });
-    },
-  });
-
-  const llmModels = (modelsQ.data || []).filter(m => m.kind === 'chat' && m.enabled);
-  const embeddingModels = (modelsQ.data || []).filter(m => m.kind === 'embedding' && m.enabled);
-
-  const findCurrent = (c: string) =>
-    (defaultsQ.data || []).find(d => d.case_name === c)?.model_id ?? null;
-
-  if (defaultsQ.isLoading || modelsQ.isLoading) {
-    return <div className="text-[12.5px] text-stone-400">加载中...</div>;
-  }
-
-  return (
-    <div>
-      <h3 className="mb-3 text-[14px] font-semibold text-stone-900">默认调用模型</h3>
-      <p className="mb-4 text-[12px] text-stone-500">
-        指定 agent 调用时不显式传 model 时，默认走哪个模型。embedding 影响知识库写入向量；vision 暂未启用。
-      </p>
-      <div className="rounded-lg border border-stone-200/60 bg-paper">
-        <CaseRow
-          label="LLM (chat)"
-          value={findCurrent('llm')}
-          options={llmModels.map(m => ({ id: m.id, name: m.code, provider: m.provider_code }))}
-          onChange={id => updateMut.mutate({ case_name: 'llm', model_id: id })}
-        />
-        <CaseRow
-          label="Embedding"
-          value={findCurrent('embedding')}
-          options={embeddingModels.map(m => ({
-            id: m.id,
-            name: m.code,
-            provider: m.provider_code,
-          }))}
-          onChange={id => updateMut.mutate({ case_name: 'embedding', model_id: id })}
-        />
-        <CaseRow
-          label="Vision（可选）"
-          value={findCurrent('vision')}
-          options={llmModels.map(m => ({ id: m.id, name: m.code, provider: m.provider_code }))}
-          onChange={id => updateMut.mutate({ case_name: 'vision', model_id: id })}
-          allowClear
-        />
-      </div>
-    </div>
-  );
-};
-
-const CaseRow = ({
-  label,
-  value,
-  options,
-  onChange,
-  allowClear,
-}: {
-  label: string;
-  value: import('@/core/types/api').EntityId | null;
-  options: { id: import('@/core/types/api').EntityId; name: string; provider: string | null }[];
-  onChange: (id: import('@/core/types/api').EntityId | null) => void;
-  allowClear?: boolean;
-}) => (
-  <div className="flex items-center justify-between border-b border-stone-100 px-4 py-3 last:border-b-0">
-    <div className="text-[13px] font-medium text-stone-800">{label}</div>
-    <Select
-      value={value === null ? '' : String(value)}
-      onValueChange={v => onChange(v === '__clear__' ? null : Number(v))}
-    >
-      <SelectTrigger className="max-w-[280px]">
-        <SelectValue placeholder="未设置" />
-      </SelectTrigger>
-      <SelectContent>
-        {allowClear ? <SelectItem value="__clear__">未设置</SelectItem> : null}
-        {options.map(o => (
-          <SelectItem key={o.id} value={String(o.id)}>
-            {o.name}
-            {o.provider ? ` · ${o.provider}` : ''}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-);
 
 // ── export / import tab ────────────────────────────────────────
 
