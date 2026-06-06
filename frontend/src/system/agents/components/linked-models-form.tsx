@@ -70,7 +70,7 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
   if (slots.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
-        该智能体未声明模型槽。
+        该应用未声明模型槽。
         <div className="mt-1 text-[11.5px] text-stone-400">
           如需按页面切换模型，请在代码用{' '}
           <code className="font-mono">@agent(models=[ModelSlot(...)])</code> 声明。
@@ -82,13 +82,14 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
   return (
     <div className="space-y-4">
       <div className="text-[12px] text-stone-500">
-        每个模型槽绑定一个已配置模型；留空 = 用槽默认 / 系统默认。运行时{' '}
-        <code className="font-mono">ctx.llm(slot)</code> 按此解析。
+        每个模型槽绑定一个已配置模型；留空时系统自动用槽默认 / 系统默认模型。
       </div>
 
       <div className="space-y-2.5">
         {slots.map(s => {
           const val = effective(s.name, s.bound_code) || UNBOUND;
+          // 只列与槽 kind 匹配的模型（对话槽不列生图/向量模型）
+          const slotModels = models.filter(m => m.kind === s.kind);
           return (
             <div
               key={s.name}
@@ -100,6 +101,9 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
                   {s.label}
                   <span className="font-mono text-[10.5px] font-normal text-stone-400">
                     {s.name}
+                  </span>
+                  <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-normal text-stone-500">
+                    {s.kind}
                   </span>
                   {s.optional && (
                     <span className="text-[10.5px] font-normal text-stone-400">· 可选</span>
@@ -123,16 +127,22 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
                   setEdits(prev => ({ ...prev, [s.name]: v === UNBOUND ? '' : v }))
                 }
               >
-                <SelectTrigger className="w-56">
+                <SelectTrigger className="w-44 shrink-0 sm:w-56">
                   <SelectValue placeholder="用默认" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={UNBOUND}>默认 / 系统默认</SelectItem>
-                  {models.map(m => (
-                    <SelectItem key={m.code} value={m.code} className="font-mono">
-                      {m.label}
-                    </SelectItem>
-                  ))}
+                  {slotModels.length === 0 ? (
+                    <div className="px-2 py-1.5 text-[11.5px] text-stone-400">
+                      无可用 {s.kind} 模型
+                    </div>
+                  ) : (
+                    slotModels.map(m => (
+                      <SelectItem key={m.code} value={m.code} className="font-mono">
+                        {m.label}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>

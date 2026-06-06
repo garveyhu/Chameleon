@@ -72,6 +72,8 @@ export interface LinkedKbItem {
 export interface ModelSlotItem {
   name: string;
   label: string;
+  /** 此槽需要的模型类型，前端按此过滤可选模型 */
+  kind: string;
   optional: boolean;
   locked: boolean;
   default: string | null;
@@ -81,6 +83,7 @@ export interface ModelSlotItem {
 export interface ConfiguredModelItem {
   code: string;
   label: string;
+  kind: string;
 }
 
 export interface AgentModelSlots {
@@ -126,4 +129,7 @@ export interface AgentOverview {
   total_cost_usd: number;
   avg_duration_ms: number;
   prev_total_calls: number;
+  /** 应用类型 —— 前端按此自适应指标（生成类无 token） */
+  agent_source: string;
+  media_kind?: 'image' | 'video' | null;
 }

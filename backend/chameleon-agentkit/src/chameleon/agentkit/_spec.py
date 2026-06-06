@@ -19,6 +19,8 @@ class ModelSlot:
     Attributes:
         name: 槽名，运行时 `ctx.llm("chat")` 的 key。
         label: web "关联模型" tab 展示名。
+        kind: 此槽需要的模型类型（chat/embedding/rerank/image/video），web 据此
+            只列对应 kind 的模型、并校验绑定。默认 chat（向后兼容）。
         default: web 未绑定时兜底的模型 code（须是平台已配置且启用的模型）。
         locked: True 则 web 只读不可改、恒用 default（代码钉死）。
         optional: True 则未配置不报错（用到才校验）。
@@ -26,6 +28,7 @@ class ModelSlot:
 
     name: str
     label: str
+    kind: str = "chat"
     default: str | None = None
     locked: bool = False
     optional: bool = False

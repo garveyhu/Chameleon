@@ -499,6 +499,10 @@ async def update_agent_linked_kbs(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("agents:write")),
 ) -> Result[list[LinkedKbItem]]:
+    # 仅代码应用（local）在此管 KB；graph 在画布配、外部在远端、生成应用无 KB
+    agent = await _get_or_404(session, agent_id)
+    if agent.source != "local":
+        raise ValidationError(message="仅代码应用可在此关联知识库")
     kbs = await agent_kb_service.replace_linked_kbs(
         session, agent_id=agent_id, kb_ids=req.kb_ids
     )
@@ -512,6 +516,7 @@ async def update_agent_linked_kbs(
 class ModelSlotItem(BaseModel):
     name: str
     label: str
+    kind: str = "chat"  # 此槽需要的模型类型；前端据此过滤下拉
     optional: bool = False
     locked: bool = False
     default: str | None = None
@@ -521,11 +526,12 @@ class ModelSlotItem(BaseModel):
 class ConfiguredModelItem(BaseModel):
     code: str
     label: str
+    kind: str  # chat/embedding/rerank/image/video，前端按槽 kind 过滤
 
 
 class AgentModelSlotsResponse(BaseModel):
     slots: list[ModelSlotItem]
-    models: list[ConfiguredModelItem]  # 可选的已配置 chat 模型（下拉用）
+    models: list[ConfiguredModelItem]  # 已配置的启用模型（含 kind，下拉按槽 kind 过滤）
 
 
 class UpdateModelBindingsRequest(BaseModel):
@@ -544,6 +550,7 @@ async def _build_slots_response(
         ModelSlotItem(
             name=s.name,
             label=s.label,
+            kind=getattr(s, "kind", "chat"),
             optional=s.optional,
             locked=s.locked,
             default=s.default,
@@ -551,11 +558,11 @@ async def _build_slots_response(
         )
         for s in (manifest.models if manifest else [])
     ]
+    # 返回全部启用模型（含 kind），前端按槽 kind 过滤下拉
     rows = (
         (
             await session.execute(
                 select(LLMModel).where(
-                    LLMModel.kind == "chat",
                     LLMModel.enabled.is_(True),
                     LLMModel.deleted_at.is_(None),
                 )
@@ -564,7 +571,9 @@ async def _build_slots_response(
         .scalars()
         .all()
     )
-    models = [ConfiguredModelItem(code=m.code, label=m.code) for m in rows]
+    models = [
+        ConfiguredModelItem(code=m.code, label=m.code, kind=m.kind) for m in rows
+    ]
     return AgentModelSlotsResponse(slots=slots, models=models)
 
 
@@ -594,33 +603,40 @@ async def update_agent_model_bindings(
     from chameleon.data.models.model_def import LLMModel
 
     agent = await _get_or_404(session, agent_id)
+    # 仅代码应用（local）有模型槽；graph 在画布配、外部在远端、生成应用绑单一模型
+    if agent.source != "local":
+        raise ValidationError(message="仅代码应用可在此绑定模型槽")
     manifest = declared_agents().get(agent.agent_key)
-    declared = {s.name for s in manifest.models} if manifest else set()
-    locked = {s.name for s in (manifest.models if manifest else []) if s.locked}
-    valid_codes = set(
+    slot_specs = {s.name: s for s in (manifest.models if manifest else [])}
+    locked = {n for n, s in slot_specs.items() if s.locked}
+    # code → kind 映射，绑定时校验「槽 kind == 模型 kind」（对话槽不能误绑生图模型）
+    code_kind = dict(
         (
             await session.execute(
-                select(LLMModel.code).where(
-                    LLMModel.kind == "chat",
+                select(LLMModel.code, LLMModel.kind).where(
                     LLMModel.enabled.is_(True),
                     LLMModel.deleted_at.is_(None),
                 )
             )
-        )
-        .scalars()
-        .all()
+        ).all()
     )
 
     clean: dict[str, str] = {}
     for slot, code in (req.bindings or {}).items():
-        if slot not in declared:
+        spec = slot_specs.get(slot)
+        if spec is None:
             raise ValidationError(message=f"未声明的模型槽: {slot}")
         if slot in locked:
             raise ValidationError(message=f"模型槽 {slot} 已锁定，不可在页面修改")
         if not code:
             continue  # 空 = 解绑（用默认）
-        if code not in valid_codes:
+        if code not in code_kind:
             raise ValidationError(message=f"模型不存在或未启用: {code}")
+        slot_kind = getattr(spec, "kind", "chat")
+        if code_kind[code] != slot_kind:
+            raise ValidationError(
+                message=f"模型槽 {slot} 需要 {slot_kind} 类型模型，{code} 是 {code_kind[code]}"
+            )
         clean[slot] = code
 
     agent.model_bindings = clean
@@ -787,9 +803,12 @@ class AgentOverviewItem(BaseModel):
     total_calls: int
     success_rate: float  # 0~1
     total_tokens: int
-    total_cost_usd: float
+    total_cost_usd: float  # 实际 CNY 元
     avg_duration_ms: float
     prev_total_calls: int  # 上一同长度周期，算 delta
+    # 应用类型 —— 前端按此自适应指标（生成类应用无 token，显示生成数/成本）
+    agent_source: str
+    media_kind: str | None = None  # comfyui 生成应用：image / video
 
 
 @router.get("/{agent_id}/overview", response_model=Result[AgentOverviewItem])
@@ -836,6 +855,15 @@ async def get_agent_overview(
     ).scalar_one()
 
     total = int(row.total or 0)
+    # 生成类应用解析产物模态（image/video），前端据此把「总 Tokens」换成「生成数」
+    media_kind = None
+    if agent.source == "comfyui":
+        from chameleon.data.models.model_def import LLMModel
+
+        mid = (agent.config or {}).get("model_id")
+        if mid:
+            m = await session.get(LLMModel, int(mid))
+            media_kind = m.kind if m else None
     return Result.ok(
         AgentOverviewItem(
             window_hours=hours,
@@ -845,5 +873,7 @@ async def get_agent_overview(
             total_cost_usd=float(row.cost or 0),
             avg_duration_ms=float(row.avg_dur or 0),
             prev_total_calls=int(prev_total or 0),
+            agent_source=agent.source,
+            media_kind=media_kind,
         )
     )
