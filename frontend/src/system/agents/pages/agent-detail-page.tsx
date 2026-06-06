@@ -39,6 +39,7 @@ import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
 import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
+import { modelApi } from '@/system/models/services/model';
 
 type TabKey = 'info' | 'kbs' | 'model' | 'sessions' | 'api' | 'monitor';
 
@@ -176,8 +177,40 @@ const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean 
   );
 };
 
+const GenerationAppInfo = ({ agent }: { agent: AgentItem }) => {
+  const modelId = (agent.config as { model_id?: string | number } | null)?.model_id;
+  const q = useQuery({ queryKey: ['models', 'all'], queryFn: () => modelApi.list() });
+  const model = (q.data ?? []).find(m => String(m.id) === String(modelId));
+  const isVideo = model?.kind === 'video';
+  return (
+    <div className="grid grid-cols-2 gap-3 text-[12.5px]">
+      <div className="col-span-2 rounded-md border border-violet-200 bg-violet-50/60 px-3 py-2.5 text-[12px] text-violet-700">
+        生成类应用：直接调用下方生成模型出{isVideo ? '视频' : '图'}，可在 Playground 关联或经 API 调用。
+      </div>
+      <Kv label="应用标识" value={agent.agent_key} mono />
+      <Kv label="类型" value={isVideo ? '图生视频' : '文生图'} />
+      <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
+      <Kv
+        label="生成模型"
+        value={
+          model
+            ? `${model.code}${model.provider_code ? `（${model.provider_code}）` : ''}`
+            : modelId
+              ? `#${modelId}（模型不存在或未启用）`
+              : '未绑定'
+        }
+        mono
+      />
+      <Kv label="描述" value={agent.description || '—'} full />
+      <Kv label="创建时间" value={formatDateTime(agent.created_at)} mono />
+      <Kv label="更新时间" value={formatDateTime(agent.updated_at)} mono />
+    </div>
+  );
+};
+
 const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
   if (!agent) return <div className="py-12 text-center text-sm text-stone-400">—</div>;
+  if (agent.source === 'comfyui') return <GenerationAppInfo agent={agent} />;
   return (
     <>
       <div className="grid grid-cols-2 gap-3 text-[12.5px]">
