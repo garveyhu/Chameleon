@@ -11,10 +11,13 @@ import { RequireAuth } from '@/core/components/common/permission-guard';
 
 import { EndpointDetail } from '../components/station/endpoint-detail';
 import { ExamplePane } from '../components/station/example-pane';
+import { GuideDetail } from '../components/station/guide-detail';
 import { Sidebar } from '../components/station/sidebar';
 import { StationHeader } from '../components/station/station-header';
 
-const FIRST_ENDPOINT_ID = ALL_ENDPOINTS[0]?.id ?? '';
+// 默认落地到排序后第一个条目（概览指南），而非 glob 顺序的第一个
+const FIRST_ENDPOINT_ID =
+  groupEndpoints(ALL_ENDPOINTS)[0]?.endpoints[0]?.id ?? ALL_ENDPOINTS[0]?.id ?? '';
 
 export const DocsStationPage = () => {
   const [params, setParams] = useSearchParams();
@@ -72,15 +75,17 @@ export const DocsStationPage = () => {
           searchInputRef={searchRef}
         />
         <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto">
-          {endpoint ? (
-            <EndpointDetail endpoint={endpoint} />
-          ) : (
+          {!endpoint ? (
             <div className="flex h-full items-center justify-center text-stone-400">
               该端点不存在
             </div>
+          ) : endpoint.guide ? (
+            <GuideDetail guide={endpoint} />
+          ) : (
+            <EndpointDetail endpoint={endpoint} />
           )}
         </main>
-        {endpoint && <ExamplePane endpoint={endpoint} baseUrl={origin} />}
+        {endpoint && !endpoint.guide && <ExamplePane endpoint={endpoint} baseUrl={origin} />}
       </div>
     </div>
     </RequireAuth>

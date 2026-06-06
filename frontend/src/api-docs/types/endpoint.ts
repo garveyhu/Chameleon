@@ -51,20 +51,27 @@ export interface EndpointSpec {
   group: string;
   /** 端点显示名 */
   title: string;
-  method: 'GET' | 'POST';
-  /** 完整路径（含 /v1 前缀），path param 用 {name} 占位 */
-  path: string;
   /** 一段说明（支持富文本节点） */
   desc: ReactNode;
-  auth: AuthKind;
   /** 排序权重（同组内，小的靠前） */
   order?: number;
+
+  /** 指南页（散文，非端点）：true 时只渲染 title + body，不要 method/path/参数/示例 */
+  guide?: boolean;
+  /** 指南正文（guide=true 时用） */
+  body?: ReactNode;
+
+  // ── 以下为「端点」专有字段（guide 页不需要）──
+  method?: 'GET' | 'POST';
+  /** 完整路径（含 /v1 前缀），path param 用 {name} 占位 */
+  path?: string;
+  auth?: AuthKind;
 
   pathParams?: ParamSpec[];
   queryParams?: ParamSpec[];
   bodyParams?: ParamSpec[];
 
-  responses: ResponseSpec[];
+  responses?: ResponseSpec[];
   /** 完整 cURL 命令字符串（含 {BASE} 占位会被替换为实际 base url） */
-  cURL: string;
+  cURL?: string;
 }

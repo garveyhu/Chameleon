@@ -39,12 +39,12 @@ export const EndpointDetail = ({ endpoint }: Props) => {
 
       {/* Method + Path 行 */}
       <div className="mt-4 flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50/70 px-3 py-2">
-        <MethodPill method={endpoint.method} />
+        <MethodPill method={endpoint.method ?? 'GET'} />
         <code className="min-w-0 flex-1 truncate font-mono text-[13px] text-stone-800">{endpoint.path}</code>
-        <CopyButton text={endpoint.path} />
+        <CopyButton text={endpoint.path ?? ''} />
       </div>
 
-      <AuthBlock auth={endpoint.auth} />
+      {endpoint.auth && <AuthBlock auth={endpoint.auth} />}
 
       {endpoint.pathParams && <ParamTable title="Path 参数" params={endpoint.pathParams} />}
       {endpoint.queryParams && <ParamTable title="Query 参数" params={endpoint.queryParams} />}
@@ -56,7 +56,7 @@ export const EndpointDetail = ({ endpoint }: Props) => {
           响应
         </h3>
         <div className="space-y-2">
-          {endpoint.responses.map((r, i) => (
+          {(endpoint.responses ?? []).map((r, i) => (
             <div
               key={i}
               className="flex items-baseline gap-3 rounded-lg border border-stone-200 bg-white px-3 py-2"

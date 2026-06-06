@@ -22,7 +22,7 @@ const formatExample = (ex: unknown): string => {
 };
 
 export const ExamplePane = ({ endpoint, baseUrl }: Props) => {
-  const curl = endpoint.cURL.replaceAll('{BASE}', baseUrl);
+  const curl = (endpoint.cURL ?? '').replaceAll('{BASE}', baseUrl);
 
   return (
     <aside className="hidden h-full w-[26rem] shrink-0 overflow-y-auto border-l border-stone-200/70 bg-stone-50/50 px-5 py-6 lg:block">
@@ -34,7 +34,7 @@ export const ExamplePane = ({ endpoint, baseUrl }: Props) => {
           <CodeBlock text={curl} label="cURL" />
         </section>
 
-        {endpoint.responses.map((r, i) => {
+        {(endpoint.responses ?? []).map((r, i) => {
           const text = formatExample(r.example);
           if (!text) return null;
           return (

@@ -2,6 +2,7 @@
 import type { GroupMeta } from '@/api-docs/types/endpoint';
 
 export const GROUPS: readonly GroupMeta[] = [
+  { key: 'guide', title: '概览', order: 5 },
   { key: 'invoke', title: '应用调用', order: 10 },
   { key: 'sessions', title: '会话管理', order: 20 },
   { key: 'kb', title: '知识库', order: 30 },

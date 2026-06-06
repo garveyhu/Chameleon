@@ -29,7 +29,7 @@ export const Sidebar = ({ groups, activeId, onSelect, searchInputRef }: Props) =
   const matches = (e: EndpointSpec) => {
     if (!kw) return true;
     if (e.title.toLowerCase().includes(kw)) return true;
-    if (e.path.toLowerCase().includes(kw)) return true;
+    if (e.path?.toLowerCase().includes(kw)) return true;
     if (typeof e.desc === 'string' && e.desc.toLowerCase().includes(kw)) return true;
     return false;
   };
@@ -92,7 +92,13 @@ export const Sidebar = ({ groups, activeId, onSelect, searchInputRef }: Props) =
                               : 'text-stone-700 hover:bg-stone-100/70',
                           )}
                         >
-                          <MethodPill method={e.method} size="sm" />
+                          {e.guide || !e.method ? (
+                            <span className="shrink-0 rounded bg-stone-100 px-1.5 py-0.5 text-[9.5px] font-medium text-stone-500">
+                              指南
+                            </span>
+                          ) : (
+                            <MethodPill method={e.method} size="sm" />
+                          )}
                           <span className="min-w-0 flex-1 truncate">{e.title}</span>
                         </button>
                       </li>

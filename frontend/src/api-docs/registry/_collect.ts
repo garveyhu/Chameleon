@@ -8,7 +8,7 @@ import type { EndpointSpec, GroupMeta } from '@/api-docs/types/endpoint';
 import { getGroup, GROUPS } from './_groups';
 
 const modules = import.meta.glob<{ default: EndpointSpec[] }>(
-  ['./*.ts', '!./_*.ts'],
+  ['./*.ts', './*.tsx', '!./_*.ts'],
   { eager: true },
 );
 
