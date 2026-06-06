@@ -10,6 +10,7 @@ import type { ComponentType } from 'react';
 import {
   Activity,
   Boxes,
+  Coins,
   Database,
   FileText,
   FlaskConical,
@@ -153,6 +154,7 @@ export const DOMAINS: NavDomain[] = [
           { to: '/providers', icon: Globe, i18nKey: 'menu.providers', fallbackTitle: 'Providers', perm: 'providers:read' },
           { to: '/models', icon: Sparkles, i18nKey: 'menu.models', fallbackTitle: '模型', perm: 'models:read' },
           { to: '/api-keys', icon: KeySquare, i18nKey: 'menu.api_keys', fallbackTitle: 'Key', perm: 'api_keys:read' },
+          { to: '/pricing', icon: Coins, i18nKey: 'menu.pricing', fallbackTitle: '计费', perm: 'models:read' },
         ],
       },
       {

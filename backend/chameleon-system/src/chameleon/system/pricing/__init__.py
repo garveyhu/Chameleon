@@ -10,8 +10,11 @@ from chameleon.system.pricing.service import (
     calc_media_cost,
     get_active_media_pricing,
     get_active_pricing,
+    list_model_pricing,
     seed_default_pricing,
     seed_media_pricing,
+    set_media_pricing,
+    set_token_pricing,
 )
 from chameleon.system.pricing.units import PricingUnit, VideoTier
 
@@ -20,6 +23,9 @@ __all__ = [
     "calc_media_cost",
     "get_active_pricing",
     "get_active_media_pricing",
+    "list_model_pricing",
+    "set_token_pricing",
+    "set_media_pricing",
     "seed_default_pricing",
     "seed_media_pricing",
     "PricingUnit",

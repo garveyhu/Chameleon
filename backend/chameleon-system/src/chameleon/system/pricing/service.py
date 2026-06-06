@@ -9,7 +9,7 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.data.models import MediaPricing, ModelPricing
+from chameleon.data.models import LLMModel, MediaPricing, ModelPricing, Provider
 from chameleon.system.pricing.units import PricingUnit, VideoTier
 
 #: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
@@ -170,6 +170,98 @@ async def seed_media_pricing(session: AsyncSession) -> int:
         await session.commit()
         logger.info("media_pricing seeded | count={}", added)
     return added
+
+
+async def list_model_pricing(session: AsyncSession) -> list[dict]:
+    """列出所有模型 + 当前生效价目（admin 价目管理页用）。
+
+    chat/embedding → token 价（prompt/completion per 1k）；image → 每张价；
+    video → 各分辨率档每秒价。币种 CNY。
+    """
+    providers = {
+        p.id: p.code
+        for p in (await session.execute(select(Provider))).scalars().all()
+    }
+    models = (
+        await session.execute(
+            select(LLMModel)
+            .where(LLMModel.deleted_at.is_(None))
+            .order_by(LLMModel.kind, LLMModel.code)
+        )
+    ).scalars().all()
+    out: list[dict] = []
+    for m in models:
+        entry: dict = {
+            "model_code": m.code,
+            "kind": m.kind,
+            "provider_code": providers.get(m.provider_id),
+            "currency": "CNY",
+        }
+        if m.kind in ("chat", "embedding"):
+            tp = await get_active_pricing(session, m.code)
+            entry["prompt_per_1k"] = float(tp.prompt_price_per_1k) if tp else None
+            entry["completion_per_1k"] = (
+                float(tp.completion_price_per_1k) if tp else None
+            )
+        elif m.kind == "image":
+            mp = await get_active_media_pricing(
+                session, m.code, unit=PricingUnit.IMAGE
+            )
+            entry["image_price"] = float(mp.price) if mp else None
+        elif m.kind == "video":
+            tiers = []
+            for tier in (VideoTier.P720, VideoTier.P1080):
+                vp = await get_active_media_pricing(
+                    session, m.code, unit=PricingUnit.VIDEO_SECOND, tier=tier
+                )
+                tiers.append(
+                    {"tier": str(tier), "price": float(vp.price) if vp else None}
+                )
+            entry["video_tiers"] = tiers
+        out.append(entry)
+    return out
+
+
+async def set_token_pricing(
+    session: AsyncSession,
+    *,
+    model_code: str,
+    prompt_per_1k: float,
+    completion_per_1k: float,
+) -> None:
+    """设 token 价目（新增时间版本，不改老行——cost 可重放）。"""
+    session.add(
+        ModelPricing(
+            model_code=model_code,
+            effective_from=datetime.now(timezone.utc),
+            prompt_price_per_1k=Decimal(str(prompt_per_1k)),
+            completion_price_per_1k=Decimal(str(completion_per_1k)),
+            currency="CNY",
+        )
+    )
+    await session.commit()
+
+
+async def set_media_pricing(
+    session: AsyncSession,
+    *,
+    model_code: str,
+    unit: str,
+    price: float,
+    tier: str = "",
+) -> None:
+    """设媒体价目（新增时间版本）。"""
+    session.add(
+        MediaPricing(
+            model_code=model_code,
+            unit=unit,
+            tier=tier or "",
+            price=Decimal(str(price)),
+            currency="CNY",
+            effective_from=datetime.now(timezone.utc),
+        )
+    )
+    await session.commit()
 
 
 async def seed_default_pricing(session: AsyncSession) -> int:

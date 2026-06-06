@@ -62,6 +62,7 @@ from chameleon.system.models import models_router
 from chameleon.system.permissions import permissions_router
 from chameleon.system.playground import playground_router
 from chameleon.system.plugins import plugins_router
+from chameleon.system.pricing.api import router as pricing_router
 from chameleon.system.providers import providers_admin_router
 from chameleon.system.roles import roles_router
 from chameleon.system.schemas import schemas_router
@@ -197,6 +198,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(permissions_router)
     app.include_router(providers_admin_router)
     app.include_router(models_router)
+    app.include_router(pricing_router)
     app.include_router(imagegen_router)
     app.include_router(agents_admin_router)
     app.include_router(kbs_admin_router)
