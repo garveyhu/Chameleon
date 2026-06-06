@@ -1,22 +1,19 @@
-/** 应用详情「会话」tab —— 该应用近期的会话 / 运行
+/** 应用详情「会话」tab —— 该应用的会话列表（ChatSession 维度）。
  *
- * 复用会话账本的数据源（callLogApi.list 按 agent_key 过滤）与徽标。展示近 N 条紧凑列表，
- * 顶部给「在会话账本中查看全部」跳 /sessions?agent_key=X。点行开 TraceDrawer 下钻。
+ * 数据源 callLogApi.listSessions（按 agent_key 过滤）。展示会话标题/轮次/终端用户/
+ * 最后消息时间；点行进会话详情（/conversations/{id}，渲染多模态消息含图片/视频）。
+ * 顶部「在会话账本中查看全部」跳 /sessions?agent_key=X。
  */
-import { useState } from 'react';
-
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ScrollText } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowRight, MessagesSquare } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { EmptyState } from '@/core/components/common/empty-state';
 import { DataTable, type DataTableColumn } from '@/core/components/table';
-import { StatusBadge } from '@/core/components/ui/status-badge';
-import { formatCost, formatDateTime, formatDurationMs, formatTokens } from '@/core/lib/format';
-import { ChannelLabel, KindBadge } from '@/system/call_logs/components/ledger-badges';
-import { TraceDrawer } from '@/system/call_logs/components/trace-drawer';
+import { formatDateTime } from '@/core/lib/format';
+import { ChannelLabel } from '@/system/call_logs/components/ledger-badges';
 import { callLogApi } from '@/system/call_logs/services/call-log';
-import type { CallLogItem } from '@/system/call_logs/types/call-log';
+import type { SessionItem } from '@/system/call_logs/types/call-log';
 
 interface Props {
   agentKey: string;
@@ -25,87 +22,66 @@ interface Props {
 const RECENT_SIZE = 20;
 
 export const AgentSessionsTab = ({ agentKey }: Props) => {
-  const [traceLog, setTraceLog] = useState<CallLogItem | null>(null);
+  const navigate = useNavigate();
 
   const listQ = useQuery({
-    queryKey: ['agent-sessions', agentKey],
-    queryFn: () => callLogApi.list({ page: 1, page_size: RECENT_SIZE, agent_key: agentKey }),
+    queryKey: ['agent-session-list', agentKey],
+    queryFn: () =>
+      callLogApi.listSessions({ page: 1, page_size: RECENT_SIZE, agent_key: agentKey }),
     enabled: !!agentKey,
   });
 
   const rows = listQ.data?.items ?? [];
   const total = listQ.data?.total ?? 0;
 
-  const columns: DataTableColumn<CallLogItem>[] = [
+  const columns: DataTableColumn<SessionItem>[] = [
     {
-      key: 'created_at',
-      header: '时间',
-      width: 150,
-      render: l => (
-        <span className="tnum font-mono text-[11.5px] text-stone-500">
-          {formatDateTime(l.created_at)}
-        </span>
+      key: 'title',
+      header: '会话',
+      render: s => (
+        <div className="min-w-0">
+          <div className="truncate text-[12.5px] text-stone-800">
+            {s.title || '未命名会话'}
+          </div>
+          <div className="truncate font-mono text-[10.5px] text-stone-400">
+            {s.session_id}
+          </div>
+        </div>
       ),
     },
     {
       key: 'channel',
       header: '渠道',
       width: 92,
-      render: l => <ChannelLabel channel={l.channel} />,
+      render: s => (s.channel ? <ChannelLabel channel={s.channel} /> : <span className="text-stone-400">—</span>),
     },
     {
-      key: 'kind',
-      header: '类型',
-      width: 96,
-      render: l => <KindBadge source={l.source} kind={l.kind} />,
-    },
-    {
-      key: 'status',
-      header: '状态',
-      width: 96,
-      render: l =>
-        l.success ? (
-          <StatusBadge tone="success">成功</StatusBadge>
-        ) : (
-          <StatusBadge tone="error">失败 {l.code}</StatusBadge>
-        ),
-    },
-    {
-      key: 'tokens',
-      header: 'Tokens',
-      width: 90,
+      key: 'turns',
+      header: '轮次',
+      width: 70,
       align: 'right',
-      render: l =>
-        l.total_tokens ? (
-          <span className="tnum font-mono text-[11.5px] text-stone-700">
-            {formatTokens(l.total_tokens)}
-          </span>
+      render: s => (
+        <span className="tnum font-mono text-[11.5px] text-stone-700">{s.turn_count}</span>
+      ),
+    },
+    {
+      key: 'end_user',
+      header: '终端用户',
+      width: 130,
+      render: s =>
+        s.end_user_id ? (
+          <span className="truncate font-mono text-[11px] text-stone-500">{s.end_user_id}</span>
         ) : (
           <span className="text-stone-400">—</span>
         ),
     },
     {
-      key: 'cost',
-      header: '成本',
-      width: 80,
-      align: 'right',
-      render: l =>
-        l.cost_usd != null ? (
-          <span className="tnum font-mono text-[11.5px] text-stone-700">
-            {formatCost(l.cost_usd)}
-          </span>
-        ) : (
-          <span className="text-stone-400">—</span>
-        ),
-    },
-    {
-      key: 'duration',
-      header: '时延',
-      width: 80,
-      align: 'right',
-      render: l => (
-        <span className="tnum font-mono text-[11.5px] text-stone-600">
-          {formatDurationMs(l.duration_ms)}
+      key: 'last',
+      header: '最后消息',
+      width: 150,
+      render: s => (
+        <span className="tnum font-mono text-[11.5px] text-stone-500">
+          {formatDateTime(s.last_message_at ?? s.created_at)}
         </span>
       ),
     },
@@ -115,7 +91,7 @@ export const AgentSessionsTab = ({ agentKey }: Props) => {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <span className="text-[12px] text-stone-500">
-          近期会话与运行{total > 0 ? ` · 共 ${total} 条` : ''}
+          近期会话{total > 0 ? ` · 共 ${total} 个` : ''}
         </span>
         <Link
           to={`/sessions?agent_key=${encodeURIComponent(agentKey)}`}
@@ -129,19 +105,17 @@ export const AgentSessionsTab = ({ agentKey }: Props) => {
       <DataTable
         columns={columns}
         rows={rows}
-        rowKey="id"
+        rowKey="session_id"
         loading={listQ.isLoading}
-        leftBar={l => (l.success ? 'bg-emerald-400' : 'bg-red-400')}
-        onRowClick={row => setTraceLog(row)}
+        onRowClick={s => navigate(`/conversations/${s.session_id}`)}
         emptyText={
           <EmptyState
-            icon={<ScrollText strokeWidth={1.5} />}
-            title="该应用暂无会话与运行记录"
+            icon={<MessagesSquare strokeWidth={1.5} />}
+            title="该应用暂无会话记录"
+            description="在 Playground 关联此应用对话，或经 API / 嵌入式调用后，会话会出现在这里。"
           />
         }
       />
-
-      <TraceDrawer callLog={traceLog} onClose={() => setTraceLog(null)} />
     </div>
   );
 };
