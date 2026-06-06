@@ -115,6 +115,8 @@ export class ChameleonWidget {
   private messages: WidgetMessage[] = [];
   private isOpen = false;
   private isSending = false;
+  /** 等待态计时器：每秒刷新「已用 Ns」，首个内容到达或结束即停 */
+  private pendingTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * 流式 / 新消息时是否自动跟随到底部。
    * - 用户向上滚动 → false，停止强拉（避免打断阅读）
@@ -1042,6 +1044,26 @@ export class ChameleonWidget {
     this.messagesEl.appendChild(this.buildMessageEl(msg));
   }
 
+  /** 等待态每秒重渲一次该消息（recompute 已用秒数）；内容到达 / 非 pending 即停 */
+  private startPendingTimer(id: string): void {
+    this.stopPendingTimer();
+    this.pendingTimer = setInterval(() => {
+      const m = this.messages.find(x => x.id === id);
+      if (!m || !m.pending || m.content) {
+        this.stopPendingTimer();
+        return;
+      }
+      this.updateMessage(id, {});
+    }, 1000);
+  }
+
+  private stopPendingTimer(): void {
+    if (this.pendingTimer != null) {
+      clearInterval(this.pendingTimer);
+      this.pendingTimer = null;
+    }
+  }
+
   private buildMessageEl(msg: WidgetMessage): HTMLDivElement {
     const wrap = document.createElement('div');
     wrap.className = `msg ${msg.role === 'user' ? 'user' : 'bot'}${msg.error ? ' error' : ''}`;
@@ -1088,7 +1110,11 @@ export class ChameleonWidget {
     const bubble = document.createElement('div');
     bubble.className = 'bubble-text';
     if (msg.pending && !msg.content) {
-      bubble.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>`;
+      // 长耗时（生图/视频）等待显示已用秒数，>2s 才出，避免普通快回复闪烁
+      const secs = msg.pendingSince ? Math.floor((Date.now() - msg.pendingSince) / 1000) : 0;
+      const elapsed =
+        secs >= 2 ? `<span class="typing-elapsed">已用 ${secs}s</span>` : '';
+      bubble.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>${elapsed}`;
     } else if (msg.role === 'assistant') {
       bubble.innerHTML = renderMarkdown(msg.content);
     } else {
@@ -1312,8 +1338,10 @@ export class ChameleonWidget {
       role: 'assistant',
       content: '',
       pending: true,
+      pendingSince: Date.now(),
       streaming: this.behavior.streaming,
     });
+    this.startPendingTimer(pendingId);
 
     try {
       if (this.behavior.streaming) {
@@ -1330,6 +1358,7 @@ export class ChameleonWidget {
         error: true,
       });
     } finally {
+      this.stopPendingTimer();
       this.isSending = false;
       this.setComposerDisabled(false);
       this.textarea.focus();

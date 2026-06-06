@@ -721,6 +721,12 @@ export const buildStyles = (ui: UiConfig): string => {
 }
 .typing span:nth-child(2) { animation-delay: .15s; }
 .typing span:nth-child(3) { animation-delay: .3s; }
+.typing-elapsed {
+  margin-left: 8px;
+  font-size: 11px;
+  color: ${theme.subtleText};
+  vertical-align: middle;
+}
 @keyframes typing {
   0%, 60%, 100% { transform: translateY(0); opacity: .4; }
   30% { transform: translateY(-4px); opacity: 1; }

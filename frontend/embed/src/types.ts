@@ -190,6 +190,8 @@ export interface WidgetMessage {
   /** 用户当前反馈：1 = 👍，-1 = 👎，null/undefined = 未点 */
   feedback?: 1 | -1 | null;
   pending?: boolean;
+  /** 进入 pending 的时刻（ms），等待态显示已用秒数（生图/视频等长耗时反馈） */
+  pendingSince?: number;
   streaming?: boolean;
   error?: boolean;
   /** 招呼语 / 系统提示等占位消息：不渲 actions（复制 / 重生成 / 反馈 / 删除） */
