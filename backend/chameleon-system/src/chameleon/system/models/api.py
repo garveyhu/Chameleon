@@ -52,7 +52,7 @@ class ModelItem(BaseModel):
 class CreateModelRequest(BaseModel):
     provider_id: int
     code: str = Field(min_length=1, max_length=128)
-    kind: str = Field(pattern="^(chat|embedding|rerank)$")
+    kind: str = Field(pattern="^(chat|embedding|rerank|image)$")
     dim: int | None = None
     defaults: dict | None = None
     upstream_name: str | None = Field(default=None, max_length=128)
@@ -91,7 +91,7 @@ router = APIRouter(prefix="/v1/admin/models", tags=["admin:models"])
 
 @router.get("", response_model=Result[list[ModelItem]])
 async def list_models(
-    kind: str | None = Query(default=None, pattern="^(chat|embedding)$"),
+    kind: str | None = Query(default=None, pattern="^(chat|embedding|rerank|image)$"),
     provider_id: int | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("models:read")),

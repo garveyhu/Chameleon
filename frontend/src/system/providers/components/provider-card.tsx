@@ -20,6 +20,7 @@ const KIND_LABEL: Record<string, string> = {
   dify: 'Dify',
   fastgpt: 'FastGPT',
   coze: 'Coze',
+  comfyui: '生图',
 };
 
 interface Props {

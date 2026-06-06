@@ -1,6 +1,14 @@
 /** models 管理页 —— 按用途分组的现代卡片网格 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDownUp, Boxes, Cpu, MessageSquare, Plus, Power } from 'lucide-react';
+import {
+  ArrowDownUp,
+  Boxes,
+  Cpu,
+  Image as ImageIcon,
+  MessageSquare,
+  Plus,
+  Power,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -30,6 +38,7 @@ import type { EntityId } from '@/core/types/api';
 import { ModelCard } from '@/system/models/components/model-card';
 import { ModelConfigSheet } from '@/system/models/components/model-config-sheet';
 import { TestModelModal } from '@/system/models/components/test-model-modal';
+import { imagegenApi } from '@/system/models/services/imagegen';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 import { providerApi } from '@/system/providers/services/provider';
@@ -39,6 +48,7 @@ const GROUPS = [
   { kind: 'chat', label: '对话模型', icon: MessageSquare },
   { kind: 'embedding', label: '向量模型', icon: Boxes },
   { kind: 'rerank', label: '重排模型', icon: ArrowDownUp },
+  { kind: 'image', label: '生图模型', icon: ImageIcon },
 ] as const;
 
 // 卡片「设为默认」按 kind 写对应 model_defaults case
@@ -240,15 +250,22 @@ const CreateModelModal = ({
   onSubmit: (req: {
     provider_id: EntityId;
     code: string;
-    kind: 'chat' | 'embedding' | 'rerank';
+    kind: 'chat' | 'embedding' | 'rerank' | 'image';
     dim?: number;
+    defaults?: Record<string, unknown>;
   }) => void;
   loading: boolean;
 }) => {
   const [providerId, setProviderId] = useState<string>('');
   const [code, setCode] = useState('');
-  const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank'>('chat');
+  const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank' | 'image'>('chat');
   const [dim, setDim] = useState<string>('');
+  const [workflow, setWorkflow] = useState('');
+  const workflowsQ = useQuery({
+    queryKey: ['imagegen-workflows'],
+    queryFn: imagegenApi.listWorkflows,
+    enabled: open && kind === 'image',
+  });
 
   return (
     <Modal
@@ -259,6 +276,7 @@ const CreateModelModal = ({
           setCode('');
           setKind('chat');
           setDim('');
+          setWorkflow('');
           onClose();
         }
       }}
@@ -289,7 +307,10 @@ const CreateModelModal = ({
           </div>
           <div className="space-y-1.5">
             <Label>类型</Label>
-            <Select value={kind} onValueChange={v => setKind(v as 'chat' | 'embedding' | 'rerank')}>
+            <Select
+              value={kind}
+              onValueChange={v => setKind(v as 'chat' | 'embedding' | 'rerank' | 'image')}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -297,6 +318,7 @@ const CreateModelModal = ({
                 <SelectItem value="chat">对话 (chat)</SelectItem>
                 <SelectItem value="embedding">向量 (embedding)</SelectItem>
                 <SelectItem value="rerank">重排 (rerank)</SelectItem>
+                <SelectItem value="image">生图 (image)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -311,19 +333,40 @@ const CreateModelModal = ({
               />
             </div>
           )}
+          {kind === 'image' && (
+            <div className="space-y-1.5">
+              <Label>工作流</Label>
+              <Select value={workflow} onValueChange={setWorkflow}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择生图工作流" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(workflowsQ.data ?? []).map(w => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-stone-400">
+                供应商需选 ComfyUI（生图）类型；模型标识可填如 z-image-turbo，测试时用所选工作流出图。
+              </p>
+            </div>
+          )}
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
           <Button
-            disabled={loading || !providerId || !code}
+            disabled={loading || !providerId || !code || (kind === 'image' && !workflow)}
             onClick={() =>
               onSubmit({
                 provider_id: providerId,
                 code,
                 kind,
-                dim: dim ? Number(dim) : undefined,
+                dim: kind === 'embedding' && dim ? Number(dim) : undefined,
+                defaults: kind === 'image' && workflow ? { workflow } : undefined,
               })
             }
           >

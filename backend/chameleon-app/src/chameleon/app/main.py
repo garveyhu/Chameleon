@@ -55,6 +55,7 @@ from chameleon.system.eval_jobs import eval_jobs_router
 from chameleon.system.eval_jobs import scheduler as eval_scheduler
 from chameleon.system.eval_templates import eval_templates_router
 from chameleon.system.graphs import graphs_router
+from chameleon.system.imagegen import imagegen_router
 from chameleon.system.kbs import kbs_admin_router
 from chameleon.system.marketplace import marketplace_router
 from chameleon.system.models import models_router
@@ -195,6 +196,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(permissions_router)
     app.include_router(providers_admin_router)
     app.include_router(models_router)
+    app.include_router(imagegen_router)
     app.include_router(agents_admin_router)
     app.include_router(kbs_admin_router)
     app.include_router(dashboard_router)

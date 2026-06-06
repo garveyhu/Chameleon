@@ -12,7 +12,7 @@ export interface ModelItem {
   provider_id: EntityId;
   provider_code: string | null;
   code: string;
-  kind: 'chat' | 'embedding' | 'rerank';
+  kind: 'chat' | 'embedding' | 'rerank' | 'image';
   dim: number | null;
   defaults: Record<string, unknown> | null;
   upstream_name: string | null;
@@ -25,7 +25,7 @@ export interface ModelItem {
 export interface CreateModelRequest {
   provider_id: EntityId;
   code: string;
-  kind: 'chat' | 'embedding' | 'rerank';
+  kind: 'chat' | 'embedding' | 'rerank' | 'image';
   dim?: number;
   defaults?: Record<string, unknown>;
   upstream_name?: string;

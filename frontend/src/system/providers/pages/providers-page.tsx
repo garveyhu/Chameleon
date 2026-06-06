@@ -230,6 +230,7 @@ const CreateProviderModal = ({
                 <SelectItem value="dify">Dify</SelectItem>
                 <SelectItem value="fastgpt">FastGPT</SelectItem>
                 <SelectItem value="coze">Coze</SelectItem>
+                <SelectItem value="comfyui">生图 (ComfyUI)</SelectItem>
               </SelectContent>
             </Select>
           </div>

@@ -162,7 +162,7 @@ export const ModelCard = ({
         <div className="flex items-center gap-0.5">
           <ActionBtn icon={SlidersHorizontal} label="配置" onClick={onConfig} />
           <ActionBtn icon={Zap} label="测试" onClick={onTest} />
-          {!isDefault && model.enabled && (
+          {!isDefault && model.enabled && model.kind !== 'image' && (
             <ActionBtn icon={Star} label="设为默认" onClick={onSetDefault} />
           )}
         </div>

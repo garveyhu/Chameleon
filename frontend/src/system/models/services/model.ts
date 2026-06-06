@@ -11,13 +11,15 @@ import type {
 /** model test 的流事件 —— 在 FlatSSEEvent 基础上 narrow meta 字段 + 注明 end 扩展字段 */
 export interface TestStreamChunk extends FlatSSEEvent {
   meta?: {
-    kind: 'chat' | 'embedding';
+    kind: 'chat' | 'embedding' | 'rerank' | 'image';
     model: string;
     provider: string;
   };
   /** 流末 end 携带 */
   latency_ms?: number;
   sample?: string;
+  /** image 模型测试：生成完毕的产物图（final） */
+  image_chunk?: { url: string; detail?: string; mime_type?: string };
 }
 
 export const modelApi = {

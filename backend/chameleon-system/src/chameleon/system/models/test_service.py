@@ -18,20 +18,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.sse_events import (
+    ImageChunkPayload,
     UsagePayload,
     event_delta,
     event_end,
     event_error,
+    event_image_chunk,
     event_meta,
 )
 from chameleon.data.models import LLMModel, Provider
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
+from chameleon.integrations.images import stream_generate, workflow_exists
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import resolve_upstream
 from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
 
 PING_PROMPT = "请用一句话简短自我介绍。"
-DEFAULT_STREAM_MAX_TOKENS = 128
+# 连通性测试上限放宽：推理模型（如 Qwen3 thinking）一轮思考就可能吃掉上千
+# token，额度太小会导致 reasoning 占满、正式 content 一个字都没产出 → 空回复。
+DEFAULT_STREAM_MAX_TOKENS = 2048
+# image 模型连通性测试的默认提示词（用户未输入时）
+DEFAULT_TEST_IMAGE_PROMPT = (
+    "a cute corgi puppy running on green grass, sunny day, photorealistic"
+)
 
 
 async def _load_model_and_provider(
@@ -99,7 +108,18 @@ async def stream_test(
                 if u:
                     usage = UsagePayload.from_dict(u)
             latency_ms = int((time.monotonic() - start) * 1000)
-            sample = "".join(collected)[:120] or "(空回复)"
+            text = "".join(collected)[:120]
+            if text:
+                sample = text
+            elif usage and usage.output_tokens:
+                # 消耗了 token 却无正式 content：典型推理模型——思考过程
+                # （reasoning_content）占满 max_tokens，正式回答没轮到就被截断
+                sample = (
+                    f"(空回复：消耗 {usage.output_tokens} token 但无正式输出，"
+                    "疑似推理模型思考占满额度，请调大该模型 max_tokens)"
+                )
+            else:
+                sample = "(空回复)"
             yield event_end(usage=usage, latency_ms=latency_ms, sample=sample)
         elif m.kind == "embedding":
             dim = m.dim or 1536
@@ -147,6 +167,54 @@ async def stream_test(
                 yield event_delta("(空结果)\n")
                 sample = "(空)"
             yield event_end(usage=None, latency_ms=latency_ms, sample=sample)
+        elif m.kind == "image":
+            host = p.base_url
+            if not host:
+                yield event_error("ConfigError", "ComfyUI 供应商未配置 base_url")
+                return
+            defaults = m.defaults or {}
+            workflow_id = defaults.get("workflow")
+            if not workflow_id or not workflow_exists(str(workflow_id)):
+                yield event_error(
+                    "ConfigError",
+                    f"模型未配置有效工作流（defaults.workflow），当前: {workflow_id!r}",
+                )
+                return
+            gen_params = {k: v for k, v in defaults.items() if k != "workflow"}
+            test_prompt = prompt or DEFAULT_TEST_IMAGE_PROMPT
+            yield event_delta(f"使用工作流「{workflow_id}」提交生成…\n")
+            image_url: str | None = None
+            last_notice = 0
+            async for ev in stream_generate(
+                host=host,
+                workflow_id=str(workflow_id),
+                prompt=test_prompt,
+                params=gen_params,
+            ):
+                etype = ev["type"]
+                if etype == "submitted":
+                    yield event_delta(
+                        f"已提交 ComfyUI（prompt_id={ev['prompt_id']}），"
+                        "生成中（首次含模型加载，可能数分钟）…\n"
+                    )
+                elif etype == "progress":
+                    secs = ev["elapsed_ms"] // 1000
+                    if secs - last_notice >= 10:
+                        last_notice = secs
+                        yield event_delta(f"⏳ 已等待 {secs}s…\n")
+                elif etype == "done":
+                    image_url = ev["image_url"]
+                    yield event_image_chunk(
+                        ImageChunkPayload(
+                            url=image_url, detail="final", mime_type="image/png"
+                        )
+                    )
+            latency_ms = int((time.monotonic() - start) * 1000)
+            yield event_end(
+                usage=None,
+                latency_ms=latency_ms,
+                sample="出图成功" if image_url else "(无产物)",
+            )
         else:
             yield event_error("UnsupportedKind", f"未支持的 model.kind: {m.kind}")
     except Exception as e:  # noqa: BLE001

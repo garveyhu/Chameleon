@@ -39,8 +39,9 @@ export const TestModelModal: React.FC<TestModelModalProps> = ({ model, onClose }
 );
 
 const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () => void }) => {
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const [prompt, setPrompt] = useState(model.kind === 'image' ? '' : DEFAULT_PROMPT);
   const [output, setOutput] = useState('');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [state, setState] = useState<RunState>('idle');
   const [meta, setMeta] = useState<TestStreamChunk['meta'] | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -62,6 +63,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setOutput('');
+    setImageUrl(null);
     setMeta(null);
     setLatencyMs(null);
     setUsage(null);
@@ -69,11 +71,15 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
     setState('running');
     try {
       await modelApi.streamTest(model.id, {
-        prompt: model.kind === 'chat' ? prompt.trim() || undefined : undefined,
+        prompt:
+          model.kind === 'chat' || model.kind === 'image'
+            ? prompt.trim() || undefined
+            : undefined,
         signal: ctrl.signal,
         onChunk: chunk => {
           if (chunk.meta) setMeta(chunk.meta);
           if (chunk.delta) setOutput(prev => prev + chunk.delta);
+          if (chunk.image_chunk?.url) setImageUrl(chunk.image_chunk.url);
           if (chunk.error) {
             setErrorText(`${chunk.error.type}: ${chunk.error.message}`);
             setState('error');
@@ -105,6 +111,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
   };
 
   const isChat = model.kind === 'chat';
+  const isImage = model.kind === 'image';
   const running = state === 'running';
 
   return (
@@ -119,16 +126,23 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
         </ModalTitle>
       </ModalHeader>
       <ModalBody className="space-y-3">
-        {isChat ? (
+        {isChat || isImage ? (
           <div className="space-y-1.5">
-            <Label className="text-[12px] text-stone-600">测试 prompt</Label>
+            <Label className="text-[12px] text-stone-600">
+              测试 prompt{isImage ? '（留空用默认提示词）' : ''}
+            </Label>
             <Input
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder={DEFAULT_PROMPT}
+              placeholder={isImage ? '一只橘猫坐在窗台上，柔和晨光' : DEFAULT_PROMPT}
               disabled={running}
               className="font-mono text-[12px]"
             />
+            {isImage ? (
+              <p className="text-[11px] text-stone-400">
+                本地 ComfyUI 出图，首次含模型加载可能需数分钟，请耐心等待。
+              </p>
+            ) : null}
           </div>
         ) : model.kind === 'rerank' ? (
           <p className="text-[12px] text-stone-500">
@@ -172,6 +186,16 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
             </div>
           ) : null}
         </div>
+
+        {isImage && imageUrl ? (
+          <div className="overflow-hidden rounded-md border border-stone-200 bg-white">
+            <img
+              src={imageUrl}
+              alt="生成结果"
+              className="mx-auto max-h-[360px] w-auto object-contain"
+            />
+          </div>
+        ) : null}
       </ModalBody>
       <ModalFooter>
         <Button variant="ghost" onClick={onClose} disabled={running}>
