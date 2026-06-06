@@ -298,9 +298,13 @@ async def invoke_stream(
     messages: list[dict],
     kb_ids: list[int],
     bound_agent_key: str | None = None,
+    invoke_agent_key: str | None = None,
     persist_config: bool = True,
 ) -> AsyncIterator[dict]:
     """完整 playground 调用编排：绑 key 溯源 → 建/续会话 → KB context → 流式调用。
+
+    invoke_agent_key 非空时走 agent invoke（调该应用 provider，生图/视频/工作流），
+    否则 model-direct（直调模型）。会话 / 落库 / trace 机制两者共用。
 
     溯源（块5）：channel='playground'，落 ChatSession + user/assistant messages +
     call_log 根行（token/cost 从 generation 子行 rollup）。抛 ValidationError /
@@ -309,11 +313,14 @@ async def invoke_stream(
     if api_key_id is None:
         raise ValidationError(message="Playground 必须绑定一个 Key 用于溯源")
 
-    resolved_model = model_name
-    if not resolved_model:
-        if model_id is None:
-            raise ValidationError(message="必须提供 model_id 或 model_name")
-        resolved_model = await get_model_name(session, model_id)
+    if invoke_agent_key:
+        resolved_model = invoke_agent_key  # 显示 / trace 归属用应用 key
+    else:
+        resolved_model = model_name
+        if not resolved_model:
+            if model_id is None:
+                raise ValidationError(message="必须提供 model_id 或 model_name")
+            resolved_model = await get_model_name(session, model_id)
 
     last_user = next((m for m in reversed(messages) if m.get("role") == "user"), None)
     if last_user is None:
@@ -393,45 +400,58 @@ async def invoke_stream(
         # citations），且开了嵌套上下文 → build_kb_context 内部的 embedding / reranker
         # 的 record_scope 会以本段为父自动嵌套（解决 embedding 落 trace 根、时长看着
         # 与 retriever 相加的问题）。无 KB 时不开段。
-        if kb_ids:
-            async with record_scope(
-                observation_type=ObservationType.RETRIEVER,
-                name="kb.search",
-                request_payload={
-                    "query": user_text[:500],
-                    "kb_ids": kb_ids,
-                    "top_k": PLAYGROUND_TOP_K,
-                },
-            ) as kb_scope:
-                kb_context, citations = await build_kb_context(
-                    session, query=user_text, kb_ids=kb_ids
-                )
-                kb_scope.response_payload = {
-                    "count": len(citations),
-                    "citations": _clip_citations(citations),
-                }
+        if invoke_agent_key:
+            # 调用应用 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk
+            async for chunk in _stream_agent(
+                invoke_agent_key=invoke_agent_key,
+                messages=messages,
+                session_id=session_id,
+                request_id=request_id,
+                app_id=PLAYGROUND_APP_ID,
+            ):
+                if chunk.get("delta"):
+                    answer_parts.append(chunk["delta"])
+                yield chunk
         else:
-            kb_context, citations = "", []
-        vision_ok = await _model_supports_vision(
-            session, model_id=model_id, model_name=model_name
-        )
-        lc_messages = build_messages(
-            system_prompt=system_prompt,
-            kb_context=kb_context,
-            messages=messages,
-            vision=vision_ok,
-        )
-        async for chunk in _stream_llm(
-            session,
-            model_name=resolved_model,
-            temperature=temperature,
-            top_p=top_p,
-            max_tokens=max_tokens,
-            messages=lc_messages,
-        ):
-            if chunk.get("delta"):
-                answer_parts.append(chunk["delta"])
-            yield chunk
+            if kb_ids:
+                async with record_scope(
+                    observation_type=ObservationType.RETRIEVER,
+                    name="kb.search",
+                    request_payload={
+                        "query": user_text[:500],
+                        "kb_ids": kb_ids,
+                        "top_k": PLAYGROUND_TOP_K,
+                    },
+                ) as kb_scope:
+                    kb_context, citations = await build_kb_context(
+                        session, query=user_text, kb_ids=kb_ids
+                    )
+                    kb_scope.response_payload = {
+                        "count": len(citations),
+                        "citations": _clip_citations(citations),
+                    }
+            else:
+                kb_context, citations = "", []
+            vision_ok = await _model_supports_vision(
+                session, model_id=model_id, model_name=model_name
+            )
+            lc_messages = build_messages(
+                system_prompt=system_prompt,
+                kb_context=kb_context,
+                messages=messages,
+                vision=vision_ok,
+            )
+            async for chunk in _stream_llm(
+                session,
+                model_name=resolved_model,
+                temperature=temperature,
+                top_p=top_p,
+                max_tokens=max_tokens,
+                messages=lc_messages,
+            ):
+                if chunk.get("delta"):
+                    answer_parts.append(chunk["delta"])
+                yield chunk
     except Exception:
         ok = False
         raise
@@ -493,6 +513,67 @@ async def invoke_stream(
         except Exception:  # noqa: BLE001
             logger.exception("playground trace/persist failed | rid=%s", request_id)
         reset_trace_context(token)
+
+
+async def _stream_agent(
+    *,
+    invoke_agent_key: str,
+    messages: list[dict],
+    session_id: str,
+    request_id: str,
+    app_id: str,
+) -> AsyncIterator[dict]:
+    """调用某应用的 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk。
+
+    delta（含生图返回的 Markdown 图片 ![](url)）→ {"delta"}；citation → {"citation"}；
+    error → {"error"}。step/done 忽略（答案靠 delta 累积，前端 Markdown 渲染图片）。
+    """
+    from chameleon.providers.base.registry import AGENTS, PROVIDERS
+    from chameleon.providers.base.types import InvokeContext, Message, StreamEventType
+
+    agent = AGENTS.get(invoke_agent_key)
+    if agent is None:
+        yield {"error": {"type": "AgentNotFound", "message": f"应用未注册或未启用: {invoke_agent_key}"}}
+        return
+    provider = PROVIDERS.get(agent.provider)
+    if provider is None:
+        yield {"error": {"type": "ProviderError", "message": f"provider 未注册: {agent.provider}"}}
+        return
+
+    history = [
+        Message(role=m["role"], content=m["content"])
+        for m in messages[:-1]
+        if m.get("role") in ("user", "assistant")
+    ]
+    last_content = messages[-1].get("content", "") if messages else ""
+    input_val: object = (
+        last_content
+        if isinstance(last_content, str)
+        else [Message(role="user", content=last_content)]
+    )
+    ctx = InvokeContext(
+        agent_def=agent,
+        input=input_val,
+        history=history,
+        session_id=session_id,
+        app_id=app_id,
+        request_id=request_id,
+        stream=True,
+    )
+    try:
+        async for ev in provider.stream(ctx):
+            if ev.type == StreamEventType.delta:
+                text = ev.data.get("text", "")
+                if text:
+                    yield {"delta": text}
+            elif ev.type == StreamEventType.citation:
+                yield {"citation": ev.data}
+            elif ev.type == StreamEventType.error:
+                yield {"error": {"type": "ProviderError", "message": ev.data.get("message", "应用执行失败")}}
+                return
+    except Exception as e:  # noqa: BLE001
+        logger.exception("playground agent invoke failed | agent=%s", invoke_agent_key)
+        yield {"error": {"type": type(e).__name__, "message": str(e)[:300]}}
 
 
 async def _stream_llm(

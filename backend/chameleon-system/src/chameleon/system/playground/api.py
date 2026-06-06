@@ -34,6 +34,8 @@ class PlaygroundInvokeRequest(BaseModel):
     session_id: str | None = None
     # 应用关联：本会话基于哪个应用预填配置（仅记录溯源，运行仍 model-direct）
     bound_agent_key: str | None = None
+    # 直接调用某应用的 provider（生图/视频/工作流等）；设了就走 agent invoke 而非 model-direct
+    invoke_agent_key: str | None = None
     model_id: int | None = None
     model_name: str | None = None
     system_prompt: str | None = None
@@ -71,8 +73,8 @@ async def invoke(
     user: CurrentUser = Depends(require_permission("playground:invoke")),
 ):
     """SSE 流式调用：业务编排全部在 service.invoke_stream，API 层只做请求/响应桥接。"""
-    if not req.model_id and not req.model_name:
-        raise ValidationError(message="必须提供 model_id 或 model_name")
+    if not req.invoke_agent_key and not req.model_id and not req.model_name:
+        raise ValidationError(message="必须提供 model_id / model_name 或 invoke_agent_key")
 
     return sse_response(
         service.invoke_stream(
@@ -80,6 +82,7 @@ async def invoke(
             api_key_id=req.api_key_id,
             session_id=req.session_id,
             bound_agent_key=req.bound_agent_key,
+            invoke_agent_key=req.invoke_agent_key,
             # 操作者即终端用户：登录 admin 的 id 落 end_user_id（溯源「谁跑的」）
             operator_user_id=user.id,
             model_id=req.model_id,

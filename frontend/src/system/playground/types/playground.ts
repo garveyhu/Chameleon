@@ -59,6 +59,8 @@ export interface PlaygroundParams {
   var_values?: Record<string, string>;
   /** 关联应用：本会话配置基于哪个应用预填（仅溯源记录，运行仍 model-direct） */
   bound_agent_key?: string | null;
+  /** 直接调用某应用 provider（生图/视频等）；设了就走 agent invoke 而非 model-direct */
+  invoke_agent_key?: string | null;
 }
 
 export interface InvokeRequest {
@@ -68,6 +70,8 @@ export interface InvokeRequest {
   session_id?: string | null;
   /** 关联应用（溯源记录，落 session.meta.config.bound_agent_key） */
   bound_agent_key?: string | null;
+  /** 直接调用某应用 provider（生图/视频等）；设了后端走 agent invoke */
+  invoke_agent_key?: string | null;
   model_id?: EntityId;
   model_name?: string;
   system_prompt?: string;
