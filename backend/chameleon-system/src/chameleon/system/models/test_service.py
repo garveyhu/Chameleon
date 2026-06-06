@@ -45,8 +45,9 @@ PING_PROMPT = "请用一句话简短自我介绍。"
 # token，额度太小会导致 reasoning 占满、正式 content 一个字都没产出 → 空回复。
 DEFAULT_STREAM_MAX_TOKENS = 2048
 # image 模型连通性测试的默认提示词（用户未输入时）
+# 与前端占位符「一只橘猫坐在窗台上，柔和晨光」保持一致（留空即用此默认）
 DEFAULT_TEST_IMAGE_PROMPT = (
-    "a cute corgi puppy running on green grass, sunny day, photorealistic"
+    "an orange tabby cat sitting on a windowsill, soft morning light, photorealistic"
 )
 
 
