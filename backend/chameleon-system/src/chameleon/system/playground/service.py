@@ -141,6 +141,21 @@ async def get_model_name(session: AsyncSession, model_id: int) -> str:
     return row.code
 
 
+async def _model_supports_vision(
+    session: AsyncSession, *, model_id: int | None, model_name: str | None
+) -> bool:
+    """查模型 capabilities.vision —— 决定是否允许把图片喂给它。"""
+    stmt = select(LLMModel).where(LLMModel.deleted_at.is_(None))
+    if model_id is not None:
+        stmt = stmt.where(LLMModel.id == model_id)
+    elif model_name:
+        stmt = stmt.where(LLMModel.code == model_name)
+    else:
+        return False
+    row = (await session.execute(stmt)).scalars().first()
+    return bool((row.capabilities or {}).get("vision")) if row else False
+
+
 async def build_kb_context(
     session: AsyncSession, *, query: str, kb_ids: list[int]
 ) -> tuple[str, list[dict]]:
@@ -218,13 +233,30 @@ def _clip_citations(citations: list[dict], *, max_items: int = 20) -> list[dict]
     return out
 
 
+def _strip_image_blocks(content: object) -> object:
+    """非视觉模型：把多模态 content 摊平成纯文本，丢弃 image/audio 块，避免上游报错。"""
+    if not isinstance(content, list):
+        return content
+    texts = [
+        b.get("text", "")
+        for b in content
+        if isinstance(b, dict) and b.get("type") == "text"
+    ]
+    joined = "\n".join(t for t in texts if t)
+    return joined or "(已忽略图片：该模型不支持视觉，请改用视觉模型)"
+
+
 def build_messages(
     *,
     system_prompt: str | None,
     kb_context: str,
     messages: list[dict],
+    vision: bool = True,
 ) -> list:
-    """把 system + (kb_context 拼到 system 前缀) + 历史 message → LangChain messages"""
+    """把 system + (kb_context 拼到 system 前缀) + 历史 message → LangChain messages。
+
+    vision=False 时剥掉用户消息里的图片块（非视觉模型收到图会报错）。
+    """
     out = []
     sys_parts: list[str] = []
     if kb_context:
@@ -238,7 +270,7 @@ def build_messages(
         role = m.get("role")
         content = m.get("content", "")
         if role == "user":
-            out.append(HumanMessage(content=content))
+            out.append(HumanMessage(content=content if vision else _strip_image_blocks(content)))
         elif role == "assistant":
             out.append(AIMessage(content=content))
         elif role == "system":
@@ -380,10 +412,14 @@ async def invoke_stream(
                 }
         else:
             kb_context, citations = "", []
+        vision_ok = await _model_supports_vision(
+            session, model_id=model_id, model_name=model_name
+        )
         lc_messages = build_messages(
             system_prompt=system_prompt,
             kb_context=kb_context,
             messages=messages,
+            vision=vision_ok,
         )
         async for chunk in _stream_llm(
             session,
