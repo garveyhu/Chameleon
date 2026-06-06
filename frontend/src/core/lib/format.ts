@@ -77,10 +77,11 @@ export function formatTokens(n: number | null | undefined): string {
 }
 
 /** USD 成本：按量级自适应小数位，<$0.01 用更多位 */
-export function formatCost(usd: number | null | undefined): string {
-  if (usd === null || usd === undefined) return '—';
-  if (usd === 0) return '$0';
-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
-  if (usd < 1) return `$${usd.toFixed(3)}`;
-  return `$${usd.toFixed(2)}`;
+/** 成本格式化（人民币 元）。字段名沿用 cost_usd，但全系统计费已统一 CNY。 */
+export function formatCost(cny: number | null | undefined): string {
+  if (cny === null || cny === undefined) return '—';
+  if (cny === 0) return '¥0';
+  if (cny < 0.01) return `¥${cny.toFixed(4)}`;
+  if (cny < 1) return `¥${cny.toFixed(3)}`;
+  return `¥${cny.toFixed(2)}`;
 }

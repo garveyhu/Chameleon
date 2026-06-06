@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Coins, DollarSign, Gauge } from 'lucide-react';
+import { Activity, Banknote, Coins, Gauge } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
 import { Card, CardContent } from '@/core/components/ui/card';
@@ -207,7 +207,7 @@ export const CostTab = ({ params }: Props) => {
           value={formatCost(t?.total_usd)}
           delta={t?.delta_pct != null ? t.delta_pct / 100 : null}
           deltaInverse
-          icon={DollarSign}
+          icon={Banknote}
           tone="success"
           loading={totalsQ.isLoading}
         />

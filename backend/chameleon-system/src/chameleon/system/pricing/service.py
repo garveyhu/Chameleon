@@ -18,28 +18,28 @@ from chameleon.data.models import (
 )
 from chameleon.system.pricing.units import PricingUnit, VideoTier
 
-#: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
+#: 内置默认价目（CNY 元 per 1K tokens；2026 主流模型公开价 / 估算）
 #: 改这里只影响新装的库；已存在 model_pricing 行不会被覆盖（seed_if_empty）
 DEFAULT_PRICING: list[tuple[str, float, float]] = [
     # (model_code, prompt_per_1k, completion_per_1k)
-    ("gpt-4o", 0.0025, 0.010),
-    ("gpt-4o-mini", 0.00015, 0.0006),
-    ("gpt-4-turbo", 0.010, 0.030),
-    ("gpt-3.5-turbo", 0.0005, 0.0015),
-    ("claude-opus-4", 0.015, 0.075),
-    ("claude-sonnet-4", 0.003, 0.015),
-    ("claude-haiku-4", 0.0008, 0.004),
-    ("qwen-plus", 0.000114, 0.000343),
-    ("qwen-turbo", 0.0000428, 0.000114),
-    ("qwen-max", 0.000286, 0.000857),
-    ("deepseek-chat", 0.00014, 0.00028),
+    ("gpt-4o", 0.018, 0.072),
+    ("gpt-4o-mini", 0.0011, 0.0043),
+    ("gpt-4-turbo", 0.072, 0.216),
+    ("gpt-3.5-turbo", 0.0036, 0.0108),
+    ("claude-opus-4", 0.108, 0.54),
+    ("claude-sonnet-4", 0.0216, 0.108),
+    ("claude-haiku-4", 0.0058, 0.0288),
+    ("qwen-plus", 0.0008, 0.002),
+    ("qwen-turbo", 0.0003, 0.0006),
+    ("qwen-max", 0.0024, 0.0096),
+    ("deepseek-chat", 0.001, 0.002),
     # embedding（仅输入计费，completion_per_1k=0）
-    ("text-embedding-3-small", 0.00002, 0.0),
-    ("text-embedding-3-large", 0.00013, 0.0),
-    ("text-embedding-ada-002", 0.0001, 0.0),
-    ("text-embedding-v1", 0.0001, 0.0),
-    ("text-embedding-v2", 0.0001, 0.0),
-    ("text-embedding-v3", 0.00007, 0.0),
+    ("text-embedding-3-small", 0.00014, 0.0),
+    ("text-embedding-3-large", 0.00094, 0.0),
+    ("text-embedding-ada-002", 0.00072, 0.0),
+    ("text-embedding-v1", 0.0005, 0.0),
+    ("text-embedding-v2", 0.0005, 0.0),
+    ("text-embedding-v3", 0.0005, 0.0),
 ]
 
 
@@ -342,6 +342,7 @@ async def seed_default_pricing(session: AsyncSession) -> int:
                 effective_from=now,
                 prompt_price_per_1k=Decimal(str(prompt_price)),
                 completion_price_per_1k=Decimal(str(completion_price)),
+                currency="CNY",
             )
         )
         added += 1
