@@ -55,7 +55,7 @@ const KIND_LABEL: Record<string, string> = {
 
 export const ModelConfigSheet = ({ model, providers, onClose }: Props) => (
   <Sheet open={!!model} onOpenChange={o => !o && onClose()}>
-    <SheetContent>
+    <SheetContent onOpenAutoFocus={e => e.preventDefault()}>
       {model && (
         <ModelConfigForm
           key={model.id}
