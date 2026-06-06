@@ -72,7 +72,7 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
             已关联 KB
           </h3>
           <span className="text-[11px] text-stone-500">
-            agent 调用时会跨这些 KB 检索
+            应用调用时会跨这些 KB 检索
           </span>
         </div>
         {linkedQ.isLoading ? (

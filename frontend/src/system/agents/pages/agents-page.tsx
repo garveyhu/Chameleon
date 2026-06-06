@@ -650,7 +650,7 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
               <p className="font-medium text-stone-800">代码应用不在 Web 端创建</p>
               <p className="mt-1.5">
                 用 <code className="rounded bg-stone-200 px-1 py-0.5 font-mono text-[11px]">@agent</code>{' '}
-                装饰器定义你的智能体，把文件提交进项目的{' '}
+                装饰器定义你的应用，把文件提交进项目的{' '}
                 <code className="rounded bg-stone-200 px-1 py-0.5 font-mono text-[11px]">agents/</code>{' '}
                 目录，平台会在加载时自动扫描入表，随后即可在本目录看到并配置。
               </p>

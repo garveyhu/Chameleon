@@ -253,7 +253,7 @@ export const ConversationDetailPage = () => {
 
         <div className="mt-3">
           <StatBar>
-            <StatItem k="智能体" v={conv?.agent_key || '—'} mono />
+            <StatItem k="应用" v={conv?.agent_key || '—'} mono />
             <StatItem k="终端用户" v={conv?.end_user_id || '匿名'} mono />
             <StatItem
               k="轮次"
