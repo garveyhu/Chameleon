@@ -55,6 +55,7 @@ from chameleon.providers.base.types import (
 )
 from chameleon.providers.base.types import Message as ProviderMessage
 from chameleon.system.api_key import service as api_key_service
+from chameleon.system.pricing import resolve_agent_media_cost
 
 # ── agent 列表 / 详情（注册表只读访问） ──────────────────
 
@@ -429,6 +430,13 @@ async def invoke(
             )
 
     # ⑨ 审计（root trace 行 —— generation 子行由 BaseLLM 回调自动落）
+    rollup_cost, rollup_model = await _media_cost_fallback(
+        session,
+        agent_key=agent_key,
+        options=req.options,
+        rollup_cost=rollup_cost,
+        rollup_model=rollup_model,
+    )
     usage = result.usage
     response_payload = _build_response_payload(result)
     await _record_call(
@@ -516,6 +524,24 @@ async def _ensure_session(
             message="session_id 已绑定其他终端用户，不可跨用户访问",
         )
     return conv
+
+
+async def _media_cost_fallback(
+    session: AsyncSession,
+    *,
+    agent_key: str,
+    options: dict | None,
+    rollup_cost,
+    rollup_model,
+):
+    """token rollup 为空(媒体生成无 token)时，按应用绑定的生成模型算媒体成本。"""
+    if rollup_cost is not None:
+        return rollup_cost, rollup_model
+    opts = options or {}
+    cost, model = await resolve_agent_media_cost(
+        session, agent_key=agent_key, gen_params=opts.get("gen_params") or opts
+    )
+    return (cost, model) if cost is not None else (rollup_cost, rollup_model)
 
 
 async def _record_call(session: AsyncSession, **kwargs) -> None:
@@ -881,6 +907,13 @@ async def _stream_finalize(
                     result.usage = Usage(
                         prompt_tokens=p, completion_tokens=c, total_tokens=t
                     )
+            rollup_cost, rollup_model = await _media_cost_fallback(
+                session,
+                agent_key=agent_key,
+                options=request_payload.get("options"),
+                rollup_cost=rollup_cost,
+                rollup_model=rollup_model,
+            )
             usage = result.usage
             response_payload = (
                 _build_response_payload(result)

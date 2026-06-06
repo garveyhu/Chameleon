@@ -413,6 +413,12 @@ async def _write_log(
                 session, request_id
             )
             prompt_tokens, completion_tokens, total_tokens = p, c, t
+        if rollup_cost is None:
+            from chameleon.system.pricing import resolve_agent_media_cost
+
+            mc, mm = await resolve_agent_media_cost(session, agent_key=agent_key)
+            if mc is not None:
+                rollup_cost, rollup_model = mc, mm
 
         await record_call(
             session,

@@ -9,7 +9,13 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.data.models import LLMModel, MediaPricing, ModelPricing, Provider
+from chameleon.data.models import (
+    Agent,
+    LLMModel,
+    MediaPricing,
+    ModelPricing,
+    Provider,
+)
 from chameleon.system.pricing.units import PricingUnit, VideoTier
 
 #: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
@@ -170,6 +176,51 @@ async def seed_media_pricing(session: AsyncSession) -> int:
         await session.commit()
         logger.info("media_pricing seeded | count={}", added)
     return added
+
+
+async def resolve_agent_media_cost(
+    session: AsyncSession,
+    *,
+    agent_key: str,
+    gen_params: dict | None = None,
+) -> tuple[Decimal | None, str | None]:
+    """生成类应用(source=comfyui)→按绑定生成模型 + 参数算媒体成本(CNY)。
+
+    返回 (cost, model_code)；非媒体应用 / 无价目 → (None, None)。playground / agent /
+    embed 三处记录 call_log 时共用，避免重复算账逻辑。
+    """
+    agent = (
+        await session.execute(
+            select(Agent).where(
+                Agent.agent_key == agent_key, Agent.deleted_at.is_(None)
+            )
+        )
+    ).scalar_one_or_none()
+    if agent is None or agent.source != "comfyui":
+        return None, None
+    mid = (agent.config or {}).get("model_id")
+    if not mid:
+        return None, None
+    m = await session.get(LLMModel, int(mid))
+    if m is None or m.kind not in ("image", "video"):
+        return None, None
+    params = gen_params or {}
+    if m.kind == "video":
+        seconds = params.get("duration") or params.get("seconds") or 5
+        tier = params.get("resolution") or "720P"
+        cost = await calc_media_cost(
+            session,
+            model_code=m.code,
+            unit=PricingUnit.VIDEO_SECOND,
+            tier=str(tier),
+            quantity=float(seconds),
+        )
+    else:
+        count = params.get("n") or params.get("count") or 1
+        cost = await calc_media_cost(
+            session, model_code=m.code, unit=PricingUnit.IMAGE, quantity=float(count)
+        )
+    return cost, m.code
 
 
 async def list_model_pricing(session: AsyncSession) -> list[dict]:
