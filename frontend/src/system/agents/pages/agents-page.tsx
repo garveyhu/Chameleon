@@ -7,7 +7,7 @@
  *   - 嵌入：从卡片操作进入，复用 embed_configs 的表单弹窗（不在主导航）
  *   - 新建应用：Dify 式编排方式选择器（对话/流程 → 建 graph 跳编辑器；代码 → 指引）
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -274,7 +274,11 @@ export const AgentsPage = () => {
 
       <CreateAppModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditAppModal card={editTarget} onClose={() => setEditTarget(null)} />
-      <EmbedActionModal target={embedTarget} onClose={() => setEmbedTarget(null)} />
+      <EmbedActionModal
+        key={embedTarget?.agentId ?? 'closed'}
+        target={embedTarget}
+        onClose={() => setEmbedTarget(null)}
+      />
     </div>
   );
 };
@@ -293,12 +297,11 @@ const EmbedActionModal = ({
     qc.invalidateQueries({ queryKey: ['embed-configs'] });
   };
 
-  // 保存成功后不关弹窗 —— 用内部 state 跟踪当前编辑对象（创建后切到编辑模式 / 更新后回填最新数据）
-  const [liveInitial, setLiveInitial] = useState<EmbedConfigItem | null>(target?.initial ?? null);
-  useEffect(() => {
-    // target 变化（开 / 关 / 切到另一张卡）→ 重置 internal
-    setLiveInitial(target?.initial ?? null);
-  }, [target]);
+  // 保存成功后不关弹窗 —— 用内部 state 跟踪当前编辑对象（创建后切到编辑模式 / 更新后回填）。
+  // 惰性初始化；target 变化（切卡）由父级按 key 重挂重置，避免 set-state-in-effect。
+  const [liveInitial, setLiveInitial] = useState<EmbedConfigItem | null>(
+    () => target?.initial ?? null,
+  );
 
   const createMut = useMutation({
     mutationFn: (req: CreateEmbedConfigRequest) => embedConfigApi.create(req),

@@ -1,7 +1,7 @@
 /** Agent 关联 KB 表单 —— 多选组合框（autocomplete by name） */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Save, X } from 'lucide-react';
+import { ChevronDown, Database, Save, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -18,7 +18,6 @@ interface Props {
 }
 
 export const LinkedKbsForm = ({ agentId }: Props) => {
-  const qc = useQueryClient();
   const linkedQ = useQuery({
     queryKey: ['agent-linked-kbs', agentId],
     queryFn: () => agentApi.linkedKbs(agentId),
@@ -28,21 +27,48 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
     queryFn: () => kbApi.list({ page: 1, page_size: 100 }),
   });
 
-  const [selected, setSelected] = useState<LinkedKbItem[]>([]);
-  useEffect(() => {
-    if (linkedQ.data) setSelected(linkedQ.data);
-  }, [linkedQ.data]);
+  if (linkedQ.isLoading) {
+    return (
+      <div className="max-w-[640px] space-y-2">
+        {[0, 1].map(i => (
+          <div key={i} className="h-12 animate-pulse rounded-md bg-stone-100" />
+        ))}
+      </div>
+    );
+  }
 
-  const linkedIds = useMemo(
-    () => new Set(linkedQ.data?.map(k => k.id) ?? []),
-    [linkedQ.data],
+  // 键控内组件：服务端数据为初值惰性初始化；保存后 refetch → key 变 → 重挂重置脏态
+  const linked = linkedQ.data ?? [];
+  const dataKey = linked.map(k => k.id).join(',');
+  return (
+    <KbEditor
+      key={dataKey}
+      agentId={agentId}
+      initial={linked}
+      options={allKbsQ.data?.items ?? []}
+    />
   );
+};
+
+const KbEditor = ({
+  agentId,
+  initial,
+  options,
+}: {
+  agentId: import('@/core/types/api').EntityId;
+  initial: LinkedKbItem[];
+  options: AutocompleteProps['options'];
+}) => {
+  const qc = useQueryClient();
+  const [selected, setSelected] = useState<LinkedKbItem[]>(() => initial);
+
+  const initialIds = useMemo(() => new Set(initial.map(k => k.id)), [initial]);
   const currentIds = useMemo(() => new Set(selected.map(k => k.id)), [selected]);
   const dirty = useMemo(() => {
-    if (linkedIds.size !== currentIds.size) return true;
-    for (const id of currentIds) if (!linkedIds.has(id)) return true;
+    if (initialIds.size !== currentIds.size) return true;
+    for (const id of currentIds) if (!initialIds.has(id)) return true;
     return false;
-  }, [linkedIds, currentIds]);
+  }, [initialIds, currentIds]);
 
   const saveMut = useMutation({
     mutationFn: () =>
@@ -54,6 +80,7 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
       toast.success('关联已保存');
       qc.invalidateQueries({ queryKey: ['agent-linked-kbs', agentId] });
     },
+    onError: () => toast.error('保存失败'),
   });
 
   const remove = (id: import('@/core/types/api').EntityId) =>
@@ -75,11 +102,13 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
             应用调用时会跨这些 KB 检索
           </span>
         </div>
-        {linkedQ.isLoading ? (
-          <div className="py-6 text-center text-sm text-stone-400">加载中…</div>
-        ) : selected.length === 0 ? (
-          <div className="rounded-md border border-dashed border-stone-300 bg-stone-50/40 py-6 text-center text-[12.5px] text-stone-400">
-            尚未关联任何 KB
+        {selected.length === 0 ? (
+          <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed border-stone-300 bg-stone-50/40 py-7 text-center">
+            <Database className="h-5 w-5 text-stone-300" />
+            <div className="text-[12.5px] text-stone-400">尚未关联任何 KB</div>
+            <Link to="/kbs" className="text-[11.5px] text-blue-600 hover:underline">
+              去知识库创建 / 管理 →
+            </Link>
           </div>
         ) : (
           <ul className="space-y-1.5">
@@ -115,11 +144,7 @@ export const LinkedKbsForm = ({ agentId }: Props) => {
       </div>
 
       <div>
-        <KbAutocomplete
-          options={allKbsQ.data?.items ?? []}
-          excludeIds={currentIds}
-          onPick={add}
-        />
+        <KbAutocomplete options={options} excludeIds={currentIds} onPick={add} />
       </div>
 
       <div className="flex justify-end">
