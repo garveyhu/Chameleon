@@ -31,7 +31,8 @@ export const SegmentedControl = <T extends string>({
   <div
     role="tablist"
     className={cn(
-      'inline-flex items-center gap-1.5 rounded-xl border border-stone-200 bg-stone-100/70 p-1.5',
+      // flex + w-fit：块级独占一行（像其他表单控件那样落到 label 下方），但宽度收紧到内容
+      'flex w-fit items-center gap-0.5 rounded-lg border border-stone-200 bg-stone-100/70 p-0.5',
       className,
     )}
   >
@@ -46,10 +47,10 @@ export const SegmentedControl = <T extends string>({
           disabled={opt.disabled}
           onClick={() => !opt.disabled && onChange(opt.value)}
           className={cn(
-            'rounded-lg font-medium leading-none transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+            'rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40',
             size === 'sm'
-              ? 'px-3.5 py-2 text-[12px]'
-              : 'px-5 py-2.5 text-[12.5px]',
+              ? 'px-3 py-1 text-[12px]'
+              : 'px-3.5 py-1.5 text-[12.5px]',
             active
               ? 'bg-stone-800 text-white shadow-sm'
               : 'text-stone-500 hover:bg-white hover:text-stone-800',
