@@ -1,7 +1,7 @@
 /** Playground 列参数面板：model / system prompt / temperature / top_p / max_tokens / kb_ids */
 
 import { useQuery } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 
 import { AgentPicker } from '@/core/components/common/agent-picker';
 import { GenerationPanel } from '@/core/components/common/generation-panel';
@@ -108,6 +108,28 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
       toast.error('载入应用配置失败');
     }
   };
+
+  // 会话恢复：有 invoke_agent_key 但缺生成模型信息 → 补拉，让右栏生成面板能渲染
+  useEffect(() => {
+    const key = params.invoke_agent_key;
+    if (!key || params.media_model_id) return;
+    let cancelled = false;
+    agentApi
+      .prefillConfig(key)
+      .then(cfg => {
+        if (cancelled || cfg.source !== 'comfyui') return;
+        onChange({
+          ...params,
+          media_kind: cfg.media_kind ?? null,
+          media_model_id: cfg.media_model_id ?? null,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.invoke_agent_key, params.media_model_id]);
 
   return (
     <div className={cn('space-y-3 text-[12.5px]', className)}>
