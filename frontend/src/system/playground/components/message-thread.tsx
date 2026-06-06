@@ -15,11 +15,12 @@ import type {
   TranslateLanguage,
 } from '@/core/components/chat';
 import { Markdown } from '@/core/components/chat/markdown';
+import { ImageGenLoading } from '@/core/components/common/image-gen-loading';
 import { VirtualList } from '@/core/components/common/virtual-list';
 import { Button } from '@/core/components/ui/button';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
-import { messagesOf, useChatStore } from '@/core/stores/chat';
+import { messagesOf, paramsOf, useChatStore } from '@/core/stores/chat';
 import { RewritePromptModal } from '@/system/playground/components/rewrite-prompt-modal';
 import { SaveAsSampleModal } from '@/system/playground/components/save-as-sample-modal';
 import type { PlaygroundMessage } from '@/system/playground/types/playground';
@@ -119,6 +120,8 @@ const MessageBubble = ({
   onOpenTrace?: (msg: PlaygroundMessage) => void;
 }) => {
   const isUser = msg.role === 'user';
+  // 生成类应用（生图/视频）出结果耗时长，等待态用骨架 + 计时而非打字点
+  const mediaKind = useChatStore(s => paramsOf(s, columnId)?.media_kind ?? null);
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(msg.content);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -230,7 +233,14 @@ const MessageBubble = ({
             // user 气泡是实色背景，markdown 链接/代码沿用组件默认（bot 白底）样式
             <Markdown content={msg.content} />
           ) : msg.status === 'streaming' ? (
-            <TypingDots />
+            mediaKind ? (
+              <ImageGenLoading
+                className="w-60"
+                hint={mediaKind === 'video' ? '正在生成视频，可能需要一会儿…' : '正在生成图片…'}
+              />
+            ) : (
+              <TypingDots />
+            )
           ) : (
             <span className="text-stone-400">（空回复）</span>
           )}
