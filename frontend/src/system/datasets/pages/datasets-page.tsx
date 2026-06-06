@@ -119,16 +119,22 @@ export const DatasetsPage = () => {
       key: 'run_count',
       header: '运行',
       align: 'right',
-      width: 64,
+      width: 72,
       render: r => (
-        <span
+        <button
+          type="button"
+          title="查看该数据集的运行"
+          onClick={e => {
+            e.stopPropagation();
+            nav(`/datasets/${r.id}?tab=runs`);
+          }}
           className={cn(
-            'tnum',
+            'tnum rounded px-1.5 py-0.5 transition hover:bg-primary-50 hover:text-primary-700',
             (r.run_count ?? 0) > 0 ? 'text-stone-600' : 'text-stone-300',
           )}
         >
-          {r.run_count ?? 0}
-        </span>
+          {r.run_count ?? 0} ↗
+        </button>
       ),
     },
     {
