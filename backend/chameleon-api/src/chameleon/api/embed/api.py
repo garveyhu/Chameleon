@@ -292,9 +292,19 @@ async def list_my_session_messages(
             if value is not None:
                 feedback_map[call_log_id] = int(value)
 
+    # 媒体 URL 签发：content 存的是 minio:// 稳定引用，渲染前签成新鲜 presigned
+    # （否则生图/视频历史回放裂图 —— widget 无法解析 minio://）
+    from chameleon.data.infra.object_store import (
+        refresh_media_urls,
+        refresh_object_urls,
+    )
+
     items: list[MessageItem] = []
     for r in rows:
         item = MessageItem.model_validate(r)
+        item.content = refresh_media_urls(item.content)
+        if item.content_blocks:
+            item.content_blocks = refresh_object_urls(item.content_blocks)
         if r.request_id and r.request_id in feedback_map:
             item.feedback = feedback_map[r.request_id]
         items.append(item)
