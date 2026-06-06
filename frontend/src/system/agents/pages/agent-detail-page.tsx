@@ -211,15 +211,25 @@ const GenerationAppInfo = ({ agent }: { agent: AgentItem }) => {
 const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
   if (!agent) return <div className="py-12 text-center text-sm text-stone-400">—</div>;
   if (agent.source === 'comfyui') return <GenerationAppInfo agent={agent} />;
+  const isLocal = agent.source === 'local';
+  const isGraph = agent.source === 'graph';
+  const isExternal = ['dify', 'fastgpt', 'coze'].includes(agent.source);
+  const typeLabel = isLocal
+    ? '代码应用'
+    : isGraph
+      ? agent.graph_kind === 'workflow'
+        ? '流程编排应用'
+        : '对话编排应用'
+      : EXTERNAL_LABEL[agent.source] ?? '外部应用';
   return (
     <>
       <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-        {agent.source === 'graph' && agent.graph_id != null && (
+        {isGraph && agent.graph_id != null && (
           <div className="col-span-2 flex items-center justify-between gap-3 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2.5">
             <div className="flex items-center gap-2 text-[12px] text-stone-600">
               <Workflow className="h-4 w-4 shrink-0 text-blue-600" />
               <span>
-                此智能体由<span className="font-medium text-stone-800">工作流编排</span>
+                此应用由<span className="font-medium text-stone-800">工作流编排</span>
                 驱动，知识库 / 模型在编排画布的节点里配置。
               </span>
             </div>
@@ -232,22 +242,37 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
             </Link>
           </div>
         )}
+        {isExternal && (
+          <div className="col-span-2 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-[12px] text-amber-700">
+            外部应用：对话流程与凭据在 {typeLabel} 平台维护，此处仅作关联与调用入口。
+          </div>
+        )}
         <Kv label="应用标识" value={agent.agent_key} mono />
-        <Kv label="来源" value={agent.source} />
+        <Kv label="类型" value={typeLabel} />
         <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
-        <Kv label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
-        <Kv label="本地类路径" value={agent.local_class_path ?? '—'} mono />
-        <Kv label="版本" value={agent.version ?? '—'} mono />
-        <AgentHelperModelField agent={agent} />
-        <Kv label="标签" value={(agent.tags ?? []).join(', ') || '—'} />
-        <Kv label="配置" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
-        <Kv label="描述" value={agent.description ?? '—'} full />
+        {isExternal && (
+          <Kv label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
+        )}
+        {isLocal && <Kv label="本地类路径" value={agent.local_class_path ?? '—'} mono />}
+        {isLocal && agent.version && <Kv label="版本" value={agent.version} mono />}
+        {(isLocal || isGraph) && <AgentHelperModelField agent={agent} />}
+        {(agent.tags ?? []).length > 0 && (
+          <Kv label="标签" value={(agent.tags ?? []).join(', ')} />
+        )}
+        {agent.description && <Kv label="描述" value={agent.description} full />}
         <Kv label="创建时间" value={formatDateTime(agent.created_at)} mono />
         <Kv label="更新时间" value={formatDateTime(agent.updated_at)} mono />
       </div>
-      <AgentConfigForm agentId={agent.id} />
+      {/* 代码应用的声明式配置项可在此编辑；外部/编排应用配置在各自平台/画布，不在此暴露 */}
+      {isLocal && <AgentConfigForm agentId={agent.id} />}
     </>
   );
+};
+
+const EXTERNAL_LABEL: Record<string, string> = {
+  dify: 'Dify',
+  fastgpt: 'FastGPT',
+  coze: 'Coze',
 };
 
 const Kv = ({
