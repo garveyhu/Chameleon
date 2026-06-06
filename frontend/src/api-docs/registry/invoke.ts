@@ -71,7 +71,7 @@ const ENDPOINTS: EndpointSpec[] = [
         type: 'object',
         required: false,
         default: '{}',
-        desc: 'provider-specific 运行时覆盖（temperature / top_p / max_tokens 等）',
+        desc: 'provider-specific 运行时覆盖。对话应用：temperature / top_p / max_tokens。生成类应用（生图/视频）：options.gen_params（尺寸 / 风格 / 分辨率 / 时长 / 数量等，见「生成应用」一节）、options.input_images（图生视频首帧图 url 数组）。',
       },
     ],
     responses: [
@@ -109,6 +109,83 @@ const ENDPOINTS: EndpointSpec[] = [
     "user": "end-user-id-12345",
     "session_id": null,
     "stream": false
+  }'`,
+  },
+  {
+    id: 'invoke-generation',
+    group: 'invoke',
+    order: 15,
+    title: '生成应用：生图 / 视频',
+    method: 'POST',
+    path: '/v1/invoke',
+    auth: 'bearer-key',
+    desc: '生成类应用（绑定图片 / 视频模型）走同一 /v1/invoke 端点：input 为生成提示词，options.gen_params 调生成参数，options.input_images 传图生视频首帧。产物落对象存储，answer 字段以 Markdown 形式回传（图片 ![](url)、视频 [▶视频](url)）。按张 / 按秒计费（人民币元，见可观测）。',
+    bodyParams: [
+      {
+        name: 'input',
+        type: 'string',
+        required: true,
+        desc: '生成提示词（prompt）',
+        example: 'a red sports car on a mountain road',
+      },
+      {
+        name: 'options.gen_params',
+        type: 'object',
+        required: false,
+        default: '{}',
+        desc: '生成参数（随模型而异，可经 GET /v1/admin/imagegen/param-spec?model_id= 查可用字段）。图片常用：size("1024*1024") / n(张数) / negative_prompt / seed；视频常用：resolution("720P"|"1080P") / duration(秒) / seed。',
+      },
+      {
+        name: 'options.input_images',
+        type: 'string[]',
+        required: false,
+        default: '[]',
+        desc: '图生视频（i2v）首帧图 url（仅视频模型用）。本地图会自动转 base64 内联，外部图直接透传。',
+      },
+      {
+        name: 'user',
+        type: 'string | null',
+        required: false,
+        default: null,
+        desc: '终端用户外部标识（会话归属 / 计费统计）',
+      },
+    ],
+    responses: [
+      {
+        code: 200,
+        name: '200 - 生图（application/json）',
+        desc: 'answer 为 Markdown 图片，url 为对象存储签名地址',
+        example: {
+          code: 0,
+          message: 'ok',
+          data: {
+            session_id: 'sess_01H...',
+            request_id: 'req_01H...',
+            answer: '![image](https://oss.example.com/mediagen/.../out.png?sig=...)',
+            usage: null,
+          },
+        },
+      },
+    ],
+    cURL: `# 生图（绑定 qwen-image-2.0 等图片模型的应用）
+curl -X POST '{BASE}/v1/invoke' \\
+  -H 'Authorization: Bearer {API_KEY}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "input": "a red sports car on a mountain road",
+    "options": { "gen_params": { "size": "1024*1024", "n": 1 } }
+  }'
+
+# 图生视频（绑定 wan2.7-i2v 等视频模型的应用）
+curl -X POST '{BASE}/v1/invoke' \\
+  -H 'Authorization: Bearer {API_KEY}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "input": "镜头缓慢推进，云雾流动",
+    "options": {
+      "gen_params": { "resolution": "720P", "duration": 5 },
+      "input_images": ["https://your-cdn.com/first-frame.png"]
+    }
   }'`,
   },
   {

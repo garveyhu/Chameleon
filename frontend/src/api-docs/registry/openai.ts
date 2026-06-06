@@ -27,7 +27,7 @@ const ENDPOINTS: EndpointSpec[] = [
         name: 'messages',
         type: 'OAMessage[]',
         required: true,
-        desc: '消息数组，每条 { role, content }。role ∈ user / assistant / system / tool。',
+        desc: '消息数组，每条 { role, content }。role ∈ user / assistant / system / tool。content 可为纯字符串，或 OpenAI 视觉格式的内容块数组（图理解）：[{ "type": "text", "text": "..." }, { "type": "image_url", "image_url": { "url": "https://... 或 data:image/png;base64,..." } }]。图片仅在应用绑定的模型支持视觉（如 qwen-vl）时生效，否则图片块会被忽略。',
       },
       {
         name: 'stream',
@@ -77,7 +77,8 @@ const ENDPOINTS: EndpointSpec[] = [
           'data: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\ndata: [DONE]',
       },
     ],
-    cURL: `curl -X POST '{BASE}/v1/chat/completions' \\
+    cURL: `# 纯文本
+curl -X POST '{BASE}/v1/chat/completions' \\
   -H 'Authorization: Bearer {API_KEY}' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -87,6 +88,20 @@ const ENDPOINTS: EndpointSpec[] = [
     ],
     "user": "end-user-id-12345",
     "stream": false
+  }'
+
+# 图理解（应用需绑定视觉模型，如 qwen-vl）
+curl -X POST '{BASE}/v1/chat/completions' \\
+  -H 'Authorization: Bearer {API_KEY}' \\
+  -H 'Content-Type: application/json' \\
+  -d '{
+    "model": "agt_vision_app",
+    "messages": [
+      {"role": "user", "content": [
+        {"type": "text", "text": "这张图里有什么？"},
+        {"type": "image_url", "image_url": {"url": "https://your-cdn.com/photo.jpg"}}
+      ]}
+    ]
   }'`,
   },
 ];
