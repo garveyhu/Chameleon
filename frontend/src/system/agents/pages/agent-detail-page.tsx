@@ -199,18 +199,18 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
             </Link>
           </div>
         )}
-        <Kv label="agent_key" value={agent.agent_key} mono />
-        <Kv label="source" value={agent.source} />
+        <Kv label="应用标识" value={agent.agent_key} mono />
+        <Kv label="来源" value={agent.source} />
         <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
-        <Kv label="provider_id" value={String(agent.provider_id ?? '—')} mono />
-        <Kv label="local_class_path" value={agent.local_class_path ?? '—'} mono />
-        <Kv label="version" value={agent.version ?? '—'} mono />
+        <Kv label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
+        <Kv label="本地类路径" value={agent.local_class_path ?? '—'} mono />
+        <Kv label="版本" value={agent.version ?? '—'} mono />
         <AgentHelperModelField agent={agent} />
-        <Kv label="tags" value={(agent.tags ?? []).join(', ') || '—'} />
-        <Kv label="config" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
-        <Kv label="description" value={agent.description ?? '—'} full />
-        <Kv label="created_at" value={formatDateTime(agent.created_at)} mono />
-        <Kv label="updated_at" value={formatDateTime(agent.updated_at)} mono />
+        <Kv label="标签" value={(agent.tags ?? []).join(', ') || '—'} />
+        <Kv label="配置" value={agent.config ? JSON.stringify(agent.config) : '—'} mono full />
+        <Kv label="描述" value={agent.description ?? '—'} full />
+        <Kv label="创建时间" value={formatDateTime(agent.created_at)} mono />
+        <Kv label="更新时间" value={formatDateTime(agent.updated_at)} mono />
       </div>
       <AgentConfigForm agentId={agent.id} />
     </>

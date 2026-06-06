@@ -1,8 +1,9 @@
 /** 模型连通性测试弹窗：SSE 流式输出 */
 
-import { AlertCircle, CheckCircle2, Loader2, X, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Image as ImageIcon, Loader2, X, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { ImageGenLoading } from '@/core/components/common/image-gen-loading';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -154,48 +155,71 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
           </p>
         )}
 
-        <div className="rounded-md border border-stone-200 bg-stone-50">
-          <div className="flex items-center justify-between border-b border-stone-200 px-3 py-1.5">
+        {isImage ? (
+          <div className="space-y-2">
             <div className="flex items-center gap-2 text-[11px] text-stone-500">
               <StateBadge state={state} />
               {meta ? <span className="font-mono">{meta.kind} / {meta.model}</span> : null}
-              {latencyMs !== null ? <span className="font-mono">· {latencyMs}ms</span> : null}
+              {latencyMs !== null ? (
+                <span className="font-mono">· {(latencyMs / 1000).toFixed(1)}s</span>
+              ) : null}
             </div>
-            {usage ? (
-              <span className="font-mono text-[11px] text-stone-500">
-                tokens in/out: {usage.input_tokens}/{usage.output_tokens}
-              </span>
-            ) : null}
-          </div>
-          <pre
-            ref={outputRef}
-            className={cn(
-              'max-h-[280px] min-h-[120px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-[12px] leading-relaxed text-stone-800',
-              state === 'idle' && 'text-stone-400',
+            {state === 'running' ? (
+              <ImageGenLoading hint="本地 ComfyUI 出图，首次含模型加载可能需数分钟" />
+            ) : imageUrl ? (
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
+                <img
+                  src={imageUrl}
+                  alt="生成结果"
+                  className="mx-auto max-h-[420px] w-auto object-contain"
+                />
+              </div>
+            ) : errorText ? (
+              <div className="flex items-start gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11.5px] text-rose-700">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{errorText}</span>
+              </div>
+            ) : (
+              <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-stone-200 bg-stone-50/60 text-stone-400">
+                <ImageIcon className="h-8 w-8 text-stone-300" />
+                <span className="text-[12px]">点击「开始测试」生成图片</span>
+              </div>
             )}
-          >
-            {output || (state === 'idle' ? '点击「开始测试」运行...' : '')}
-            {running ? (
-              <span className="inline-block h-3 w-1.5 animate-pulse bg-stone-400 align-middle" />
-            ) : null}
-          </pre>
-          {errorText ? (
-            <div className="flex items-start gap-1.5 border-t border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span className="font-mono">{errorText}</span>
-            </div>
-          ) : null}
-        </div>
-
-        {isImage && imageUrl ? (
-          <div className="overflow-hidden rounded-md border border-stone-200 bg-white">
-            <img
-              src={imageUrl}
-              alt="生成结果"
-              className="mx-auto max-h-[360px] w-auto object-contain"
-            />
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-md border border-stone-200 bg-stone-50">
+            <div className="flex items-center justify-between border-b border-stone-200 px-3 py-1.5">
+              <div className="flex items-center gap-2 text-[11px] text-stone-500">
+                <StateBadge state={state} />
+                {meta ? <span className="font-mono">{meta.kind} / {meta.model}</span> : null}
+                {latencyMs !== null ? <span className="font-mono">· {latencyMs}ms</span> : null}
+              </div>
+              {usage ? (
+                <span className="font-mono text-[11px] text-stone-500">
+                  tokens in/out: {usage.input_tokens}/{usage.output_tokens}
+                </span>
+              ) : null}
+            </div>
+            <pre
+              ref={outputRef}
+              className={cn(
+                'max-h-[280px] min-h-[120px] overflow-auto whitespace-pre-wrap px-3 py-2 font-mono text-[12px] leading-relaxed text-stone-800',
+                state === 'idle' && 'text-stone-400',
+              )}
+            >
+              {output || (state === 'idle' ? '点击「开始测试」运行...' : '')}
+              {running ? (
+                <span className="inline-block h-3 w-1.5 animate-pulse bg-stone-400 align-middle" />
+              ) : null}
+            </pre>
+            {errorText ? (
+              <div className="flex items-start gap-1.5 border-t border-rose-200 bg-rose-50 px-3 py-2 text-[11.5px] text-rose-700">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span className="font-mono">{errorText}</span>
+              </div>
+            ) : null}
+          </div>
+        )}
       </ModalBody>
       <ModalFooter>
         <Button variant="ghost" onClick={onClose} disabled={running}>

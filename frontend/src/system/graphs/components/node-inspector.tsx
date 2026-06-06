@@ -220,7 +220,7 @@ const DataForm = ({
       <>
         <Section title="生图模型">
           <ImageModelSelect
-            value={(data.model_id as number | undefined) ?? ''}
+            value={(data.model_id as string) || ''}
             onChange={id => onPatch({ model_id: id || undefined })}
           />
           <p className="mt-1 text-[10.5px] text-stone-400">

@@ -515,7 +515,7 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
   const [method, setMethod] = useState<AppMethod>('chatflow');
   const [graphKey, setGraphKey] = useState('');
   const [graphName, setGraphName] = useState('');
-  const [imageModelId, setImageModelId] = useState<number | ''>('');
+  const [imageModelId, setImageModelId] = useState('');
 
   const reset = () => {
     setMethod('chatflow');

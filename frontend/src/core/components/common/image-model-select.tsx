@@ -17,9 +17,9 @@ import { cn } from '@/core/lib/cn';
 import { modelApi } from '@/system/models/services/model';
 
 interface Props {
-  /** 选中的 model.id；'' = 未选 */
-  value: number | '';
-  onChange: (id: number | '') => void;
+  /** 选中的 model.id（字符串，避免雪花 id 过 Number 丢精度）；'' = 未选 */
+  value: string;
+  onChange: (id: string) => void;
   placeholder?: string;
   className?: string;
 }
@@ -39,8 +39,8 @@ export const ImageModelSelect = ({
 
   return (
     <Select
-      value={value ? String(value) : undefined}
-      onValueChange={v => onChange(v ? Number(v) : '')}
+      value={value || undefined}
+      onValueChange={v => onChange(v ?? '')}
     >
       <SelectTrigger className={cn('h-7 text-[12px]', className)}>
         <SelectValue placeholder={q.isLoading ? '加载中…' : placeholder} />

@@ -87,7 +87,7 @@ export const AgentHelperModelField = ({ agent, compact = false }: Props) => {
     <div className="col-span-2 rounded-md border border-stone-200/70 bg-white px-3 py-2">
       <div className="mb-1 flex items-center justify-between gap-3">
         <div>
-          <div className="text-[11px] text-stone-500">辅助模型 · default_model_code</div>
+          <div className="text-[11px] text-stone-500">辅助模型</div>
           <div className="text-[11px] leading-tight text-stone-400">{desc}</div>
         </div>
         {Trigger}
