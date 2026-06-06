@@ -260,11 +260,14 @@ const CreateModelModal = ({
   const [code, setCode] = useState('');
   const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank' | 'image'>('chat');
   const [dim, setDim] = useState<string>('');
+  const [imageDriver, setImageDriver] = useState<'comfyui' | 'dashscope'>('comfyui');
   const [workflow, setWorkflow] = useState('');
+  const [upstreamModel, setUpstreamModel] = useState('');
+  const [imageSize, setImageSize] = useState('1280*1280');
   const workflowsQ = useQuery({
     queryKey: ['imagegen-workflows'],
     queryFn: imagegenApi.listWorkflows,
-    enabled: open && kind === 'image',
+    enabled: open && kind === 'image' && imageDriver === 'comfyui',
   });
 
   return (
@@ -276,7 +279,10 @@ const CreateModelModal = ({
           setCode('');
           setKind('chat');
           setDim('');
+          setImageDriver('comfyui');
           setWorkflow('');
+          setUpstreamModel('');
+          setImageSize('1280*1280');
           onClose();
         }
       }}
@@ -334,24 +340,65 @@ const CreateModelModal = ({
             </div>
           )}
           {kind === 'image' && (
-            <div className="space-y-1.5">
-              <Label>工作流</Label>
-              <Select value={workflow} onValueChange={setWorkflow}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择生图工作流" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(workflowsQ.data ?? []).map(w => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[11px] text-stone-400">
-                供应商需选 ComfyUI（生图）类型；模型标识可填如 z-image-turbo，测试时用所选工作流出图。
-              </p>
-            </div>
+            <>
+              <div className="space-y-1.5">
+                <Label>生成后端</Label>
+                <Select
+                  value={imageDriver}
+                  onValueChange={v => setImageDriver(v as 'comfyui' | 'dashscope')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="comfyui">本地 ComfyUI（工作流）</SelectItem>
+                    <SelectItem value="dashscope">DashScope 远程（千问 / 万相）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {imageDriver === 'comfyui' ? (
+                <div className="space-y-1.5">
+                  <Label>工作流</Label>
+                  <Select value={workflow} onValueChange={setWorkflow}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择生图工作流" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(workflowsQ.data ?? []).map(w => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-stone-400">
+                    供应商需选 ComfyUI（生图）类型；模型标识可填如 z-image-turbo。
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>上游模型 (DashScope model)</Label>
+                    <Input
+                      value={upstreamModel}
+                      onChange={e => setUpstreamModel(e.target.value)}
+                      placeholder="qwen-image"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>默认尺寸 (size)</Label>
+                    <Input
+                      value={imageSize}
+                      onChange={e => setImageSize(e.target.value)}
+                      placeholder="1280*1280"
+                    />
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    供应商选千问（DashScope）；复用其 API Key 直连百炼异步出图。上游模型名以百炼控制台为准。
+                  </p>
+                </>
+              )}
+            </>
           )}
         </ModalBody>
         <ModalFooter>
@@ -359,14 +406,29 @@ const CreateModelModal = ({
             取消
           </Button>
           <Button
-            disabled={loading || !providerId || !code || (kind === 'image' && !workflow)}
+            disabled={
+              loading ||
+              !providerId ||
+              !code ||
+              (kind === 'image' &&
+                (imageDriver === 'comfyui' ? !workflow : !upstreamModel.trim()))
+            }
             onClick={() =>
               onSubmit({
                 provider_id: providerId,
                 code,
                 kind,
                 dim: kind === 'embedding' && dim ? Number(dim) : undefined,
-                defaults: kind === 'image' && workflow ? { workflow } : undefined,
+                defaults:
+                  kind === 'image'
+                    ? imageDriver === 'comfyui'
+                      ? { workflow }
+                      : {
+                          driver: 'dashscope',
+                          model: upstreamModel.trim(),
+                          size: imageSize.trim() || '1280*1280',
+                        }
+                    : undefined,
               })
             }
           >

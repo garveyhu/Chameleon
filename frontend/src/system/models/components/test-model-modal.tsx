@@ -141,7 +141,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
             />
             {isImage ? (
               <p className="text-[11px] text-stone-400">
-                本地 ComfyUI 出图，首次含模型加载可能需数分钟，请耐心等待。
+                远程模型（DashScope）通常数秒出图；本地 ComfyUI 首次含模型加载可能需数分钟。
               </p>
             ) : null}
           </div>
@@ -165,7 +165,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
               ) : null}
             </div>
             {state === 'running' ? (
-              <ImageGenLoading hint="本地 ComfyUI 出图，首次含模型加载可能需数分钟" />
+              <ImageGenLoading hint="远程模型通常数秒；本地 ComfyUI 首次含模型加载可能数分钟" />
             ) : imageUrl ? (
               <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
                 <img

@@ -48,9 +48,9 @@ class ComfyuiProvider(Provider):
     name = "comfyui"
 
     async def stream(self, ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
-        from chameleon.integrations.images import (
-            ImageConfigError,
-            resolve_image_target,
+        from chameleon.integrations.mediagen import (
+            MediaConfigError,
+            resolve_media_target,
             stream_generate,
         )
 
@@ -64,18 +64,19 @@ class ComfyuiProvider(Provider):
             )
 
         try:
-            target = await resolve_image_target(int(model_id))
-        except ImageConfigError as e:
+            target = await resolve_media_target(int(model_id))
+        except MediaConfigError as e:
             raise ProviderInternalError(
                 message=f"comfyui agent {ctx.agent_def.key} 生图模型配置无效: {e}"
             ) from e
 
         prompt = _extract_prompt(ctx) or _FALLBACK_PROMPT
         logger.debug(
-            "comfyui provider | agent={} | model={} | workflow={} | prompt={!r}",
+            "comfyui provider | agent={} | model={} | driver={} | upstream={} | prompt={!r}",
             ctx.agent_def.key,
             target.model_code,
-            target.workflow_id,
+            target.driver,
+            target.upstream,
             prompt[:60],
         )
 
@@ -87,14 +88,9 @@ class ComfyuiProvider(Provider):
         start = time.monotonic()
         image_url = ""
         try:
-            async for ev in stream_generate(
-                host=target.host,
-                workflow_id=target.workflow_id,
-                prompt=prompt,
-                params=target.params,
-            ):
+            async for ev in stream_generate(target, prompt=prompt):
                 if ev["type"] == "done":
-                    image_url = ev["image_url"]
+                    image_url = ev["url"]
         except Exception as e:
             yield StreamEvent(
                 type=StreamEventType.step,

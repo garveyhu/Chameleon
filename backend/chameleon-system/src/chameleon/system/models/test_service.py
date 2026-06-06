@@ -28,13 +28,13 @@ from chameleon.core.api.sse_events import (
 )
 from chameleon.data.models import LLMModel, Provider
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
-from chameleon.integrations.images import (
-    ImageConfigError,
-    build_image_target,
-    stream_generate,
-)
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import resolve_upstream
+from chameleon.integrations.mediagen import (
+    MediaConfigError,
+    build_media_target,
+    stream_generate,
+)
 from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
 
 PING_PROMPT = "请用一句话简短自我介绍。"
@@ -173,24 +173,19 @@ async def stream_test(
             yield event_end(usage=None, latency_ms=latency_ms, sample=sample)
         elif m.kind == "image":
             try:
-                target = build_image_target(m, p)
-            except ImageConfigError as e:
+                target = build_media_target(m, p)
+            except MediaConfigError as e:
                 yield event_error("ConfigError", str(e))
                 return
             test_prompt = prompt or DEFAULT_TEST_IMAGE_PROMPT
-            yield event_delta(f"使用工作流「{target.workflow_id}」提交生成…\n")
+            yield event_delta(f"使用「{target.upstream}」（{target.driver}）提交生成…\n")
             image_url: str | None = None
             last_notice = 0
-            async for ev in stream_generate(
-                host=target.host,
-                workflow_id=target.workflow_id,
-                prompt=test_prompt,
-                params=target.params,
-            ):
+            async for ev in stream_generate(target, prompt=test_prompt):
                 etype = ev["type"]
                 if etype == "submitted":
                     yield event_delta(
-                        f"已提交 ComfyUI（prompt_id={ev['prompt_id']}），"
+                        f"已提交（ref={ev['ref']}），"
                         "生成中（首次含模型加载，可能数分钟）…\n"
                     )
                 elif etype == "progress":
@@ -199,10 +194,12 @@ async def stream_test(
                         last_notice = secs
                         yield event_delta(f"⏳ 已等待 {secs}s…\n")
                 elif etype == "done":
-                    image_url = ev["image_url"]
+                    image_url = ev["url"]
                     yield event_image_chunk(
                         ImageChunkPayload(
-                            url=image_url, detail="final", mime_type="image/png"
+                            url=image_url,
+                            detail="final",
+                            mime_type=ev.get("mime_type", "image/png"),
                         )
                     )
             latency_ms = int((time.monotonic() - start) * 1000)

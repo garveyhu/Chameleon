@@ -86,9 +86,9 @@ class ImageGenNode(Node[Any, dict]):
     async def _run(
         self, ctx: NodeContext, input: Any, emit: DeltaSink | None
     ) -> dict:
-        from chameleon.integrations.images import (
-            ImageConfigError,
-            resolve_image_target,
+        from chameleon.integrations.mediagen import (
+            MediaConfigError,
+            resolve_media_target,
             stream_generate,
         )
 
@@ -99,31 +99,27 @@ class ImageGenNode(Node[Any, dict]):
             raise ValueError("ImageGenNode 无可用提示词（data.prompt / input.query 均空）")
 
         try:
-            target = await resolve_image_target(int(data["model_id"]))
-        except ImageConfigError as e:
+            target = await resolve_media_target(int(data["model_id"]))
+        except MediaConfigError as e:
             raise ValueError(f"生图模型配置无效: {e}") from e
 
-        params = {**target.params, **(data.get("params") or {})}
+        params = data.get("params") or {}
         logger.debug(
-            "ImageGenNode {} | model={} | workflow={} | prompt={!r}",
+            "ImageGenNode {} | model={} | driver={} | upstream={} | prompt={!r}",
             self.id,
             target.model_code,
-            target.workflow_id,
+            target.driver,
+            target.upstream,
             prompt[:60],
         )
 
         image_url = ""
         image_key = ""
         latency_ms = 0
-        async for ev in stream_generate(
-            host=target.host,
-            workflow_id=target.workflow_id,
-            prompt=prompt,
-            params=params,
-        ):
+        async for ev in stream_generate(target, prompt=prompt, params=params):
             if ev["type"] == "done":
-                image_url = ev["image_url"]
-                image_key = ev["image_key"]
+                image_url = ev["url"]
+                image_key = ev["key"]
                 latency_ms = ev["latency_ms"]
 
         if not image_url:

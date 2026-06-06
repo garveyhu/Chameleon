@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from chameleon.core.api.response import Result
-from chameleon.integrations.images import list_workflows
+from chameleon.integrations.mediagen import list_workflows
 from chameleon.system.auth.dependencies import require_permission
 
 
