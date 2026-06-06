@@ -11,6 +11,7 @@ import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { AgentPicker } from '@/core/components/common/agent-picker';
+import { CronBuilder } from '@/core/components/common/cron-builder';
 import { ModelPicker } from '@/core/components/common/model-picker';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
@@ -47,10 +48,7 @@ import {
 import { schemeToRunFields } from '@/system/datasets/utils/scoring-scheme-payload';
 import { evalJobApi } from '@/system/eval_jobs/services/eval-job';
 import type { CreateEvalJobPayload } from '@/system/eval_jobs/types/eval-job';
-import {
-  CRON_CUSTOM_SENTINEL,
-  CRON_PRESETS,
-} from '@/system/eval_jobs/types/eval-job';
+import { genJobKey } from '@/system/eval_jobs/utils/job-key';
 
 interface DatasetOption {
   id: EntityId;
@@ -100,10 +98,8 @@ export const NewEvaluationWizard = ({
   const [agentKey, setAgentKey] = useState('');
   // 归属 Key（雪花 id 以字符串存，'' = 不归属/内部评测）
   const [apiKeyId, setApiKeyId] = useState('');
-  // 定时专属
-  const [jobKey, setJobKey] = useState('');
-  const [cronPreset, setCronPreset] = useState('0 9 * * *');
-  const [cronCustom, setCronCustom] = useState('');
+  // 定时专属：job_key 自动生成、cron 由 CronBuilder 维护
+  const [cron, setCron] = useState('0 9 * * *');
 
   const datasetsQ = useQuery({
     queryKey: ['new-eval:datasets'],
@@ -154,8 +150,6 @@ export const NewEvaluationWizard = ({
       toast.error((e as { message?: string })?.message || '创建失败'),
   });
 
-  const isCustomCron = cronPreset === CRON_CUSTOM_SENTINEL;
-  const finalCron = isCustomCron ? cronCustom.trim() : cronPreset;
   const schemeReady =
     scheme.mode === 'template' ? scheme.templateId != null : true;
   const pending = runMut.isPending || jobMut.isPending;
@@ -164,7 +158,7 @@ export const NewEvaluationWizard = ({
     !!datasetId &&
     !!name.trim() &&
     schemeReady &&
-    (runMode === 'now' || (!!finalCron && !!jobKey.trim())) &&
+    (runMode === 'now' || !!cron.trim()) &&
     !pending;
 
   const handleSubmit = () => {
@@ -182,7 +176,7 @@ export const NewEvaluationWizard = ({
       runMut.mutate(req);
     } else {
       const payload: CreateEvalJobPayload = {
-        job_key: jobKey.trim(),
+        job_key: genJobKey(name),
         name: name.trim(),
         dataset_id: datasetId as unknown as EntityId,
         target_kind: 'agent',
@@ -192,7 +186,7 @@ export const NewEvaluationWizard = ({
         judge_config: schemeFields.judge_config ?? null,
         template_id:
           scheme.mode === 'template' ? (scheme.templateId ?? null) : null,
-        cron_expr: finalCron,
+        cron_expr: cron.trim(),
       };
       jobMut.mutate(payload);
     }
@@ -332,43 +326,12 @@ export const NewEvaluationWizard = ({
               ))}
             </div>
             {runMode === 'scheduled' && (
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1.5">
-                  <Label>
-                    job_key <span className="text-rose-500">*</span>
-                  </Label>
-                  <Input
-                    value={jobKey}
-                    onChange={e => setJobKey(e.target.value)}
-                    placeholder="daily-baseline"
-                    className="font-mono"
-                    maxLength={64}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Cron 触发时间</Label>
-                  <Select value={cronPreset} onValueChange={setCronPreset}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="选预设…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CRON_PRESETS.map(p => (
-                        <SelectItem key={p.label} value={p.value}>
-                          {p.label}
-                          {p.value !== CRON_CUSTOM_SENTINEL && `（${p.value}）`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {isCustomCron && (
-                    <Input
-                      value={cronCustom}
-                      onChange={e => setCronCustom(e.target.value)}
-                      placeholder="* * * * *（分 时 日 月 周）"
-                      className="font-mono"
-                    />
-                  )}
-                </div>
+              <div className="space-y-1.5 pt-1">
+                <Label>触发周期</Label>
+                <CronBuilder value={cron} onChange={setCron} />
+                <p className="text-[10.5px] text-stone-400">
+                  任务标识自动生成；可在「定时任务」里改名 / 启停 / 删除。
+                </p>
               </div>
             )}
           </div>

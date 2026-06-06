@@ -43,6 +43,7 @@ import type {
   EvalJobItem,
   UpdateEvalJobPayload,
 } from '@/system/eval_jobs/types/eval-job';
+import { genJobKey } from '@/system/eval_jobs/utils/job-key';
 
 interface DatasetItem {
   id: EntityId;
@@ -71,18 +72,6 @@ const initialScheme = (job?: EvalJobItem | null): ScoringScheme => {
     judge: job?.judge ?? 'exact_match',
     judgeConfig: job?.judge_config ?? undefined,
   };
-};
-
-/** 由显示名自动生成唯一任务标识：ASCII slug + 随机后缀，中文名退回 job-<rand>。 */
-const genJobKey = (name: string): string => {
-  const slug = name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 24);
-  const rand = Math.random().toString(36).slice(2, 8);
-  return slug ? `${slug}-${rand}` : `job-${rand}`;
 };
 
 export const EvalJobFormModal = ({
