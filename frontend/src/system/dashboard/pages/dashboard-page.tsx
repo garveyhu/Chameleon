@@ -7,7 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import { DateRangePicker } from '@/core/components/common/date-range-picker';
 import { RequirePermission } from '@/core/components/common/permission-guard';
-import { cn } from '@/core/lib/cn';
+import { SegmentedControl } from '@/core/components/ui/segmented-control';
 import { useAuthStore } from '@/core/stores/auth-store';
 import { useDashboardRange } from '@/system/dashboard/hooks/useDashboardRange';
 import { CostTab } from '@/system/dashboard/pages/tabs/cost-tab';
@@ -43,23 +43,11 @@ export const DashboardPage = () => {
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         {visibleTabs.length > 1 ? (
-          <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-            {visibleTabs.map(t => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => switchTab(t.key)}
-                className={cn(
-                  'rounded-md px-3.5 py-1 text-[13px] transition',
-                  active === t.key
-                    ? 'bg-stone-800 text-white'
-                    : 'text-stone-600 hover:bg-stone-100',
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={active}
+            onChange={switchTab}
+            options={visibleTabs.map(t => ({ value: t.key, label: t.label }))}
+          />
         ) : (
           <div />
         )}

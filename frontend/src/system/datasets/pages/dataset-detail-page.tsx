@@ -27,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
+import { SegmentedControl } from '@/core/components/ui/segmented-control';
 import { confirm } from '@/core/lib/confirm';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
@@ -450,47 +451,23 @@ export const DatasetDetailPage = () => {
       </header>
 
       <div className="flex items-center justify-between">
-        <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-          {(
-            [
-              ['items', '样本'],
-              ['runs', '运行'],
-            ] as const
-          ).map(([k, label]) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setTab(k)}
-              className={cn(
-                'rounded-md px-3 py-1 text-[13px] transition',
-                tab === k ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'items', label: '样本' },
+            { value: 'runs', label: '运行' },
+          ]}
+        />
         {tab === 'items' && (
-          <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-            {(
-              [
-                ['table', '表格'],
-                ['sheet', '电子表格'],
-              ] as const
-            ).map(([k, label]) => (
-              <button
-                key={k}
-                type="button"
-                onClick={() => setItemsView(k)}
-                className={cn(
-                  'rounded-md px-3 py-1 text-[12.5px] transition',
-                  itemsView === k ? 'bg-stone-800 text-white' : 'text-stone-600 hover:bg-stone-100',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            value={itemsView}
+            onChange={setItemsView}
+            options={[
+              { value: 'table', label: '表格' },
+              { value: 'sheet', label: '电子表格' },
+            ]}
+          />
         )}
         {tab === 'runs' && (
           <div className="flex items-center gap-2">
