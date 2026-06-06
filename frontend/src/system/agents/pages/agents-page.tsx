@@ -24,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 
+import { ImageModelSelect } from '@/core/components/common/image-model-select';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import {
@@ -480,7 +481,7 @@ const EditAppModal = ({ card, onClose }: { card: AppCardModel | null; onClose: (
 };
 
 // ── 新建应用：编排方式选择器 ────────────────────────────────
-type AppMethod = 'chatflow' | 'workflow' | 'code';
+type AppMethod = 'chatflow' | 'workflow' | 'comfyui' | 'code';
 
 const METHOD_META: Record<
   AppMethod,
@@ -496,6 +497,11 @@ const METHOD_META: Record<
     desc: '一次性管线：填输入跑、批处理；可视化拖拽节点',
     icon: Workflow,
   },
+  comfyui: {
+    label: '生图应用',
+    desc: '绑定本地 ComfyUI 生图模型，对话即出图（Markdown 图片）',
+    icon: ImagePlus,
+  },
   code: {
     label: '代码应用',
     desc: '用 @agent 装饰器在代码里定义；提交进 agents 目录自动注册',
@@ -509,11 +515,13 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
   const [method, setMethod] = useState<AppMethod>('chatflow');
   const [graphKey, setGraphKey] = useState('');
   const [graphName, setGraphName] = useState('');
+  const [imageModelId, setImageModelId] = useState<number | ''>('');
 
   const reset = () => {
     setMethod('chatflow');
     setGraphKey('');
     setGraphName('');
+    setImageModelId('');
   };
 
   const createMut = useMutation({
@@ -533,7 +541,24 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
     },
   });
 
+  const createComfyuiMut = useMutation({
+    mutationFn: () =>
+      agentApi.create({
+        agent_key: graphKey.trim(),
+        name: graphName.trim() || graphKey.trim(),
+        source: 'comfyui',
+        config: { model_id: imageModelId },
+      }),
+    onSuccess: () => {
+      toast.success('生图应用已创建');
+      qc.invalidateQueries({ queryKey: ['agents'] });
+      onClose();
+      reset();
+    },
+  });
+
   const isGraphMethod = method === 'chatflow' || method === 'workflow';
+  const isComfyui = method === 'comfyui';
 
   return (
     <Modal
@@ -552,8 +577,8 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
         <ModalBody className="space-y-3">
           <div>
             <label className="mb-1.5 block text-[12px] text-stone-600">编排方式</label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              {(['chatflow', 'workflow', 'code'] as const).map(m => {
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {(['chatflow', 'workflow', 'comfyui', 'code'] as const).map(m => {
                 const meta = METHOD_META[m];
                 const Icon = meta.icon;
                 const active = method === m;
@@ -582,7 +607,7 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
             </div>
           </div>
 
-          {isGraphMethod ? (
+          {isGraphMethod || isComfyui ? (
             <>
               <div>
                 <label className="mb-1 block text-[12px] text-stone-600">
@@ -605,6 +630,20 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
                   className="h-8"
                 />
               </div>
+              {isComfyui ? (
+                <div>
+                  <label className="mb-1 block text-[12px] text-stone-600">生图模型</label>
+                  <ImageModelSelect
+                    value={imageModelId}
+                    onChange={setImageModelId}
+                    className="w-full"
+                  />
+                  <p className="mt-1 text-[10.5px] leading-snug text-stone-400">
+                    需先在「模型」页添加 ComfyUI 供应商下的 image 模型；对话时把用户消息当
+                    提示词出图，返回 Markdown 图片。
+                  </p>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-[12px] leading-relaxed text-stone-600">
@@ -628,6 +667,13 @@ const CreateAppModal = ({ open, onClose }: { open: boolean; onClose: () => void 
               disabled={!graphKey.trim() || createMut.isPending}
             >
               {createMut.isPending ? '创建中…' : '创建并编辑'}
+            </Button>
+          ) : isComfyui ? (
+            <Button
+              onClick={() => createComfyuiMut.mutate()}
+              disabled={!graphKey.trim() || !imageModelId || createComfyuiMut.isPending}
+            >
+              {createComfyuiMut.isPending ? '创建中…' : '创建'}
             </Button>
           ) : (
             <Button onClick={onClose}>知道了</Button>

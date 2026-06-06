@@ -51,7 +51,7 @@ export interface CreateAgentRequest {
   agent_key: string;
   name: string;
   description?: string;
-  source: 'dify' | 'fastgpt' | 'coze';
+  source: 'dify' | 'fastgpt' | 'coze' | 'comfyui';
   provider_id?: EntityId;
   config?: Record<string, unknown>;
   tags?: string[];

@@ -19,6 +19,7 @@ members = [
     "chameleon-data",
     "chameleon-engine",
     "chameleon-integrations",
+    "chameleon-provider-comfyui",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
     "chameleon-provider-graph",
@@ -351,6 +352,7 @@ dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-data" },
     { name = "chameleon-integrations" },
+    { name = "chameleon-provider-comfyui" },
     { name = "chameleon-provider-dify" },
     { name = "chameleon-provider-fastgpt" },
     { name = "chameleon-provider-local" },
@@ -373,6 +375,7 @@ requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-integrations", editable = "chameleon-integrations" },
+    { name = "chameleon-provider-comfyui", editable = "chameleon-providers/comfyui" },
     { name = "chameleon-provider-dify", editable = "chameleon-providers/dify" },
     { name = "chameleon-provider-fastgpt", editable = "chameleon-providers/fastgpt" },
     { name = "chameleon-provider-local", editable = "chameleon-providers/local" },
@@ -537,6 +540,27 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pynacl", specifier = ">=1.5" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+]
+
+[[package]]
+name = "chameleon-provider-comfyui"
+version = "0.1.0"
+source = { editable = "chameleon-providers/comfyui" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-data" },
+    { name = "chameleon-integrations" },
+    { name = "chameleon-providers-base" },
+    { name = "loguru" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-data", editable = "chameleon-data" },
+    { name = "chameleon-integrations", editable = "chameleon-integrations" },
+    { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+    { name = "loguru", specifier = ">=0.7" },
 ]
 
 [[package]]

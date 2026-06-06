@@ -15,6 +15,7 @@ import {
   Flag,
   GitBranch,
   Globe,
+  Image as ImageIcon,
   type LucideIcon,
   Plus,
   Repeat,
@@ -54,6 +55,14 @@ const ITEMS: PaletteItem[] = [
     icon: Shuffle,
     desc: 'LLM 意图分类',
     color: 'text-lime-600',
+    group: '生成',
+  },
+  {
+    type: 'image_gen',
+    label: '生图',
+    icon: ImageIcon,
+    desc: '本地 ComfyUI 文生图',
+    color: 'text-purple-600',
     group: '生成',
   },
   {

@@ -28,7 +28,11 @@ from chameleon.core.api.sse_events import (
 )
 from chameleon.data.models import LLMModel, Provider
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
-from chameleon.integrations.images import stream_generate, workflow_exists
+from chameleon.integrations.images import (
+    ImageConfigError,
+    build_image_target,
+    stream_generate,
+)
 from chameleon.integrations.llms.base import BaseLLM
 from chameleon.integrations.llms.factory import resolve_upstream
 from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
@@ -168,28 +172,20 @@ async def stream_test(
                 sample = "(空)"
             yield event_end(usage=None, latency_ms=latency_ms, sample=sample)
         elif m.kind == "image":
-            host = p.base_url
-            if not host:
-                yield event_error("ConfigError", "ComfyUI 供应商未配置 base_url")
+            try:
+                target = build_image_target(m, p)
+            except ImageConfigError as e:
+                yield event_error("ConfigError", str(e))
                 return
-            defaults = m.defaults or {}
-            workflow_id = defaults.get("workflow")
-            if not workflow_id or not workflow_exists(str(workflow_id)):
-                yield event_error(
-                    "ConfigError",
-                    f"模型未配置有效工作流（defaults.workflow），当前: {workflow_id!r}",
-                )
-                return
-            gen_params = {k: v for k, v in defaults.items() if k != "workflow"}
             test_prompt = prompt or DEFAULT_TEST_IMAGE_PROMPT
-            yield event_delta(f"使用工作流「{workflow_id}」提交生成…\n")
+            yield event_delta(f"使用工作流「{target.workflow_id}」提交生成…\n")
             image_url: str | None = None
             last_notice = 0
             async for ev in stream_generate(
-                host=host,
-                workflow_id=str(workflow_id),
+                host=target.host,
+                workflow_id=target.workflow_id,
                 prompt=test_prompt,
-                params=gen_params,
+                params=target.params,
             ):
                 etype = ev["type"]
                 if etype == "submitted":

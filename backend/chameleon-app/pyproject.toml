@@ -11,6 +11,7 @@ dependencies = [
     "chameleon-provider-local",
     "chameleon-provider-dify",
     "chameleon-provider-fastgpt",
+    "chameleon-provider-comfyui",
     # 业务路由两个独立包
     "chameleon-api",
     "chameleon-system",
@@ -35,6 +36,7 @@ chameleon-providers-base = { workspace = true }
 chameleon-provider-local = { workspace = true }
 chameleon-provider-dify = { workspace = true }
 chameleon-provider-fastgpt = { workspace = true }
+chameleon-provider-comfyui = { workspace = true }
 chameleon-api = { workspace = true }
 chameleon-system = { workspace = true }
 chameleon-agent-qwen-chat = { workspace = true }

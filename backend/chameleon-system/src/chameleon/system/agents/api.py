@@ -19,7 +19,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -86,10 +86,16 @@ class CreateAgentRequest(BaseModel):
     agent_key: str = Field(min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=128)
     description: str | None = None
-    source: str = Field(pattern="^(dify|fastgpt|coze)$")
+    source: str = Field(pattern="^(dify|fastgpt|coze|comfyui)$")
     provider_id: int | None = None
     config: dict | None = None
     tags: list | None = None
+
+    @model_validator(mode="after")
+    def _check_comfyui_model(self) -> "CreateAgentRequest":
+        if self.source == "comfyui" and not (self.config or {}).get("model_id"):
+            raise ValueError("comfyui 应用必须绑定生图模型（config.model_id）")
+        return self
 
 
 class UpdateAgentRequest(BaseModel):

@@ -14,6 +14,7 @@ import {
   Flag,
   GitBranch,
   Globe,
+  Image as ImageIcon,
   type LucideIcon,
   PlayCircle,
   Repeat,
@@ -56,6 +57,13 @@ export const TYPE_META: Record<GraphNodeType, NodeTypeMeta> = {
     ring: 'ring-violet-200',
     bg: 'bg-violet-50',
     label: 'LLM',
+  },
+  image_gen: {
+    icon: ImageIcon,
+    color: 'text-purple-700',
+    ring: 'ring-purple-200',
+    bg: 'bg-purple-50',
+    label: '生图',
   },
   kb: {
     icon: Database,
@@ -177,6 +185,7 @@ export function isNodeAllowedForKind(type: GraphNodeType, kind: GraphKind): bool
 /** 各节点类型的输出字段（变量选择器 + 输出变量区共用） */
 export const NODE_OUTPUT_FIELDS: Partial<Record<GraphNodeType, string[]>> = {
   llm: ['answer'],
+  image_gen: ['image_url', 'answer', 'prompt', 'model', 'workflow', 'latency_ms'],
   kb: ['joined_context', 'hits', 'query'],
   http: ['status_code', 'body', 'headers'],
   template: ['text'],

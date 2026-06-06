@@ -4,6 +4,7 @@
  */
 import { Trash2 } from 'lucide-react';
 
+import { ImageModelSelect } from '@/core/components/common/image-model-select';
 import { Input } from '@/core/components/ui/input';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
@@ -209,6 +210,37 @@ const DataForm = ({
               需所选模型支持视觉；非图片附件由 KB / Code 节点接管
             </div>
           </Field>
+        </Section>
+      </>
+    );
+  }
+
+  if (type === 'image_gen') {
+    return (
+      <>
+        <Section title="生图模型">
+          <ImageModelSelect
+            value={(data.model_id as number | undefined) ?? ''}
+            onChange={id => onPatch({ model_id: id || undefined })}
+          />
+          <p className="mt-1 text-[10.5px] text-stone-400">
+            选一个「生图(image)」模型，运行时用其绑定的 ComfyUI 工作流出图
+          </p>
+        </Section>
+
+        <Section title="提示词">
+          <PromptField
+            label="生图提示词（留空则取上游 query）"
+            value={(data.prompt as string) || ''}
+            onChange={v => onPatch({ prompt: v || undefined })}
+            onInsert={t => onPatch({ prompt: ((data.prompt as string) || '') + t })}
+            nodeVars={nodeVars}
+            rows={4}
+            placeholder={'一只橘猫坐在窗台上，柔和晨光\n或引用：{{#sys.query#}}'}
+          />
+          <p className="mt-1 text-[10.5px] text-stone-400">
+            输出 image_url（产物图 URL）与 answer（Markdown 图片，可作答案节点）
+          </p>
         </Section>
       </>
     );

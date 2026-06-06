@@ -5,6 +5,7 @@ export type GraphNodeType =
   | 'start'
   | 'end'
   | 'llm'
+  | 'image_gen'
   | 'kb'
   | 'tool'
   | 'if_else'

@@ -23,8 +23,10 @@ export interface TestStreamChunk extends FlatSSEEvent {
 }
 
 export const modelApi = {
-  list: (params?: { kind?: 'chat' | 'embedding'; provider_id?: number }) =>
-    get<ModelItem[]>('/v1/admin/models', { params }),
+  list: (params?: {
+    kind?: 'chat' | 'embedding' | 'rerank' | 'image';
+    provider_id?: number;
+  }) => get<ModelItem[]>('/v1/admin/models', { params }),
   create: (req: CreateModelRequest) => post<ModelItem>('/v1/admin/models', req),
   update: (
     id: EntityId,
