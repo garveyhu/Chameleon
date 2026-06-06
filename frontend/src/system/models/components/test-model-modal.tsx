@@ -21,6 +21,7 @@ import {
   ModalTitle,
 } from '@/core/components/ui/modal';
 import { cn } from '@/core/lib/cn';
+import { uploadFile } from '@/system/files/services/file-upload';
 import { modelApi, type TestStreamChunk } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
 
@@ -53,9 +54,23 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [usage, setUsage] = useState<TestStreamChunk['usage']>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [visionImg, setVisionImg] = useState<string | null>(null);
+  const [imgUploading, setImgUploading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef<HTMLPreElement | null>(null);
   const genRef = useRef<GenerationPanelHandle | null>(null);
+  const visionFileRef = useRef<HTMLInputElement | null>(null);
+
+  const onPickVisionImg = async (file: File | undefined) => {
+    if (!file) return;
+    setImgUploading(true);
+    try {
+      const r = await uploadFile(file, { namespace: 'vlm-test' });
+      setVisionImg(r.object_url);
+    } finally {
+      setImgUploading(false);
+    }
+  };
 
   // 输出自动滚到底
   useEffect(() => {
@@ -87,7 +102,11 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
             ? prompt.trim() || undefined
             : undefined,
         params: isGen ? gen?.params : undefined,
-        inputImages: isGen ? gen?.input_images : undefined,
+        inputImages: isGen
+          ? gen?.input_images
+          : visionImg
+            ? [visionImg]
+            : undefined,
         signal: ctrl.signal,
         onChunk: chunk => {
           if (chunk.meta) setMeta(chunk.meta);
@@ -128,6 +147,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
   const isImage = model.kind === 'image';
   const isVideo = model.kind === 'video';
   const isGen = isImage || isVideo;
+  const isVisionChat = isChat && !!model.capabilities?.vision;
   const running = state === 'running';
 
   return (
@@ -154,15 +174,60 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
             }
           />
         ) : isChat ? (
-          <div className="space-y-1.5">
-            <Label className="text-[12px] text-stone-600">测试 prompt</Label>
-            <Input
-              value={prompt}
-              onChange={e => setPrompt(e.target.value)}
-              placeholder={DEFAULT_PROMPT}
-              disabled={running}
-              className="font-mono text-[12px]"
-            />
+          <div className="space-y-2">
+            <div className="space-y-1.5">
+              <Label className="text-[12px] text-stone-600">测试 prompt</Label>
+              <Input
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                placeholder={isVisionChat ? '描述/提问这张图片…' : DEFAULT_PROMPT}
+                disabled={running}
+                className="font-mono text-[12px]"
+              />
+            </div>
+            {isVisionChat ? (
+              <div className="space-y-1.5">
+                <Label className="text-[12px] text-stone-600">图片（视觉模型可选，测图理解）</Label>
+                <input
+                  ref={visionFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => onPickVisionImg(e.target.files?.[0] ?? undefined)}
+                />
+                {visionImg ? (
+                  <div className="relative inline-block">
+                    <img
+                      src={visionImg}
+                      alt="参考图"
+                      className="h-24 w-auto rounded-md border border-stone-200 object-cover"
+                    />
+                    <button
+                      type="button"
+                      disabled={running}
+                      onClick={() => setVisionImg(null)}
+                      className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-stone-700 text-white"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={running || imgUploading}
+                    onClick={() => visionFileRef.current?.click()}
+                    className="flex h-20 w-28 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-stone-300 text-stone-400 transition hover:border-stone-400"
+                  >
+                    {imgUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <ImageIcon className="h-5 w-5" />
+                    )}
+                    <span className="text-[11px]">{imgUploading ? '上传中…' : '上传图片'}</span>
+                  </button>
+                )}
+              </div>
+            ) : null}
           </div>
         ) : model.kind === 'rerank' ? (
           <p className="text-[12px] text-stone-500">

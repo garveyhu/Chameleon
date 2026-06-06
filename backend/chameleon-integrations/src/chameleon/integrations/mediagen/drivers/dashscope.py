@@ -14,15 +14,14 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import time
 from collections.abc import AsyncIterator
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 from loguru import logger
 
+from ..fetch import ensure_fetchable
 from ..persist import content_type_for, store_media
 from ..presets import (
     ASPECT_MULTIMODAL,
@@ -40,20 +39,6 @@ _IMAGE_TIMEOUT = 300.0
 _SYNC_TIMEOUT = 240.0
 _VIDEO_TIMEOUT = 900.0
 _TERMINAL_FAIL = {"FAILED", "CANCELED", "UNKNOWN"}
-_LOCAL_HOSTS = ("127.0.0.1", "localhost", "0.0.0.0")
-
-
-async def _ensure_fetchable(url: str) -> str:
-    """DashScope 服务端要能拉到首帧图；本地 MinIO（127.0.0.1）地址抓不到，
-    则下载后转 base64 data URI 内联发送（无需公网桶）。公网地址原样透传。"""
-    host = urlparse(url).hostname or ""
-    if url.startswith("data:") or not any(h in host for h in _LOCAL_HOSTS):
-        return url
-    async with httpx.AsyncClient(timeout=60.0) as c:
-        r = await c.get(url)
-    r.raise_for_status()
-    mime = (r.headers.get("content-type") or "image/png").split(";")[0]
-    return f"data:{mime};base64,{base64.b64encode(r.content).decode()}"
 
 
 def _root(host: str) -> str:
@@ -186,7 +171,7 @@ class DashScopeDriver:
         # wan2.7-i2v 首帧图走 input.media（带 type 的多模态块数组）；旧版用
         # input.img_url（字符串）。默认 wan2.7 形态，可经 extra.image_field 切到旧版。
         image_field = str(target.extra.get("image_field") or "media")
-        first_frame = await _ensure_fetchable(input_images[0])
+        first_frame = await ensure_fetchable(input_images[0])
         if image_field == "img_url":
             input_obj: dict[str, Any] = {"prompt": prompt, "img_url": first_frame}
         else:

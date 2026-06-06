@@ -35,6 +35,7 @@ from chameleon.integrations.llms.factory import resolve_upstream
 from chameleon.integrations.mediagen import (
     MediaConfigError,
     build_media_target,
+    ensure_fetchable,
     stream_generate,
 )
 from chameleon.integrations.rerank.openai_compat import OpenAICompatReranker
@@ -104,7 +105,16 @@ async def stream_test(
                 temperature=defaults.get("temperature", 0.7),
                 max_tokens=defaults.get("max_tokens", DEFAULT_STREAM_MAX_TOKENS),
             )
-            messages = [HumanMessage(content=prompt or PING_PROMPT)]
+            # 视觉模型 + 上传了图片 → 多模态消息（本地图 base64 内联，远端可达）
+            if input_images and (m.capabilities or {}).get("vision"):
+                img = await ensure_fetchable(input_images[0])
+                content: object = [
+                    {"type": "text", "text": prompt or "请用中文描述这张图片。"},
+                    {"type": "image_url", "image_url": {"url": img}},
+                ]
+            else:
+                content = prompt or PING_PROMPT
+            messages = [HumanMessage(content=content)]
             collected: list[str] = []
             usage: UsagePayload | None = None
             async for chunk in llm.astream(messages):
