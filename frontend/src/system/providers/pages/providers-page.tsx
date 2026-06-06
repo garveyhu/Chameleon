@@ -1,13 +1,12 @@
 /** providers 管理页 —— 现代供应商卡片（网关高亮 + 模型数） */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Boxes, Cloud, Network, Plus, ShieldCheck } from 'lucide-react';
+import { Cloud, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
-import { MiniStat } from '@/core/components/common/mini-stat';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -99,23 +98,6 @@ export const ProvidersPage = () => {
           <Plus className="h-3.5 w-3.5" /> {t('common.create')}
         </Button>
       </header>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MiniStat label="供应商" value={providers.length} icon={Cloud} tone="primary" />
-        <MiniStat
-          label="已配凭证"
-          value={providers.filter(p => p.has_api_key).length}
-          icon={ShieldCheck}
-          tone="success"
-        />
-        <MiniStat label="模型总数" value={models.length} icon={Boxes} tone="violet" />
-        <MiniStat
-          label="网关"
-          value={providers.filter(p => p.kind === 'gateway').length}
-          icon={Network}
-          tone="sky"
-        />
-      </div>
 
       {listQ.isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
