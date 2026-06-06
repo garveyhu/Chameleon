@@ -192,10 +192,18 @@ export const RunDetailPanel = ({
                 <GitCompare className="h-3.5 w-3.5" /> 对比上一版本
               </button>
             )}
+            {/* 智能优化只对模型直调运行有意义：它重写 System Prompt 再重跑。
+                智能体的 Prompt 烤在其工作流编排里，外部无法覆盖，故禁用入口。 */}
             <button
               type="button"
               onClick={onOptimize}
-              className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-700 transition hover:bg-violet-100"
+              disabled={!!run.agent_key}
+              title={
+                run.agent_key
+                  ? '本次被测对象是智能体，其 Prompt 在工作流编排里维护，智能优化仅用于模型直调运行；如需优化请到工作流编辑器调整后重新评测'
+                  : '汇总低分样本，让 AI 重写 System Prompt'
+              }
+              className="inline-flex items-center gap-1 rounded-md bg-violet-50 px-2 py-1 text-[11px] text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:bg-stone-50 disabled:text-stone-400"
             >
               <Sparkles className="h-3.5 w-3.5" /> 智能优化
             </button>
