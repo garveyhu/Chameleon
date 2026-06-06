@@ -35,6 +35,7 @@ from chameleon.core.observe import (
     set_trace_context,
 )
 from chameleon.data.constants import Channel
+from chameleon.data.infra.object_store import stash_media_urls
 from chameleon.data.models import ChatSession, KnowledgeBase, LLMModel, Message
 from chameleon.data.utils.snowflake import next_session_id
 from chameleon.integrations.llms.factory import llm as get_llm
@@ -123,7 +124,8 @@ async def _append_message(
             session_id=session_id,
             seq=next_seq,
             role=role,
-            content=content,
+            # 落库归一：生图返回的 presigned 图片 URL → minio:// 稳定引用（读时再签）
+            content=stash_media_urls(content),
             request_id=request_id,
             usage=usage,
             end_user_id=end_user_id,

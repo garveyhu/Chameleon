@@ -8,7 +8,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 
 from loguru import logger
@@ -28,23 +27,21 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.config import inventory
 from chameleon.data.infra.auth import CurrentApp
-from chameleon.data.infra.object_store import get_object_store, refresh_object_urls
+from chameleon.data.infra.object_store import (
+    refresh_media_urls,
+    refresh_object_urls,
+    stash_media_urls,
+    stash_object_urls,
+)
 from chameleon.data.models import ChatSession, Message
 from chameleon.data.utils.snowflake import next_session_id
 from chameleon.providers.base.types import Message as ProviderMessage
 
-# 消息内容里 Markdown 图片/视频的 URL（生成产物嵌的 presigned，会过期）
-_MEDIA_URL_RE = re.compile(r'(https?://[^\s)\]"\'<>]+)')
-
 
 def _refresh_message_media(item: MessageItem) -> MessageItem:
-    """读取消息时重签媒体 URL —— 生成图/视频的 presigned 嵌在 content，过期会裂图；
-    refresh_url 从 URL 路径提 key 重签 7 天（与旧签名是否过期无关），修历史也保未来。"""
-    store = get_object_store()
-    if item.content:
-        item.content = _MEDIA_URL_RE.sub(
-            lambda m: store.refresh_url(m.group(1)) or m.group(1), item.content
-        )
+    """读取消息时签发媒体 URL —— content 里存的是 minio:// 稳定引用（或老数据的旧
+    presigned），渲染前签成新鲜 presigned。修历史裂图也保未来。"""
+    item.content = refresh_media_urls(item.content)
     if item.content_blocks:
         item.content_blocks = refresh_object_urls(item.content_blocks)
     return item
@@ -202,12 +199,13 @@ async def append(
             # 只有 file_ref（少见，正常会有 text block 一起进来）→ content 仍用 draft.content
             blocks = file_refs or None
 
+    # 落库归一：媒体 presigned URL → minio:// 稳定引用（不存死签名，读时再签）
     msg = Message(
         session_id=session_id,
         seq=next_seq,
         role=draft.role,
-        content=content_str,
-        content_blocks=blocks,
+        content=stash_media_urls(content_str),
+        content_blocks=stash_object_urls(blocks) if blocks else blocks,
         steps=draft.steps,
         citations=draft.citations,
         tool_calls=draft.tool_calls,
