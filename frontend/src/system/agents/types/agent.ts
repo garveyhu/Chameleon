@@ -23,6 +23,9 @@ export interface AgentPrefillConfig {
   kb_ids: EntityId[];
   /** 人类可读说明（预填范围/限制） */
   notes: string | null;
+  /** 生成类应用（source=comfyui）：产物模态 + 绑定生成模型 id（前端渲染生成面板用） */
+  media_kind?: 'image' | 'video' | null;
+  media_model_id?: string | null;
 }
 
 export interface AgentItem {

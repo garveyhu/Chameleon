@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { AgentPicker } from '@/core/components/common/agent-picker';
+import { GenerationPanel } from '@/core/components/common/generation-panel';
 import { Input } from '@/core/components/ui/input';
 import {
   Select,
@@ -50,14 +51,30 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
   /** 选关联应用 → 用其配置预填（应用默认 ⊕ 会话覆盖）；选「全部应用」(='') 解除关联 */
   const onPickAgent = async (agentKey: string) => {
     if (!agentKey) {
-      onChange({ ...params, bound_agent_key: null, invoke_agent_key: null });
+      onChange({
+        ...params,
+        bound_agent_key: null,
+        invoke_agent_key: null,
+        media_kind: null,
+        media_model_id: null,
+        gen_params: undefined,
+        input_images: undefined,
+      });
       return;
     }
     try {
       const cfg = await agentApi.prefillConfig(agentKey);
-      // 生成类应用（生图/视频，source=comfyui）→ 直接调用其 provider，不预填模型
+      // 生成类应用（生图/视频，source=comfyui）→ 直接调用其 provider，右栏换生成面板
       if (cfg.source === 'comfyui') {
-        onChange({ ...params, bound_agent_key: agentKey, invoke_agent_key: agentKey });
+        onChange({
+          ...params,
+          bound_agent_key: agentKey,
+          invoke_agent_key: agentKey,
+          media_kind: cfg.media_kind ?? null,
+          media_model_id: cfg.media_model_id ?? null,
+          gen_params: {},
+          input_images: [],
+        });
         toast.success(`已切换为调用应用「${cfg.name}」生成`);
         return;
       }
@@ -65,6 +82,8 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         ...params,
         bound_agent_key: agentKey,
         invoke_agent_key: null,
+        media_kind: null,
+        media_model_id: null,
       };
       // 仅可预填的应用才覆盖配置；workflow/外部应用只记录关联，不动用户现有设置
       let modelMissing = false;
@@ -104,12 +123,23 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         </p>
       </div>
 
-      {params.invoke_agent_key ? (
-        <div className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-snug text-violet-700">
-          调用应用模式：直接运行该应用（生图 / 视频）出结果，下方模型 / 提示词参数不生效。
+      {params.invoke_agent_key && params.media_model_id ? (
+        <div className="space-y-2">
+          <div className="rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-[11px] leading-snug text-violet-700">
+            调用应用模式：在下方调生成参数，左侧对话框输入提示词即出
+            {params.media_kind === 'video' ? '视频' : '图'}。
+          </div>
+          <GenerationPanel
+            key={params.media_model_id}
+            modelId={params.media_model_id}
+            onChange={r => onChange({ ...params, gen_params: r.params, input_images: r.input_images })}
+            hidePrompt
+          />
         </div>
       ) : null}
 
+      {!params.invoke_agent_key && (
+        <>
       <div>
         <label className="mb-1 block text-stone-600">模型</label>
         <Select
@@ -221,6 +251,8 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

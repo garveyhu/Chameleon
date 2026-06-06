@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.data.models import Agent, Graph, KnowledgeBase
+from chameleon.data.models import Agent, Graph, KnowledgeBase, LLMModel
 from chameleon.system.agents import agent_kb_service
 
 
@@ -33,6 +33,9 @@ class AgentPrefillConfig(BaseModel):
     system_prompt: str | None = None
     kb_ids: list[int] = Field(default_factory=list)
     notes: str | None = None
+    # 生成类应用（source=comfyui）：产物模态 + 绑定的生成模型 id（前端据此渲染生成面板）
+    media_kind: str | None = None
+    media_model_id: str | None = None
 
 
 async def _kb_ids_of_agent(session: AsyncSession, agent_id: int) -> list[int]:
@@ -148,6 +151,20 @@ async def build_prefill_config(
                 notes="工作流型应用无单一对话配置，仅记录关联，不预填。",
             )
         return await _from_chatflow(session, agent, graph)
+
+    if agent.source == "comfyui":
+        mid = (agent.config or {}).get("model_id")
+        media_kind = None
+        if mid:
+            m = await session.get(LLMModel, int(mid))
+            media_kind = m.kind if m else None
+        return AgentPrefillConfig(
+            **common,
+            prefillable=False,
+            media_kind=media_kind,
+            media_model_id=str(mid) if mid else None,
+            notes="生成类应用：右侧调生成参数，对话框输入提示词即出结果。",
+        )
 
     return AgentPrefillConfig(
         **common,

@@ -61,6 +61,13 @@ export interface PlaygroundParams {
   bound_agent_key?: string | null;
   /** 直接调用某应用 provider（生图/视频等）；设了就走 agent invoke 而非 model-direct */
   invoke_agent_key?: string | null;
+  /** 生成类应用的产物模态 + 绑定模型 id（右栏渲染生成参数面板用） */
+  media_kind?: 'image' | 'video' | null;
+  media_model_id?: string | null;
+  /** 生成参数（风格/比例/尺寸/分辨率/时长/种子…，来自生成面板） */
+  gen_params?: Record<string, unknown>;
+  /** 首帧/参考图 url（i2v 首帧） */
+  input_images?: string[];
 }
 
 export interface InvokeRequest {
@@ -72,6 +79,9 @@ export interface InvokeRequest {
   bound_agent_key?: string | null;
   /** 直接调用某应用 provider（生图/视频等）；设了后端走 agent invoke */
   invoke_agent_key?: string | null;
+  /** 生成参数（生图/视频面板）+ 首帧图，仅 invoke_agent_key 时生效 */
+  gen_params?: Record<string, unknown>;
+  input_images?: string[];
   model_id?: EntityId;
   model_name?: string;
   system_prompt?: string;

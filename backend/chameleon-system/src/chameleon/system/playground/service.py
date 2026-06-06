@@ -299,6 +299,8 @@ async def invoke_stream(
     kb_ids: list[int],
     bound_agent_key: str | None = None,
     invoke_agent_key: str | None = None,
+    gen_params: dict | None = None,
+    input_images: list[str] | None = None,
     persist_config: bool = True,
 ) -> AsyncIterator[dict]:
     """完整 playground 调用编排：绑 key 溯源 → 建/续会话 → KB context → 流式调用。
@@ -408,6 +410,8 @@ async def invoke_stream(
                 session_id=session_id,
                 request_id=request_id,
                 app_id=PLAYGROUND_APP_ID,
+                gen_params=gen_params,
+                input_images=input_images,
             ):
                 if chunk.get("delta"):
                     answer_parts.append(chunk["delta"])
@@ -522,11 +526,14 @@ async def _stream_agent(
     session_id: str,
     request_id: str,
     app_id: str,
+    gen_params: dict | None = None,
+    input_images: list[str] | None = None,
 ) -> AsyncIterator[dict]:
     """调用某应用的 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk。
 
     delta（含生图返回的 Markdown 图片 ![](url)）→ {"delta"}；citation → {"citation"}；
-    error → {"error"}。step/done 忽略（答案靠 delta 累积，前端 Markdown 渲染图片）。
+    error → {"error"}；流末补 {"end": True}（否则前端永远「生成中」）。生成参数 /
+    首帧图经 InvokeContext.options 透传给 provider→driver。
     """
     from chameleon.providers.base.registry import AGENTS, PROVIDERS
     from chameleon.providers.base.types import InvokeContext, Message, StreamEventType
@@ -534,10 +541,12 @@ async def _stream_agent(
     agent = AGENTS.get(invoke_agent_key)
     if agent is None:
         yield {"error": {"type": "AgentNotFound", "message": f"应用未注册或未启用: {invoke_agent_key}"}}
+        yield {"end": True}
         return
     provider = PROVIDERS.get(agent.provider)
     if provider is None:
         yield {"error": {"type": "ProviderError", "message": f"provider 未注册: {agent.provider}"}}
+        yield {"end": True}
         return
 
     history = [
@@ -559,6 +568,7 @@ async def _stream_agent(
         app_id=app_id,
         request_id=request_id,
         stream=True,
+        options={"gen_params": gen_params or {}, "input_images": input_images or []},
     )
     try:
         async for ev in provider.stream(ctx):
@@ -570,10 +580,12 @@ async def _stream_agent(
                 yield {"citation": ev.data}
             elif ev.type == StreamEventType.error:
                 yield {"error": {"type": "ProviderError", "message": ev.data.get("message", "应用执行失败")}}
+                yield {"end": True}
                 return
     except Exception as e:  # noqa: BLE001
         logger.exception("playground agent invoke failed | agent=%s", invoke_agent_key)
         yield {"error": {"type": type(e).__name__, "message": str(e)[:300]}}
+    yield {"end": True}
 
 
 async def _stream_llm(

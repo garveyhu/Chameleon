@@ -193,6 +193,8 @@ export const createChatActions: StateCreator<
           session_id: get().columns.find(c => c.id === columnId)?.sessionId,
           bound_agent_key: params.bound_agent_key,
           invoke_agent_key: params.invoke_agent_key,
+          gen_params: params.invoke_agent_key ? params.gen_params : undefined,
+          input_images: params.invoke_agent_key ? params.input_images : undefined,
           model_id: params.invoke_agent_key ? undefined : params.model_id,
           system_prompt: effectiveSystem,
           temperature: params.temperature,

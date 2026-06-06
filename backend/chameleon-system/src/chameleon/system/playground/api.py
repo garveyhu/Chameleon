@@ -36,6 +36,10 @@ class PlaygroundInvokeRequest(BaseModel):
     bound_agent_key: str | None = None
     # 直接调用某应用的 provider（生图/视频/工作流等）；设了就走 agent invoke 而非 model-direct
     invoke_agent_key: str | None = None
+    # 生成参数（生图/视频：size / n / negative_prompt / resolution / duration / seed …）
+    gen_params: dict | None = None
+    # 首帧/参考图片 url（i2v 首帧；VLM 参考图也可走 messages 的 ContentBlock）
+    input_images: list[str] | None = None
     model_id: int | None = None
     model_name: str | None = None
     system_prompt: str | None = None
@@ -83,6 +87,8 @@ async def invoke(
             session_id=req.session_id,
             bound_agent_key=req.bound_agent_key,
             invoke_agent_key=req.invoke_agent_key,
+            gen_params=req.gen_params,
+            input_images=req.input_images,
             # 操作者即终端用户：登录 admin 的 id 落 end_user_id（溯源「谁跑的」）
             operator_user_id=user.id,
             model_id=req.model_id,

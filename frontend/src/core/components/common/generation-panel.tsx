@@ -7,7 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Dices, ImagePlus, Loader2, X } from 'lucide-react';
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -39,6 +39,10 @@ interface Props {
   modelId: EntityId;
   disabled?: boolean;
   promptPlaceholder?: string;
+  /** 隐藏提示词输入（Playground 等场景提示词走聊天框，仅本面板调参数） */
+  hidePrompt?: boolean;
+  /** 参数/风格/首帧变化时回调（受控场景：把 params + input_images 提升到父级） */
+  onChange?: (req: GenerationRequest) => void;
 }
 
 const chipCls = (active: boolean) =>
@@ -50,7 +54,7 @@ const chipCls = (active: boolean) =>
   );
 
 export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
-  ({ modelId, disabled, promptPlaceholder }, ref) => {
+  ({ modelId, disabled, promptPlaceholder, hidePrompt, onChange }, ref) => {
     const [prompt, setPrompt] = useState('');
     const [styleId, setStyleId] = useState('none');
     const [params, setParams] = useState<Record<string, unknown>>({});
@@ -82,27 +86,37 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
     const valOf = (f: ParamField) => params[f.key] ?? f.default;
     const setVal = (k: string, v: unknown) => setParams(p => ({ ...p, [k]: v }));
 
-    useImperativeHandle(
-      ref,
-      () => ({
-        getRequest: () => {
-          const merged: Record<string, unknown> = {};
-          for (const f of fields) {
-            const v = params[f.key] ?? f.default;
-            if (v !== undefined && v !== null && v !== '') merged[f.key] = v;
-          }
-          const suffix = styles.find(s => s.id === styleId)?.suffix ?? '';
-          const base = prompt.trim();
-          const finalPrompt = suffix ? (base ? `${base}, ${suffix}` : suffix) : base;
-          return {
-            prompt: finalPrompt,
-            params: merged,
-            input_images: firstFrame ? [firstFrame] : [],
-          };
-        },
-      }),
-      [fields, params, styles, styleId, prompt, firstFrame],
-    );
+    const buildRequest = (): GenerationRequest => {
+      const merged: Record<string, unknown> = {};
+      for (const f of fields) {
+        const v = params[f.key] ?? f.default;
+        if (v !== undefined && v !== null && v !== '') merged[f.key] = v;
+      }
+      const suffix = styles.find(s => s.id === styleId)?.suffix ?? '';
+      const base = prompt.trim();
+      const finalPrompt = suffix ? (base ? `${base}, ${suffix}` : suffix) : base;
+      return {
+        prompt: finalPrompt,
+        params: merged,
+        input_images: firstFrame ? [firstFrame] : [],
+      };
+    };
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useImperativeHandle(ref, () => ({ getRequest: buildRequest }), [
+      fields,
+      params,
+      styles,
+      styleId,
+      prompt,
+      firstFrame,
+    ]);
+
+    // 受控场景：参数/风格/首帧变化时把结果提升到父级（提示词由父级聊天框另给）
+    useEffect(() => {
+      onChange?.(buildRequest());
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fields, params, styleId, firstFrame]);
 
     const basic = fields.filter(f => f.group === 'basic');
     const advanced = fields.filter(f => f.group === 'advanced');
@@ -153,17 +167,19 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
           </div>
         ) : null}
 
-        <div className="space-y-1.5">
-          <Label className="text-[12px] text-stone-600">提示词</Label>
-          <Textarea
-            value={prompt}
-            onChange={e => setPrompt(e.target.value)}
-            disabled={disabled}
-            rows={3}
-            placeholder={promptPlaceholder ?? '描述你想生成的画面…'}
-            className="text-[12.5px]"
-          />
-        </div>
+        {hidePrompt ? null : (
+          <div className="space-y-1.5">
+            <Label className="text-[12px] text-stone-600">提示词</Label>
+            <Textarea
+              value={prompt}
+              onChange={e => setPrompt(e.target.value)}
+              disabled={disabled}
+              rows={3}
+              placeholder={promptPlaceholder ?? '描述你想生成的画面…'}
+              className="text-[12.5px]"
+            />
+          </div>
+        )}
 
         {styles.length ? (
           <div className="space-y-1.5">

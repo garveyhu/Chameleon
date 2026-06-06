@@ -85,45 +85,56 @@ class ComfyuiProvider(Provider):
             data={"name": "生图", "status": "running"},
         )
 
+        # 生成参数 / 首帧图经 InvokeContext.options 透传（Playground 生成面板设置）
+        opts = ctx.options or {}
+        gen_params = opts.get("gen_params") or {}
+        input_images = opts.get("input_images") or []
+
         start = time.monotonic()
-        image_url = ""
+        media_url = ""
+        media_kind = "image"
         try:
-            async for ev in stream_generate(target, prompt=prompt):
+            async for ev in stream_generate(
+                target, prompt=prompt, params=gen_params, input_images=input_images
+            ):
                 if ev["type"] == "done":
-                    image_url = ev["url"]
+                    media_url = ev["url"]
+                    media_kind = ev.get("media_kind", "image")
         except Exception as e:
             yield StreamEvent(
                 type=StreamEventType.step,
                 data={
-                    "name": "生图",
+                    "name": "生成",
                     "status": "failed",
                     "duration_ms": int((time.monotonic() - start) * 1000),
                 },
             )
             yield StreamEvent(
                 type=StreamEventType.error,
-                data={"message": f"生图失败: {e}"},
+                data={"message": f"生成失败: {e}"},
             )
             return
 
         duration_ms = int((time.monotonic() - start) * 1000)
         yield StreamEvent(
             type=StreamEventType.step,
-            data={"name": "生图", "status": "success", "duration_ms": duration_ms},
+            data={"name": "生成", "status": "success", "duration_ms": duration_ms},
         )
 
-        if not image_url:
+        if not media_url:
             yield StreamEvent(
                 type=StreamEventType.error,
-                data={"message": "ComfyUI 未产出图片"},
+                data={"message": "未产出结果"},
             )
             return
 
-        # Markdown 图片走 delta：前端聊天气泡按 Markdown 渲染为 <img>
-        yield StreamEvent(
-            type=StreamEventType.delta,
-            data={"text": f"![image]({image_url})"},
+        # 图片 → Markdown 图片（前端渲染 <img>）；视频 → Markdown 链接（点开播放）
+        text = (
+            f"[▶ 点击查看生成的视频]({media_url})"
+            if media_kind == "video"
+            else f"![image]({media_url})"
         )
+        yield StreamEvent(type=StreamEventType.delta, data={"text": text})
         yield StreamEvent(
             type=StreamEventType.done,
             data={
