@@ -4,6 +4,7 @@ import {
   ArrowDownUp,
   Boxes,
   Clapperboard,
+  Coins,
   Cpu,
   Image as ImageIcon,
   MessageSquare,
@@ -12,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import { ConfirmDialog } from '@/core/components/common/confirm-dialog';
 import { EmptyState } from '@/core/components/common/empty-state';
@@ -70,6 +72,7 @@ const KIND_TO_CASE: Record<string, string> = {
 
 export const ModelsPage = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [delModel, setDelModel] = useState<ModelItem | null>(null);
@@ -147,9 +150,14 @@ export const ModelsPage = () => {
             逻辑模型目录 —— 能力、上游映射与运行参数在此管理
           </p>
         </div>
-        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus className="h-3.5 w-3.5" /> {t('common.create')}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/pricing')}>
+            <Coins className="h-3.5 w-3.5" /> 计费 / 价目
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> {t('common.create')}
+          </Button>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
