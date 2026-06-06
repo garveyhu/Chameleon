@@ -261,9 +261,10 @@ const CreateModelModal = ({
   const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank' | 'image'>('chat');
   const [dim, setDim] = useState<string>('');
   const [imageDriver, setImageDriver] = useState<'comfyui' | 'dashscope'>('comfyui');
+  const [imageApi, setImageApi] = useState<'multimodal' | 'synthesis'>('multimodal');
   const [workflow, setWorkflow] = useState('');
   const [upstreamModel, setUpstreamModel] = useState('');
-  const [imageSize, setImageSize] = useState('1280*1280');
+  const [imageSize, setImageSize] = useState('1328*1328');
   const workflowsQ = useQuery({
     queryKey: ['imagegen-workflows'],
     queryFn: imagegenApi.listWorkflows,
@@ -280,9 +281,10 @@ const CreateModelModal = ({
           setKind('chat');
           setDim('');
           setImageDriver('comfyui');
+          setImageApi('multimodal');
           setWorkflow('');
           setUpstreamModel('');
-          setImageSize('1280*1280');
+          setImageSize('1328*1328');
           onClose();
         }
       }}
@@ -382,19 +384,38 @@ const CreateModelModal = ({
                     <Input
                       value={upstreamModel}
                       onChange={e => setUpstreamModel(e.target.value)}
-                      placeholder="qwen-image"
+                      placeholder="qwen-image-2.0-pro"
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>调用接口</Label>
+                    <Select
+                      value={imageApi}
+                      onValueChange={v => setImageApi(v as 'multimodal' | 'synthesis')}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="multimodal">
+                          同步 multimodal（qwen-image-2.0 / 2.0-pro / max）
+                        </SelectItem>
+                        <SelectItem value="synthesis">
+                          异步 text2image（qwen-image / plus、万相 wan）
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label>默认尺寸 (size)</Label>
                     <Input
                       value={imageSize}
                       onChange={e => setImageSize(e.target.value)}
-                      placeholder="1280*1280"
+                      placeholder="1328*1328"
                     />
                   </div>
                   <p className="text-[11px] text-stone-400">
-                    供应商选千问（DashScope）；复用其 API Key 直连百炼异步出图。上游模型名以百炼控制台为准。
+                    供应商选千问（DashScope）；复用其 API Key 直连百炼出图。上游模型名与调用接口以百炼控制台为准。
                   </p>
                 </>
               )}
@@ -426,7 +447,8 @@ const CreateModelModal = ({
                       : {
                           driver: 'dashscope',
                           model: upstreamModel.trim(),
-                          size: imageSize.trim() || '1280*1280',
+                          api: imageApi,
+                          size: imageSize.trim() || '1328*1328',
                         }
                     : undefined,
               })
