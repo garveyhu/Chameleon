@@ -26,6 +26,7 @@ from chameleon.data.models.kb_metadata_field import KbMetadataField
 from chameleon.data.models.knowledge import Chunk, Document, KnowledgeBase
 from chameleon.data.models.model_def import LLMModel
 from chameleon.data.models.model_default import ModelDefault
+from chameleon.data.models.media_pricing import MediaPricing
 from chameleon.data.models.model_pricing import ModelPricing
 from chameleon.data.models.plugin import PluginInstance
 from chameleon.data.models.plugin_registry import PluginRegistryEntry
@@ -94,6 +95,7 @@ __all__ = [
     "AppTemplate",
     "EvalTemplate",
     "KbConsistencyReport",
+    "MediaPricing",
     "ModelPricing",
     # 插件
     "PluginInstance",

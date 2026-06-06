@@ -9,7 +9,8 @@ from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.data.models import ModelPricing
+from chameleon.data.models import MediaPricing, ModelPricing
+from chameleon.system.pricing.units import PricingUnit, VideoTier
 
 #: 内置默认价目（USD per 1K tokens；2026-Q4 主流模型公开价）
 #: 改这里只影响新装的库；已存在 model_pricing 行不会被覆盖（seed_if_empty）
@@ -78,6 +79,97 @@ async def calc_cost(
         / Decimal(1000)
     )
     return (p + c).quantize(Decimal("0.000001"))
+
+
+#: 内置媒体价目（CNY 元；qwen/万相公开价）。(model_code, unit, tier, price)
+#: image：tier="" 无档；video_second：tier=分辨率。改这里只影响新装库（不覆盖已存在）
+DEFAULT_MEDIA_PRICING: list[tuple[str, str, str, float]] = [
+    ("qwen-image", PricingUnit.IMAGE, "", 0.2),
+    ("qwen-image-plus", PricingUnit.IMAGE, "", 0.2),
+    ("qwen-image-2.0", PricingUnit.IMAGE, "", 0.2),
+    ("qwen-image-2.0-pro", PricingUnit.IMAGE, "", 0.5),
+    ("wan2.7-i2v", PricingUnit.VIDEO_SECOND, VideoTier.P720, 0.6),
+    ("wan2.7-i2v", PricingUnit.VIDEO_SECOND, VideoTier.P1080, 1.0),
+]
+
+
+async def get_active_media_pricing(
+    session: AsyncSession,
+    model_code: str,
+    *,
+    unit: str,
+    tier: str = "",
+    at: datetime | None = None,
+) -> MediaPricing | None:
+    """取某 (model, unit, tier) 在 at 时刻生效的媒体价目。"""
+    when = at or datetime.now(timezone.utc)
+    return (
+        await session.execute(
+            select(MediaPricing)
+            .where(
+                MediaPricing.model_code == model_code,
+                MediaPricing.unit == unit,
+                MediaPricing.tier == (tier or ""),
+                MediaPricing.effective_from <= when,
+            )
+            .order_by(MediaPricing.effective_from.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+
+async def calc_media_cost(
+    session: AsyncSession,
+    *,
+    model_code: str | None,
+    unit: str,
+    quantity: float,
+    tier: str = "",
+    at: datetime | None = None,
+) -> Decimal | None:
+    """按当时价目算媒体成本（CNY）。quantity：图=张数，视频=秒数。价目缺失返 None。"""
+    if not model_code or not quantity:
+        return None
+    pricing = await get_active_media_pricing(
+        session, model_code, unit=unit, tier=tier, at=at
+    )
+    if pricing is None:
+        return None
+    return (pricing.price * Decimal(str(quantity))).quantize(Decimal("0.000001"))
+
+
+async def seed_media_pricing(session: AsyncSession) -> int:
+    """启动期 seed 内置媒体价目（已存在 (model,unit,tier) 则跳过）。"""
+    existing = {
+        (c, u, t)
+        for c, u, t in (
+            await session.execute(
+                select(
+                    MediaPricing.model_code, MediaPricing.unit, MediaPricing.tier
+                ).distinct()
+            )
+        ).all()
+    }
+    now = datetime.now(timezone.utc)
+    added = 0
+    for code, unit, tier, price in DEFAULT_MEDIA_PRICING:
+        if (code, str(unit), tier) in existing:
+            continue
+        session.add(
+            MediaPricing(
+                model_code=code,
+                unit=str(unit),
+                tier=tier,
+                price=Decimal(str(price)),
+                currency="CNY",
+                effective_from=now,
+            )
+        )
+        added += 1
+    if added:
+        await session.commit()
+        logger.info("media_pricing seeded | count={}", added)
+    return added
 
 
 async def seed_default_pricing(session: AsyncSession) -> int:

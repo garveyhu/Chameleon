@@ -122,15 +122,16 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     sbx_runtimes = await bootstrap_runtimes()
     logger.info("sandbox runtimes: {}", sbx_runtimes)
 
-    # P22.1：model_pricing seed（幂等，已存在 model_code 跳过）
+    # P22.1：model_pricing seed（幂等，已存在 model_code 跳过）+ 媒体价目 seed
     try:
         from chameleon.data.infra.db import AsyncSessionLocal
-        from chameleon.system.pricing import seed_default_pricing
+        from chameleon.system.pricing import seed_default_pricing, seed_media_pricing
 
         async with AsyncSessionLocal() as _s:
             await seed_default_pricing(_s)
+            await seed_media_pricing(_s)
     except Exception:
-        logger.exception("model_pricing seed failed (continuing)")
+        logger.exception("pricing seed failed (continuing)")
 
     yield
 

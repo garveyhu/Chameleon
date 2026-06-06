@@ -7,12 +7,21 @@
 
 from chameleon.system.pricing.service import (
     calc_cost,
+    calc_media_cost,
+    get_active_media_pricing,
     get_active_pricing,
     seed_default_pricing,
+    seed_media_pricing,
 )
+from chameleon.system.pricing.units import PricingUnit, VideoTier
 
 __all__ = [
     "calc_cost",
+    "calc_media_cost",
     "get_active_pricing",
+    "get_active_media_pricing",
     "seed_default_pricing",
+    "seed_media_pricing",
+    "PricingUnit",
+    "VideoTier",
 ]

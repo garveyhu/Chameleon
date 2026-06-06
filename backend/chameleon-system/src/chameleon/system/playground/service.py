@@ -10,6 +10,7 @@ import time
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from loguru import logger
@@ -139,6 +140,56 @@ async def get_model_name(session: AsyncSession, model_id: int) -> str:
     if row is None:
         raise BusinessError(ResultCode.Fail, message=f"model 不存在: {model_id}")
     return row.code
+
+
+async def _resolve_gen_model(
+    session: AsyncSession, invoke_agent_key: str
+) -> tuple[str | None, str | None]:
+    """解析生成应用绑定的生成模型 (code, kind=image|video)，用于计费。"""
+    from chameleon.data.models import Agent, LLMModel
+
+    agent = (
+        await session.execute(
+            select(Agent).where(Agent.agent_key == invoke_agent_key)
+        )
+    ).scalar_one_or_none()
+    mid = (agent.config or {}).get("model_id") if agent else None
+    if not mid:
+        return None, None
+    m = await session.get(LLMModel, int(mid))
+    return (m.code, m.kind) if m else (None, None)
+
+
+async def _calc_gen_cost(
+    session: AsyncSession,
+    *,
+    model_code: str | None,
+    media_kind: str | None,
+    gen_params: dict | None,
+) -> Decimal | None:
+    """按生成模型 + 参数（数量 / 时长 / 分辨率）算媒体成本（CNY）。"""
+    from chameleon.system.pricing import PricingUnit, calc_media_cost
+
+    if not model_code:
+        return None
+    params = gen_params or {}
+    if media_kind == "video":
+        seconds = params.get("duration") or params.get("seconds") or 5
+        tier = params.get("resolution") or "720P"
+        return await calc_media_cost(
+            session,
+            model_code=model_code,
+            unit=PricingUnit.VIDEO_SECOND,
+            tier=str(tier),
+            quantity=float(seconds),
+        )
+    count = params.get("n") or params.get("count") or 1
+    return await calc_media_cost(
+        session,
+        model_code=model_code,
+        unit=PricingUnit.IMAGE,
+        quantity=float(count),
+    )
 
 
 async def _model_supports_vision(
@@ -488,6 +539,22 @@ async def invoke_stream(
             p, c, t, cost, fmodel = await aggregate_generation_rollup(
                 session, request_id
             )
+            # 媒体生成无 token rollup → 按生成模型 + 参数算成本（CNY）落 trace
+            if invoke_agent_key and ok:
+                gen_code, gen_kind = await _resolve_gen_model(
+                    session, invoke_agent_key
+                )
+                if gen_kind in ("image", "video"):
+                    media_cost = await _calc_gen_cost(
+                        session,
+                        model_code=gen_code,
+                        media_kind=gen_kind,
+                        gen_params=gen_params,
+                    )
+                    if media_cost is not None:
+                        cost = media_cost
+                    if gen_code:
+                        fmodel = gen_code
             answer = "".join(answer_parts)
             if answer:
                 await _append_message(
