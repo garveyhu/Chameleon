@@ -12,10 +12,10 @@ from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import LLMModel, Provider
 from chameleon.data.utils.crypto import get_or_decrypt
 
-from .types import MediaConfigError, MediaTarget
+from .types import DriverName, MediaConfigError, MediaKind, MediaTarget
 from .workflows import workflow_exists
 
-_MEDIA_KINDS = {"image", "video"}
+_MEDIA_KINDS = {MediaKind.image.value, MediaKind.video.value}
 
 
 def _infer_driver(model: LLMModel, provider: Provider) -> str:
@@ -23,8 +23,8 @@ def _infer_driver(model: LLMModel, provider: Provider) -> str:
     if explicit:
         return str(explicit)
     if provider.kind == "comfyui":
-        return "comfyui"
-    return "dashscope"  # 远程默认
+        return DriverName.comfyui.value
+    return DriverName.dashscope.value  # 远程默认
 
 
 def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarget:
@@ -43,7 +43,7 @@ def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarge
     defaults = dict(model.defaults or {})
     driver = _infer_driver(model, provider)
 
-    if driver == "comfyui":
+    if driver == DriverName.comfyui.value:
         upstream = defaults.get("workflow")
         if not upstream or not workflow_exists(str(upstream)):
             raise MediaConfigError(
@@ -65,6 +65,7 @@ def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarge
         model_code=model.code,
         upstream=str(upstream),
         params=params,
+        extra=dict(provider.extra_config or {}),
     )
 
 

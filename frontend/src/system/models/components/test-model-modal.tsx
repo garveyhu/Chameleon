@@ -3,6 +3,10 @@
 import { AlertCircle, CheckCircle2, Image as ImageIcon, Loader2, X, Zap } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import {
+  GenerationPanel,
+  type GenerationPanelHandle,
+} from '@/core/components/common/generation-panel';
 import { ImageGenLoading } from '@/core/components/common/image-gen-loading';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
@@ -50,6 +54,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
   const [errorText, setErrorText] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const outputRef = useRef<HTMLPreElement | null>(null);
+  const genRef = useRef<GenerationPanelHandle | null>(null);
 
   // 输出自动滚到底
   useEffect(() => {
@@ -70,12 +75,16 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
     setUsage(null);
     setErrorText(null);
     setState('running');
+    const gen = model.kind === 'image' ? genRef.current?.getRequest() : undefined;
     try {
       await modelApi.streamTest(model.id, {
         prompt:
-          model.kind === 'chat' || model.kind === 'image'
-            ? prompt.trim() || undefined
-            : undefined,
+          model.kind === 'image'
+            ? gen?.prompt || undefined
+            : model.kind === 'chat'
+              ? prompt.trim() || undefined
+              : undefined,
+        params: model.kind === 'image' ? gen?.params : undefined,
         signal: ctrl.signal,
         onChunk: chunk => {
           if (chunk.meta) setMeta(chunk.meta);
@@ -127,23 +136,23 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
         </ModalTitle>
       </ModalHeader>
       <ModalBody className="space-y-3">
-        {isChat || isImage ? (
+        {isImage ? (
+          <GenerationPanel
+            ref={genRef}
+            modelId={model.id}
+            disabled={running}
+            promptPlaceholder="一只橘猫坐在窗台上，柔和晨光（留空用默认提示词）"
+          />
+        ) : isChat ? (
           <div className="space-y-1.5">
-            <Label className="text-[12px] text-stone-600">
-              测试 prompt{isImage ? '（留空用默认提示词）' : ''}
-            </Label>
+            <Label className="text-[12px] text-stone-600">测试 prompt</Label>
             <Input
               value={prompt}
               onChange={e => setPrompt(e.target.value)}
-              placeholder={isImage ? '一只橘猫坐在窗台上，柔和晨光' : DEFAULT_PROMPT}
+              placeholder={DEFAULT_PROMPT}
               disabled={running}
               className="font-mono text-[12px]"
             />
-            {isImage ? (
-              <p className="text-[11px] text-stone-400">
-                远程模型（DashScope）通常数秒出图；本地 ComfyUI 首次含模型加载可能需数分钟。
-              </p>
-            ) : null}
           </div>
         ) : model.kind === 'rerank' ? (
           <p className="text-[12px] text-stone-500">

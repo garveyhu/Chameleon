@@ -69,6 +69,7 @@ async def stream_test(
     *,
     model_id: int,
     prompt: str | None = None,
+    params: dict | None = None,
 ) -> AsyncIterator[dict]:
     """流式测试模型。
 
@@ -181,7 +182,7 @@ async def stream_test(
             yield event_delta(f"使用「{target.upstream}」（{target.driver}）提交生成…\n")
             image_url: str | None = None
             last_notice = 0
-            async for ev in stream_generate(target, prompt=test_prompt):
+            async for ev in stream_generate(target, prompt=test_prompt, params=params or {}):
                 etype = ev["type"]
                 if etype == "submitted":
                     yield event_delta(

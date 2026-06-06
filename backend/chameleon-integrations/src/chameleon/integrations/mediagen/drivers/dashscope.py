@@ -22,7 +22,16 @@ import httpx
 from loguru import logger
 
 from ..persist import content_type_for, store_media
-from ..types import MediaConfigError, MediaGenError, MediaTarget
+from ..presets import (
+    ASPECT_MULTIMODAL,
+    ASPECT_SYNTHESIS,
+    MULTIMODAL_DIM,
+    SYNTHESIS_DIM,
+    VIDEO_RESOLUTION,
+    field,
+)
+from ..types import MediaConfigError, MediaGenError, MediaTarget, ParamFieldType
+from .base import register_driver
 
 _POLL_INTERVAL = 3.0
 _IMAGE_TIMEOUT = 300.0
@@ -58,8 +67,34 @@ def _extract_media_url(output: dict[str, Any]) -> str | None:
     return vid if isinstance(vid, str) else None
 
 
+@register_driver
 class DashScopeDriver:
     name = "dashscope"
+    supported_kinds = frozenset({"image", "video"})
+
+    def param_spec(self, target: MediaTarget) -> list[dict[str, Any]]:
+        if target.media_kind == "video":
+            return [
+                field("resolution", "分辨率", ParamFieldType.select, target.params.get("resolution") or "720P", "basic", options=VIDEO_RESOLUTION),
+                field("duration", "时长(秒)", ParamFieldType.int, int(target.params.get("duration") or 5), "basic", min=3, max=10),
+                field("seed", "种子", ParamFieldType.seed, None, "advanced"),
+            ]
+        # image：尺寸预置与上下限按调用接口区分（multimodal 上限更大）
+        if str(target.params.get("api") or "synthesis") == "multimodal":
+            options, (dmin, dmax), size_default = ASPECT_MULTIMODAL, MULTIMODAL_DIM, "2048*2048"
+        else:
+            options, (dmin, dmax), size_default = ASPECT_SYNTHESIS, SYNTHESIS_DIM, "1328*1328"
+        return [
+            field(
+                "size", "比例", ParamFieldType.aspect_ratio,
+                target.params.get("size") or size_default, "basic",
+                options=options, custom=True, min=dmin, max=dmax,
+            ),
+            field("n", "数量", ParamFieldType.int, 1, "basic", min=1, max=4),
+            field("negative_prompt", "反向提示词", ParamFieldType.text, "", "advanced"),
+            field("prompt_extend", "智能扩写", ParamFieldType.toggle, bool(target.params.get("prompt_extend", True)), "advanced"),
+            field("seed", "种子", ParamFieldType.seed, None, "advanced"),
+        ]
 
     async def generate(
         self,

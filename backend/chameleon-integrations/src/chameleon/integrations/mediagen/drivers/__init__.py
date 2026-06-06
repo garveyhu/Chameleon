@@ -1,28 +1,15 @@
-"""媒体生成驱动注册表 —— 新增后端在此登记一行即可。"""
+"""媒体生成驱动注册表 —— 新增厂商：建驱动文件 + 此处 import 一行。"""
 
 from __future__ import annotations
 
-from ..types import MediaConfigError
-from .base import MediaGenDriver
-from .comfyui import ComfyUIDriver
-from .dashscope import DashScopeDriver
+from . import comfyui, dashscope  # noqa: F401  import 即触发 register_driver
+from .base import MediaGenDriver, get_driver, register_driver, registered_drivers
 
-_DRIVERS: dict[str, MediaGenDriver] = {
-    d.name: d for d in (ComfyUIDriver(), DashScopeDriver())
-}
-
-
-def get_driver(name: str) -> MediaGenDriver:
-    driver = _DRIVERS.get(name)
-    if driver is None:
-        raise MediaConfigError(
-            f"未知媒体生成驱动: {name!r}（已注册: {sorted(_DRIVERS)}）"
-        )
-    return driver
-
-
-def registered_drivers() -> list[str]:
-    return sorted(_DRIVERS)
-
-
-__all__ = ["MediaGenDriver", "get_driver", "registered_drivers"]
+__all__ = [
+    "MediaGenDriver",
+    "get_driver",
+    "register_driver",
+    "registered_drivers",
+    "comfyui",
+    "dashscope",
+]

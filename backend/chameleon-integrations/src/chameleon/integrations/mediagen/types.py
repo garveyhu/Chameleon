@@ -19,6 +19,32 @@ class MediaKind(StrEnum):
     video = "video"
 
 
+class DriverName(StrEnum):
+    """媒体生成后端驱动名（与各 driver.name 对应）。"""
+
+    comfyui = "comfyui"
+    dashscope = "dashscope"
+
+
+class MediaApiStyle(StrEnum):
+    """DashScope 图片调用接口形态。"""
+
+    synthesis = "synthesis"  # 异步 text2image（qwen-image / plus、万相 wan）
+    multimodal = "multimodal"  # 同步 multimodal（qwen-image-2.0 / pro / max）
+
+
+class ParamFieldType(StrEnum):
+    """生成面板字段类型（前后端共用，前端按此渲染控件）。"""
+
+    aspect_ratio = "aspect_ratio"
+    select = "select"
+    int = "int"
+    float = "float"
+    text = "text"
+    seed = "seed"
+    toggle = "toggle"
+
+
 class MediaConfigError(Exception):
     """媒体生成模型配置不完整 / 不可用（缺驱动、缺上游、缺 key 等）。"""
 
@@ -47,3 +73,6 @@ class MediaTarget:
     model_code: str
     upstream: str
     params: dict[str, Any] = field(default_factory=dict)
+    # 厂商专属配置位（来自 provider.extra_config）：region / org / 额外 header 等，
+    # 让新厂商无需改 MediaTarget 结构即可携带自定义参数。
+    extra: dict[str, Any] = field(default_factory=dict)

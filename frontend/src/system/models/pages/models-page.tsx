@@ -38,6 +38,14 @@ import type { EntityId } from '@/core/types/api';
 import { ModelCard } from '@/system/models/components/model-card';
 import { ModelConfigSheet } from '@/system/models/components/model-config-sheet';
 import { TestModelModal } from '@/system/models/components/test-model-modal';
+import {
+  IMAGE_API_STYLES,
+  IMAGE_DRIVERS,
+  MODEL_KINDS,
+  type ImageApiStyle,
+  type ImageDriver,
+  type ModelKind,
+} from '@/core/constants/media';
 import { imagegenApi } from '@/system/models/services/imagegen';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelItem } from '@/system/models/types/model';
@@ -258,10 +266,10 @@ const CreateModelModal = ({
 }) => {
   const [providerId, setProviderId] = useState<string>('');
   const [code, setCode] = useState('');
-  const [kind, setKind] = useState<'chat' | 'embedding' | 'rerank' | 'image'>('chat');
+  const [kind, setKind] = useState<ModelKind>('chat');
   const [dim, setDim] = useState<string>('');
-  const [imageDriver, setImageDriver] = useState<'comfyui' | 'dashscope'>('comfyui');
-  const [imageApi, setImageApi] = useState<'multimodal' | 'synthesis'>('multimodal');
+  const [imageDriver, setImageDriver] = useState<ImageDriver>('comfyui');
+  const [imageApi, setImageApi] = useState<ImageApiStyle>('multimodal');
   const [workflow, setWorkflow] = useState('');
   const [upstreamModel, setUpstreamModel] = useState('');
   const [imageSize, setImageSize] = useState('1328*1328');
@@ -317,16 +325,17 @@ const CreateModelModal = ({
             <Label>类型</Label>
             <Select
               value={kind}
-              onValueChange={v => setKind(v as 'chat' | 'embedding' | 'rerank' | 'image')}
+              onValueChange={v => setKind(v as ModelKind)}
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="chat">对话 (chat)</SelectItem>
-                <SelectItem value="embedding">向量 (embedding)</SelectItem>
-                <SelectItem value="rerank">重排 (rerank)</SelectItem>
-                <SelectItem value="image">生图 (image)</SelectItem>
+                {MODEL_KINDS.map(k => (
+                  <SelectItem key={k.value} value={k.value}>
+                    {k.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -347,14 +356,17 @@ const CreateModelModal = ({
                 <Label>生成后端</Label>
                 <Select
                   value={imageDriver}
-                  onValueChange={v => setImageDriver(v as 'comfyui' | 'dashscope')}
+                  onValueChange={v => setImageDriver(v as ImageDriver)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="comfyui">本地 ComfyUI（工作流）</SelectItem>
-                    <SelectItem value="dashscope">DashScope 远程（千问 / 万相）</SelectItem>
+                    {IMAGE_DRIVERS.map(d => (
+                      <SelectItem key={d.value} value={d.value}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -389,20 +401,16 @@ const CreateModelModal = ({
                   </div>
                   <div className="space-y-1.5">
                     <Label>调用接口</Label>
-                    <Select
-                      value={imageApi}
-                      onValueChange={v => setImageApi(v as 'multimodal' | 'synthesis')}
-                    >
+                    <Select value={imageApi} onValueChange={v => setImageApi(v as ImageApiStyle)}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="multimodal">
-                          同步 multimodal（qwen-image-2.0 / 2.0-pro / max）
-                        </SelectItem>
-                        <SelectItem value="synthesis">
-                          异步 text2image（qwen-image / plus、万相 wan）
-                        </SelectItem>
+                        {IMAGE_API_STYLES.map(a => (
+                          <SelectItem key={a.value} value={a.value}>
+                            {a.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

@@ -361,6 +361,8 @@ async def test_model(
 
 class StreamTestRequest(BaseModel):
     prompt: str | None = Field(default=None, max_length=2000)
+    # image/video 模型：生成面板的可调参数（size / n / negative_prompt / seed …）
+    params: dict | None = None
 
 
 @router.post("/{model_id}/test/stream")
@@ -375,8 +377,9 @@ async def test_model_stream(
     chunk 结构详见 test_service.stream_test 注释。
     """
     prompt = req.prompt if req else None
+    params = req.params if req else None
     return sse_response(
-        test_service.stream_test(session, model_id=model_id, prompt=prompt),
+        test_service.stream_test(session, model_id=model_id, prompt=prompt, params=params),
         log_label=f"model_test:{model_id}",
     )
 

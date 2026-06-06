@@ -51,12 +51,13 @@ export const modelApi = {
     id: EntityId,
     opts: {
       prompt?: string;
+      params?: Record<string, unknown>;
       signal?: AbortSignal;
       onChunk: (chunk: TestStreamChunk) => void;
     },
   ): Promise<void> =>
     streamSSE<TestStreamChunk>(`/v1/admin/models/${id}/test/stream`, {
-      body: { prompt: opts.prompt ?? null },
+      body: { prompt: opts.prompt ?? null, params: opts.params ?? null },
       signal: opts.signal,
       onChunk: opts.onChunk,
     }),
