@@ -61,6 +61,7 @@ class CreateModelRequest(BaseModel):
 
 class UpdateModelRequest(BaseModel):
     provider_id: int | None = None
+    code: str | None = Field(default=None, min_length=1, max_length=128)
     dim: int | None = None
     defaults: dict | None = None
     enabled: bool | None = None
@@ -203,6 +204,20 @@ async def update_model(
         if prov is None:
             raise ValidationError(message=f"provider 不存在: {req.provider_id}")
         m.provider_id = req.provider_id
+    if req.code is not None and req.code != m.code:
+        dup = (
+            await session.execute(
+                select(LLMModel).where(
+                    LLMModel.provider_id == m.provider_id,
+                    LLMModel.code == req.code,
+                    LLMModel.id != m.id,
+                    LLMModel.deleted_at.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if dup is not None:
+            raise ValidationError(message=f"同 provider 已有同 code 的 model: {req.code}")
+        m.code = req.code
     if req.dim is not None:
         m.dim = req.dim
     if req.defaults is not None:

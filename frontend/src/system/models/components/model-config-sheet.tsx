@@ -81,6 +81,7 @@ const ModelConfigForm = ({
   const d = model.defaults || {};
   const c = model.capabilities || {};
   const [providerId, setProviderId] = useState(String(model.provider_id));
+  const [code, setCode] = useState(model.code);
   const [temperature, setTemperature] = useState(numOr(d.temperature, 0.7));
   const [topP, setTopP] = useState(numOr(d.top_p, 1));
   const [maxTokens, setMaxTokens] = useState(numOr(d.max_tokens, 0));
@@ -112,6 +113,7 @@ const ModelConfigForm = ({
       if (contextWindow) capabilities.context_window = Number(contextWindow);
       return modelApi.update(model.id, {
         provider_id: providerId,
+        code: code.trim() || undefined,
         defaults,
         dim: model.kind === 'embedding' && dim ? Number(dim) : undefined,
         enabled,
@@ -137,6 +139,19 @@ const ModelConfigForm = ({
       </SheetHeader>
 
       <SheetBody className="space-y-5">
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-medium text-stone-700">模型标识 (code)</label>
+          <Input
+            value={code}
+            onChange={e => setCode(e.target.value)}
+            placeholder={model.code}
+            className="font-mono"
+          />
+          <p className="text-[10.5px] leading-snug text-stone-500">
+            逻辑模型标识；改后按旧 code 引用此模型的应用 / 知识库需同步更新（按 ID 引用的不受影响）
+          </p>
+        </div>
+
         <div className="space-y-1.5">
           <label className="text-[12px] font-medium text-stone-700">供应商</label>
           <Select value={providerId} onValueChange={setProviderId}>
