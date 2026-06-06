@@ -75,6 +75,8 @@ class SessionConfig(BaseModel):
     max_tokens: int | None = None
     kb_ids: list[int] = Field(default_factory=list)
     bound_agent_key: str | None = None
+    # 调用模式（生图/视频等生成应用）：非空则 reopen 时前端恢复为「调用应用」模式
+    invoke_agent_key: str | None = None
 
 
 def _build_session_config(
@@ -87,6 +89,7 @@ def _build_session_config(
     max_tokens: int | None,
     kb_ids: list[int],
     bound_agent_key: str | None,
+    invoke_agent_key: str | None = None,
 ) -> dict:
     """组装会话配置快照 dict（create + 每轮 update 共用，单一来源）。"""
     return SessionConfig(
@@ -98,6 +101,7 @@ def _build_session_config(
         max_tokens=max_tokens,
         kb_ids=list(kb_ids or []),
         bound_agent_key=bound_agent_key,
+        invoke_agent_key=invoke_agent_key,
     ).model_dump()
 
 
@@ -366,6 +370,7 @@ async def invoke_stream(
         max_tokens=max_tokens,
         kb_ids=kb_ids,
         bound_agent_key=bound_agent_key,
+        invoke_agent_key=invoke_agent_key,
     )
 
     # 会话：续接已有 / 新建（新建时用首条 user 文本当标题 + 落初始配置）

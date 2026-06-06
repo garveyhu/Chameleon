@@ -97,6 +97,9 @@ const metaToParams = (
     kb_ids: Array.isArray(cfg.kb_ids) ? cfg.kb_ids.map(String) : [],
     bound_agent_key:
       typeof cfg.bound_agent_key === 'string' ? cfg.bound_agent_key : null,
+    // 调用模式（生图/视频生成应用）恢复；media_model_id 由 param-panel 的 effect 补拉
+    invoke_agent_key:
+      typeof cfg.invoke_agent_key === 'string' ? cfg.invoke_agent_key : null,
   };
   // 雪花 id 后端存字符串；仅当存在时写入，避免 undefined 覆盖掉当前模型（老会话存的是数字 → 跳过）
   if (typeof cfg.model_id === 'string') out.model_id = cfg.model_id as EntityId;
