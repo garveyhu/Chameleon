@@ -1,7 +1,7 @@
 /** Agent 关联 KB 表单 —— 多选组合框（autocomplete by name） */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, Database, Save, X } from 'lucide-react';
+import { BookOpen, ChevronDown, Database, Save, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
@@ -9,6 +9,7 @@ import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
+import { DetailSection } from '@/system/agents/components/detail-section';
 import { agentApi } from '@/system/agents/services/agent';
 import type { LinkedKbItem } from '@/system/agents/types/agent';
 import { kbApi } from '@/system/kbs/services/kb';
@@ -92,16 +93,12 @@ const KbEditor = ({
   };
 
   return (
-    <div className="max-w-[640px] space-y-4">
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-[13.5px] font-medium text-stone-900">
-            已关联 KB
-          </h3>
-          <span className="text-[11px] text-stone-500">
-            应用调用时会跨这些 KB 检索
-          </span>
-        </div>
+    <DetailSection
+      icon={BookOpen}
+      title="关联知识库"
+      desc="应用调用时会跨这些 KB 检索"
+    >
+      <div className="max-w-[640px] space-y-4">
         {selected.length === 0 ? (
           <div className="flex flex-col items-center gap-1.5 rounded-md border border-dashed border-stone-300 bg-stone-50/40 py-7 text-center">
             <Database className="h-5 w-5 text-stone-300" />
@@ -141,11 +138,8 @@ const KbEditor = ({
             ))}
           </ul>
         )}
-      </div>
 
-      <div>
         <KbAutocomplete options={options} excludeIds={currentIds} onPick={add} />
-      </div>
 
       <div className="flex justify-end">
         <Button
@@ -156,7 +150,8 @@ const KbEditor = ({
           {saveMut.isPending ? '保存中…' : '保存关联'}
         </Button>
       </div>
-    </div>
+      </div>
+    </DetailSection>
   );
 };
 

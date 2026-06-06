@@ -8,6 +8,8 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Cpu, Lock, Save } from 'lucide-react';
 
+import { DetailSection } from '@/system/agents/components/detail-section';
+
 import { Button } from '@/core/components/ui/button';
 import {
   Select,
@@ -69,22 +71,24 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
 
   if (slots.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
-        该应用未声明模型槽。
-        <div className="mt-1 text-[11.5px] text-stone-400">
-          如需按页面切换模型，请在代码用{' '}
-          <code className="font-mono">@agent(models=[ModelSlot(...)])</code> 声明。
+      <DetailSection icon={Cpu} title="关联模型" desc="按声明的模型槽逐槽绑定模型">
+        <div className="rounded-lg border border-dashed border-stone-200 px-4 py-8 text-center text-[12.5px] text-stone-400">
+          该应用未声明模型槽。
+          <div className="mt-1 text-[11.5px] text-stone-400">
+            如需按页面切换模型，请在代码用{' '}
+            <code className="font-mono">@agent(models=[ModelSlot(...)])</code> 声明。
+          </div>
         </div>
-      </div>
+      </DetailSection>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="text-[12px] text-stone-500">
-        每个模型槽绑定一个已配置模型；留空时系统自动用槽默认 / 系统默认模型。
-      </div>
-
+    <DetailSection
+      icon={Cpu}
+      title="关联模型"
+      desc="每个模型槽绑定一个已配置模型；留空走槽默认 / 系统默认"
+    >
       <div className="space-y-2.5">
         {slots.map(s => {
           const val = effective(s.name, s.bound_code) || UNBOUND;
@@ -150,10 +154,12 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
         })}
       </div>
 
-      <Button onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}>
-        <Save className="h-3.5 w-3.5" /> 保存绑定
-      </Button>
-    </div>
+      <div className="mt-4">
+        <Button onClick={() => saveMut.mutate()} disabled={!dirty || saveMut.isPending}>
+          <Save className="h-3.5 w-3.5" /> 保存绑定
+        </Button>
+      </div>
+    </DetailSection>
   );
 };
 
