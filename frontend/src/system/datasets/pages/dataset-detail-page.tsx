@@ -18,7 +18,15 @@ import {
 import { DataTable, type DataTableColumn, TablePagination } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { Button } from '@/core/components/ui/button';
+import { Input } from '@/core/components/ui/input';
 import { JsonCell } from '@/core/components/ui/json-cell';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
 import { confirm } from '@/core/lib/confirm';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
@@ -106,6 +114,10 @@ export const DatasetDetailPage = () => {
     key: string;
     order: 'asc' | 'desc';
   }>({ key: 'created_at', order: 'desc' });
+  const [runPage, setRunPage] = useState(1);
+  const [runPageSize, setRunPageSize] = useState(20);
+  const [runKeyword, setRunKeyword] = useState('');
+  const [runStatus, setRunStatus] = useState('');
 
   const toggleRun = (rid: EntityId) =>
     setSelRunIds(p => (p.includes(rid) ? p.filter(x => x !== rid) : [...p, rid]));
@@ -123,10 +135,23 @@ export const DatasetDetailPage = () => {
     enabled: !!dsId,
     placeholderData: keepPreviousData,
   });
+  // 趋势图 / 统计条用全量；表格用分页 + 过滤。
   const runsQ = useQuery({
     queryKey: ['datasets', dsId, 'runs'],
     queryFn: () => datasetApi.listRuns(dsId),
     enabled: !!dsId && tab === 'runs',
+  });
+  const runsPagedQ = useQuery({
+    queryKey: ['datasets', dsId, 'runs', 'paged', runPage, runPageSize, runKeyword, runStatus],
+    queryFn: () =>
+      datasetApi.listRunsPaged(dsId, {
+        page: runPage,
+        page_size: runPageSize,
+        keyword: runKeyword.trim() || undefined,
+        status: runStatus || undefined,
+      }),
+    enabled: !!dsId && tab === 'runs',
+    placeholderData: keepPreviousData,
   });
   const judgesQ = useQuery({
     queryKey: ['datasets', 'judges'],
@@ -538,18 +563,63 @@ export const DatasetDetailPage = () => {
           {(runsQ.data?.length ?? 0) > 0 && (
             <RunStatsOverview runs={runsQ.data ?? []} itemCount={dsQ.data?.item_count ?? 0} />
           )}
+          {/* 运行表格：名称搜索 + 状态过滤 + 分页（趋势图仍用全量） */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              value={runKeyword}
+              onChange={e => {
+                setRunKeyword(e.target.value);
+                setRunPage(1);
+              }}
+              placeholder="搜索运行名…"
+              className="h-8 w-[200px] text-[12px]"
+            />
+            <Select
+              value={runStatus || 'all'}
+              onValueChange={v => {
+                setRunStatus(v === 'all' ? '' : v);
+                setRunPage(1);
+              }}
+            >
+              <SelectTrigger className="h-8 w-[120px] text-[12px]">
+                <SelectValue placeholder="全部状态" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="success">成功</SelectItem>
+                <SelectItem value="running">运行中</SelectItem>
+                <SelectItem value="failed">失败</SelectItem>
+                <SelectItem value="pending">待运行</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <DataTable
             columns={runCols}
-            rows={sortRuns(runsQ.data ?? [], runSort)}
+            rows={sortRuns(runsPagedQ.data?.items ?? [], runSort)}
             rowKey="id"
             leftBar={r => statusBar(r.status)}
-            loading={runsQ.isLoading}
+            loading={runsPagedQ.isLoading}
+            refreshing={runsPagedQ.isFetching}
             onRowClick={r => navigate(`/datasets/${dsId}/runs/${r.id}`)}
             sortKey={runSort.key}
             sortOrder={runSort.order}
             onSortChange={(key, order) => setRunSort({ key, order })}
-            emptyText="还没有运行；点右上「新建评估」跑一次会出现在这里"
+            emptyText={
+              runKeyword || runStatus
+                ? '没有符合筛选条件的运行'
+                : '还没有运行；点右上「新建评估」跑一次会出现在这里'
+            }
             minWidth={620}
+          />
+          <TablePagination
+            page={runPage}
+            pageSize={runPageSize}
+            total={runsPagedQ.data?.total ?? 0}
+            onPageChange={setRunPage}
+            onPageSizeChange={s => {
+              setRunPageSize(s);
+              setRunPage(1);
+            }}
           />
         </div>
       )}

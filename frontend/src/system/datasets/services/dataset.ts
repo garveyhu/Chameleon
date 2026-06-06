@@ -93,6 +93,11 @@ export const datasetApi = {
   run: (id: EntityId, req: CreateDatasetRunRequest) =>
     post<DatasetRunDetail>(`${BASE}/${id}/run`, req),
   listRuns: (datasetId: EntityId) => get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
+  /** 运行列表分页 + 名称/状态过滤（运行 tab 表格用；趋势图仍走全量 listRuns）。 */
+  listRunsPaged: (
+    datasetId: EntityId,
+    params: { page: number; page_size: number; keyword?: string; status?: string },
+  ) => get<PageResult<DatasetRunRow>>(`${BASE}/${datasetId}/runs/paged`, { params }),
   getRun: (runId: EntityId) => get<DatasetRunDetail>(`${BASE}/runs/${runId}`),
   listRunItems: (runId: EntityId) => get<DatasetRunItemRow[]>(`${BASE}/runs/${runId}/items`),
   compareRuns: (runIds: EntityId[]) =>

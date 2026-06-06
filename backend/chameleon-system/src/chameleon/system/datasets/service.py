@@ -666,6 +666,42 @@ async def list_runs(
     return [DatasetRunRow.model_validate(r) for r in rows]
 
 
+async def list_runs_paged(
+    session: AsyncSession,
+    dataset_id: int,
+    page: PageParams,
+    keyword: str | None = None,
+    status: str | None = None,
+) -> PageResult[DatasetRunRow]:
+    """运行列表分页 + 按名称/状态过滤；运行 tab 表格据此渲染。"""
+    await _load_dataset(session, dataset_id)
+    stmt = select(DatasetRun).where(DatasetRun.dataset_id == dataset_id)
+    if keyword:
+        stmt = stmt.where(DatasetRun.name.ilike(f"%{keyword}%"))
+    if status:
+        stmt = stmt.where(DatasetRun.status == status)
+    total = (
+        await session.execute(select(func.count()).select_from(stmt.subquery()))
+    ).scalar_one()
+    rows = (
+        (
+            await session.execute(
+                stmt.order_by(DatasetRun.created_at.desc())
+                .offset(page.offset)
+                .limit(page.limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return PageResult(
+        items=[DatasetRunRow.model_validate(r) for r in rows],
+        total=total,
+        page=page.page,
+        page_size=page.page_size,
+    )
+
+
 async def get_run(session: AsyncSession, run_id: int) -> DatasetRunDetail:
     row = (
         await session.execute(select(DatasetRun).where(DatasetRun.id == run_id))

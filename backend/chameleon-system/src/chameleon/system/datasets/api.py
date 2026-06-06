@@ -350,6 +350,29 @@ async def list_runs(
     return Result.ok(items)
 
 
+@router.get(
+    "/{dataset_id}/runs/paged",
+    response_model=Result[PageResult[DatasetRunRow]],
+)
+async def list_runs_paged(
+    dataset_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: str | None = Query(None),
+    status: str | None = Query(None),
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:read")),
+) -> Result[PageResult[DatasetRunRow]]:
+    result = await ds_service.list_runs_paged(
+        session,
+        dataset_id,
+        PageParams(page=page, page_size=page_size),
+        keyword=keyword,
+        status=status,
+    )
+    return Result.ok(result)
+
+
 @router.get("/runs/{run_id}", response_model=Result[DatasetRunDetail])
 async def get_run(
     run_id: int,
