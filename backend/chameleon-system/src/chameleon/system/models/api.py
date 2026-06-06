@@ -52,7 +52,7 @@ class ModelItem(BaseModel):
 class CreateModelRequest(BaseModel):
     provider_id: int
     code: str = Field(min_length=1, max_length=128)
-    kind: str = Field(pattern="^(chat|embedding|rerank|image)$")
+    kind: str = Field(pattern="^(chat|embedding|rerank|image|video)$")
     dim: int | None = None
     defaults: dict | None = None
     upstream_name: str | None = Field(default=None, max_length=128)
@@ -91,7 +91,7 @@ router = APIRouter(prefix="/v1/admin/models", tags=["admin:models"])
 
 @router.get("", response_model=Result[list[ModelItem]])
 async def list_models(
-    kind: str | None = Query(default=None, pattern="^(chat|embedding|rerank|image)$"),
+    kind: str | None = Query(default=None, pattern="^(chat|embedding|rerank|image|video)$"),
     provider_id: int | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_permission("models:read")),
@@ -363,6 +363,8 @@ class StreamTestRequest(BaseModel):
     prompt: str | None = Field(default=None, max_length=2000)
     # image/video 模型：生成面板的可调参数（size / n / negative_prompt / seed …）
     params: dict | None = None
+    # video(i2v) 模型：首帧/参考图片 url（来自附件上传）
+    input_images: list[str] | None = None
 
 
 @router.post("/{model_id}/test/stream")
@@ -376,10 +378,14 @@ async def test_model_stream(
 
     chunk 结构详见 test_service.stream_test 注释。
     """
-    prompt = req.prompt if req else None
-    params = req.params if req else None
     return sse_response(
-        test_service.stream_test(session, model_id=model_id, prompt=prompt, params=params),
+        test_service.stream_test(
+            session,
+            model_id=model_id,
+            prompt=req.prompt if req else None,
+            params=req.params if req else None,
+            input_images=req.input_images if req else None,
+        ),
         log_label=f"model_test:{model_id}",
     )
 

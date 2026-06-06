@@ -11,7 +11,7 @@ import type {
 /** model test 的流事件 —— 在 FlatSSEEvent 基础上 narrow meta 字段 + 注明 end 扩展字段 */
 export interface TestStreamChunk extends FlatSSEEvent {
   meta?: {
-    kind: 'chat' | 'embedding' | 'rerank' | 'image';
+    kind: 'chat' | 'embedding' | 'rerank' | 'image' | 'video';
     model: string;
     provider: string;
   };
@@ -20,11 +20,13 @@ export interface TestStreamChunk extends FlatSSEEvent {
   sample?: string;
   /** image 模型测试：生成完毕的产物图（final） */
   image_chunk?: { url: string; detail?: string; mime_type?: string };
+  /** video 模型测试：生成完毕的产物视频 */
+  video_chunk?: { url: string; detail?: string; mime_type?: string };
 }
 
 export const modelApi = {
   list: (params?: {
-    kind?: 'chat' | 'embedding' | 'rerank' | 'image';
+    kind?: 'chat' | 'embedding' | 'rerank' | 'image' | 'video';
     provider_id?: number;
   }) => get<ModelItem[]>('/v1/admin/models', { params }),
   create: (req: CreateModelRequest) => post<ModelItem>('/v1/admin/models', req),
@@ -52,12 +54,17 @@ export const modelApi = {
     opts: {
       prompt?: string;
       params?: Record<string, unknown>;
+      inputImages?: string[];
       signal?: AbortSignal;
       onChunk: (chunk: TestStreamChunk) => void;
     },
   ): Promise<void> =>
     streamSSE<TestStreamChunk>(`/v1/admin/models/${id}/test/stream`, {
-      body: { prompt: opts.prompt ?? null, params: opts.params ?? null },
+      body: {
+        prompt: opts.prompt ?? null,
+        params: opts.params ?? null,
+        input_images: opts.inputImages ?? null,
+      },
       signal: opts.signal,
       onChunk: opts.onChunk,
     }),

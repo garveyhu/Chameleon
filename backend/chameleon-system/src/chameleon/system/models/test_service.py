@@ -20,11 +20,13 @@ from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.sse_events import (
     ImageChunkPayload,
     UsagePayload,
+    VideoChunkPayload,
     event_delta,
     event_end,
     event_error,
     event_image_chunk,
     event_meta,
+    event_video_chunk,
 )
 from chameleon.data.models import LLMModel, Provider
 from chameleon.integrations.embedding.openai_compat import OpenAICompatEmbedding
@@ -70,6 +72,7 @@ async def stream_test(
     model_id: int,
     prompt: str | None = None,
     params: dict | None = None,
+    input_images: list[str] | None = None,
 ) -> AsyncIterator[dict]:
     """流式测试模型。
 
@@ -172,42 +175,60 @@ async def stream_test(
                 yield event_delta("(空结果)\n")
                 sample = "(空)"
             yield event_end(usage=None, latency_ms=latency_ms, sample=sample)
-        elif m.kind == "image":
+        elif m.kind in ("image", "video"):
             try:
                 target = build_media_target(m, p)
             except MediaConfigError as e:
                 yield event_error("ConfigError", str(e))
                 return
-            test_prompt = prompt or DEFAULT_TEST_IMAGE_PROMPT
+            is_video = m.kind == "video"
+            test_prompt = prompt or ("" if is_video else DEFAULT_TEST_IMAGE_PROMPT)
             yield event_delta(f"使用「{target.upstream}」（{target.driver}）提交生成…\n")
-            image_url: str | None = None
+            out_url: str | None = None
             last_notice = 0
-            async for ev in stream_generate(target, prompt=test_prompt, params=params or {}):
-                etype = ev["type"]
-                if etype == "submitted":
-                    yield event_delta(
-                        f"已提交（ref={ev['ref']}），"
-                        "生成中（首次含模型加载，可能数分钟）…\n"
-                    )
-                elif etype == "progress":
-                    secs = ev["elapsed_ms"] // 1000
-                    if secs - last_notice >= 10:
-                        last_notice = secs
-                        yield event_delta(f"⏳ 已等待 {secs}s…\n")
-                elif etype == "done":
-                    image_url = ev["url"]
-                    yield event_image_chunk(
-                        ImageChunkPayload(
-                            url=image_url,
-                            detail="final",
-                            mime_type=ev.get("mime_type", "image/png"),
+            try:
+                gen = stream_generate(
+                    target,
+                    prompt=test_prompt,
+                    params=params or {},
+                    input_images=input_images or [],
+                )
+                async for ev in gen:
+                    etype = ev["type"]
+                    if etype == "submitted":
+                        yield event_delta(
+                            f"已提交（ref={ev['ref']}），生成中"
+                            f"（{'视频通常数分钟' if is_video else '首次含模型加载可能数分钟'}）…\n"
                         )
-                    )
+                    elif etype == "progress":
+                        secs = ev["elapsed_ms"] // 1000
+                        if secs - last_notice >= 10:
+                            last_notice = secs
+                            yield event_delta(f"⏳ 已等待 {secs}s…\n")
+                    elif etype == "done":
+                        out_url = ev["url"]
+                        if is_video:
+                            yield event_video_chunk(
+                                VideoChunkPayload(
+                                    url=out_url, mime_type=ev.get("mime_type", "video/mp4")
+                                )
+                            )
+                        else:
+                            yield event_image_chunk(
+                                ImageChunkPayload(
+                                    url=out_url,
+                                    detail="final",
+                                    mime_type=ev.get("mime_type", "image/png"),
+                                )
+                            )
+            except MediaConfigError as e:
+                yield event_error("ConfigError", str(e))
+                return
             latency_ms = int((time.monotonic() - start) * 1000)
             yield event_end(
                 usage=None,
                 latency_ms=latency_ms,
-                sample="出图成功" if image_url else "(无产物)",
+                sample=("生成成功" if out_url else "(无产物)"),
             )
         else:
             yield event_error("UnsupportedKind", f"未支持的 model.kind: {m.kind}")

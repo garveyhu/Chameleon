@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowDownUp,
   Boxes,
+  Clapperboard,
   Cpu,
   Image as ImageIcon,
   MessageSquare,
@@ -57,6 +58,7 @@ const GROUPS = [
   { kind: 'embedding', label: '向量模型', icon: Boxes },
   { kind: 'rerank', label: '重排模型', icon: ArrowDownUp },
   { kind: 'image', label: '生图模型', icon: ImageIcon },
+  { kind: 'video', label: '生视频模型', icon: Clapperboard },
 ] as const;
 
 // 卡片「设为默认」按 kind 写对应 model_defaults case
@@ -258,7 +260,7 @@ const CreateModelModal = ({
   onSubmit: (req: {
     provider_id: EntityId;
     code: string;
-    kind: 'chat' | 'embedding' | 'rerank' | 'image';
+    kind: ModelKind;
     dim?: number;
     defaults?: Record<string, unknown>;
   }) => void;
@@ -429,6 +431,21 @@ const CreateModelModal = ({
               )}
             </>
           )}
+          {kind === 'video' && (
+            <>
+              <div className="space-y-1.5">
+                <Label>上游模型 (DashScope model)</Label>
+                <Input
+                  value={upstreamModel}
+                  onChange={e => setUpstreamModel(e.target.value)}
+                  placeholder="wan2.7-i2v"
+                />
+              </div>
+              <p className="text-[11px] text-stone-400">
+                供应商选千问（DashScope）；图生视频(i2v) 生成时需上传首帧图。分辨率/时长在生成面板里调。
+              </p>
+            </>
+          )}
         </ModalBody>
         <ModalFooter>
           <Button variant="ghost" onClick={onClose}>
@@ -440,7 +457,8 @@ const CreateModelModal = ({
               !providerId ||
               !code ||
               (kind === 'image' &&
-                (imageDriver === 'comfyui' ? !workflow : !upstreamModel.trim()))
+                (imageDriver === 'comfyui' ? !workflow : !upstreamModel.trim())) ||
+              (kind === 'video' && !upstreamModel.trim())
             }
             onClick={() =>
               onSubmit({
@@ -458,7 +476,9 @@ const CreateModelModal = ({
                           api: imageApi,
                           size: imageSize.trim() || '1328*1328',
                         }
-                    : undefined,
+                    : kind === 'video'
+                      ? { driver: 'dashscope', model: upstreamModel.trim() }
+                      : undefined,
               })
             }
           >

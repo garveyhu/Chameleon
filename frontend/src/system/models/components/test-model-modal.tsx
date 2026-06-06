@@ -47,6 +47,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
   const [prompt, setPrompt] = useState(model.kind === 'image' ? '' : DEFAULT_PROMPT);
   const [output, setOutput] = useState('');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [state, setState] = useState<RunState>('idle');
   const [meta, setMeta] = useState<TestStreamChunk['meta'] | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -70,26 +71,29 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
     abortRef.current = ctrl;
     setOutput('');
     setImageUrl(null);
+    setVideoUrl(null);
     setMeta(null);
     setLatencyMs(null);
     setUsage(null);
     setErrorText(null);
     setState('running');
-    const gen = model.kind === 'image' ? genRef.current?.getRequest() : undefined;
+    const isGen = model.kind === 'image' || model.kind === 'video';
+    const gen = isGen ? genRef.current?.getRequest() : undefined;
     try {
       await modelApi.streamTest(model.id, {
-        prompt:
-          model.kind === 'image'
-            ? gen?.prompt || undefined
-            : model.kind === 'chat'
-              ? prompt.trim() || undefined
-              : undefined,
-        params: model.kind === 'image' ? gen?.params : undefined,
+        prompt: isGen
+          ? gen?.prompt || undefined
+          : model.kind === 'chat'
+            ? prompt.trim() || undefined
+            : undefined,
+        params: isGen ? gen?.params : undefined,
+        inputImages: isGen ? gen?.input_images : undefined,
         signal: ctrl.signal,
         onChunk: chunk => {
           if (chunk.meta) setMeta(chunk.meta);
           if (chunk.delta) setOutput(prev => prev + chunk.delta);
           if (chunk.image_chunk?.url) setImageUrl(chunk.image_chunk.url);
+          if (chunk.video_chunk?.url) setVideoUrl(chunk.video_chunk.url);
           if (chunk.error) {
             setErrorText(`${chunk.error.type}: ${chunk.error.message}`);
             setState('error');
@@ -122,6 +126,8 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
 
   const isChat = model.kind === 'chat';
   const isImage = model.kind === 'image';
+  const isVideo = model.kind === 'video';
+  const isGen = isImage || isVideo;
   const running = state === 'running';
 
   return (
@@ -136,12 +142,16 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
         </ModalTitle>
       </ModalHeader>
       <ModalBody className="space-y-3">
-        {isImage ? (
+        {isGen ? (
           <GenerationPanel
             ref={genRef}
             modelId={model.id}
             disabled={running}
-            promptPlaceholder="一只橘猫坐在窗台上，柔和晨光（留空用默认提示词）"
+            promptPlaceholder={
+              isVideo
+                ? '描述镜头运动 / 画面变化…'
+                : '一只橘猫坐在窗台上，柔和晨光（留空用默认提示词）'
+            }
           />
         ) : isChat ? (
           <div className="space-y-1.5">
@@ -164,7 +174,7 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
           </p>
         )}
 
-        {isImage ? (
+        {isGen ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-[11px] text-stone-500">
               <StateBadge state={state} />
@@ -174,7 +184,17 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
               ) : null}
             </div>
             {state === 'running' ? (
-              <ImageGenLoading hint="远程模型通常数秒；本地 ComfyUI 首次含模型加载可能数分钟" />
+              <ImageGenLoading
+                hint={
+                  isVideo
+                    ? '图生视频通常需数分钟，请耐心等待'
+                    : '远程模型通常数秒；本地 ComfyUI 首次含模型加载可能数分钟'
+                }
+              />
+            ) : videoUrl ? (
+              <div className="overflow-hidden rounded-xl border border-stone-200 bg-black">
+                <video src={videoUrl} controls className="mx-auto max-h-[420px] w-auto" />
+              </div>
             ) : imageUrl ? (
               <div className="overflow-hidden rounded-xl border border-stone-200 bg-white">
                 <img
@@ -191,7 +211,9 @@ const TestModelContent = ({ model, onClose }: { model: ModelItem; onClose: () =>
             ) : (
               <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-stone-200 bg-stone-50/60 text-stone-400">
                 <ImageIcon className="h-8 w-8 text-stone-300" />
-                <span className="text-[12px]">点击「开始测试」生成图片</span>
+                <span className="text-[12px]">
+                  点击「开始测试」生成{isVideo ? '视频' : '图片'}
+                </span>
               </div>
             )}
           </div>

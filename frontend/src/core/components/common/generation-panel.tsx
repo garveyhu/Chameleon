@@ -6,8 +6,8 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { Dices } from 'lucide-react';
-import { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
+import { Dices, ImagePlus, Loader2, X } from 'lucide-react';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -21,11 +21,14 @@ import {
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import type { EntityId } from '@/core/types/api';
+import { uploadFile } from '@/system/files/services/file-upload';
 import { imagegenApi, type ParamField } from '@/system/models/services/imagegen';
 
 export interface GenerationRequest {
   prompt: string;
   params: Record<string, unknown>;
+  /** video(i2v) 首帧/参考图 url */
+  input_images: string[];
 }
 
 export interface GenerationPanelHandle {
@@ -52,14 +55,29 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
     const [styleId, setStyleId] = useState('none');
     const [params, setParams] = useState<Record<string, unknown>>({});
     const [showAdvanced, setShowAdvanced] = useState(false);
+    const [firstFrame, setFirstFrame] = useState('');
+    const [uploading, setUploading] = useState(false);
+    const fileRef = useRef<HTMLInputElement | null>(null);
 
     const q = useQuery({
       queryKey: ['mediagen-param-spec', String(modelId)],
       queryFn: () => imagegenApi.getParamSpec(modelId),
       staleTime: 30_000,
     });
+    const mediaKind = q.data?.media_kind;
     const fields = useMemo(() => q.data?.fields ?? [], [q.data]);
     const styles = useMemo(() => q.data?.styles ?? [], [q.data]);
+
+    const onPickFile = async (file: File | undefined) => {
+      if (!file) return;
+      setUploading(true);
+      try {
+        const r = await uploadFile(file, { namespace: 'mediagen-input' });
+        setFirstFrame(r.object_url);
+      } finally {
+        setUploading(false);
+      }
+    };
 
     const valOf = (f: ParamField) => params[f.key] ?? f.default;
     const setVal = (k: string, v: unknown) => setParams(p => ({ ...p, [k]: v }));
@@ -76,10 +94,14 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
           const suffix = styles.find(s => s.id === styleId)?.suffix ?? '';
           const base = prompt.trim();
           const finalPrompt = suffix ? (base ? `${base}, ${suffix}` : suffix) : base;
-          return { prompt: finalPrompt, params: merged };
+          return {
+            prompt: finalPrompt,
+            params: merged,
+            input_images: firstFrame ? [firstFrame] : [],
+          };
         },
       }),
-      [fields, params, styles, styleId, prompt],
+      [fields, params, styles, styleId, prompt, firstFrame],
     );
 
     const basic = fields.filter(f => f.group === 'basic');
@@ -87,6 +109,50 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
 
     return (
       <div className="space-y-3">
+        {mediaKind === 'video' ? (
+          <div className="space-y-1.5">
+            <Label className="text-[12px] text-stone-600">首帧图（图生视频必填）</Label>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={e => onPickFile(e.target.files?.[0] ?? undefined)}
+            />
+            {firstFrame ? (
+              <div className="relative inline-block">
+                <img
+                  src={firstFrame}
+                  alt="首帧"
+                  className="h-24 w-auto rounded-md border border-stone-200 object-cover"
+                />
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setFirstFrame('')}
+                  className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-stone-700 text-white"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={disabled || uploading}
+                onClick={() => fileRef.current?.click()}
+                className="flex h-24 w-32 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-stone-300 text-stone-400 transition hover:border-stone-400"
+              >
+                {uploading ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <ImagePlus className="h-5 w-5" />
+                )}
+                <span className="text-[11px]">{uploading ? '上传中…' : '上传首帧图'}</span>
+              </button>
+            )}
+          </div>
+        ) : null}
+
         <div className="space-y-1.5">
           <Label className="text-[12px] text-stone-600">提示词</Label>
           <Textarea

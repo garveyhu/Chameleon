@@ -69,6 +69,7 @@ class SSEEventKind(StrEnum):
     # P19.4 PR #40：多模态预留 —— provider 流式生成图 / 音频时按 chunk emit
     IMAGE_CHUNK = "image_chunk"
     AUDIO_CHUNK = "audio_chunk"
+    VIDEO_CHUNK = "video_chunk"
     # v1.1 PR A1：GraphEngine 节点生命周期事件（dotted 命名做 graph 域命名空间）
     # payload / 构造 helper 在 core/graph/engine/event_manager.py（graph 域内聚），
     # kind 集中登记在此枚举 —— 红线：所有 SSE event 必须是 typed kind，禁止匿名 event。
@@ -159,6 +160,15 @@ class AudioChunkPayload(BaseModel):
     duration_ms: int | None = None
 
 
+class VideoChunkPayload(BaseModel):
+    """视频生成产物片段（文生视频 / 图生视频）。"""
+
+    url: str
+    detail: str = "final"
+    mime_type: str | None = None
+    duration_ms: int | None = None
+
+
 # ── 构造 helper —— service 调这些，不直接拼 dict ────────────
 
 
@@ -212,6 +222,12 @@ def event_audio_chunk(payload: AudioChunkPayload | dict[str, Any]) -> dict[str, 
     if isinstance(payload, AudioChunkPayload):
         return {SSEEventKind.AUDIO_CHUNK.value: payload.model_dump(exclude_none=True)}
     return {SSEEventKind.AUDIO_CHUNK.value: payload}
+
+
+def event_video_chunk(payload: VideoChunkPayload | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(payload, VideoChunkPayload):
+        return {SSEEventKind.VIDEO_CHUNK.value: payload.model_dump(exclude_none=True)}
+    return {SSEEventKind.VIDEO_CHUNK.value: payload}
 
 
 def event_end(

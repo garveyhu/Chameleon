@@ -6,6 +6,7 @@ export const MODEL_KINDS = [
   { value: 'embedding', label: '向量 (embedding)' },
   { value: 'rerank', label: '重排 (rerank)' },
   { value: 'image', label: '生图 (image)' },
+  { value: 'video', label: '生视频 (video)' },
 ] as const;
 export type ModelKind = (typeof MODEL_KINDS)[number]['value'];
 
