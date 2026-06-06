@@ -1,16 +1,18 @@
-/** EvalJob 创建 / 编辑 Modal —— 评分方案 + cron preset + alert 配置
+/** 定时任务 创建 / 编辑 Modal —— 数据集 + 评分方案 + 触发周期 + 被测对象 + 告警
  *
- * 复杂度集中三块：
- *  1) 评分方案选择器（选模板 or 自定义 judge）—— 用户最痛点（建了模板没法选）
- *  2) cron preset 切换（自定义 mode 时露出 raw 输入）
- *  3) alert_config 启用切换：关 → null；开 → {kind, target, threshold, silence}
+ * 设计要点：
+ *  - 任务标识（job_key）自动生成，不让用户手填；编辑态只读展示。
+ *  - 被测对象走 AgentPicker（含工作流类智能体），不手填 key。
+ *  - 触发周期用 CronBuilder 可视化生成。
+ *  - 启用状态用开关；评分方案选模板 or 自定义 judge（带中文说明）。
  */
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { AgentPicker } from '@/core/components/common/agent-picker';
+import { CronBuilder } from '@/core/components/common/cron-builder';
 import { ModelPicker } from '@/core/components/common/model-picker';
-import { get } from '@/core/lib/request';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -29,6 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
+import { Switch } from '@/core/components/ui/switch';
+import { get } from '@/core/lib/request';
 import type { EntityId, PageResult } from '@/core/types/api';
 import { ScoringSchemePicker } from '@/system/datasets/components/scoring-scheme-picker';
 import type { ScoringScheme } from '@/system/datasets/types/scoring-scheme';
@@ -38,10 +42,6 @@ import type {
   CreateEvalJobPayload,
   EvalJobItem,
   UpdateEvalJobPayload,
-} from '@/system/eval_jobs/types/eval-job';
-import {
-  CRON_CUSTOM_SENTINEL,
-  CRON_PRESETS,
 } from '@/system/eval_jobs/types/eval-job';
 
 interface DatasetItem {
@@ -58,9 +58,7 @@ interface EvalJobFormModalProps {
   /** 预设数据集（新建评估 wizard 注入时锁定，隐藏选择器） */
   presetDatasetId?: EntityId;
   onClose: () => void;
-  onSubmit: (
-    payload: CreateEvalJobPayload | UpdateEvalJobPayload,
-  ) => void;
+  onSubmit: (payload: CreateEvalJobPayload | UpdateEvalJobPayload) => void;
 }
 
 /** 从已存 job 回填 ScoringScheme：绑了模板 → template 模式；否则 judge 模式。 */
@@ -75,6 +73,18 @@ const initialScheme = (job?: EvalJobItem | null): ScoringScheme => {
   };
 };
 
+/** 由显示名自动生成唯一任务标识：ASCII slug + 随机后缀，中文名退回 job-<rand>。 */
+const genJobKey = (name: string): string => {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24);
+  const rand = Math.random().toString(36).slice(2, 8);
+  return slug ? `${slug}-${rand}` : `job-${rand}`;
+};
+
 export const EvalJobFormModal = ({
   open,
   initial,
@@ -84,12 +94,8 @@ export const EvalJobFormModal = ({
   onSubmit,
 }: EvalJobFormModalProps) => {
   const isEdit = !!initial;
-  // 惰性初始化 + 父层 remount key（react-hooks/set-state-in-effect 禁副作用同步）
-  const [jobKey, setJobKey] = useState(() => initial?.job_key ?? '');
   const [name, setName] = useState(() => initial?.name ?? '');
-  const [description, setDescription] = useState(
-    () => initial?.description ?? '',
-  );
+  const [description, setDescription] = useState(() => initial?.description ?? '');
   const [datasetId, setDatasetId] = useState<string>(() =>
     initial
       ? String(initial.dataset_id)
@@ -107,26 +113,10 @@ export const EvalJobFormModal = ({
   const [promptOverride, setPromptOverride] = useState(
     () => initial?.prompt_override ?? '',
   );
-  const [scheme, setScheme] = useState<ScoringScheme>(() =>
-    initialScheme(initial),
-  );
-  const [cronPreset, setCronPreset] = useState(() => {
-    if (!initial) return '0 9 * * *';
-    const preset = CRON_PRESETS.find(
-      p => p.value === initial.cron_expr && p.value !== CRON_CUSTOM_SENTINEL,
-    );
-    return preset ? initial.cron_expr : CRON_CUSTOM_SENTINEL;
-  });
-  const [cronCustom, setCronCustom] = useState(() => {
-    if (!initial) return '';
-    const preset = CRON_PRESETS.find(
-      p => p.value === initial.cron_expr && p.value !== CRON_CUSTOM_SENTINEL,
-    );
-    return preset ? '' : initial.cron_expr;
-  });
-  const [alertEnabled, setAlertEnabled] = useState(
-    () => !!initial?.alert_config,
-  );
+  const [scheme, setScheme] = useState<ScoringScheme>(() => initialScheme(initial));
+  const [cron, setCron] = useState(() => initial?.cron_expr ?? '0 9 * * *');
+  const [enabled, setEnabled] = useState(() => initial?.enabled ?? true);
+  const [alertEnabled, setAlertEnabled] = useState(() => !!initial?.alert_config);
   const [alertKind, setAlertKind] = useState<'slack' | 'webhook'>(
     () => initial?.alert_config?.kind ?? 'slack',
   );
@@ -158,15 +148,12 @@ export const EvalJobFormModal = ({
     staleTime: 30_000,
   });
 
-  const isCustomCron = cronPreset === CRON_CUSTOM_SENTINEL;
-  const finalCron = isCustomCron ? cronCustom.trim() : cronPreset;
   const schemeReady =
     scheme.mode === 'template' ? scheme.templateId != null : true;
   const canSubmit =
-    !!finalCron &&
+    !!cron.trim() &&
     !!datasetId &&
     schemeReady &&
-    (isEdit || !!jobKey.trim()) &&
     !!name.trim() &&
     !loading &&
     (!alertEnabled || !!alertTarget.trim());
@@ -197,13 +184,14 @@ export const EvalJobFormModal = ({
         judge: schemeFields.judge,
         judge_config: schemeFields.judge_config,
         template_id: schemeFields.template_id,
-        cron_expr: finalCron,
+        cron_expr: cron.trim(),
         alert_config: buildAlert(),
+        enabled,
       };
       onSubmit(payload);
     } else {
       const payload: CreateEvalJobPayload = {
-        job_key: jobKey.trim(),
+        job_key: genJobKey(name),
         name: name.trim(),
         description: description.trim() || null,
         dataset_id: datasetId as unknown as EntityId,
@@ -217,8 +205,9 @@ export const EvalJobFormModal = ({
           schemeFields.template_id === (0 as unknown as EntityId)
             ? null
             : schemeFields.template_id,
-        cron_expr: finalCron,
+        cron_expr: cron.trim(),
         alert_config: buildAlert(),
+        enabled,
       };
       onSubmit(payload);
     }
@@ -231,26 +220,11 @@ export const EvalJobFormModal = ({
           <ModalTitle>{isEdit ? '编辑定时任务' : '新建定时任务'}</ModalTitle>
         </ModalHeader>
         <ModalBody className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+          {/* 任务名 + 启用开关 */}
+          <div className="flex items-start gap-3">
+            <div className="flex-1 space-y-1.5">
               <Label>
-                job_key <span className="text-rose-500">*</span>
-                <span className="ml-1 text-[11px] text-stone-400">
-                  · 唯一；a-zA-Z0-9_-:.
-                </span>
-              </Label>
-              <Input
-                value={jobKey}
-                onChange={e => setJobKey(e.target.value)}
-                placeholder="daily-baseline"
-                className="font-mono"
-                disabled={isEdit}
-                maxLength={64}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>
-                显示名 <span className="text-rose-500">*</span>
+                任务名 <span className="text-rose-500">*</span>
               </Label>
               <Input
                 value={name}
@@ -258,6 +232,20 @@ export const EvalJobFormModal = ({
                 placeholder="每日基线回归"
                 maxLength={128}
               />
+              {isEdit && initial && (
+                <p className="text-[10.5px] text-stone-400">
+                  任务标识 <span className="font-mono">{initial.job_key}</span> · 不可改
+                </p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>启用</Label>
+              <div className="flex h-[34px] items-center gap-2">
+                <Switch checked={enabled} onCheckedChange={setEnabled} />
+                <span className="text-[12px] text-stone-500">
+                  {enabled ? '已启用' : '已停用'}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -274,7 +262,7 @@ export const EvalJobFormModal = ({
           {!lockDataset && (
             <div className="space-y-1.5">
               <Label>
-                Dataset <span className="text-rose-500">*</span>
+                数据集 <span className="text-rose-500">*</span>
               </Label>
               <Select value={datasetId} onValueChange={setDatasetId}>
                 <SelectTrigger>
@@ -283,7 +271,7 @@ export const EvalJobFormModal = ({
                 <SelectContent>
                   {(datasetsQ.data?.items ?? []).map(d => (
                     <SelectItem key={d.id} value={String(d.id)}>
-                      {d.name}（{d.item_count} items）
+                      {d.name}（{d.item_count} 条样本）
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -298,37 +286,22 @@ export const EvalJobFormModal = ({
           />
 
           <div className="space-y-1.5">
-            <Label>Cron 触发时间</Label>
-            <Select value={cronPreset} onValueChange={setCronPreset}>
-              <SelectTrigger>
-                <SelectValue placeholder="选预设…" />
-              </SelectTrigger>
-              <SelectContent>
-                {CRON_PRESETS.map(p => (
-                  <SelectItem key={p.label} value={p.value}>
-                    {p.label}
-                    {p.value !== CRON_CUSTOM_SENTINEL && `（${p.value}）`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {isCustomCron && (
-              <Input
-                value={cronCustom}
-                onChange={e => setCronCustom(e.target.value)}
-                placeholder="* * * * *（分 时 日 月 周）"
-                className="font-mono"
-              />
-            )}
-            <div className="text-[10.5px] text-stone-400">
-              当前表达式：
-              <span className="font-mono text-stone-600">
-                {finalCron || '—'}
-              </span>
-            </div>
+            <Label>触发周期</Label>
+            <CronBuilder value={cron} onChange={setCron} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>被测对象</Label>
+              <AgentPicker
+                value={targetKey}
+                onChange={setTargetKey}
+                width={232}
+              />
+              <p className="text-[10.5px] leading-tight text-stone-400">
+                不选则用数据集样本里记录的默认对象
+              </p>
+            </div>
             <div className="space-y-1.5">
               <Label>覆盖模型</Label>
               <ModelPicker
@@ -338,29 +311,20 @@ export const EvalJobFormModal = ({
                 width={232}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Target key</Label>
-              <Input
-                value={targetKey}
-                onChange={e => setTargetKey(e.target.value)}
-                placeholder="可选 · agent_key / graph_key"
-                maxLength={64}
-              />
-            </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label>System prompt override</Label>
+            <Label>系统提示词覆盖</Label>
             <textarea
               value={promptOverride}
               onChange={e => setPromptOverride(e.target.value)}
-              placeholder="可选 · 用此 prompt 跑评测"
+              placeholder="可选 · 用此提示词跑评测"
               rows={2}
               className="w-full rounded-md border border-stone-300/70 bg-white px-2.5 py-1.5 text-[12.5px] text-stone-800 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-200"
             />
           </div>
 
-          {/* Alert 配置 */}
+          {/* 回归告警配置 */}
           <div className="rounded-md border border-stone-200/70 bg-stone-50/40 p-3 space-y-3">
             <label className="flex items-center gap-2 text-[12.5px] text-stone-800">
               <input
@@ -369,18 +333,16 @@ export const EvalJobFormModal = ({
                 onChange={e => setAlertEnabled(e.target.checked)}
                 className="h-3.5 w-3.5 accent-primary-500"
               />
-              开启 regression 告警
+              开启回归告警（分数明显下跌时通知）
             </label>
             {alertEnabled && (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label>渠道</Label>
+                    <Label>通知渠道</Label>
                     <Select
                       value={alertKind}
-                      onValueChange={v =>
-                        setAlertKind(v as 'slack' | 'webhook')
-                      }
+                      onValueChange={v => setAlertKind(v as 'slack' | 'webhook')}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -393,7 +355,7 @@ export const EvalJobFormModal = ({
                   </div>
                   <div className="space-y-1.5">
                     <Label>
-                      Target URL <span className="text-rose-500">*</span>
+                      通知地址 <span className="text-rose-500">*</span>
                     </Label>
                     <Input
                       value={alertTarget}
@@ -433,7 +395,7 @@ export const EvalJobFormModal = ({
                       min={1}
                     />
                     <div className="text-[10.5px] text-stone-400">
-                      同 (job, kind) 内不重复发；默认 60 min
+                      同一任务内不重复发；默认 60 分钟
                     </div>
                   </div>
                 </div>
@@ -445,11 +407,7 @@ export const EvalJobFormModal = ({
           <Button variant="ghost" onClick={onClose} disabled={loading}>
             取消
           </Button>
-          <Button
-            variant="primary"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-          >
+          <Button variant="primary" disabled={!canSubmit} onClick={handleSubmit}>
             {loading ? '保存中…' : isEdit ? '保存' : '创建'}
           </Button>
         </ModalFooter>
