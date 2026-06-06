@@ -233,6 +233,27 @@ def _clip_citations(citations: list[dict], *, max_items: int = 20) -> list[dict]
     return out
 
 
+async def _inline_image_urls(messages: list[dict]) -> list[dict]:
+    """把多模态消息里 image_url 块的本地 url 转 base64 内联（远端可达）。"""
+    from chameleon.integrations.mediagen import ensure_fetchable
+
+    out: list[dict] = []
+    for m in messages:
+        content = m.get("content")
+        if not isinstance(content, list):
+            out.append(m)
+            continue
+        blocks = []
+        for b in content:
+            if isinstance(b, dict) and b.get("type") == "image_url":
+                url = (b.get("image_url") or {}).get("url")
+                if url:
+                    b = {**b, "image_url": {**b["image_url"], "url": await ensure_fetchable(url)}}
+            blocks.append(b)
+        out.append({**m, "content": blocks})
+    return out
+
+
 def _strip_image_blocks(content: object) -> object:
     """非视觉模型：把多模态 content 摊平成纯文本，丢弃 image/audio 块，避免上游报错。"""
     if not isinstance(content, list):
@@ -439,10 +460,12 @@ async def invoke_stream(
             vision_ok = await _model_supports_vision(
                 session, model_id=model_id, model_name=model_name
             )
+            # 视觉模型：把消息里的本地 MinIO 图 url 转 base64 内联（上游抓不到 localhost）
+            msgs = await _inline_image_urls(messages) if vision_ok else messages
             lc_messages = build_messages(
                 system_prompt=system_prompt,
                 kb_context=kb_context,
-                messages=messages,
+                messages=msgs,
                 vision=vision_ok,
             )
             async for chunk in _stream_llm(
