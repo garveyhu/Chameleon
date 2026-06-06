@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { AgentPicker } from '@/core/components/common/agent-picker';
 import { CronBuilder } from '@/core/components/common/cron-builder';
 import { ModelPicker } from '@/core/components/common/model-picker';
+import { SegmentedControl } from '@/core/components/ui/segmented-control';
 import { Button } from '@/core/components/ui/button';
 import { Input } from '@/core/components/ui/input';
 import { Label } from '@/core/components/ui/label';
@@ -32,7 +33,6 @@ import {
   SelectValue,
 } from '@/core/components/ui/select';
 import { get } from '@/core/lib/request';
-import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
 import type { EntityId, PageResult } from '@/core/types/api';
 import { ScoringSchemePicker } from '@/system/datasets/components/scoring-scheme-picker';
@@ -235,28 +235,14 @@ export const NewEvaluationWizard = ({
 
           <div className="space-y-2">
             <Label>被测对象</Label>
-            <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-              {(
-                [
-                  ['model', '指定模型'],
-                  ['agent', '指定智能体'],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setTargetKind(k)}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-[12px] transition',
-                    targetKind === k
-                      ? 'bg-stone-800 text-white'
-                      : 'text-stone-600 hover:bg-stone-100',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              value={targetKind}
+              onChange={setTargetKind}
+              options={[
+                { value: 'model', label: '指定模型' },
+                { value: 'agent', label: '指定智能体' },
+              ]}
+            />
             <div>
               {targetKind === 'model' ? (
                 <ModelPicker
@@ -303,28 +289,14 @@ export const NewEvaluationWizard = ({
 
           <div className="space-y-2">
             <Label>执行方式</Label>
-            <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-              {(
-                [
-                  ['now', '立即跑一次'],
-                  ['scheduled', '定时周期跑'],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  onClick={() => setRunMode(k)}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-[12px] transition',
-                    runMode === k
-                      ? 'bg-stone-800 text-white'
-                      : 'text-stone-600 hover:bg-stone-100',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl
+              value={runMode}
+              onChange={setRunMode}
+              options={[
+                { value: 'now', label: '立即跑一次' },
+                { value: 'scheduled', label: '定时周期跑' },
+              ]}
+            />
             {runMode === 'scheduled' && (
               <div className="space-y-1.5 pt-1">
                 <Label>触发周期</Label>

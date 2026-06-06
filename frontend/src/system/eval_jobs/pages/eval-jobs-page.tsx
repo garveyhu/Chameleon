@@ -17,6 +17,7 @@ import {
   TableToolbar,
 } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
+import { Switch } from '@/core/components/ui/switch';
 import { Button } from '@/core/components/ui/button';
 import { cn } from '@/core/lib/cn';
 import { confirm } from '@/core/lib/confirm';
@@ -168,21 +169,28 @@ export const EvalJobsPage = () => {
     },
     {
       key: 'status',
-      header: '状态',
-      width: 108,
+      header: '启用',
+      width: 124,
       render: r => (
-        <div className="flex items-center gap-1">
-          <Badge
-            variant="outline"
+        <div
+          className="flex items-center gap-2"
+          onClick={e => e.stopPropagation()}
+        >
+          <Switch
+            checked={r.enabled}
+            disabled={updateMut.isPending}
+            onCheckedChange={v =>
+              updateMut.mutate({ id: r.id, payload: { enabled: v } })
+            }
+          />
+          <span
             className={cn(
-              'text-[10.5px]',
-              r.enabled
-                ? 'bg-emerald-50 text-emerald-700'
-                : 'bg-stone-50 text-stone-500',
+              'text-[11px]',
+              r.enabled ? 'text-emerald-600' : 'text-stone-400',
             )}
           >
-            {r.enabled ? '启用' : '停用'}
-          </Badge>
+            {r.enabled ? '已启用' : '已停用'}
+          </span>
           {r.alert_config && (
             <Badge
               variant="outline"
@@ -198,7 +206,7 @@ export const EvalJobsPage = () => {
       key: 'actions',
       header: '',
       align: 'right',
-      width: 132,
+      width: 84,
       render: r => (
         <div
           className="flex items-center justify-end gap-1"
@@ -212,21 +220,6 @@ export const EvalJobsPage = () => {
             className="hover:bg-primary-50 hover:text-primary-700 rounded p-1 text-stone-400 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Play className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            title={r.enabled ? '停用定时' : '启用定时'}
-            onClick={() =>
-              updateMut.mutate({ id: r.id, payload: { enabled: !r.enabled } })
-            }
-            className={cn(
-              'rounded px-2 py-1 text-[10.5px] font-medium',
-              r.enabled
-                ? 'bg-stone-50 text-stone-600 hover:bg-stone-200'
-                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100',
-            )}
-          >
-            {r.enabled ? '停用' : '启用'}
           </button>
           <button
             type="button"

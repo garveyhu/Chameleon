@@ -14,6 +14,7 @@ import { useState } from 'react';
 
 import { Badge } from '@/core/components/ui/badge';
 import { Label } from '@/core/components/ui/label';
+import { SegmentedControl } from '@/core/components/ui/segmented-control';
 import {
   Select,
   SelectContent,
@@ -21,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
-import { cn } from '@/core/lib/cn';
 import type { EntityId } from '@/core/types/api';
 import { JudgeConfigFields } from '@/system/datasets/components/judge-config-fields';
 import { evalTemplateApi } from '@/system/datasets/services/eval-template';
@@ -113,28 +113,14 @@ export const ScoringSchemePicker = ({
   return (
     <div className="space-y-3">
       <Label>评分方案</Label>
-      <div className="inline-flex gap-1 rounded-lg border border-stone-200 bg-white p-0.5">
-        {(
-          [
-            ['template', '选已有模板'],
-            ['judge', '自定义评分'],
-          ] as const
-        ).map(([k, label]) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => switchMode(k)}
-            className={cn(
-              'rounded-md px-3 py-1 text-[12px] transition',
-              value.mode === k
-                ? 'bg-stone-800 text-white'
-                : 'text-stone-600 hover:bg-stone-100',
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        value={value.mode}
+        onChange={switchMode}
+        options={[
+          { value: 'template', label: '选已有模板' },
+          { value: 'judge', label: '自定义评分' },
+        ]}
+      />
 
       {value.mode === 'template' ? (
         <TemplateMode
