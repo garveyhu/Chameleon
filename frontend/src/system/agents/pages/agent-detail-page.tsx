@@ -3,7 +3,7 @@
  * 按 source 显隐：关联 KB / 关联模型仅 source='local'（代码应用）；其余 tab 全应用通用。
  * graph 来源的应用走全屏图编辑器，此页仅作详情聚合（KB / 模型在编排画布配置，故隐藏两 tab）。
  */
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
@@ -16,11 +16,13 @@ import {
   Code2,
   Cpu,
   Globe,
+  Image as ImageIcon,
   Info,
   KeyRound,
   type LucideIcon,
   MessageSquare,
   MessagesSquare,
+  Video,
   Workflow,
 } from 'lucide-react';
 
@@ -31,6 +33,7 @@ import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { resolveOrchestrationKind } from '@/core/lib/orchestration';
 import { AgentApiTab } from '@/system/agents/components/agent-api-tab';
+import { DetailSection } from '@/system/agents/components/detail-section';
 import { AgentConfigForm } from '@/system/agents/components/agent-config-form';
 import { AgentHelperModelField } from '@/system/agents/components/agent-helper-model-field';
 import { AgentOverviewTab } from '@/system/agents/components/agent-overview-tab';
@@ -177,34 +180,78 @@ const Header = ({ agent, loading }: { agent: AgentItem | null; loading: boolean 
   );
 };
 
+const EXTERNAL_LABEL: Record<string, string> = {
+  dify: 'Dify',
+  fastgpt: 'FastGPT',
+  coze: 'Coze',
+};
+
+/** 定义列表行（label 左·value 右，行间细分隔线） */
+const Field = ({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
+}) => (
+  <div className="flex items-start justify-between gap-6 py-2.5">
+    <span className="shrink-0 text-[12px] text-stone-400">{label}</span>
+    <span
+      className={cn(
+        'min-w-0 text-right text-[12.5px] break-all text-stone-800',
+        mono && 'font-mono',
+      )}
+    >
+      {value}
+    </span>
+  </div>
+);
+
+const StatusPill = ({ enabled }: { enabled: boolean }) => (
+  <span
+    className={cn(
+      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+      enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500',
+    )}
+  >
+    <span
+      className={cn('h-1.5 w-1.5 rounded-full', enabled ? 'bg-emerald-500' : 'bg-stone-400')}
+    />
+    {enabled ? '已启用' : '已停用'}
+  </span>
+);
+
 const GenerationAppInfo = ({ agent }: { agent: AgentItem }) => {
   const modelId = (agent.config as { model_id?: string | number } | null)?.model_id;
   const q = useQuery({ queryKey: ['models', 'all'], queryFn: () => modelApi.list() });
   const model = (q.data ?? []).find(m => String(m.id) === String(modelId));
   const isVideo = model?.kind === 'video';
+  const modelLabel = model
+    ? `${model.code}${model.provider_code ? `（${model.provider_code}）` : ''}`
+    : modelId
+      ? `#${modelId}（模型不存在或未启用）`
+      : '未绑定';
   return (
-    <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-      <div className="col-span-2 rounded-md border border-violet-200 bg-violet-50/60 px-3 py-2.5 text-[12px] text-violet-700">
+    <DetailSection
+      icon={isVideo ? Video : ImageIcon}
+      title={agent.name}
+      desc={isVideo ? '图生视频应用' : '文生图应用'}
+    >
+      <div className="mb-3 rounded-lg border border-violet-200 bg-violet-50/60 px-3 py-2.5 text-[12px] text-violet-700">
         生成类应用：直接调用下方生成模型出{isVideo ? '视频' : '图'}，可在 Playground 关联或经 API 调用。
       </div>
-      <Kv label="应用标识" value={agent.agent_key} mono />
-      <Kv label="类型" value={isVideo ? '图生视频' : '文生图'} />
-      <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
-      <Kv
-        label="生成模型"
-        value={
-          model
-            ? `${model.code}${model.provider_code ? `（${model.provider_code}）` : ''}`
-            : modelId
-              ? `#${modelId}（模型不存在或未启用）`
-              : '未绑定'
-        }
-        mono
-      />
-      <Kv label="描述" value={agent.description || '—'} full />
-      <Kv label="创建时间" value={formatDateTime(agent.created_at)} mono />
-      <Kv label="更新时间" value={formatDateTime(agent.updated_at)} mono />
-    </div>
+      <div className="divide-y divide-stone-100">
+        <Field label="应用标识" value={agent.agent_key} mono />
+        <Field label="类型" value={isVideo ? '图生视频' : '文生图'} />
+        <Field label="状态" value={<StatusPill enabled={agent.enabled} />} />
+        <Field label="生成模型" value={modelLabel} mono />
+        {agent.description && <Field label="描述" value={agent.description} />}
+        <Field label="创建时间" value={formatDateTime(agent.created_at)} mono />
+        <Field label="更新时间" value={formatDateTime(agent.updated_at)} mono />
+      </div>
+    </DetailSection>
   );
 };
 
@@ -221,77 +268,73 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
         ? '流程编排应用'
         : '对话编排应用'
       : EXTERNAL_LABEL[agent.source] ?? '外部应用';
+  const SectionIcon = isLocal ? Code2 : isGraph ? Workflow : Globe;
   return (
-    <>
-      <div className="grid grid-cols-2 gap-3 text-[12.5px]">
-        {isGraph && agent.graph_id != null && (
-          <div className="col-span-2 flex items-center justify-between gap-3 rounded-md border border-blue-200 bg-blue-50/60 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-[12px] text-stone-600">
-              <Workflow className="h-4 w-4 shrink-0 text-blue-600" />
-              <span>
-                此应用由<span className="font-medium text-stone-800">工作流编排</span>
-                驱动，知识库 / 模型在编排画布的节点里配置。
-              </span>
-            </div>
-            <Link
-              to={`/graphs/${agent.graph_id}/edit`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
-            >
-              去工作流编排
-              <ArrowRight className="h-3 w-3" />
-            </Link>
+    <div className="space-y-4">
+      {isGraph && agent.graph_id != null && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3">
+          <div className="flex items-center gap-2 text-[12px] text-stone-600">
+            <Workflow className="h-4 w-4 shrink-0 text-blue-600" />
+            <span>
+              此应用由<span className="font-medium text-stone-800">工作流编排</span>
+              驱动，知识库 / 模型在编排画布的节点里配置。
+            </span>
           </div>
-        )}
-        {isExternal && (
-          <div className="col-span-2 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-[12px] text-amber-700">
-            外部应用：对话流程与凭据在 {typeLabel} 平台维护，此处仅作关联与调用入口。
-          </div>
-        )}
-        <Kv label="应用标识" value={agent.agent_key} mono />
-        <Kv label="类型" value={typeLabel} />
-        <Kv label="状态" value={agent.enabled ? '已启用' : '已停用'} />
-        {isExternal && (
-          <Kv label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
-        )}
-        {isLocal && <Kv label="本地类路径" value={agent.local_class_path ?? '—'} mono />}
-        {isLocal && agent.version && <Kv label="版本" value={agent.version} mono />}
-        {(isLocal || isGraph) && <AgentHelperModelField agent={agent} />}
-        {(agent.tags ?? []).length > 0 && (
-          <Kv label="标签" value={(agent.tags ?? []).join(', ')} />
-        )}
-        {agent.description && <Kv label="描述" value={agent.description} full />}
-        <Kv label="创建时间" value={formatDateTime(agent.created_at)} mono />
-        <Kv label="更新时间" value={formatDateTime(agent.updated_at)} mono />
-      </div>
-      {/* 代码应用的声明式配置项可在此编辑；外部/编排应用配置在各自平台/画布，不在此暴露 */}
+          <Link
+            to={`/graphs/${agent.graph_id}/edit`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 text-[11.5px] font-medium text-white transition hover:bg-blue-700"
+          >
+            去工作流编排
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+      {isExternal && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-[12px] text-amber-700">
+          外部应用：对话流程与凭据在 {typeLabel} 平台维护，此处仅作关联与调用入口。
+        </div>
+      )}
+
+      <DetailSection icon={SectionIcon} title={agent.name} desc={typeLabel}>
+        <div className="divide-y divide-stone-100">
+          <Field label="应用标识" value={agent.agent_key} mono />
+          <Field label="类型" value={typeLabel} />
+          <Field label="状态" value={<StatusPill enabled={agent.enabled} />} />
+          {isExternal && (
+            <Field label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
+          )}
+          {isLocal && <Field label="本地类路径" value={agent.local_class_path ?? '—'} mono />}
+          {isLocal && agent.version && <Field label="版本" value={agent.version} mono />}
+          {(agent.tags ?? []).length > 0 && (
+            <Field
+              label="标签"
+              value={
+                <span className="flex flex-wrap justify-end gap-1">
+                  {(agent.tags ?? []).map(t => (
+                    <span
+                      key={t}
+                      className="rounded-full bg-stone-100 px-2 py-0.5 text-[10.5px] text-stone-600"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              }
+            />
+          )}
+          {agent.description && <Field label="描述" value={agent.description} />}
+          <Field label="创建时间" value={formatDateTime(agent.created_at)} mono />
+          <Field label="更新时间" value={formatDateTime(agent.updated_at)} mono />
+        </div>
+      </DetailSection>
+
+      {(isLocal || isGraph) && (
+        <DetailSection icon={Cpu} title="辅助模型" desc="followup / 标题 / 摘要等辅助调用使用">
+          <AgentHelperModelField agent={agent} compact />
+        </DetailSection>
+      )}
+      {/* 代码应用的声明式配置项可在此编辑；外部/编排配置在各自平台/画布 */}
       {isLocal && <AgentConfigForm agentId={agent.id} />}
-    </>
+    </div>
   );
 };
-
-const EXTERNAL_LABEL: Record<string, string> = {
-  dify: 'Dify',
-  fastgpt: 'FastGPT',
-  coze: 'Coze',
-};
-
-const Kv = ({
-  label,
-  value,
-  mono,
-  full,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-  full?: boolean;
-}) => (
-  <div
-    className={cn('rounded-md border border-stone-200/70 bg-white px-3 py-2', full && 'col-span-2')}
-  >
-    <div className="text-[11px] text-stone-500">{label}</div>
-    <div className={cn('mt-0.5 text-[12.5px] break-all text-stone-800', mono && 'tnum font-mono')}>
-      {value}
-    </div>
-  </div>
-);

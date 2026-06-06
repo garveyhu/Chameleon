@@ -20,6 +20,7 @@ import {
 import { EmptyState } from '@/core/components/common/empty-state';
 import { StatTile } from '@/core/components/ui/stat-tile';
 import { cn } from '@/core/lib/cn';
+import { DetailSection } from '@/system/agents/components/detail-section';
 import {
   formatCost,
   formatDurationMs,
@@ -82,21 +83,18 @@ export const AgentOverviewTab = ({ agentId }: Props) => {
 
   if (d && d.total_calls === 0) {
     return (
-      <div className="space-y-4">
-        {switcher}
+      <DetailSection icon={Activity} title="调用统计" action={switcher}>
         <EmptyState
           icon={<Activity className="h-6 w-6" />}
           title="该时间窗暂无调用"
           description="此应用在所选时间窗内还没有调用记录，换个时间窗或先去 Playground 试运行。"
         />
-      </div>
+      </DetailSection>
     );
   }
 
   return (
-    <div className="space-y-4">
-      {switcher}
-
+    <DetailSection icon={Activity} title="调用统计" action={switcher}>
       <div
         className={cn(
           'grid grid-cols-2 gap-3 lg:grid-cols-4',
@@ -142,9 +140,9 @@ export const AgentOverviewTab = ({ agentId }: Props) => {
         />
       </div>
 
-      <p className="text-[11px] text-stone-400">
+      <p className="mt-4 text-[11px] text-stone-400">
         统计基于该应用调用账本（trace 根，去除嵌套子节点重复计数）。成本为人民币（元）。
       </p>
-    </div>
+    </DetailSection>
   );
 };
