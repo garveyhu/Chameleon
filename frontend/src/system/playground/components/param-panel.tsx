@@ -139,6 +139,7 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
           value={params.bound_agent_key ?? ''}
           onChange={onPickAgent}
           width={232}
+          allLabel="不关联（直调模型）"
         />
         <p className="mt-1 text-[10.5px] leading-tight text-stone-400">
           选应用后用其模型 / 提示词 / 知识库预填，仍可手动调整

@@ -16,7 +16,7 @@ import { agentApi } from '@/system/agents/services/agent';
 import type { AgentOption } from '@/system/agents/types/agent';
 
 const CATEGORIES: { value: string; label: string }[] = [
-  { value: '', label: '全部应用' },
+  { value: '', label: '全部' },
   { value: 'local', label: '代码' },
   { value: 'graph-chatflow', label: '对话编排' },
   { value: 'graph-workflow', label: '流程编排' },
@@ -24,15 +24,24 @@ const CATEGORIES: { value: string; label: string }[] = [
 ];
 
 interface AgentPickerProps {
-  /** 选中的 agent_key；'' = 全部 */
+  /** 选中的 agent_key；'' = 全部 / 不关联 */
   value: string;
   onChange: (agentKey: string) => void;
   /** 触发器宽度（px），默认 168 */
   width?: number;
   className?: string;
+  /** 空值（value=''）选项的文案：筛选场景默认「全部应用」；
+   *  关联/绑定场景传「不关联」更贴切 */
+  allLabel?: string;
 }
 
-export const AgentPicker = ({ value, onChange, width = 168, className }: AgentPickerProps) => {
+export const AgentPicker = ({
+  value,
+  onChange,
+  width = 168,
+  className,
+  allLabel = '全部应用',
+}: AgentPickerProps) => {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState('');
   const [search, setSearch] = useState('');
@@ -72,7 +81,7 @@ export const AgentPicker = ({ value, onChange, width = 168, className }: AgentPi
 
   const triggerLabel =
     value === ''
-      ? '全部应用'
+      ? allLabel
       : picked && picked.agent_key === value
         ? picked.name
         : value;
@@ -131,12 +140,12 @@ export const AgentPicker = ({ value, onChange, width = 168, className }: AgentPi
               />
             </div>
             <div ref={listRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto p-1.5 pt-0">
-              {/* 全部应用 */}
+              {/* 空值选项：全部应用 / 不关联 */}
               <Row
                 active={value === ''}
                 onClick={() => select(null)}
                 icon={<Bot className="h-3.5 w-3.5 text-stone-400" />}
-                title="全部应用"
+                title={allLabel}
               />
               {items.map(opt => (
                 <Row
