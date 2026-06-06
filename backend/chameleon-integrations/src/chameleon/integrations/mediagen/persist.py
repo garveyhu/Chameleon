@@ -40,4 +40,5 @@ async def store_media(
     key = f"mediagen/{ref}/{filename}"
     store = get_object_store()
     await asyncio.to_thread(store.put, key, data, content_type=content_type)
-    return key, store.presigned_get_url(key)
+    # 7 天 presigned（嵌进消息内容）；过期后由消息读取层 refresh_url 重签
+    return key, store.presigned_get_url(key, expires_seconds=7 * 24 * 3600)

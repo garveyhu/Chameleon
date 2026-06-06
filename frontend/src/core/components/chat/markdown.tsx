@@ -9,6 +9,8 @@ import remarkGfm from 'remark-gfm';
 
 import { cn } from '@/core/lib/cn';
 
+const IS_VIDEO = /\.(mp4|webm|mov)(\?|$)/i;
+
 interface Props {
   content: string;
   className?: string;
@@ -27,16 +29,39 @@ export const Markdown = ({ content, className }: Props) => (
           <ol className="mb-2 list-decimal space-y-0.5 pl-5 last:mb-0">{children}</ol>
         ),
         li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-        a: ({ children, href }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sky-600 underline underline-offset-2"
-          >
-            {children}
-          </a>
-        ),
+        a: ({ children, href }) =>
+          href && IS_VIDEO.test(href) ? (
+            <video
+              src={href}
+              controls
+              className="my-1 max-h-[420px] max-w-full rounded-lg border border-stone-200"
+            />
+          ) : (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sky-600 underline underline-offset-2"
+            >
+              {children}
+            </a>
+          ),
+        img: ({ src, alt }) =>
+          typeof src === 'string' && IS_VIDEO.test(src) ? (
+            <video
+              src={src}
+              controls
+              className="my-1 max-h-[420px] max-w-full rounded-lg border border-stone-200"
+            />
+          ) : (
+            // 约束尺寸 + 预留高度，避免大图加载时上下抖动（reflow）
+            <img
+              src={typeof src === 'string' ? src : undefined}
+              alt={alt}
+              loading="lazy"
+              className="my-1 max-h-[420px] max-w-full rounded-lg border border-stone-200 object-contain"
+            />
+          ),
         strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
         em: ({ children }) => <em className="italic">{children}</em>,
         h1: ({ children }) => <h1 className="mt-1 mb-1.5 text-[15px] font-semibold">{children}</h1>,

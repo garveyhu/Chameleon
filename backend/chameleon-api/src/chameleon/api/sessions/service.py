@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from loguru import logger
@@ -27,9 +28,27 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.core.config import inventory
 from chameleon.data.infra.auth import CurrentApp
+from chameleon.data.infra.object_store import get_object_store, refresh_object_urls
 from chameleon.data.models import ChatSession, Message
 from chameleon.data.utils.snowflake import next_session_id
 from chameleon.providers.base.types import Message as ProviderMessage
+
+# 消息内容里 Markdown 图片/视频的 URL（生成产物嵌的 presigned，会过期）
+_MEDIA_URL_RE = re.compile(r'(https?://[^\s)\]"\'<>]+)')
+
+
+def _refresh_message_media(item: MessageItem) -> MessageItem:
+    """读取消息时重签媒体 URL —— 生成图/视频的 presigned 嵌在 content，过期会裂图；
+    refresh_url 从 URL 路径提 key 重签 7 天（与旧签名是否过期无关），修历史也保未来。"""
+    store = get_object_store()
+    if item.content:
+        item.content = _MEDIA_URL_RE.sub(
+            lambda m: store.refresh_url(m.group(1)) or m.group(1), item.content
+        )
+    if item.content_blocks:
+        item.content_blocks = refresh_object_urls(item.content_blocks)
+    return item
+
 
 # ── 创建 / 取 / 软删 ──────────────────────────────────────
 
@@ -319,7 +338,7 @@ async def list_messages(
     )
 
     return PageResult(
-        items=[MessageItem.model_validate(r) for r in rows],
+        items=[_refresh_message_media(MessageItem.model_validate(r)) for r in rows],
         total=total,
         page=page.page,
         page_size=page.page_size,
