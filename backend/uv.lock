@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "chameleon-agent-example-echo",
+    "chameleon-agent-example-orchestrator",
     "chameleon-agent-example-rag-qa",
     "chameleon-agent-example-tool-use",
     "chameleon-agent-example-triage",
@@ -259,6 +260,17 @@ dependencies = [
 requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
+name = "chameleon-agent-example-orchestrator"
+version = "0.1.0"
+source = { editable = "chameleon-agents/examples/orchestrator" }
+dependencies = [
+    { name = "chameleon-agentkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
+
+[[package]]
 name = "chameleon-agent-example-rag-qa"
 version = "0.1.0"
 source = { editable = "chameleon-agents/examples/rag_qa" }
@@ -386,6 +398,7 @@ version = "1.0.0"
 source = { editable = "chameleon-app" }
 dependencies = [
     { name = "chameleon-agent-example-echo" },
+    { name = "chameleon-agent-example-orchestrator" },
     { name = "chameleon-agent-example-rag-qa" },
     { name = "chameleon-agent-example-tool-use" },
     { name = "chameleon-agent-example-triage" },
@@ -410,6 +423,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "chameleon-agent-example-echo", editable = "chameleon-agents/examples/echo" },
+    { name = "chameleon-agent-example-orchestrator", editable = "chameleon-agents/examples/orchestrator" },
     { name = "chameleon-agent-example-rag-qa", editable = "chameleon-agents/examples/rag_qa" },
     { name = "chameleon-agent-example-tool-use", editable = "chameleon-agents/examples/tool_use" },
     { name = "chameleon-agent-example-triage", editable = "chameleon-agents/examples/triage" },

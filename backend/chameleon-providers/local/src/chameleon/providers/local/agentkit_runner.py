@@ -78,12 +78,21 @@ class InProcessTransport(RuntimeTransport):
         bindings: dict[str, str],
         slots: dict[str, ModelSlot],
         tool_keys: list[str] | None = None,
+        request_id: str | None = None,
+        session_id: str | None = None,
+        a2a_depth: int = 0,
+        budget: int = 100_000,
     ) -> None:
         self._agent_key = agent_key
         self._bindings = bindings or {}
         self._slots = slots or {}
         #: 该 agent 启用的平台工具 key（manifest.tools ∩ web tool_bindings）
         self._tool_keys = list(tool_keys or [])
+        #: A2A 上下文（trace 根 / 当前深度 / 剩余预算）
+        self._request_id = request_id
+        self._session_id = session_id
+        self._a2a_depth = a2a_depth
+        self._budget = budget
         self._pending: list[StreamEvent] = []
 
     def _resolve_code(self, slot: str) -> str | None:
@@ -266,7 +275,11 @@ class InProcessTransport(RuntimeTransport):
             self.emit(
                 StreamEvent(
                     type=StreamEventType.step,
-                    data={"text": f"工具循环达上限 {max_steps} 轮，强制收口"},
+                    data={
+                        "name": "tool-loop",
+                        "status": "success",
+                        "output": {"note": f"工具循环达上限 {max_steps} 轮，强制收口"},
+                    },
                 )
             )
             final = await client.ainvoke(convo)
@@ -291,6 +304,39 @@ class InProcessTransport(RuntimeTransport):
                     "data": None,
                     "error": f"{type(e).__name__}: {str(e)[:300]}",
                 }
+
+    async def call_agent(self, target: str, *, input: str) -> str:
+        from chameleon.providers.base.a2a_bridge import get_a2a_caller
+
+        caller = get_a2a_caller()
+        if caller is None:
+            raise RuntimeError(
+                "A2A caller 未注入（app 启动应调 engine.agent.a2a.wire_a2a_bridge）"
+            )
+        tc = current_trace_context()
+        # trace 根优先；无 trace 上下文时兜底到 session_id（仍保证 a2a 的 trace_id 非空红线）
+        trace_id = self._request_id or (tc.request_id if tc else None) or self._session_id
+        if not trace_id:
+            raise RuntimeError("ctx.call_agent 需要 trace_id / session_id 至少其一")
+        self.emit(
+            StreamEvent(
+                type=StreamEventType.step,
+                data={
+                    "name": f"调用子智能体 {target}",
+                    "status": "success",
+                    "output": {"target": target},
+                },
+            )
+        )
+        out = await caller(
+            source=self._agent_key,
+            target=target,
+            input=input,
+            trace_id=trace_id,
+            budget_remaining=self._budget,
+            depth=self._a2a_depth + 1,
+        )
+        return out.get("answer") or ""
 
     def span(self, name: str, *, type: str = "span") -> Any:
         return observe(
@@ -339,11 +385,16 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         allowed = set(bindings_cfg)
         enabled_tools = [t for t in declared_tools if t in allowed]
 
+    cvars = ctx.context_vars or {}
     transport = InProcessTransport(
         agent_key=ctx.agent_def.key,
         bindings=cfg.get("model_bindings") or {},
         slots=slots,
         tool_keys=enabled_tools,
+        request_id=ctx.request_id,
+        session_id=ctx.session_id,
+        a2a_depth=int(cvars.get("_a2a_depth", 0)),
+        budget=int(cvars.get("_a2a_budget", 100_000)),
     )
     run = AgentRun(
         transport=transport,

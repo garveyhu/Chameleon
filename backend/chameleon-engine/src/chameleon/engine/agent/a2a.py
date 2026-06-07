@@ -251,3 +251,37 @@ async def call_agent(
             options=options,
         )
     )
+
+
+def wire_a2a_bridge() -> None:
+    """app 启动注入 A2A caller 到 providers-base 的 IoC 桥。
+
+    让 agentkit runner（providers-local，不依赖 engine）经 `ctx.call_agent` 发起
+    子智能体调用，红线（trace 不断链 / 预算 / 深度）由本 helper 统一满足。
+    """
+    from chameleon.providers.base.a2a_bridge import set_a2a_caller
+
+    async def _caller(
+        *,
+        source: str,
+        target: str,
+        input: str | list[Message],
+        trace_id: str,
+        budget_remaining: int,
+        depth: int,
+    ) -> dict[str, Any]:
+        res = await call_agent(
+            source=source,
+            target=target,
+            input=input,
+            trace_id=trace_id,
+            budget_remaining=budget_remaining,
+            depth=depth,
+        )
+        return {
+            "answer": res.result.answer,
+            "tokens": res.budget_consumed,
+            "sub_observation_id": res.sub_observation_id,
+        }
+
+    set_a2a_caller(_caller)

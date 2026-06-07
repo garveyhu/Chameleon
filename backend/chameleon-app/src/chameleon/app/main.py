@@ -174,10 +174,18 @@ def _wire_agent_bridges() -> None:
     wire_agent_bridges()
 
 
+def _wire_a2a_bridge() -> None:
+    """注入 A2A caller，让 agentkit ctx.call_agent 委托到 engine.agent.a2a（不反向依赖）。"""
+    from chameleon.engine.agent.a2a import wire_a2a_bridge
+
+    wire_a2a_bridge()
+
+
 def create_app() -> FastAPI:
     setup_logger()
     _register_observation_sink()
     _wire_agent_bridges()
+    _wire_a2a_bridge()
 
     app = FastAPI(
         title="Chameleon",

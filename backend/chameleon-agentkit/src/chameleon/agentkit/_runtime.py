@@ -90,6 +90,14 @@ class RuntimeTransport(ABC):
         ...
 
     @abstractmethod
+    async def call_agent(self, target: str, *, input: str) -> str:
+        """调另一个已注册智能体（A2A）；返回其答案文本。
+
+        trace 不断链 / 预算 / 深度等红线由实现层（经 engine a2a）统一满足。
+        """
+        ...
+
+    @abstractmethod
     def span(self, name: str, *, type: str = "span") -> Any:
         """打开一个 observe span（async context manager）。"""
         ...
@@ -247,6 +255,16 @@ class AgentRun:
             user_text = f"参考资料：\n{ctx_text}\n\n问题：{user}"
         msgs.append(("user", user_text))
         return msgs
+
+    # —— 子智能体（A2A）——
+
+    async def call_agent(self, target: str, *, input: str) -> str:
+        """调另一个已注册智能体，返回其答案文本。
+
+        source / trace_id / depth+1 / 预算自动从本次运行上下文透传；嵌套深度、
+        token 预算、trace 串联等红线由底层 engine a2a 统一守。
+        """
+        return await self._t.call_agent(target, input=input)
 
     # —— 知识库 ——
 

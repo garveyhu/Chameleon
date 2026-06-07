@@ -208,6 +208,11 @@ class HttpDevTransport(RuntimeTransport):
         if text:
             yield text
 
+    async def call_agent(self, target: str, *, input: str) -> str:
+        raise NotImplementedError(
+            "dev 模式暂不支持 ctx.call_agent 子智能体调用；请在站内验证该路径。"
+        )
+
     def span(self, name: str, *, type: str = "span") -> Any:
         return _NullSpan()
 
