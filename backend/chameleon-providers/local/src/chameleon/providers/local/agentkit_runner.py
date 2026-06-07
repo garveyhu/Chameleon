@@ -486,17 +486,33 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         attachments=ctx.attachments,
     )
 
-    # 类式 @agent（BaseAgent 子类）：暂走其 astream（高级路径，后续 phase 细化）
     if manifest.is_class:
+        # 新式类：定义了实例方法 handle(self, run) → 注入 AgentRun + transport，
+        # 与函数式共用同一 ctx（兑现「两层共用同一 ctx」）。
+        if hasattr(target, "handle"):
+            inst = target()
+            async for ev in _consume(inst.handle(run), transport):
+                yield ev
+            return
+        # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx 便利）
         async for ev in target.astream(ctx):
             yield ev
         return
 
-    result = target(run)
+    async for ev in _consume(target(run), transport):
+        yield ev
+
+
+async def _consume(
+    result: Any, transport: InProcessTransport
+) -> AsyncIterator[StreamEvent]:
+    """把作者 handler 返回（async generator / coroutine）适配成 StreamEvent 流。
+
+    每个文本增量前先 drain transport 缓冲（tool_call/tool_result/citation/step），
+    保证工具调用 / 引用出现在对应答案文本之前。
+    """
     if inspect.isasyncgen(result):
         async for chunk in result:
-            # 先 drain：把本次 chunk 计算期间 emit 的 tool_call/tool_result/citation
-            # 排在该文本增量之前（保证工具调用出现在最终答案之前）。
             for ev in transport.drain():
                 yield ev
             yield StreamEvent(type=StreamEventType.delta, data={"text": chunk})

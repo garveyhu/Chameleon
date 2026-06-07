@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from chameleon.agentkit import AgentRun, tool
+from chameleon.agentkit import AgentMetadata, AgentRun, BaseAgent, agent, tool
 from chameleon.providers.base.types import StreamEventType
-from chameleon.providers.local.agentkit_runner import InProcessTransport
+from chameleon.providers.local.agentkit_runner import InProcessTransport, _consume
 
 
 def test_tool_schema_inference():
@@ -141,6 +141,33 @@ async def test_call_agent_delegates_to_bridge():
         assert captured["trace_id"] == "trace-1" and captured["budget"] == 9000
     finally:
         a2a_bridge._CALLER = None  # 清理，避免污染其它测试
+
+
+@pytest.mark.asyncio
+async def test_class_style_handle_gets_ctx():
+    """类式 @agent 定义 handle(self, run) → 注入 AgentRun（兑现两层共用 ctx）。"""
+
+    @agent(key="_t_classic", name="经典类式", models=[])
+    class _Classic(BaseAgent):
+        @classmethod
+        def get_metadata(cls):
+            return AgentMetadata(id="_t_classic", name="经典类式", description="")
+
+        async def handle(self, run: AgentRun):
+            yield f"hi {run.query}"
+
+    t = InProcessTransport(agent_key="_t_classic", bindings={}, slots={})
+    run = AgentRun(
+        transport=t, agent_key="_t_classic", query="bob",
+        messages=[], history=[], session_id=None, config={},
+    )
+    inst = _Classic()
+    texts = [
+        e.data.get("text")
+        async for e in _consume(inst.handle(run), t)
+        if e.type == StreamEventType.delta
+    ]
+    assert "hi bob" in texts
 
 
 @pytest.mark.asyncio
