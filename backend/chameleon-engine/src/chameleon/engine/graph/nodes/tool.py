@@ -1,37 +1,28 @@
 """ToolNode —— 调注册的 Tool（P18.2 起接 chameleon.core.tools 实现）
 
+执行逻辑（`run_tool`）已下沉到 `chameleon.integrations.tools.execute`，与 graph
+解耦，graph ToolNode / LLMNode function-calling / agentkit 共用同一入口。本模块只
+保留 graph 节点壳 + 兼容 re-export。
+
 data 配置（v0.4 起）：
     {
       "tool_key": "http",
       "args": { ... }       # 透传给 Tool.run；也可以从上游 input 拼
     }
 
-执行约定（P18.2 PR #23）：
-    1. 从 chameleon.core.tools.get_tool_class(tool_key) 拿 Tool 子类
-    2. 查 tool_instances 表的 admin config（同步路径用独立 session）
-       - 找到且 enabled=True → 用 admin config 实例化
-       - 找到但 enabled=False → 拒绝 + 清晰错误
-       - 未找到（admin 没配过）→ 用代码层默认（空 config）
-    3. 用 run_with_validation 跑（按 parameters_schema 校验入参）
-    4. 返 {tool_key, ok, data, error, meta}
-
-兼容：register_tool() 函数本地也透出，方便测试 / 早期模块手动注册。
+兼容：register_tool() / run_tool 本地也透出，方便测试 / 早期模块手动 import。
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
-
-from chameleon.core.tools import ToolContext, ToolResult  # 协议留 core
-from chameleon.data.infra.db import AsyncSessionLocal
-from chameleon.data.models import ToolInstance
 from chameleon.engine.graph.context import NodeContext
 from chameleon.engine.graph.node_base import Node
 from chameleon.engine.graph.registry import register_node_type
-from chameleon.integrations.tools import (  # registry 已迁 integrations
-    get_tool_class,
+from chameleon.integrations.tools import (
+    get_tool_class,  # noqa: F401  (compat re-export)
+    run_tool,  # noqa: F401  (compat re-export)
 )
 from chameleon.integrations.tools import (
     register_tool as _register_tool_real,
@@ -44,92 +35,6 @@ def register_tool(tool_cls):  # noqa: ANN001
     兼容老测试 / 早期代码直接从本模块 import register_tool 的写法。
     """
     return _register_tool_real(tool_cls)
-
-
-async def run_tool(
-    tool_key: str,
-    args: dict[str, Any],
-    *,
-    caller: str,
-    related_id: str | None = None,
-    extra: dict[str, Any] | None = None,
-    config_override: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """按 tool_key 跑一个注册 Tool，返回统一 dict 结果
-
-    ToolNode 与 LLMNode 的多轮 tool_call 循环（A2）共用此入口，避免逻辑分叉。
-
-    流程：get_tool_class → 查 tool_instances admin config（含 enabled 闸门）→
-    实例化 → run_with_validation（按 parameters_schema 校验入参）。
-
-    Args:
-        tool_key: 注册的 tool key
-        args: 调用参数（已合并好）
-        caller: ToolContext.caller（如 "graph" / "llm-node"）
-        related_id: ToolContext.related_id（如 graph_run_id）
-        extra: ToolContext.extra（graph_id / node_id 等）
-        config_override: 覆盖 admin config 的同名字段（spec.data.config）
-
-    Returns:
-        {tool_key, ok, data, error, meta}
-        admin 禁用：{tool_key, ok: False, error: "...被 admin 禁用", meta}
-    """
-    tool_cls = get_tool_class(tool_key)
-    if tool_cls is None:
-        raise RuntimeError(
-            f"tool_key={tool_key!r} 未注册；可用 keys 由启动期 builtins 扫表得"
-        )
-
-    config: dict[str, Any] = {}
-    inst = await _load_tool_instance(tool_key)
-    if inst is not None and not inst.enabled:
-        return {
-            "tool_key": tool_key,
-            "ok": False,
-            "data": None,
-            "error": f"tool {tool_key!r} 被 admin 禁用",
-            "meta": {"instance_id": inst.id},
-        }
-    if inst is not None:
-        config = inst.config or {}
-    if config_override:
-        config = {**config, **config_override}
-
-    tool = tool_cls(config)
-
-    tool_ctx = ToolContext(
-        caller=caller,
-        related_id=related_id,
-        extra=extra or {},
-    )
-
-    # Tool 是自定义 ABC（非 LangChain BaseTool）→ 执行点包 record_scope 落 TOOL 节点。
-    # 此入口被 graph ToolNode 与 LLMNode function-calling 共用，一处覆盖全工具路径。
-    from chameleon.core.observe.context import ObservationType
-    from chameleon.integrations.observe.aspect import record_scope
-
-    async with record_scope(
-        observation_type=ObservationType.TOOL,
-        name=tool_key,
-        request_payload={"tool_key": tool_key, "args": str(args)[:2000]},
-    ) as scope:
-        result = await tool.run_with_validation(args, tool_ctx)
-        scope.success = bool(result.ok)
-        if not result.ok:
-            scope.code = 500
-            scope.error_message = (result.error or "")[:500]
-        scope.response_payload = {
-            "ok": result.ok,
-            "data": str(result.data)[:2000] if result.data is not None else None,
-            "error": result.error,
-        }
-        return {
-            "tool_key": tool_key,
-            "ok": result.ok,
-            "data": result.data,
-            "error": result.error,
-            "meta": result.meta,
-        }
 
 
 class ToolNode(Node[Any, dict]):
@@ -158,20 +63,6 @@ class ToolNode(Node[Any, dict]):
             extra={"graph_id": ctx.graph_id, "node_id": self.id},
             config_override=self.spec.data.get("config"),
         )
-
-
-async def _load_tool_instance(tool_key: str) -> ToolInstance | None:
-    """查 tool_instances 表的 admin 配置（独立 session）"""
-    async with AsyncSessionLocal() as s:
-        return (
-            await s.execute(
-                select(ToolInstance).where(ToolInstance.tool_key == tool_key)
-            )
-        ).scalar_one_or_none()
-
-
-# 防 lint：ToolResult 在模块层 import 后未直接使用，但暴露给 type-checkers / docs
-_ = ToolResult
 
 
 register_node_type(ToolNode)
