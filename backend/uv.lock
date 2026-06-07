@@ -8,6 +8,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "chameleon-agent-example-classic",
     "chameleon-agent-example-echo",
     "chameleon-agent-example-orchestrator",
     "chameleon-agent-example-rag-qa",
@@ -249,6 +250,17 @@ wheels = [
 ]
 
 [[package]]
+name = "chameleon-agent-example-classic"
+version = "0.1.0"
+source = { editable = "chameleon-agents/examples/classic" }
+dependencies = [
+    { name = "chameleon-agentkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
+
+[[package]]
 name = "chameleon-agent-example-echo"
 version = "0.1.0"
 source = { editable = "chameleon-agents/examples/echo" }
@@ -397,6 +409,7 @@ name = "chameleon-app"
 version = "1.0.0"
 source = { editable = "chameleon-app" }
 dependencies = [
+    { name = "chameleon-agent-example-classic" },
     { name = "chameleon-agent-example-echo" },
     { name = "chameleon-agent-example-orchestrator" },
     { name = "chameleon-agent-example-rag-qa" },
@@ -422,6 +435,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chameleon-agent-example-classic", editable = "chameleon-agents/examples/classic" },
     { name = "chameleon-agent-example-echo", editable = "chameleon-agents/examples/echo" },
     { name = "chameleon-agent-example-orchestrator", editable = "chameleon-agents/examples/orchestrator" },
     { name = "chameleon-agent-example-rag-qa", editable = "chameleon-agents/examples/rag_qa" },

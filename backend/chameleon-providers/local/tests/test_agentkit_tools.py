@@ -170,6 +170,19 @@ async def test_class_style_handle_gets_ctx():
     assert "hi bob" in texts
 
 
+def test_sandboxed_flag_and_policy():
+    """@agent(sandboxed=True) → manifest.sandboxed；策略决策点不抛（接口预留）。"""
+    from chameleon.providers.local.agentkit_runner import _resolve_sandbox_policy
+
+    @agent(key="_t_sandboxed", name="S", models=[], sandboxed=True)
+    async def _h(run):  # noqa: ANN001
+        yield "x"
+
+    man = _h.__agent_manifest__
+    assert man.sandboxed is True
+    _resolve_sandbox_policy("_t_sandboxed", man)  # 不抛即可（开发态进程内）
+
+
 @pytest.mark.asyncio
 async def test_run_tool_loop_no_tool_calls_returns_text():
     t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[])

@@ -92,6 +92,9 @@ class AgentManifest:
     tags: list[str] = field(default_factory=list)
     #: 平台 registry 工具点名（已配置工具 tool_key）；web「关联工具」据此列出可启停集
     tools: list[str] = field(default_factory=list)
+    #: 是否要求在沙箱（隔离 runtime）执行 —— 多租户 / 不可信代码用。接口已预留；
+    #: 真正容器隔离执行按部署需求启用（见 runner 决策点 + core/sandbox）。
+    sandboxed: bool = False
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False

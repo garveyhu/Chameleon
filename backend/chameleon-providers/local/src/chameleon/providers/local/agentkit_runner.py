@@ -19,6 +19,8 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
+from loguru import logger
+
 from chameleon.agentkit import AgentRun, RuntimeTransport
 from chameleon.agentkit._runtime import _content_to_text
 from chameleon.agentkit._spec import Doc, ModelSlot, ToolSpec
@@ -446,6 +448,34 @@ def is_agentkit_agent(ctx: InvokeContext) -> bool:
     return bool(ctx.agent_def.config.get("__agentkit_module__"))
 
 
+def _resolve_sandbox_policy(agent_key: str, manifest: Any) -> None:
+    """沙箱执行决策点（接口预留）。
+
+    `@agent(sandboxed=True)` 表达「该 agent 需在隔离 runtime 执行」（多租户 / 不可信
+    代码）。**真正的容器隔离执行（把 handle 放进 SandboxRuntime + ctx 资源经受控 RPC
+    回主进程）按部署需求启用**——core/sandbox 的协议 + registry（get_runtime /
+    is_production）已就绪，是后续接线点。当前默认进程内执行：
+    - 非生产：直接进程内跑（开发便利），仅记一条 info。
+    - 生产 + 要求沙箱：记 warning 提示「隔离未启用，按信任源码运行」，由部署方决定是否
+      上 docker runtime（不在此静默假装隔离）。
+    """
+    if not getattr(manifest, "sandboxed", False):
+        return
+    from chameleon.core.sandbox import is_production
+
+    if is_production():
+        logger.warning(
+            "agentkit agent {} 声明 sandboxed=True 但隔离执行未启用：当前按信任源码"
+            "进程内运行；多租户/不可信场景请接 core/sandbox docker runtime。",
+            agent_key,
+        )
+    else:
+        logger.info(
+            "agentkit agent {} sandboxed=True（开发态进程内运行；隔离执行接口已预留）",
+            agent_key,
+        )
+
+
 async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     """运行一个 @agent 声明的本地智能体，产出 StreamEvent 流。"""
     cfg = ctx.agent_def.config
@@ -453,6 +483,8 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     target = getattr(mod, cfg["__agentkit_attr__"])
     manifest = target.__agent_manifest__
     slots = {s.name: s for s in manifest.models}
+
+    _resolve_sandbox_policy(ctx.agent_def.key, manifest)
 
     # 平台工具启用集：manifest 声明的可用集 ∩ web tool_bindings（None=全启用）
     declared_tools = list(manifest.tools or [])

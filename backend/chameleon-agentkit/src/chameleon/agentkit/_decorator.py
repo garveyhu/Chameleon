@@ -32,6 +32,7 @@ def agent(
     config: list[Opt] | None = None,
     tags: list[str] | None = None,
     tools: list[str] | None = None,
+    sandboxed: bool = False,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -55,6 +56,7 @@ def agent(
             config=list(config or []),
             tags=list(tags or []),
             tools=list(tools or []),
+            sandboxed=sandboxed,
             handler=target,
             is_class=isinstance(target, type),
         )
