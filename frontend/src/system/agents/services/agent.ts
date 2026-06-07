@@ -8,6 +8,7 @@ import type {
   AgentOption,
   AgentOverview,
   AgentPrefillConfig,
+  AgentTools,
   CreateAgentRequest,
   LinkedKbItem,
 } from '@/system/agents/types/agent';
@@ -56,6 +57,10 @@ export const agentApi = {
     post<AgentModelSlots>(`/v1/admin/agents/${id}/model-bindings/update`, {
       bindings,
     }),
+
+  tools: (id: EntityId) => get<AgentTools>(`/v1/admin/agents/${id}/tools`),
+  updateTools: (id: EntityId, enabled: string[]) =>
+    post<AgentTools>(`/v1/admin/agents/${id}/tools/update`, { enabled }),
 
   configSchema: (id: EntityId) => get<AgentConfigSchema>(`/v1/admin/agents/${id}/config-schema`),
   updateConfig: (id: EntityId, values: Record<string, unknown>) =>

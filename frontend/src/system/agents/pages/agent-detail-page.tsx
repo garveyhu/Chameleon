@@ -24,6 +24,7 @@ import {
   MessagesSquare,
   Video,
   Workflow,
+  Wrench,
 } from 'lucide-react';
 
 import { OrchestrationBadge } from '@/core/components/common/orchestration-badge';
@@ -40,11 +41,12 @@ import { AgentOverviewTab } from '@/system/agents/components/agent-overview-tab'
 import { AgentSessionsTab } from '@/system/agents/components/agent-sessions-tab';
 import { LinkedKbsForm } from '@/system/agents/components/linked-kbs-form';
 import { LinkedModelsForm } from '@/system/agents/components/linked-models-form';
+import { LinkedToolsForm } from '@/system/agents/components/linked-tools-form';
 import { agentApi } from '@/system/agents/services/agent';
 import type { AgentItem } from '@/system/agents/types/agent';
 import { modelApi } from '@/system/models/services/model';
 
-type TabKey = 'info' | 'kbs' | 'model' | 'sessions' | 'api' | 'monitor';
+type TabKey = 'info' | 'kbs' | 'model' | 'tools' | 'sessions' | 'api' | 'monitor';
 
 interface TabDef {
   key: TabKey;
@@ -58,6 +60,7 @@ const TABS: TabDef[] = [
   { key: 'info', label: '概览', icon: <Info className="h-3.5 w-3.5" /> },
   { key: 'kbs', label: '关联 KB', icon: <BookOpen className="h-3.5 w-3.5" />, localOnly: true },
   { key: 'model', label: '关联模型', icon: <Cpu className="h-3.5 w-3.5" />, localOnly: true },
+  { key: 'tools', label: '关联工具', icon: <Wrench className="h-3.5 w-3.5" />, localOnly: true },
   { key: 'sessions', label: '会话', icon: <MessagesSquare className="h-3.5 w-3.5" /> },
   { key: 'api', label: 'API', icon: <KeyRound className="h-3.5 w-3.5" /> },
   { key: 'monitor', label: '监测', icon: <Activity className="h-3.5 w-3.5" /> },
@@ -113,6 +116,7 @@ export const AgentDetailPage = () => {
           {tab === 'info' && <InfoTab agent={agent} />}
           {tab === 'kbs' && isLocal && <LinkedKbsForm agentId={agentId} />}
           {tab === 'model' && isLocal && <LinkedModelsForm agentId={agentId} />}
+          {tab === 'tools' && isLocal && <LinkedToolsForm agentId={agentId} />}
           {tab === 'sessions' && agent && <AgentSessionsTab agentKey={agent.agent_key} />}
           {tab === 'api' && agent && <AgentApiTab agentId={agentId} agentKey={agent.agent_key} />}
           {tab === 'monitor' && <AgentOverviewTab agentId={agentId} />}

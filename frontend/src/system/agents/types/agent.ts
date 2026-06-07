@@ -91,6 +91,17 @@ export interface AgentModelSlots {
   models: ConfiguredModelItem[];
 }
 
+/** agentkit @agent(tools=[...]) 声明的平台工具（含启停态） */
+export interface AgentToolItem {
+  tool_key: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface AgentTools {
+  tools: AgentToolItem[];
+}
+
 export interface ConfigOptionItem {
   key: string;
   label: string;
