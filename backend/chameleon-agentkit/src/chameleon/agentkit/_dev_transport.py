@@ -101,6 +101,14 @@ class HttpDevTransport(RuntimeTransport):
         # dev 不解析 slot 绑定链（无 DB 上下文）：slot 走系统默认，model 点名透传
         return _RemoteChatModel(self, model)
 
+    def structured_model(
+        self, *, slot: str | None = None, model: str | None = None, schema: type
+    ) -> Any:
+        raise NotImplementedError(
+            "dev 模式暂不支持 ctx.complete(schema=...) 结构化输出；"
+            "请在站内（提交后 InProcessTransport）验证该路径。"
+        )
+
     async def kb_search(
         self,
         query: str,

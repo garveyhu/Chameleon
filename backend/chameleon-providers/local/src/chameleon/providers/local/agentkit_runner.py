@@ -104,6 +104,11 @@ class InProcessTransport(RuntimeTransport):
                 return llm_by_name(code)
         return llm()  # 系统默认
 
+    def structured_model(
+        self, *, slot: str | None = None, model: str | None = None, schema: type
+    ) -> Any:
+        return self.chat_model(slot=slot, model=model).with_structured_output(schema)
+
     async def kb_search(
         self,
         query: str,

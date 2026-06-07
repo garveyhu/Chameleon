@@ -50,6 +50,14 @@ class RuntimeTransport(ABC):
         ...
 
     @abstractmethod
+    def structured_model(
+        self, *, slot: str | None = None, model: str | None = None, schema: type
+    ) -> Any:
+        """返回一个绑定了结构化输出（`with_structured_output(schema)`）的模型；
+        其 `ainvoke` 直接返回校验后的 pydantic 实例。"""
+        ...
+
+    @abstractmethod
     async def kb_search(
         self,
         query: str,
@@ -138,11 +146,22 @@ class AgentRun:
         system: str | None = None,
         user: str,
         context: Any = None,
+        schema: type | None = None,
         **kw: Any,
-    ) -> str:
-        """高层糖：一次性出文本，自动 generation span + usage。"""
-        chat = self._t.chat_model(slot=None if model else slot, model=model)
+    ) -> Any:
+        """高层糖：一次性出文本，自动 generation span + usage。
+
+        给了 `schema`（一个 pydantic BaseModel 子类）则走结构化输出：返回校验后的
+        模型**实例**（而非 str）。底层用 langchain `with_structured_output`。
+        """
         msgs = self._build_messages(system, user, context)
+        if schema is not None:
+            structured = self._t.structured_model(
+                slot=None if model else slot, model=model, schema=schema
+            )
+            async with self._t.span("llm.complete", type="span"):
+                return await structured.ainvoke(msgs, **kw)
+        chat = self._t.chat_model(slot=None if model else slot, model=model)
         async with self._t.span("llm.complete", type="span"):
             resp = await chat.ainvoke(msgs, **kw)
         return _content_to_text(resp)

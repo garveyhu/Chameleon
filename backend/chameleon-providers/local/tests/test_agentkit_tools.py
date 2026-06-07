@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import BaseModel
 
-from chameleon.agentkit import tool
+from chameleon.agentkit import AgentRun, tool
 from chameleon.providers.base.types import StreamEventType
 from chameleon.providers.local.agentkit_runner import InProcessTransport
 
@@ -73,6 +74,45 @@ async def test_run_tool_loop_dispatches_local_tool():
     types = [e.type for e in t.drain()]
     assert StreamEventType.tool_call in types
     assert StreamEventType.tool_result in types
+
+
+class _FakeStructured:
+    def __init__(self, inst):
+        self._inst = inst
+
+    async def ainvoke(self, messages, **kw):  # noqa: ANN001
+        return self._inst
+
+
+class _FakeChatStructured:
+    def __init__(self, inst):
+        self._inst = inst
+
+    def with_structured_output(self, schema):  # noqa: ANN001
+        return _FakeStructured(self._inst)
+
+
+@pytest.mark.asyncio
+async def test_complete_with_schema_returns_instance():
+    class Triage(BaseModel):
+        category: str
+        confidence: float
+
+    inst = Triage(category="技术", confidence=0.9)
+    t = InProcessTransport(agent_key="x", bindings={}, slots={})
+    t.chat_model = lambda *, slot=None, model=None: _FakeChatStructured(inst)  # type: ignore[method-assign]
+    run = AgentRun(
+        transport=t,
+        agent_key="x",
+        query="q",
+        messages=[],
+        history=[],
+        session_id=None,
+        config={},
+    )
+    res = await run.complete(user="把这句分类", schema=Triage)
+    assert isinstance(res, Triage)
+    assert res.category == "技术" and res.confidence == 0.9
 
 
 @pytest.mark.asyncio
