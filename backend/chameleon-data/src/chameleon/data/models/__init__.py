@@ -5,6 +5,8 @@
 
 from chameleon.data.models.agent import Agent
 from chameleon.data.models.agent_kb_link import AgentKbLink
+from chameleon.data.models.agent_memory import AgentMemory
+from chameleon.data.models.ai_task import AiTask
 from chameleon.data.models.api_key import ApiKey, CallLog
 from chameleon.data.models.app_template import AppTemplate
 from chameleon.data.models.audit_log import AuditLog
@@ -24,9 +26,9 @@ from chameleon.data.models.kb_collection import KbCollection
 from chameleon.data.models.kb_consistency import KbConsistencyReport
 from chameleon.data.models.kb_metadata_field import KbMetadataField
 from chameleon.data.models.knowledge import Chunk, Document, KnowledgeBase
+from chameleon.data.models.media_pricing import MediaPricing
 from chameleon.data.models.model_def import LLMModel
 from chameleon.data.models.model_default import ModelDefault
-from chameleon.data.models.media_pricing import MediaPricing
 from chameleon.data.models.model_pricing import ModelPricing
 from chameleon.data.models.plugin import PluginInstance
 from chameleon.data.models.plugin_registry import PluginRegistryEntry
@@ -62,6 +64,8 @@ __all__ = [
     "ModelDefault",
     "Agent",
     "AgentKbLink",
+    "AgentMemory",
+    "AiTask",
     # 业务域
     "ChatSession",
     "Message",

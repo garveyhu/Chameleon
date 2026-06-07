@@ -82,6 +82,7 @@ class InProcessTransport(RuntimeTransport):
         session_id: str | None = None,
         a2a_depth: int = 0,
         budget: int = 100_000,
+        scope_ref: str | None = None,
     ) -> None:
         self._agent_key = agent_key
         self._bindings = bindings or {}
@@ -93,6 +94,8 @@ class InProcessTransport(RuntimeTransport):
         self._session_id = session_id
         self._a2a_depth = a2a_depth
         self._budget = budget
+        #: ctx.memory 作用域（end_user_id 优先，退化 session_id）
+        self._scope_ref = scope_ref
         self._pending: list[StreamEvent] = []
 
     def _resolve_code(self, slot: str) -> str | None:
@@ -305,6 +308,81 @@ class InProcessTransport(RuntimeTransport):
                     "error": f"{type(e).__name__}: {str(e)[:300]}",
                 }
 
+    async def memory_get(self, key: str, default: Any = None) -> Any:
+        if not self._scope_ref:
+            return default
+        from sqlalchemy import select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import AgentMemory
+
+        async with AsyncSessionLocal() as s:
+            row = (
+                await s.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == self._agent_key,
+                        AgentMemory.scope_ref == self._scope_ref,
+                        AgentMemory.mkey == key,
+                    )
+                )
+            ).scalar_one_or_none()
+        if row is None or not isinstance(row.value, dict):
+            return default
+        return row.value.get("v", default)
+
+    async def memory_set(self, key: str, value: Any) -> None:
+        if not self._scope_ref:
+            return
+        from sqlalchemy import select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import AgentMemory
+
+        async with AsyncSessionLocal() as s:
+            row = (
+                await s.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == self._agent_key,
+                        AgentMemory.scope_ref == self._scope_ref,
+                        AgentMemory.mkey == key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                s.add(
+                    AgentMemory(
+                        agent_key=self._agent_key,
+                        scope_ref=self._scope_ref,
+                        mkey=key,
+                        value={"v": value},
+                    )
+                )
+            else:
+                row.value = {"v": value}
+            await s.commit()
+
+    async def memory_all(self) -> dict[str, Any]:
+        if not self._scope_ref:
+            return {}
+        from sqlalchemy import select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import AgentMemory
+
+        async with AsyncSessionLocal() as s:
+            rows = (
+                await s.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == self._agent_key,
+                        AgentMemory.scope_ref == self._scope_ref,
+                    )
+                )
+            ).scalars().all()
+        return {
+            r.mkey: (r.value.get("v") if isinstance(r.value, dict) else None)
+            for r in rows
+        }
+
     async def call_agent(self, target: str, *, input: str) -> str:
         from chameleon.providers.base.a2a_bridge import get_a2a_caller
 
@@ -395,6 +473,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         session_id=ctx.session_id,
         a2a_depth=int(cvars.get("_a2a_depth", 0)),
         budget=int(cvars.get("_a2a_budget", 100_000)),
+        scope_ref=cvars.get("end_user_id") or ctx.session_id,
     )
     run = AgentRun(
         transport=transport,

@@ -208,6 +208,15 @@ class HttpDevTransport(RuntimeTransport):
         if text:
             yield text
 
+    async def memory_get(self, key: str, default: Any = None) -> Any:
+        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+
+    async def memory_set(self, key: str, value: Any) -> None:
+        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+
+    async def memory_all(self) -> dict[str, Any]:
+        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+
     async def call_agent(self, target: str, *, input: str) -> str:
         raise NotImplementedError(
             "dev 模式暂不支持 ctx.call_agent 子智能体调用；请在站内验证该路径。"

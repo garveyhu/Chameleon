@@ -36,6 +36,19 @@ class KbHandle(Protocol):
         ...
 
 
+class MemoryHandle(Protocol):
+    """`ctx.memory` —— 跨会话 kv 记忆门面。
+
+    作用域：优先 end_user_id（跨会话），无身份退化 session_id。值须 JSON 可序列化。
+    """
+
+    async def get(self, key: str, default: Any = None) -> Any: ...
+
+    async def set(self, key: str, value: Any) -> None: ...
+
+    async def all(self) -> dict[str, Any]: ...
+
+
 class RuntimeTransport(ABC):
     """ctx 背后的可插拔后端：解析已配置资源 + 观测。"""
 
@@ -87,6 +100,21 @@ class RuntimeTransport(ABC):
         续轮；无 tool_calls 即出最终文本。自动 emit tool_call/tool_result 事件、
         开 span、累加 usage。`max_steps` 为循环轮次上限。
         """
+        ...
+
+    @abstractmethod
+    async def memory_get(self, key: str, default: Any = None) -> Any:
+        """读 kv 记忆（按本 agent + 作用域）。"""
+        ...
+
+    @abstractmethod
+    async def memory_set(self, key: str, value: Any) -> None:
+        """写 kv 记忆（upsert）。"""
+        ...
+
+    @abstractmethod
+    async def memory_all(self) -> dict[str, Any]:
+        """取本 agent + 作用域下全部 kv。"""
         ...
 
     @abstractmethod
@@ -272,6 +300,12 @@ class AgentRun:
     def kb(self) -> KbHandle:
         return _KbProxy(self._t)
 
+    # —— 记忆（跨会话 kv）——
+
+    @property
+    def memory(self) -> MemoryHandle:
+        return _MemoryProxy(self._t)
+
     # —— 追踪（直接转发 transport，Phase 0 即可用其抽象契约）——
 
     def span(self, name: str, *, type: str = "span") -> Any:
@@ -281,6 +315,22 @@ class AgentRun:
     def emit(self, event: StreamEvent) -> None:
         """透传一个自定义 StreamEvent。"""
         self._t.emit(event)
+
+
+class _MemoryProxy:
+    """`ctx.memory` 的实现：转发给 transport（结构上满足 MemoryHandle）。"""
+
+    def __init__(self, transport: RuntimeTransport) -> None:
+        self._t = transport
+
+    async def get(self, key: str, default: Any = None) -> Any:
+        return await self._t.memory_get(key, default)
+
+    async def set(self, key: str, value: Any) -> None:
+        await self._t.memory_set(key, value)
+
+    async def all(self) -> dict[str, Any]:
+        return await self._t.memory_all()
 
 
 class _KbProxy:
