@@ -19,6 +19,7 @@ from loguru import logger
 from sqlalchemy import text
 
 from chameleon.api.agent import flat_api_router
+from chameleon.api.dev import dev_router
 from chameleon.api.embed import embed_router
 from chameleon.api.files import files_router
 from chameleon.api.knowledge import knowledge_router
@@ -44,6 +45,7 @@ from chameleon.integrations.rerank.factory import reload_rerank_cache
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
+from chameleon.system.ai_tasks import ai_tasks_router
 from chameleon.system.api_key import api_keys_router
 from chameleon.system.app_templates import app_templates_router
 from chameleon.system.audit_logs import audit_logs_router
@@ -116,6 +118,14 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     from chameleon.system.graphs import human_input_scheduler
 
     await human_input_scheduler.start()
+
+    # ai_tasks：import 各域 handler 触发注册 + 残留 running/pending 兜底标 failed
+    from chameleon.system.ai_tasks import service as ai_task_service
+    from chameleon.system.datasets import ai_handlers  # noqa: F401 —— 注册副作用
+
+    _recovered = await ai_task_service.recover_stale_tasks()
+    if _recovered:
+        logger.info("ai_tasks: 残留中断任务标 failed | count={}", _recovered)
 
     # P20.1：sandbox runtime 注册（docker 可达 → docker，dev 兜底 mock）
     from chameleon.integrations.sandbox import bootstrap_runtimes
@@ -210,6 +220,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(graphs_router)
     app.include_router(tools_router)
     app.include_router(datasets_router)
+    app.include_router(ai_tasks_router)
     app.include_router(eval_jobs_router)
     app.include_router(eval_templates_router)
     app.include_router(plugins_router)
@@ -228,6 +239,8 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(knowledge_router)
     app.include_router(files_router)
     app.include_router(tasks_router)
+    # agentkit 本地开发 dev 端点（仅 CHAMELEON_DEV_TOKEN 设了才放行，否则全 404）
+    app.include_router(dev_router)
 
 
 def _log_registry_summary() -> None:

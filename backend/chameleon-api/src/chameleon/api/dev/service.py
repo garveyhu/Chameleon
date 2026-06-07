@@ -1,0 +1,136 @@
+"""agentkit 本地开发 dev 服务 —— 给 HttpDevTransport 回调的资源解析实现。
+
+作者本地用 `agentkit chat` 跑自己的 @agent 代码，代码里的 ctx.llm/kb/tools 调用
+经 HttpDevTransport 回调到这里：模型 / KB / 工具都用站内已配置资源，作者无需本地
+凭据。仅开发态（设了 CHAMELEON_DEV_TOKEN）放行。
+
+注：站内进程内运行走 InProcessTransport（providers-local），与此处是「同一份作者
+代码两种跑法」的两端，逻辑各自独立、契约一致。
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from chameleon.integrations.components import llm, llm_by_name, search_kb
+from chameleon.integrations.tools.execute import run_tool
+from chameleon.integrations.tools.loop import (
+    bind_schemas,
+    extract_tool_calls,
+    extract_usage,
+    tool_schemas,
+)
+from chameleon.integrations.tools.registry import all_tool_classes
+
+
+def _to_messages(raw: list[dict[str, Any]]) -> list[Any]:
+    """把 OpenAI 风格消息 dict 转 LangChain 消息（含 assistant tool_calls / tool 回填）。"""
+    from langchain_core.messages import (
+        AIMessage,
+        HumanMessage,
+        SystemMessage,
+        ToolMessage,
+    )
+
+    out: list[Any] = []
+    for m in raw:
+        role = m.get("role")
+        content = m.get("content") or ""
+        if role == "system":
+            out.append(SystemMessage(content=content))
+        elif role == "assistant":
+            tcs = m.get("tool_calls") or []
+            if tcs:
+                out.append(
+                    AIMessage(
+                        content=content,
+                        tool_calls=[
+                            {"name": t["name"], "args": t.get("args") or {}, "id": t.get("id")}
+                            for t in tcs
+                        ],
+                    )
+                )
+            else:
+                out.append(AIMessage(content=content))
+        elif role == "tool":
+            out.append(
+                ToolMessage(
+                    content=content, tool_call_id=m.get("tool_call_id") or m.get("id") or ""
+                )
+            )
+        else:  # user / 其它一律当 user
+            out.append(HumanMessage(content=content))
+    return out
+
+
+def _content_text(resp: Any) -> str:
+    content = getattr(resp, "content", resp)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            b if isinstance(b, str) else (b.get("text", "") if isinstance(b, dict) else "")
+            for b in content
+        ]
+        return "".join(parts)
+    return str(content) if content is not None else ""
+
+
+async def dev_llm(
+    *,
+    messages: list[dict[str, Any]],
+    model: str | None = None,
+    platform_tool_keys: list[str] | None = None,
+    local_tool_schemas: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """一次模型调用（可绑工具），返回 {content, tool_calls, usage}。
+
+    工具循环跑在客户端（HttpDevTransport）；本端只负责「绑工具 + 调一次 + 抽结果」。
+    """
+    base = llm_by_name(model) if model else llm()
+    schemas = tool_schemas(list(platform_tool_keys or []))
+    schemas.extend(local_tool_schemas or [])
+    client = bind_schemas(base, schemas) if schemas else base
+    resp = await client.ainvoke(_to_messages(messages))
+    return {
+        "content": _content_text(resp),
+        "tool_calls": extract_tool_calls(resp),
+        "usage": extract_usage(resp),
+    }
+
+
+async def dev_kb_search(
+    *,
+    query: str,
+    kbs: list[str],
+    top_k: int | None = None,
+    min_score: float = 0.0,
+) -> list[dict[str, Any]]:
+    """跨指定 KB 检索（dev 必须显式给 kbs，无 agent 关联上下文）。"""
+    merged: list[dict[str, Any]] = []
+    for kb_key in kbs:
+        hits = await search_kb(kb_key, query, top_k=top_k, min_score=min_score)
+        for h in hits:
+            merged.append(
+                {
+                    "text": h.content,
+                    "score": h.score,
+                    "source": f"{kb_key}#doc{h.doc_id}#{h.seq}",
+                    "metadata": {"kb_key": kb_key, "doc_id": h.doc_id, "seq": h.seq},
+                }
+            )
+    merged.sort(key=lambda d: d.get("score", 0.0), reverse=True)
+    return merged[: (top_k or 5)]
+
+
+async def dev_exec_tool(*, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    """执行一个平台工具（走站内 registry + admin 闸门）。"""
+    return await run_tool(name, args, caller="agentkit-dev")
+
+
+def dev_list_tools() -> list[dict[str, Any]]:
+    """列平台已注册工具（key + description）。"""
+    return [
+        {"tool_key": k, "description": cls.description}
+        for k, cls in sorted(all_tool_classes().items())
+    ]

@@ -34,6 +34,10 @@ class EnvSettings(PydanticBaseSettings):
     # 雪花 ID 实例号（多实例部署必须）
     CHAMELEON_INSTANCE_ID: int = 0
 
+    # agentkit 本地开发 dev 端点 token（仅开发态设置）：
+    # 设了才放行 /v1/dev/* 并要求请求带 X-Dev-Token 匹配；生产**不设**=端点全 404。
+    CHAMELEON_DEV_TOKEN: str | None = None
+
     # 数据库 URL override（如果设了就用这个，否则从 component.json 拼）
     DATABASE_URL: str | None = None
 

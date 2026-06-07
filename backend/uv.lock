@@ -311,11 +311,18 @@ dependencies = [
     { name = "chameleon-providers-base" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "httpx" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+    { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "chameleon-aikit"
