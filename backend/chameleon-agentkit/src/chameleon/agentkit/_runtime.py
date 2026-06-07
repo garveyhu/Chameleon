@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
 
-from chameleon.agentkit._spec import Doc
+from chameleon.agentkit._spec import Doc, ToolSpec
 
 if TYPE_CHECKING:
     from chameleon.providers.base.types import Message, StreamEvent
@@ -59,6 +59,26 @@ class RuntimeTransport(ABC):
         min_score: float = 0.0,
     ) -> list[Doc]:
         """检索；自动记 citation。kbs 校验须命中已配置 KB。"""
+        ...
+
+    @abstractmethod
+    def run_tool_loop(
+        self,
+        *,
+        messages: list[Any],
+        slot: str | None,
+        model: str | None,
+        platform_keys: list[str],
+        local_tools: list[ToolSpec],
+        max_steps: int,
+    ) -> AsyncIterator[str]:
+        """跑 ReAct / function-calling 循环，yield 最终答案文本增量。
+
+        绑平台工具（platform_keys ∪ 该 agent 绑定集）+ 本地工具（local_tools），
+        多轮：模型出 tool_calls → 执行（平台走 registry / 本地走 handler）→ 回填 →
+        续轮；无 tool_calls 即出最终文本。自动 emit tool_call/tool_result 事件、
+        开 span、累加 usage。`max_steps` 为循环轮次上限。
+        """
         ...
 
     @abstractmethod
@@ -145,6 +165,47 @@ class AgentRun:
                 text = _content_to_text(chunk)
                 if text:
                     yield text
+
+    # —— 工具调用（ReAct 循环糖）——
+
+    async def run_with_tools(
+        self,
+        *,
+        user: str | None = None,
+        system: str | None = None,
+        slot: str = "chat",
+        model: str | None = None,
+        tools: list[Any] | None = None,
+        tool_keys: list[str] | None = None,
+        context: Any = None,
+        max_steps: int = 6,
+    ) -> AsyncIterator[str]:
+        """高层糖：自动 ReAct 工具循环，逐增量 yield 最终答案文本。
+
+        - `tools`：本地 `@tool` 声明的函数（或 ToolSpec）；随代码走。
+        - `tool_keys`：本轮临时追加点名的平台工具；与 `@agent(tools=)` / web 绑定
+          的平台工具合并。
+        - 工具调用 / 结果自动 emit 成 tool_call / tool_result 事件（作者无需手动
+          yield），自动 trace + usage 累加。`max_steps` 防无限循环。
+        """
+        user_text = user if user is not None else self.query
+        local: list[ToolSpec] = []
+        for t in tools or []:
+            spec = getattr(t, "__tool_spec__", None)
+            if spec is None and isinstance(t, ToolSpec):
+                spec = t
+            if spec is not None:
+                local.append(spec)
+        msgs = self._build_messages(system, user_text, context)
+        async for delta in self._t.run_tool_loop(
+            messages=msgs,
+            slot=None if model else slot,
+            model=model,
+            platform_keys=list(tool_keys or []),
+            local_tools=local,
+            max_steps=max_steps,
+        ):
+            yield delta
 
     def _build_messages(
         self, system: str | None, user: str, context: Any

@@ -21,9 +21,9 @@
 可随意重构。破坏性变更走 major 版本。
 """
 
-from chameleon.agentkit._decorator import agent, declared_agents
+from chameleon.agentkit._decorator import agent, declared_agents, tool
 from chameleon.agentkit._runtime import AgentRun, KbHandle, RuntimeTransport
-from chameleon.agentkit._spec import AgentManifest, Doc, ModelSlot, Opt
+from chameleon.agentkit._spec import AgentManifest, Doc, ModelSlot, Opt, ToolSpec
 
 # 高级用法（有状态 / 多节点）+ 流事件类型：从既有包 re-export，
 # 让作者只依赖 agentkit 一处。
@@ -43,6 +43,8 @@ __all__ = [
     "RuntimeTransport",
     "StreamEvent",
     "StreamEventType",
+    "ToolSpec",
     "agent",
     "declared_agents",
+    "tool",
 ]

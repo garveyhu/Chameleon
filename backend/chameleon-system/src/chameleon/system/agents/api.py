@@ -645,6 +645,80 @@ async def update_agent_model_bindings(
     return Result.ok(await _build_slots_response(session, agent))
 
 
+# ── 关联工具（agentkit @agent(tools=[...]) 平台工具启停） ──
+
+
+class AgentToolItem(BaseModel):
+    tool_key: str
+    description: str = ""
+    enabled: bool = True
+
+
+class AgentToolsResponse(BaseModel):
+    tools: list[AgentToolItem]  # 该 agent 声明的平台工具可用集（含启停态）
+
+
+class UpdateToolBindingsRequest(BaseModel):
+    enabled: list[str] = Field(default_factory=list)  # 启用的 tool_key 子集
+
+
+async def _build_tools_response(agent: Agent) -> AgentToolsResponse:
+    from chameleon.agentkit import declared_agents
+    from chameleon.integrations.tools import get_tool_class
+
+    manifest = declared_agents().get(agent.agent_key)
+    declared = list(manifest.tools) if manifest else []
+    bindings = agent.tool_bindings  # None=全启用；列表=启用子集
+    enabled_set = set(declared if bindings is None else bindings)
+    tools = []
+    for k in declared:
+        cls = get_tool_class(k)
+        tools.append(
+            AgentToolItem(
+                tool_key=k,
+                description=(cls.description if cls else ""),
+                enabled=k in enabled_set,
+            )
+        )
+    return AgentToolsResponse(tools=tools)
+
+
+@router.get("/{agent_id}/tools", response_model=Result[AgentToolsResponse])
+async def get_agent_tools(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentToolsResponse]:
+    agent = await _get_or_404(session, agent_id)
+    return Result.ok(await _build_tools_response(agent))
+
+
+@router.post(
+    "/{agent_id}/tools/update", response_model=Result[AgentToolsResponse]
+)
+async def update_agent_tools(
+    agent_id: int,
+    req: UpdateToolBindingsRequest,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:write")),
+) -> Result[AgentToolsResponse]:
+    from chameleon.agentkit import declared_agents
+
+    agent = await _get_or_404(session, agent_id)
+    if agent.source != "local":
+        raise ValidationError(message="仅代码应用可在此启停平台工具")
+    manifest = declared_agents().get(agent.agent_key)
+    declared = set(manifest.tools if manifest else [])
+    for k in req.enabled:
+        if k not in declared:
+            raise ValidationError(message=f"未声明的平台工具: {k}")
+    # 存启用子集（与声明集取交集，顺序按声明）
+    agent.tool_bindings = [k for k in (manifest.tools if manifest else []) if k in set(req.enabled)]
+    await session.commit()
+    await reload_agent_registry()  # 让 AGENTS 重新注入新工具集
+    return Result.ok(await _build_tools_response(agent))
+
+
 # ── 配置 Schema（agentkit @agent(config=[Opt]) → 运营可调参数表单） ──
 
 

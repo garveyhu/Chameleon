@@ -331,6 +331,12 @@ async def build_agent_registry_from_db(
             config["model_bindings"] = (
                 dict(row.model_bindings) if row.model_bindings else {}
             )
+            manifest = getattr(tgt, "__agent_manifest__", None)
+            config["tools"] = list(manifest.tools) if manifest else []
+            # None=声明工具全启用；列表=web 选定的启用子集（runner 据此取交集）
+            config["tool_bindings"] = (
+                list(row.tool_bindings) if row.tool_bindings is not None else None
+            )
 
         agents[row.agent_key] = AgentDef(
             key=row.agent_key,

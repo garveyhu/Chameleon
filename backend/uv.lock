@@ -10,9 +10,11 @@ resolution-markers = [
 members = [
     "chameleon-agent-example-echo",
     "chameleon-agent-example-rag-qa",
+    "chameleon-agent-example-tool-use",
     "chameleon-agent-example-triage",
     "chameleon-agent-qwen-chat",
     "chameleon-agentkit",
+    "chameleon-aikit",
     "chameleon-api",
     "chameleon-app",
     "chameleon-core",
@@ -268,6 +270,17 @@ dependencies = [
 requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
 
 [[package]]
+name = "chameleon-agent-example-tool-use"
+version = "0.1.0"
+source = { editable = "chameleon-agents/examples/tool_use" }
+dependencies = [
+    { name = "chameleon-agentkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
+
+[[package]]
 name = "chameleon-agent-example-triage"
 version = "0.1.0"
 source = { editable = "chameleon-agents/examples/triage" }
@@ -302,6 +315,27 @@ dependencies = [
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
+]
+
+[[package]]
+name = "chameleon-aikit"
+version = "1.0.0"
+source = { editable = "chameleon-aikit" }
+dependencies = [
+    { name = "chameleon-core" },
+    { name = "chameleon-integrations" },
+    { name = "langchain-core" },
+    { name = "loguru" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chameleon-core", editable = "chameleon-core" },
+    { name = "chameleon-integrations", editable = "chameleon-integrations" },
+    { name = "langchain-core", specifier = ">=0.3" },
+    { name = "loguru", specifier = ">=0.7" },
+    { name = "pydantic", specifier = ">=2.7" },
 ]
 
 [[package]]
@@ -346,6 +380,7 @@ source = { editable = "chameleon-app" }
 dependencies = [
     { name = "chameleon-agent-example-echo" },
     { name = "chameleon-agent-example-rag-qa" },
+    { name = "chameleon-agent-example-tool-use" },
     { name = "chameleon-agent-example-triage" },
     { name = "chameleon-agent-qwen-chat" },
     { name = "chameleon-api" },
@@ -369,6 +404,7 @@ dependencies = [
 requires-dist = [
     { name = "chameleon-agent-example-echo", editable = "chameleon-agents/examples/echo" },
     { name = "chameleon-agent-example-rag-qa", editable = "chameleon-agents/examples/rag_qa" },
+    { name = "chameleon-agent-example-tool-use", editable = "chameleon-agents/examples/tool_use" },
     { name = "chameleon-agent-example-triage", editable = "chameleon-agents/examples/triage" },
     { name = "chameleon-agent-qwen-chat", editable = "chameleon-agents/qwen_chat" },
     { name = "chameleon-api", editable = "chameleon-api" },
@@ -485,6 +521,7 @@ name = "chameleon-engine"
 version = "1.0.0"
 source = { editable = "chameleon-engine" }
 dependencies = [
+    { name = "chameleon-aikit" },
     { name = "chameleon-core" },
     { name = "chameleon-data" },
     { name = "chameleon-integrations" },
@@ -497,6 +534,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chameleon-aikit", editable = "chameleon-aikit" },
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-integrations", editable = "chameleon-integrations" },
@@ -662,6 +700,7 @@ version = "1.0.0"
 source = { editable = "chameleon-system" }
 dependencies = [
     { name = "apscheduler" },
+    { name = "chameleon-aikit" },
     { name = "chameleon-core" },
     { name = "chameleon-data" },
     { name = "chameleon-engine" },
@@ -674,6 +713,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "apscheduler", specifier = ">=3.10,<4" },
+    { name = "chameleon-aikit", editable = "chameleon-aikit" },
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-engine", editable = "chameleon-engine" },

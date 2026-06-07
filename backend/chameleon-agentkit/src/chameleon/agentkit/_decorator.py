@@ -9,10 +9,12 @@
 
 from __future__ import annotations
 
+import inspect
+import typing
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
-from chameleon.agentkit._spec import AgentManifest, ModelSlot, Opt
+from chameleon.agentkit._spec import AgentManifest, ModelSlot, Opt, ToolSpec
 
 # 模块级声明登记表：import agent 模块即登记，发现机制注册期读取
 _DECLARED: dict[str, AgentManifest] = {}
@@ -29,11 +31,16 @@ def agent(
     kb: bool = False,
     config: list[Opt] | None = None,
     tags: list[str] | None = None,
+    tools: list[str] | None = None,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
     挂 `__agent_manifest__` 到目标对象，并登记到 `_DECLARED`。
     `key` 全局唯一，重复声明直接报错。
+
+    Args:
+        tools: 平台 registry 工具点名（tool_key 列表）；web「关联工具」据此列出
+            可启停集。代码自定义工具用 `@tool` 声明、运行时传给 `ctx.run_with_tools`。
     """
 
     def deco(target: T) -> T:
@@ -47,6 +54,7 @@ def agent(
             kb=kb,
             config=list(config or []),
             tags=list(tags or []),
+            tools=list(tools or []),
             handler=target,
             is_class=isinstance(target, type),
         )
@@ -60,3 +68,76 @@ def agent(
 def declared_agents() -> dict[str, AgentManifest]:
     """注册期读取所有 `@agent` 声明（registry / 发现机制用）。"""
     return dict(_DECLARED)
+
+
+# —— 本地工具声明（@tool）————————————————————————————————
+
+_PY_TO_JSON = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+    list: "array",
+    dict: "object",
+}
+
+
+def tool(
+    *,
+    name: str | None = None,
+    description: str = "",
+) -> Callable[[T], T]:
+    """把作者的 async 函数声明成一个本地工具。
+
+    用法::
+
+        @tool(name="get_weather", description="查询城市当前天气")
+        async def get_weather(city: str) -> dict:
+            ...
+
+    从函数签名自动推断 `parameters_schema`（标量类型 → JSON Schema；无默认值 =
+    required）。挂 `__tool_spec__` 到函数并原样返回——函数仍可正常直接调用。
+    复杂入参（pydantic / 嵌套）超出 MVP 推断范围时，作者可手动覆盖
+    `fn.__tool_spec__.parameters_schema`。
+    """
+
+    def deco(fn: T) -> T:
+        if not inspect.iscoroutinefunction(fn):
+            raise TypeError(f"@tool 只能装饰 async 函数: {getattr(fn, '__name__', fn)!r}")
+        tool_name = name or fn.__name__
+        schema = _infer_parameters_schema(fn)
+        fn.__tool_spec__ = ToolSpec(  # type: ignore[attr-defined]
+            name=tool_name,
+            description=description or (inspect.getdoc(fn) or "").strip().split("\n")[0],
+            parameters_schema=schema,
+            handler=fn,
+        )
+        return fn
+
+    return deco
+
+
+def _infer_parameters_schema(fn: Any) -> dict[str, Any]:
+    """从函数签名推断 OpenAI function-calling 的 parameters JSON Schema。"""
+    sig = inspect.signature(fn)
+    try:
+        hints = typing.get_type_hints(fn)
+    except Exception:  # noqa: BLE001  注解无法解析时退化为无类型
+        hints = {}
+    props: dict[str, Any] = {}
+    required: list[str] = []
+    for pname, param in sig.parameters.items():
+        if pname in ("self", "cls") or param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        hint = hints.get(pname, str)
+        json_type = _PY_TO_JSON.get(hint, "string")
+        props[pname] = {"type": json_type}
+        if param.default is inspect.Parameter.empty:
+            required.append(pname)
+    schema: dict[str, Any] = {"type": "object", "properties": props}
+    if required:
+        schema["required"] = required
+    return schema

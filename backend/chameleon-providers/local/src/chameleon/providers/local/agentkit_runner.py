@@ -15,18 +15,29 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from collections.abc import AsyncIterator
 from typing import Any
 
 from chameleon.agentkit import AgentRun, RuntimeTransport
-from chameleon.agentkit._spec import Doc, ModelSlot
+from chameleon.agentkit._runtime import _content_to_text
+from chameleon.agentkit._spec import Doc, ModelSlot, ToolSpec
 from chameleon.core.observe.context import (
+    ObservationType,
     current_observation_id,
     current_trace_context,
     observe,
 )
 from chameleon.integrations.components import llm, llm_by_name, search_kb
 from chameleon.integrations.knowledge import list_linked_kb_metas
+from chameleon.integrations.tools.loop import (
+    bind_schemas,
+    extract_tool_calls,
+    extract_usage,
+    merge_usage,
+    run_tool_calls,
+    tool_schemas,
+)
 from chameleon.providers.base.types import (
     Citation,
     InvokeContext,
@@ -66,10 +77,13 @@ class InProcessTransport(RuntimeTransport):
         agent_key: str,
         bindings: dict[str, str],
         slots: dict[str, ModelSlot],
+        tool_keys: list[str] | None = None,
     ) -> None:
         self._agent_key = agent_key
         self._bindings = bindings or {}
         self._slots = slots or {}
+        #: 该 agent 启用的平台工具 key（manifest.tools ∩ web tool_bindings）
+        self._tool_keys = list(tool_keys or [])
         self._pending: list[StreamEvent] = []
 
     def _resolve_code(self, slot: str) -> str | None:
@@ -145,6 +159,134 @@ class InProcessTransport(RuntimeTransport):
             )
         return docs
 
+    async def run_tool_loop(
+        self,
+        *,
+        messages: list[Any],
+        slot: str | None,
+        model: str | None,
+        platform_keys: list[str],
+        local_tools: list[ToolSpec],
+        max_steps: int,
+    ) -> AsyncIterator[str]:
+        from langchain_core.messages import ToolMessage
+
+        base = self.chat_model(slot=slot, model=model)
+
+        # 平台工具：该 agent 绑定集 ∪ 本轮临时点名；去重保序
+        plat = list(dict.fromkeys([*self._tool_keys, *(platform_keys or [])]))
+        schemas = tool_schemas(plat)
+        local_by_name = {s.name: s for s in local_tools}
+        for s in local_tools:
+            schemas.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": s.name,
+                        "description": s.description,
+                        "parameters": s.parameters_schema,
+                    },
+                }
+            )
+        client = bind_schemas(base, schemas) if schemas else base
+
+        tc = current_trace_context()
+        related = tc.request_id if tc else None
+        convo = list(messages)
+        usage: dict[str, int] | None = None
+
+        async with observe(
+            observation_type="span",
+            name="agent.tools",
+            request_id=_scoped_observation_id("agent.tools"),
+        ):
+            for _step in range(max_steps):
+                resp = await client.ainvoke(convo)
+                usage = merge_usage(usage, extract_usage(resp))
+                calls = extract_tool_calls(resp)
+                if not calls:
+                    text = _content_to_text(resp)
+                    if text:
+                        yield text
+                    return
+
+                convo.append(resp)  # AIMessage（带 tool_calls）
+                for c in calls:
+                    self.emit(
+                        StreamEvent(
+                            type=StreamEventType.tool_call,
+                            data={"name": c["name"], "args": c["args"], "id": c["id"]},
+                        )
+                    )
+
+                plat_calls = [c for c in calls if c["name"] not in local_by_name]
+                loc_calls = [c for c in calls if c["name"] in local_by_name]
+                tool_msgs: list[Any] = []
+
+                if plat_calls:
+                    msgs, records = await run_tool_calls(
+                        plat_calls,
+                        caller="agentkit",
+                        related_id=related,
+                        extra={"agent_key": self._agent_key},
+                    )
+                    tool_msgs.extend(msgs)
+                    for r in records:
+                        self.emit(
+                            StreamEvent(
+                                type=StreamEventType.tool_result,
+                                data={"name": r["name"], "id": r["id"], "result": r["result"]},
+                            )
+                        )
+
+                for c in loc_calls:
+                    spec = local_by_name[c["name"]]
+                    result = await self._exec_local(spec, c["args"])
+                    tool_msgs.append(
+                        ToolMessage(
+                            content=json.dumps(result, ensure_ascii=False, default=str),
+                            tool_call_id=c["id"] or c["name"],
+                        )
+                    )
+                    self.emit(
+                        StreamEvent(
+                            type=StreamEventType.tool_result,
+                            data={"name": c["name"], "id": c["id"], "result": result},
+                        )
+                    )
+
+                convo.extend(tool_msgs)
+
+            # 达轮次上限：标记 + 最后一次无强制工具的收口回答
+            self.emit(
+                StreamEvent(
+                    type=StreamEventType.step,
+                    data={"text": f"工具循环达上限 {max_steps} 轮，强制收口"},
+                )
+            )
+            final = await client.ainvoke(convo)
+            text = _content_to_text(final)
+            if text:
+                yield text
+
+    async def _exec_local(self, spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
+        """执行作者本地 @tool，落 TOOL 观测，异常收敛成 ok=False。"""
+        async with observe(
+            observation_type=ObservationType.TOOL,
+            name=spec.name,
+            request_id=_scoped_observation_id(spec.name),
+        ):
+            try:
+                data = await spec.handler(**(args or {}))
+                return {"tool_key": spec.name, "ok": True, "data": data, "error": None}
+            except Exception as e:  # noqa: BLE001
+                return {
+                    "tool_key": spec.name,
+                    "ok": False,
+                    "data": None,
+                    "error": f"{type(e).__name__}: {str(e)[:300]}",
+                }
+
     def span(self, name: str, *, type: str = "span") -> Any:
         return observe(
             observation_type=type,
@@ -183,10 +325,20 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     manifest = target.__agent_manifest__
     slots = {s.name: s for s in manifest.models}
 
+    # 平台工具启用集：manifest 声明的可用集 ∩ web tool_bindings（None=全启用）
+    declared_tools = list(manifest.tools or [])
+    bindings_cfg = cfg.get("tool_bindings")
+    if bindings_cfg is None:
+        enabled_tools = declared_tools
+    else:
+        allowed = set(bindings_cfg)
+        enabled_tools = [t for t in declared_tools if t in allowed]
+
     transport = InProcessTransport(
         agent_key=ctx.agent_def.key,
         bindings=cfg.get("model_bindings") or {},
         slots=slots,
+        tool_keys=enabled_tools,
     )
     run = AgentRun(
         transport=transport,
@@ -208,9 +360,13 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     result = target(run)
     if inspect.isasyncgen(result):
         async for chunk in result:
-            yield StreamEvent(type=StreamEventType.delta, data={"text": chunk})
+            # 先 drain：把本次 chunk 计算期间 emit 的 tool_call/tool_result/citation
+            # 排在该文本增量之前（保证工具调用出现在最终答案之前）。
             for ev in transport.drain():
                 yield ev
+            yield StreamEvent(type=StreamEventType.delta, data={"text": chunk})
+        for ev in transport.drain():
+            yield ev
     else:
         text = await result
         for ev in transport.drain():

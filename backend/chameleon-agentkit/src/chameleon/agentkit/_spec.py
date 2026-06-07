@@ -60,6 +60,23 @@ class Doc:
 
 
 @dataclass(slots=True)
+class ToolSpec:
+    """作者用 `@tool` 声明的本地工具（随 agent 代码走，不入平台 registry）。
+
+    Attributes:
+        name: 工具名（LLM function-calling 里引用，须在本 agent 内唯一）。
+        description: 给 LLM 看的工具说明。
+        parameters_schema: 入参 JSON Schema（@tool 从函数签名自动推断）。
+        handler: 实际执行的 async 函数（`await handler(**args)`）。
+    """
+
+    name: str
+    description: str
+    parameters_schema: dict[str, Any]
+    handler: Any
+
+
+@dataclass(slots=True)
 class AgentManifest:
     """@agent 捕获的声明清单。
 
@@ -73,6 +90,8 @@ class AgentManifest:
     kb: bool = False
     config: list[Opt] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: 平台 registry 工具点名（已配置工具 tool_key）；web「关联工具」据此列出可启停集
+    tools: list[str] = field(default_factory=list)
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False
