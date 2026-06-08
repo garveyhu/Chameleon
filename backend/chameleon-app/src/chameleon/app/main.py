@@ -144,12 +144,19 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("pricing seed failed (continuing)")
 
-    yield
+    # MCP server（Phase B）：挂载时其 session manager 须在 app 生命周期内 run()
+    mcp_manager = getattr(_app.state, "mcp_session_manager", None)
+    try:
+        if mcp_manager is not None:
+            async with mcp_manager.run():
+                yield
+        else:
+            yield
+    finally:
+        await eval_scheduler.shutdown()
+        from chameleon.system.graphs import human_input_scheduler
 
-    await eval_scheduler.shutdown()
-    from chameleon.system.graphs import human_input_scheduler
-
-    await human_input_scheduler.shutdown()
+        await human_input_scheduler.shutdown()
     await redis_infra.aclose()
 
 
@@ -214,9 +221,28 @@ def create_app() -> FastAPI:
     _register_exception_handlers(app)
     _register_health_routes(app)
     _mount_routers(app)
+    _mount_mcp_server(app)
 
     logger.info("FastAPI app created")
     return app
+
+
+def _mount_mcp_server(app: FastAPI) -> None:
+    """把平台工具暴露成 MCP server，挂在 /mcp（Phase B）。
+
+    仅开发态（设了 CHAMELEON_DEV_TOKEN）挂载——与 /v1/dev/* 同一 opt-in 闸；生产默认不挂，
+    待 api_key scope 鉴权接入后再对外开放。session manager 的 run() 在 _lifespan 内进入。
+    """
+    from chameleon.core.config.env_settings import env_settings
+
+    if not env_settings.CHAMELEON_DEV_TOKEN:
+        return
+    from chameleon.api.mcp_server.server import build_streamable_app
+
+    asgi_handler, manager = build_streamable_app()
+    app.state.mcp_session_manager = manager
+    app.mount("/mcp", asgi_handler)
+    logger.info("MCP server mounted at /mcp（暴露平台工具）")
 
 
 def _mount_routers(app: FastAPI) -> None:
