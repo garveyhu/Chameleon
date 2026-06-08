@@ -1,0 +1,73 @@
+"""入站开放 A2A（Slice B）：/a2a/{key} AgentCard + message/send（JSON-RPC）映射成 A2A task。
+TestClient 跑路由；mock AGENTS（免真 registry）+ dev_call_agent（免真模型）。"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from chameleon.api.a2a import a2a_router
+from chameleon.api.a2a import api as a2a_api
+from chameleon.api.dev.api import require_dev_token
+
+
+@pytest.fixture
+def client(monkeypatch):
+    app = FastAPI()
+    app.include_router(a2a_router)
+    app.dependency_overrides[require_dev_token] = lambda: None
+    fake = SimpleNamespace(key="qwen-chat", description="测试 agent", version="1.2", tags=["x"])
+    monkeypatch.setattr("chameleon.providers.base.AGENTS", {"qwen-chat": fake})
+    return TestClient(app)
+
+
+def test_agent_card(client):
+    r = client.get("/a2a/qwen-chat/.well-known/agent.json")
+    assert r.status_code == 200
+    card = r.json()
+    assert card["name"] == "qwen-chat" and card["description"] == "测试 agent"
+    assert card["version"] == "1.2" and card["url"] == "/a2a/qwen-chat"
+    assert card["defaultInputModes"] == ["text"] and card["skills"][0]["id"] == "qwen-chat"
+
+
+def test_agent_card_404(client):
+    assert client.get("/a2a/nope/.well-known/agent.json").status_code == 404
+
+
+def test_message_send_completed(client, monkeypatch):
+    async def _fake(*, target, input, **kw):
+        return {"answer": f"答:{input}", "run_id": "r1"}
+
+    monkeypatch.setattr(a2a_api.service, "dev_call_agent", _fake)
+    r = client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "1", "method": "message/send",
+        "params": {"message": {"role": "user", "parts": [{"kind": "text", "text": "你好"}]}},
+    })
+    body = r.json()
+    result = body["result"]
+    assert result["kind"] == "task" and result["status"]["state"] == "completed"
+    assert result["artifacts"][0]["parts"][0]["text"] == "答:你好"
+
+
+def test_message_send_pending_maps_to_input_required(client, monkeypatch):
+    """durable HITL 暂停 → A2A input-required（子方案的 durable↔A2A 协同）。"""
+    async def _fake(*, target, input, **kw):
+        return {"answer": "", "run_id": "r2", "pending": {"call_index": 1, "prompt": "批准吗？"}}
+
+    monkeypatch.setattr(a2a_api.service, "dev_call_agent", _fake)
+    r = client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "2", "method": "message/send",
+        "params": {"message": {"parts": [{"kind": "text", "text": "删库"}]}},
+    })
+    result = r.json()["result"]
+    assert result["status"]["state"] == "input-required"
+    assert result["status"]["message"]["parts"][0]["text"] == "批准吗？"
+
+
+def test_unsupported_method_jsonrpc_error(client):
+    r = client.post("/a2a/qwen-chat", json={"jsonrpc": "2.0", "id": "3", "method": "tasks/cancel"})
+    err = r.json()["error"]
+    assert err["code"] == -32601 and "unsupported" in err["message"]

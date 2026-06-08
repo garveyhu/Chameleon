@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from loguru import logger
 from sqlalchemy import text
 
+from chameleon.api.a2a import a2a_router
 from chameleon.api.agent import flat_api_router
 from chameleon.api.dev import dev_router
 from chameleon.api.embed import embed_router
@@ -293,6 +294,8 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(tasks_router)
     # agentkit 本地开发 dev 端点（仅 CHAMELEON_DEV_TOKEN 设了才放行，否则全 404）
     app.include_router(dev_router)
+    # 入站开放 A2A：/a2a/{key} 暴露 agent 为标准 Agent2Agent（dev-token 闸；生产 api_key scope 见 Slice D）
+    app.include_router(a2a_router)
 
 
 def _log_registry_summary() -> None:
