@@ -73,8 +73,11 @@ async def test_agentrun_kb_proxy_delegates():
         def __init__(self):
             self.calls = []
 
-        async def kb_search(self, query, *, kbs=None, top_k=None, min_score=0.0):
-            self.calls.append((query, kbs, top_k))
+        async def kb_search(
+            self, query, *, kbs=None, top_k=None, min_score=0.0,
+            mode=None, rerank=None, expand=0, hyde=False,
+        ):
+            self.calls.append((query, kbs, top_k, mode))
             return [Doc(text="命中", score=0.9, source="kb:faq#1")]
 
     t = FakeTransport()
@@ -87,6 +90,6 @@ async def test_agentrun_kb_proxy_delegates():
         session_id=None,
         config={},
     )
-    docs = await run.kb.search("hello", kbs=["faq"], top_k=2)
+    docs = await run.kb.search("hello", kbs=["faq"], top_k=2, mode="hybrid")
     assert len(docs) == 1 and docs[0].text == "命中"
-    assert t.calls == [("hello", ["faq"], 2)]
+    assert t.calls == [("hello", ["faq"], 2, "hybrid")]

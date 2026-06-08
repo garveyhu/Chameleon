@@ -53,7 +53,8 @@ async def dev_kb_search(
     req: DevKbSearchRequest, _: None = Depends(require_dev_token)
 ) -> Result[list[DevDoc]]:
     docs = await service.dev_kb_search(
-        query=req.query, kbs=req.kbs, top_k=req.top_k, min_score=req.min_score
+        query=req.query, kbs=req.kbs, top_k=req.top_k, min_score=req.min_score,
+        mode=req.mode, rerank=req.rerank, expand=req.expand, hyde=req.hyde,
     )
     return Result.ok([DevDoc(**d) for d in docs])
 

@@ -153,6 +153,10 @@ class InProcessTransport(RuntimeTransport):
         if row is None:
             raise RuntimeError(f"生成模型不存在或未配置：{code}")
         target = await resolve_media_target(row.id)
+        if kind and target.media_kind and kind != target.media_kind:
+            raise RuntimeError(
+                f"请求 kind={kind} 与模型 {code} 的类型 {target.media_kind} 不符"
+            )
 
         done: dict[str, Any] | None = None
         async with observe(

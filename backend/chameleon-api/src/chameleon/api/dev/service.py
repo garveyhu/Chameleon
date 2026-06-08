@@ -105,20 +105,53 @@ async def dev_kb_search(
     kbs: list[str],
     top_k: int | None = None,
     min_score: float = 0.0,
+    mode: str | None = None,
+    rerank: bool | None = None,
+    expand: int = 0,
+    hyde: bool = False,
 ) -> list[dict[str, Any]]:
-    """跨指定 KB 检索（dev 必须显式给 kbs，无 agent 关联上下文）。"""
+    """跨指定 KB 检索（dev 必须显式给 kbs，无 agent 关联上下文）。
+
+    与站内一致：给了高级参数（mode/rerank/expand/hyde）且检索桥已注入则走 engine
+    hybrid 管道，否则回退基础向量——保证「两种跑法」结果一致，不静默降级。
+    """
+    from chameleon.providers.base.retrieval_bridge import get_retrieve_fn
+
+    retrieve_fn = get_retrieve_fn()
+    use_advanced = retrieve_fn is not None and (
+        mode is not None or rerank is not None or expand or hyde
+    )
     merged: list[dict[str, Any]] = []
     for kb_key in kbs:
-        hits = await search_kb(kb_key, query, top_k=top_k, min_score=min_score)
-        for h in hits:
-            merged.append(
-                {
-                    "text": h.content,
-                    "score": h.score,
-                    "source": f"{kb_key}#doc{h.doc_id}#{h.seq}",
-                    "metadata": {"kb_key": kb_key, "doc_id": h.doc_id, "seq": h.seq},
-                }
+        if use_advanced:
+            rows = await retrieve_fn(
+                kb_key, query, top_k=top_k, min_score=min_score,
+                mode=mode, rerank=rerank, expand=expand, hyde=hyde,
             )
+            for r in rows:
+                merged.append(
+                    {
+                        "text": r.get("content", ""),
+                        "score": r.get("score", 0.0),
+                        "source": f"{kb_key}#doc{r.get('doc_id', 0)}#{r.get('seq', 0)}",
+                        "metadata": {
+                            "kb_key": kb_key,
+                            "doc_id": r.get("doc_id", 0),
+                            "seq": r.get("seq", 0),
+                        },
+                    }
+                )
+        else:
+            hits = await search_kb(kb_key, query, top_k=top_k, min_score=min_score)
+            for h in hits:
+                merged.append(
+                    {
+                        "text": h.content,
+                        "score": h.score,
+                        "source": f"{kb_key}#doc{h.doc_id}#{h.seq}",
+                        "metadata": {"kb_key": kb_key, "doc_id": h.doc_id, "seq": h.seq},
+                    }
+                )
     merged.sort(key=lambda d: d.get("score", 0.0), reverse=True)
     return merged[: (top_k or 5)]
 

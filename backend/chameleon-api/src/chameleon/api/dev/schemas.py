@@ -25,6 +25,10 @@ class DevKbSearchRequest(BaseModel):
     kbs: list[str] = Field(default_factory=list)
     top_k: int | None = None
     min_score: float = 0.0
+    mode: str | None = None
+    rerank: bool | None = None
+    expand: int = 0
+    hyde: bool = False
 
 
 class DevDoc(BaseModel):
