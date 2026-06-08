@@ -569,19 +569,21 @@ class AgentRun:
 
     @property
     def kb(self) -> KbHandle:
-        return _KbProxy(self._t)
+        return _KbProxy(self._t, guard=self._durable_guard)
 
     # —— 记忆（跨会话 kv）——
 
     @property
     def memory(self) -> MemoryHandle:
+        # 注：memory 不加 durable 守卫——它正是 journal/checkpoint 的持久化底座（保留键），
+        # 守它会破坏 durable 自身。作者用 memory.set 存的是跨会话状态，重放重写值幂等。
         return _MemoryProxy(self._t)
 
     # —— 多模态生成（图/视频）——
 
     @property
     def media(self) -> MediaHandle:
-        return _MediaProxy(self._t)
+        return _MediaProxy(self._t, guard=self._durable_guard)
 
     # —— 追踪（直接转发 transport，Phase 0 即可用其抽象契约）——
 
@@ -661,8 +663,9 @@ class AgentRun:
 class _MediaProxy:
     """`ctx.media` 的实现：转发给 transport（结构上满足 MediaHandle）。"""
 
-    def __init__(self, transport: RuntimeTransport) -> None:
+    def __init__(self, transport: RuntimeTransport, guard: Any = None) -> None:
         self._t = transport
+        self._guard = guard
 
     async def generate(
         self,
@@ -674,6 +677,8 @@ class _MediaProxy:
         params: dict[str, Any] | None = None,
         input_images: list[str] | None = None,
     ) -> MediaResult:
+        if self._guard:  # durable 下硬拦：媒体生成未 journal，重放会真重出图/重扣费（评审16 🔴）
+            self._guard("media.generate")
         return await self._t.media_generate(
             kind=kind,
             prompt=prompt,
@@ -707,8 +712,9 @@ class _MemoryProxy:
 class _KbProxy:
     """`ctx.kb` 的实现：把 search 转发给 transport（结构上满足 KbHandle）。"""
 
-    def __init__(self, transport: RuntimeTransport) -> None:
+    def __init__(self, transport: RuntimeTransport, guard: Any = None) -> None:
         self._t = transport
+        self._guard = guard
 
     async def search(
         self,
@@ -722,6 +728,8 @@ class _KbProxy:
         expand: int = 0,
         hyde: bool = False,
     ) -> list[Doc]:
+        if self._guard:  # durable 下硬拦：检索未 journal，重放重跑 + 重复 citation/embedding 计费
+            self._guard("kb.search")
         return await self._t.kb_search(
             query,
             kbs=kbs,

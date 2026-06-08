@@ -540,9 +540,11 @@ class InProcessTransport(RuntimeTransport):
                 # 在同 run_id 并发/双击 resume 下会撞。回滚改 update，幂等 upsert（评审 #6）。
                 await s.rollback()
                 existing = (await s.execute(_q())).scalar_one_or_none()
-                if existing is not None:
-                    existing.value = {"v": value}
-                    await s.commit()
+                if existing is None:
+                    # 非本键 uq 冲突（其它完整性错误）→ 重抛，不静默吞（评审16 🟠 收窄 except）。
+                    raise
+                existing.value = {"v": value}
+                await s.commit()
 
     async def memory_all(self) -> dict[str, Any]:
         if not self._scope_ref:
@@ -757,21 +759,23 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
 
     cvars = ctx.context_vars or {}
 
+    # durable fail-closed（评审 #2）：journal/HITL 落 AgentMemory 按 scope_ref 持久化；无身份
+    # （scope_ref 空）则 memory no-op → journal 永久失效、ask_human resume 后无限重暂停。绝不
+    # 静默退化：durable 需持久化 scope，缺则直接拒（而非跑成坏 journal）。须在 _load_mcp_tools
+    # **之前** raise——否则 mcp_stack 已开却未进 try/finally，会泄漏 stdio/HTTP 连接（评审16）。
+    scope_ref = cvars.get("end_user_id") or ctx.session_id
+    if manifest.durable and not scope_ref:
+        raise RuntimeError(
+            f"durable agent '{ctx.agent_def.key}' 需持久化 scope（end_user_id 或 session_id）"
+            f"才能 journal 重放 / HITL resume；当前无身份。请在带会话/end_user 的上下文调用。"
+        )
+
     # 外部 MCP server 工具：连接 + 适配成 ToolSpec，自动并入 ctx.run_with_tools 的 ReAct
     # 循环。运行结束统一 aclose 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
     mcp_tools, mcp_stack = await _load_mcp_tools(ctx.agent_def.key, manifest)
 
     # 连上 MCP 后所有路径都纳入 try/finally —— 即便 transport / AgentRun 构造抛异常，
     # 也保证 finally 关闭 MCP 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
-    scope_ref = cvars.get("end_user_id") or ctx.session_id
-    # durable fail-closed（评审 #2）：journal/HITL 落 AgentMemory 按 scope_ref 持久化；无身份
-    # （scope_ref 空）则 memory no-op → journal 永久失效、ask_human resume 后无限重暂停。绝不
-    # 静默退化：durable 需持久化 scope，缺则直接拒（而非跑成坏 journal）。
-    if manifest.durable and not scope_ref:
-        raise RuntimeError(
-            f"durable agent '{ctx.agent_def.key}' 需持久化 scope（end_user_id 或 session_id）"
-            f"才能 journal 重放 / HITL resume；当前无身份。请在带会话/end_user 的上下文调用。"
-        )
     try:
         transport = InProcessTransport(
             agent_key=ctx.agent_def.key,

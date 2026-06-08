@@ -79,17 +79,29 @@ async def test_durable_fingerprint_catches_same_method_reorder():
 
 @pytest.mark.asyncio
 async def test_durable_guards_unjournaled_calls():
-    """评审 #3/#4：durable 下未 journal 的有副作用/计费调用硬拦（防重放重执行），非静默踩坑。"""
+    """评审 #3/#4 + 评审16 🔴：durable 下未 journal 的有副作用/计费调用全硬拦（防重放重执行），
+    含 kb.search / media.generate（评审16 指出此前漏拦——media 重放真重扣费）。"""
     t = FakeTransport(replies=["x"], call_agent_reply="sub")
     r = _run(t, durable=True, run_id="run-1")
+    # coroutine 类：直接 await 触发守卫
     for coro in (
         r.call_agent("sub", input="q"),
         r.complete(user="q", schema=int),  # 结构化输出路径
         r.gather([("a", "q")]),
         r.route("q", [("a", "x"), ("b", "y")]),
+        r.kb.search("q"),              # 评审16 🔴 此前漏拦
+        r.media.generate(kind="image", prompt="cat"),  # 评审16 🔴 重放真重出图/重扣费
     ):
         with pytest.raises(RuntimeError, match="durable run 暂不支持"):
             await coro
+    # async generator 类：守卫在生成器体首行，须迭代才触发
+    for agen in (
+        r.stream(user="q"),
+        r.run_with_tools(user="q", tools=[]),
+    ):
+        with pytest.raises(RuntimeError, match="durable run 暂不支持"):
+            async for _ in agen:
+                pass
 
 
 @pytest.mark.asyncio

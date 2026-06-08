@@ -208,9 +208,11 @@ async def handle(ctx: AgentRun):
 
 ### 当前边界（务必知道，越界即报错而非静默坑你）
 
-- **durable 仅 memoize `ctx.complete`（文本）+ `ctx.ask_human`**。`run_with_tools` / `call_agent` /
-  `gather` / `route` / `complete(schema=)` / `stream` 在 durable handle 里**直接报错**——它们尚未
-  接入 journal，重放会重执行（重复扣费/副作用）。后续 slice 接入后放开。
+- **durable 仅 memoize `ctx.complete`（文本）+ `ctx.ask_human`**。其余有副作用/计费的 ctx 外部
+  调用在 durable handle 里**直接报错**（穷举）：`run_with_tools` / `call_agent` / `gather` /
+  `route` / `complete(schema=)` / `stream` / `ctx.kb.search` / `ctx.media.generate`——它们尚未
+  接入 journal，重放会重执行（重复扣费/副作用，媒体生成尤其是真金白银）。后续 slice 接入后放开。
+  （`ctx.memory.set` 不拦——它是 journal/checkpoint 的持久化底座，重写值幂等。）
 - **控制流必须确定性**：禁依赖 `random` / 时间 / 未 journal 的外部状态做分支——否则重放时调用序
   错位。框架按 `method + 入参指纹`校验，错位即报错（不静默返错值）。
 - **需持久化 scope**：durable 依赖 end_user / session 身份持久化 journal；无身份调用直接拒
