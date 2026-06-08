@@ -64,16 +64,31 @@ state = await ctx.restore("progress", default={})
 - 与统一成本闸：重放的记忆调用**不重复计费**（不真调模型）；只新调用计费。
 
 ## 5. 分片实施
-1. **Slice 1**：agent_runs + ctx_call_journal + memoization 重放底座（ctx.complete 记/放，
-   单测：同一 run 重跑返记忆值不重调）。
-2. **Slice 2**：ctx.ask_human + AgentPaused + provider 标 paused + 落 pending（复用
-   human_input_pending）。e2e：ask→paused→resolve→resume 续跑。
+1. **Slice 1**：memoization 重放底座（ctx.complete 记/放，单测：同一 run 重跑返记忆值不重调）。
+2. **Slice 2**：ctx.ask_human + AgentPaused + provider 标 paused + 落 pending。
+   e2e：ask→paused→resolve→resume 续跑。
 3. ✅ **Slice 3（已交付，170949e 后续）**：ctx.checkpoint/restore（崩溃恢复 author 状态）。
-   migration-free——复用既有 ctx.memory 持久化（AgentMemory 表）+ 保留键 __chm_checkpoint__，
-   跨所有 transport 可用。Slice 1/2（journal 重放 + ask_human）仍需新 agent_runs/journal 表
-   （待迁移窗口）。
+   migration-free——复用既有 ctx.memory 持久化（AgentMemory 表）+ 保留键 __chm_checkpoint__。
 4. **Slice 4**：前端审批 UI（复用图 human-input 表单）+ 超时（复用 APScheduler 扫 timeout）+
    stream/run_with_tools 的 journal 记录。
+
+### 5.1 Slice 1/2 免迁移落地路径（解锁——不再"待迁移窗口"）
+
+原计划假设新建 `agent_runs` + `ctx_call_journal` 表（需迁移；且与用户并行 eval 迁移分支冲突，
+是历轮评审延后 Slice1/2 的关键 gate）。**采用 Slice3 同款 migration-free 套路即可消除该 gate**：
+
+- **journal 存 AgentMemory（kv），保留键命名空间** `__chm_journal__<call_index>`（value =
+  `{method, output_json}`）；run 标识用既有 `request_id`（trace 锚），无需 agent_runs 表。
+- **HITL pending 存 AgentMemory** 保留键 `__chm_pending__`（value = `{call_index, prompt, schema}`）；
+  resume 时 author/前端把答案写回 `__chm_journal__<ask_index>` 再重新 invoke。
+- `_MemoryProxy.all()` 已滤 `__chm_*__` 保留键（Slice3 时做的），journal/pending 对作者不可见。
+- 取舍：kv 表非专用 journal 表——查询/清理不如专表，且大 run 多 call 会堆 kv 行。**符合本 SDK
+  "够用 durable" 定位**（重 durable/审计/可视 time-travel 用图引擎，见 §0/§7）；真有规模化
+  journal 需求时再迁专表（届时有真实负载验证 schema，避免现在闭门造车——呼应评审14）。
+- **收益**：Slice1/2 现在**可单包内 agentkit + providers-local 实现、零迁移、不碰 eval 分支**，
+  解除历轮评审的迁移顾虑。验证（重放确定性 / ask→resume 续跑）不需真实负载即可做。
+- 仍是多分片专注项：Slice1（journal 记/放 ctx.complete）→ Slice2（ask_human + AgentPaused +
+  resume 流）→ Slice4（其余 ctx 方法 journal + 前端）。每片独立可测可提交。
 
 ## 6. 红线 / 验收
 - 确定性契约违反（控制流依赖非 ctx 随机性）→ 重放可能分叉到不同 call_index，文档强警告 +
