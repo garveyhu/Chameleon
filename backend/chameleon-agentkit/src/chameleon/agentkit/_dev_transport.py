@@ -225,6 +225,9 @@ class HttpDevTransport(RuntimeTransport):
     async def memory_all(self) -> dict[str, Any]:
         raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
 
+    async def media_generate(self, *, kind, prompt, slot=None, model=None, params=None, input_images=None):  # noqa: ANN001, ANN201
+        raise NotImplementedError("dev 模式暂不支持 ctx.media；请在站内验证该路径。")
+
     async def call_agent(self, target: str, *, input: str) -> str:
         raise NotImplementedError(
             "dev 模式暂不支持 ctx.call_agent 子智能体调用；请在站内验证该路径。"

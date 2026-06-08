@@ -22,8 +22,21 @@
 """
 
 from chameleon.agentkit._decorator import agent, declared_agents, tool
-from chameleon.agentkit._runtime import AgentRun, KbHandle, RuntimeTransport
-from chameleon.agentkit._spec import AgentManifest, Doc, ModelSlot, Opt, ToolSpec
+from chameleon.agentkit._runtime import (
+    AgentRun,
+    KbHandle,
+    MediaHandle,
+    MemoryHandle,
+    RuntimeTransport,
+)
+from chameleon.agentkit._spec import (
+    AgentManifest,
+    Doc,
+    MediaResult,
+    ModelSlot,
+    Opt,
+    ToolSpec,
+)
 
 # 高级用法（有状态 / 多节点）+ 流事件类型：从既有包 re-export，
 # 让作者只依赖 agentkit 一处。
@@ -37,6 +50,9 @@ __all__ = [
     "BaseAgent",
     "Doc",
     "KbHandle",
+    "MediaHandle",
+    "MediaResult",
+    "MemoryHandle",
     "Message",
     "ModelSlot",
     "Opt",

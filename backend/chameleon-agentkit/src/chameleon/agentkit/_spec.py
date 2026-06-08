@@ -60,6 +60,17 @@ class Doc:
 
 
 @dataclass(slots=True)
+class MediaResult:
+    """`ctx.media.generate` 的产物（图/视频，已落平台对象存储）。"""
+
+    url: str
+    object_key: str
+    media_kind: str  # image / video
+    mime_type: str | None = None
+    filename: str | None = None
+
+
+@dataclass(slots=True)
 class ToolSpec:
     """作者用 `@tool` 声明的本地工具（随 agent 代码走，不入平台 registry）。
 

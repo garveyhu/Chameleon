@@ -23,7 +23,7 @@ from loguru import logger
 
 from chameleon.agentkit import AgentRun, RuntimeTransport
 from chameleon.agentkit._runtime import _content_to_text
-from chameleon.agentkit._spec import Doc, ModelSlot, ToolSpec
+from chameleon.agentkit._spec import Doc, MediaResult, ModelSlot, ToolSpec
 from chameleon.core.observe.context import (
     ObservationType,
     current_observation_id,
@@ -122,6 +122,85 @@ class InProcessTransport(RuntimeTransport):
         self, *, slot: str | None = None, model: str | None = None, schema: type
     ) -> Any:
         return self.chat_model(slot=slot, model=model).with_structured_output(schema)
+
+    async def media_generate(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        slot: str | None = None,
+        model: str | None = None,
+        params: dict[str, Any] | None = None,
+        input_images: list[str] | None = None,
+    ) -> MediaResult:
+        from sqlalchemy import select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import LLMModel
+        from chameleon.integrations.mediagen.resolver import resolve_media_target
+        from chameleon.integrations.mediagen.service import stream_generate
+
+        # 解析生成模型 code：model 点名优先，否则走 slot 绑定链
+        code = model or (self._resolve_code(slot) if slot else None)
+        if not code:
+            raise RuntimeError(
+                "ctx.media.generate 需要 model= 点名或绑定了 image/video 模型的 slot"
+            )
+        async with AsyncSessionLocal() as s:
+            row = (
+                await s.execute(select(LLMModel).where(LLMModel.code == code))
+            ).scalar_one_or_none()
+        if row is None:
+            raise RuntimeError(f"生成模型不存在或未配置：{code}")
+        target = await resolve_media_target(row.id)
+
+        done: dict[str, Any] | None = None
+        async with observe(
+            observation_type="generation",
+            name=f"media.{kind}",
+            request_id=_scoped_observation_id(f"media.{kind}"),
+        ):
+            async for ev in stream_generate(
+                target, prompt=prompt, params=params or {}, input_images=input_images or []
+            ):
+                etype = ev.get("type")
+                if etype == "progress":
+                    self.emit(
+                        StreamEvent(
+                            type=StreamEventType.step,
+                            data={
+                                "name": f"media.{kind}",
+                                "status": "running",
+                                "output": {"elapsed_ms": ev.get("elapsed_ms")},
+                            },
+                        )
+                    )
+                elif etype == "done":
+                    done = ev
+        if not done:
+            raise RuntimeError("媒体生成未返回 done 事件")
+        result = MediaResult(
+            url=done.get("url", ""),
+            object_key=done.get("key", ""),
+            media_kind=done.get("media_kind", kind),
+            mime_type=done.get("mime_type"),
+            filename=done.get("filename"),
+        )
+        # 产物自动 emit（同 citation 模式，作者无需手动 yield）
+        self.emit(
+            StreamEvent(
+                type=StreamEventType.metadata,
+                data={
+                    "kind": "media",
+                    "media_kind": result.media_kind,
+                    "url": result.url,
+                    "object_key": result.object_key,
+                    "mime_type": result.mime_type,
+                    "filename": result.filename,
+                },
+            )
+        )
+        return result
 
     async def kb_search(
         self,

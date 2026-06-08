@@ -15,7 +15,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
 
-from chameleon.agentkit._spec import Doc, ToolSpec
+from chameleon.agentkit._spec import Doc, MediaResult, ToolSpec
 
 if TYPE_CHECKING:
     from chameleon.providers.base.types import Message, StreamEvent
@@ -41,6 +41,28 @@ class KbHandle(Protocol):
         高级检索（接平台 hybrid 管道）：mode=vector/keyword/hybrid（默认跟随 KB 配置→
         hybrid）；rerank=是否重排（None 跟随 KB 配置）；expand=multi-query 变体数；
         hyde=是否用假设答案 embed。平台未接桥时回退基础向量检索。
+        """
+        ...
+
+
+class MediaHandle(Protocol):
+    """`ctx.media` —— 多模态生成门面（图/视频，复用平台生成模型 + 对象存储）。"""
+
+    async def generate(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        slot: str | None = None,
+        model: str | None = None,
+        params: dict[str, Any] | None = None,
+        input_images: list[str] | None = None,
+    ) -> MediaResult:
+        """生成一张图 / 一段视频。
+
+        kind=image/video；slot 走该 agent 模型槽绑定链（声明 ModelSlot(kind="image")），
+        model 直接点名已配置生成模型 code；params 覆盖默认（尺寸/比例/步数/时长…）；
+        input_images 给图生视频的首帧。进度自动 emit step、产物自动 emit + usage。
         """
         ...
 
@@ -131,6 +153,20 @@ class RuntimeTransport(ABC):
     @abstractmethod
     async def memory_all(self) -> dict[str, Any]:
         """取本 agent + 作用域下全部 kv。"""
+        ...
+
+    @abstractmethod
+    async def media_generate(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        slot: str | None = None,
+        model: str | None = None,
+        params: dict[str, Any] | None = None,
+        input_images: list[str] | None = None,
+    ) -> MediaResult:
+        """生成图/视频（复用平台生成模型 + 对象存储）；自动 emit 进度/产物 + usage。"""
         ...
 
     @abstractmethod
@@ -322,6 +358,12 @@ class AgentRun:
     def memory(self) -> MemoryHandle:
         return _MemoryProxy(self._t)
 
+    # —— 多模态生成（图/视频）——
+
+    @property
+    def media(self) -> MediaHandle:
+        return _MediaProxy(self._t)
+
     # —— 追踪（直接转发 transport，Phase 0 即可用其抽象契约）——
 
     def span(self, name: str, *, type: str = "span") -> Any:
@@ -331,6 +373,32 @@ class AgentRun:
     def emit(self, event: StreamEvent) -> None:
         """透传一个自定义 StreamEvent。"""
         self._t.emit(event)
+
+
+class _MediaProxy:
+    """`ctx.media` 的实现：转发给 transport（结构上满足 MediaHandle）。"""
+
+    def __init__(self, transport: RuntimeTransport) -> None:
+        self._t = transport
+
+    async def generate(
+        self,
+        *,
+        kind: str,
+        prompt: str,
+        slot: str | None = None,
+        model: str | None = None,
+        params: dict[str, Any] | None = None,
+        input_images: list[str] | None = None,
+    ) -> MediaResult:
+        return await self._t.media_generate(
+            kind=kind,
+            prompt=prompt,
+            slot=slot,
+            model=model,
+            params=params,
+            input_images=input_images,
+        )
 
 
 class _MemoryProxy:
