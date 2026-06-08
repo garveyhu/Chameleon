@@ -287,6 +287,11 @@ class InProcessTransport(RuntimeTransport):
             )
         return docs
 
+    def _charge(self, tokens: int | None) -> None:
+        """从该 agent 的剩余 token 预算扣减（统一成本闸：A2A + 工具循环共账）。"""
+        if tokens:
+            self._budget = max(0, self._budget - int(tokens))
+
     async def run_tool_loop(
         self,
         *,
@@ -296,6 +301,7 @@ class InProcessTransport(RuntimeTransport):
         platform_keys: list[str],
         local_tools: list[ToolSpec],
         max_steps: int,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         from langchain_core.messages import ToolMessage
 
@@ -322,6 +328,7 @@ class InProcessTransport(RuntimeTransport):
         related = tc.request_id if tc else None
         convo = list(messages)
         usage: dict[str, int] | None = None
+        truncate_reason = f"工具循环达上限 {max_steps} 轮"
 
         async with observe(
             observation_type="span",
@@ -330,7 +337,9 @@ class InProcessTransport(RuntimeTransport):
         ):
             for _step in range(max_steps):
                 resp = await client.ainvoke(convo)
-                usage = merge_usage(usage, extract_usage(resp))
+                round_usage = extract_usage(resp)
+                usage = merge_usage(usage, round_usage)
+                self._charge((round_usage or {}).get("total_tokens", 0))  # 计入成本闸
                 calls = extract_tool_calls(resp)
                 if not calls:
                     text = _content_to_text(resp)
@@ -385,14 +394,23 @@ class InProcessTransport(RuntimeTransport):
 
                 convo.extend(tool_msgs)
 
-            # 达轮次上限：标记 + 最后一次无强制工具的收口回答
+                # 成本闸：agent token 预算耗尽 / 本轮循环累计超 max_tokens → 截断收口
+                loop_total = (usage or {}).get("total_tokens", 0)
+                if self._budget <= 0:
+                    truncate_reason = "agent token 预算耗尽"
+                    break
+                if max_tokens and loop_total >= max_tokens:
+                    truncate_reason = f"工具循环 token 超上限 {max_tokens}"
+                    break
+
+            # 截断收口：标记 + 最后一次无强制工具的收口回答
             self.emit(
                 StreamEvent(
                     type=StreamEventType.step,
                     data={
                         "name": "tool-loop",
                         "status": "success",
-                        "output": {"note": f"工具循环达上限 {max_steps} 轮，强制收口"},
+                        "output": {"note": f"{truncate_reason}，强制收口"},
                     },
                 )
             )
@@ -525,6 +543,8 @@ class InProcessTransport(RuntimeTransport):
             budget_remaining=self._budget,
             depth=self._a2a_depth + 1,
         )
+        # 成本闸：扣减子智能体实际消耗，扇出多次调用累计受限（不再每次满额放行）
+        self._charge(out.get("tokens", 0))
         return out.get("answer") or ""
 
     def span(self, name: str, *, type: str = "span") -> Any:

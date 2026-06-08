@@ -184,6 +184,56 @@ def test_sandboxed_flag_and_policy():
 
 
 @pytest.mark.asyncio
+async def test_call_agent_decrements_budget_cumulatively():
+    """统一成本闸：扇出多次 call_agent 累计扣预算，每次拿到的是递减后的余额。"""
+    from chameleon.providers.base import a2a_bridge
+
+    seen_budgets: list[int] = []
+
+    async def fake_caller(*, source, target, input, trace_id, budget_remaining, depth):  # noqa: ANN001
+        seen_budgets.append(budget_remaining)
+        return {"answer": "ok", "tokens": 60}
+
+    a2a_bridge.set_a2a_caller(fake_caller)
+    try:
+        t = InProcessTransport(agent_key="x", bindings={}, slots={}, request_id="r1", budget=100)
+        await t.call_agent("sub", input="a")
+        await t.call_agent("sub", input="b")
+        await t.call_agent("sub", input="c")
+        # 第一次满额 100，之后递减：100 → 40 → 0（max(0, 40-60)）
+        assert seen_budgets == [100, 40, 0]
+    finally:
+        a2a_bridge._CALLER = None
+
+
+@pytest.mark.asyncio
+async def test_run_tool_loop_truncates_on_budget_exhausted():
+    """成本闸：agent token 预算耗尽 → 工具循环截断收口（不无限续轮）。"""
+
+    @tool(name="calc", description="计算")
+    async def calc(expression: str) -> dict:
+        return {"value": 1}
+
+    spec = calc.__tool_spec__
+    t = InProcessTransport(agent_key="x", bindings={}, slots={}, budget=1)
+    responses = [
+        _FakeAI(tool_calls=[{"name": "calc", "args": {"expression": "1"}, "id": "c1"}]),
+        _FakeAI(content="收口答案"),  # 截断后的最终 ainvoke
+    ]
+    t.chat_model = lambda *, slot=None, model=None: _FakeModel(responses)  # type: ignore[method-assign]
+    out = [
+        d
+        async for d in t.run_tool_loop(
+            messages=[("user", "算")], slot="chat", model=None,
+            platform_keys=[], local_tools=[spec], max_steps=10,
+        )
+    ]
+    assert "收口答案" in "".join(out)  # 预算 1 < 单轮 2 token → 一轮后截断
+    steps = [e for e in t.drain() if e.type == StreamEventType.step]
+    assert any("预算耗尽" in (e.data.get("output", {}).get("note", "")) for e in steps)
+
+
+@pytest.mark.asyncio
 async def test_run_tool_loop_no_tool_calls_returns_text():
     t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[])
     t.chat_model = lambda *, slot=None, model=None: _FakeModel(  # type: ignore[method-assign]

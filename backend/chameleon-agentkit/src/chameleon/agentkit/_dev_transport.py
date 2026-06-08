@@ -151,6 +151,7 @@ class HttpDevTransport(RuntimeTransport):
         platform_keys: list[str],
         local_tools: list[ToolSpec],
         max_steps: int,
+        max_tokens: int | None = None,  # dev 不强制预算，仅签名一致
     ) -> AsyncIterator[str]:
         plat = list(dict.fromkeys([*self._tool_keys, *(platform_keys or [])]))
         local_by_name = {s.name: s for s in local_tools}

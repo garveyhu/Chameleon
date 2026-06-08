@@ -130,13 +130,15 @@ class RuntimeTransport(ABC):
         platform_keys: list[str],
         local_tools: list[ToolSpec],
         max_steps: int,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         """跑 ReAct / function-calling 循环，yield 最终答案文本增量。
 
         绑平台工具（platform_keys ∪ 该 agent 绑定集）+ 本地工具（local_tools），
         多轮：模型出 tool_calls → 执行（平台走 registry / 本地走 handler）→ 回填 →
         续轮；无 tool_calls 即出最终文本。自动 emit tool_call/tool_result 事件、
-        开 span、累加 usage。`max_steps` 为循环轮次上限。
+        开 span、累加 usage。`max_steps` 为循环轮次上限；`max_tokens` 为本轮循环 token
+        上限（与 agent 总预算共同构成成本闸，任一耗尽即截断收口）。
         """
         ...
 
@@ -286,6 +288,7 @@ class AgentRun:
         tool_keys: list[str] | None = None,
         context: Any = None,
         max_steps: int = 6,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         """高层糖：自动 ReAct 工具循环，逐增量 yield 最终答案文本。
 
@@ -293,7 +296,8 @@ class AgentRun:
         - `tool_keys`：本轮临时追加点名的平台工具；与 `@agent(tools=)` / web 绑定
           的平台工具合并。
         - 工具调用 / 结果自动 emit 成 tool_call / tool_result 事件（作者无需手动
-          yield），自动 trace + usage 累加。`max_steps` 防无限循环。
+          yield），自动 trace + usage 累加。`max_steps` 防无限循环；`max_tokens`
+          为本轮循环 token 上限（与 agent 总预算共同构成成本闸）。
         """
         user_text = user if user is not None else self.query
         local: list[ToolSpec] = []
@@ -311,6 +315,7 @@ class AgentRun:
             platform_keys=list(tool_keys or []),
             local_tools=local,
             max_steps=max_steps,
+            max_tokens=max_tokens,
         ):
             yield delta
 
