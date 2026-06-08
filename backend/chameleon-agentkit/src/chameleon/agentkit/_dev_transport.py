@@ -31,6 +31,7 @@ class _DevSpan:
         self._name = name
         self._type = type_
         self._start = 0.0
+        self._depth = 0
 
     async def __aenter__(self) -> _DevSpan:
         import time
@@ -288,6 +289,9 @@ class HttpDevTransport(RuntimeTransport):
 
     async def call_agent(self, target: str, *, input: str) -> str:
         out = await self._post("/v1/dev/call_agent", {"target": target, "input": input})
+        if isinstance(out, dict) and out.get("error"):
+            # 与站内 InProcessTransport 一致：子调用失败抛错，不静默返空
+            raise RuntimeError(out["error"])
         return out.get("answer", "") if isinstance(out, dict) else ""
 
     def span(self, name: str, *, type: str = "span") -> Any:

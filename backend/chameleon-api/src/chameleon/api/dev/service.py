@@ -149,13 +149,19 @@ async def dev_call_agent(*, target: str, input: str) -> dict[str, Any]:
         history=[],
         session_id=f"dev-a2a-{uuid.uuid4().hex[:12]}",
         provider_conv_id=None,
-        context_vars={},
+        context_vars={"_a2a_budget": 200_000, "_a2a_depth": 0},
         options={},
         app_id="dev",
         stream=False,
         request_id=uuid.uuid4().hex,
     )
-    result = await provider.invoke(ctx)
+    try:
+        result = await provider.invoke(ctx)
+    except Exception as e:  # noqa: BLE001
+        from loguru import logger
+
+        logger.exception("dev call_agent 失败 target={}", target)
+        return {"answer": "", "error": f"子智能体执行失败: {type(e).__name__}"}
     return {"answer": result.answer or ""}
 
 

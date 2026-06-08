@@ -4,6 +4,11 @@
 消费——MCP 双向互操作的「server 侧」。用低层 mcp Server（list_tools / call_tool 显式返
 JSON Schema dict），动态映射 integrations/tools registry，执行复用 run_tool（含 admin
 启停闸门 + TOOL 观测）。
+
+⚠️ 当前为**开发态信任模型**：/mcp 仅在设了 CHAMELEON_DEV_TOKEN 时挂载（生产默认 404），
+鉴权只有单一 X-Dev-Token。暴露**全部**已注册 agent + 平台工具，未做 api_key scope 过滤、
+不记 call_log。生产对外开放前必须补：api_key scope 鉴权 + 按 key 过滤可见 agent/工具
+（见 #23）。dev-token 持有者即等于全 agent/工具调用权。
 """
 
 from __future__ import annotations
@@ -79,13 +84,21 @@ async def exec_agent(agent_key: str, query: str) -> str:
         history=[],
         session_id=f"mcp-{uuid.uuid4().hex[:16]}",
         provider_conv_id=None,
-        context_vars={},
+        # 入口注入预算上限（对外接口，防扇出失控；与正常 invoke 服务端权威下发一致）
+        context_vars={"_a2a_budget": 200_000, "_a2a_depth": 0},
         options={},
         app_id="mcp-server",
         stream=False,
         request_id=uuid.uuid4().hex,
     )
-    result = await provider.invoke(ctx)
+    try:
+        result = await provider.invoke(ctx)
+    except Exception:  # noqa: BLE001
+        # 脱敏：绝不把内部堆栈/异常细节返给外部 MCP client
+        from loguru import logger
+
+        logger.exception("MCP exec_agent 失败 agent={}", agent_key)
+        return json.dumps({"ok": False, "error": "智能体执行失败"}, ensure_ascii=False)
     return result.answer or ""
 
 
