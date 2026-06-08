@@ -15,6 +15,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
 
+from pydantic import BaseModel
+
 from chameleon.agentkit._spec import Doc, MediaResult, ToolSpec
 
 if TYPE_CHECKING:
@@ -209,6 +211,13 @@ class RuntimeTransport(ABC):
         ...
 
 
+class _RouteChoice(BaseModel):
+    """ctx.route 的 LLM 路由决策结构化输出。"""
+
+    agent_key: str
+    reason: str = ""
+
+
 class AgentRun:
     """注入给作者 `handle(ctx)` / `astream` 的运行时上下文。
 
@@ -394,6 +403,51 @@ class AgentRun:
         例：`a, b = await ctx.gather([("agent-a", q1), ("agent-b", q2)])`
         """
         return await self._t.gather(calls)
+
+    async def route(
+        self,
+        query: str,
+        agents: list[tuple[str, str]],
+        *,
+        slot: str = "chat",
+        model: str | None = None,
+    ) -> str:
+        """supervisor 路由：LLM 据各候选子智能体的能力描述选最合适的，委托并返回其答案。
+
+        `agents`：`[(agent_key, capability_description), ...]`。常见多智能体编排模式——
+        总控按问题把任务分派给专长 agent。纯建在 ctx.complete（结构化选择）+ ctx.call_agent
+        上，路由决策自动进 trace。单候选直接委托，零候选报错。
+
+        例：`ans = await ctx.route(ctx.query, [("sql-bot","查数据库"),("doc-bot","查文档")])`
+        """
+        if not agents:
+            raise ValueError("ctx.route 至少需要一个候选 agent")
+        keys = [k for k, _ in agents]
+        if len(agents) == 1:
+            return await self.call_agent(keys[0], input=query)
+        options = "\n".join(f"- {k}: {d}" for k, d in agents)
+        choice = await self.complete(
+            slot=slot,
+            model=model,
+            schema=_RouteChoice,
+            system="你是任务路由器。根据用户问题，从候选智能体里选最合适处理的那一个，"
+            "返回它的 agent_key（必须是候选之一）。",
+            user=f"候选智能体：\n{options}\n\n用户问题：{query}",
+        )
+        chosen = choice.agent_key if choice.agent_key in keys else keys[0]
+        from chameleon.core.runtime_types import StreamEvent, StreamEventType
+
+        self.emit(
+            StreamEvent(
+                type=StreamEventType.step,
+                data={
+                    "name": f"路由到 {chosen}",
+                    "status": "success",
+                    "output": {"chosen": chosen, "reason": getattr(choice, "reason", "")},
+                },
+            )
+        )
+        return await self.call_agent(chosen, input=query)
 
     # —— 知识库 ——
 

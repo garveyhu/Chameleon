@@ -355,6 +355,56 @@ async def test_gather_empty():
 
 
 @pytest.mark.asyncio
+async def test_route_supervisor_picks_and_delegates():
+    """ctx.route：LLM 据描述选最合适子智能体并委托（supervisor 编排模式）。"""
+    import types
+
+    from chameleon.agentkit._runtime import AgentRun
+    from chameleon.agentkit.testing import FakeTransport
+
+    t = FakeTransport(
+        structured=types.SimpleNamespace(agent_key="doc-bot", reason="文档类"),
+        call_agent_reply="DOC_ANSWER",
+    )
+    run = AgentRun(
+        transport=t, agent_key="sup", query="查手册", messages=[], history=[],
+        session_id=None, config={},
+    )
+    ans = await run.route("查手册", [("sql-bot", "查数据库"), ("doc-bot", "查文档")])
+    assert ans == "DOC_ANSWER"
+    assert ("call_agent", ("doc-bot", "查手册")) in t.invocations  # 路由到 doc-bot
+
+
+@pytest.mark.asyncio
+async def test_route_single_candidate_direct():
+    """单候选 → 直接委托，不走 LLM 路由。"""
+    from chameleon.agentkit._runtime import AgentRun
+    from chameleon.agentkit.testing import FakeTransport
+
+    t = FakeTransport(call_agent_reply="ONLY")
+    run = AgentRun(
+        transport=t, agent_key="sup", query="q", messages=[], history=[],
+        session_id=None, config={},
+    )
+    assert await run.route("q", [("only-bot", "啥都行")]) == "ONLY"
+    # 未触发结构化路由（complete schema），直接 call_agent
+    assert [i[0] for i in t.invocations] == ["call_agent"]
+
+
+@pytest.mark.asyncio
+async def test_route_empty_raises():
+    from chameleon.agentkit._runtime import AgentRun
+    from chameleon.agentkit.testing import FakeTransport
+
+    run = AgentRun(
+        transport=FakeTransport(), agent_key="s", query="q", messages=[], history=[],
+        session_id=None, config={},
+    )
+    with pytest.raises(ValueError, match="至少需要一个候选"):
+        await run.route("q", [])
+
+
+@pytest.mark.asyncio
 async def test_gather_default_path_via_agentrun():
     """公共面 ctx.gather 委托 transport，默认实现（非 InProcess）= 并发 call_agent 保序。"""
     from chameleon.agentkit._runtime import AgentRun, RuntimeTransport
