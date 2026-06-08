@@ -19,11 +19,40 @@ from chameleon.agentkit._runtime import RuntimeTransport
 from chameleon.agentkit._spec import Doc, ToolSpec
 
 
-class _NullSpan:
-    async def __aenter__(self) -> _NullSpan:
+class _DevSpan:
+    """dev 本地 span —— 记录名/类型/嵌套深度/耗时，turn 结束由 CLI 渲染成 trace 树。
+
+    给本地开发回路真 trace（替代 NullSpan）：作者 `agentkit chat` 时能看到 llm/工具/
+    检索各段耗时与嵌套，不必上服务器才有可观测。
+    """
+
+    def __init__(self, transport: HttpDevTransport, name: str, type_: str) -> None:
+        self._t = transport
+        self._name = name
+        self._type = type_
+        self._start = 0.0
+
+    async def __aenter__(self) -> _DevSpan:
+        import time
+
+        self._start = time.perf_counter()
+        self._depth = self._t._span_depth
+        self._t._span_depth += 1
         return self
 
     async def __aexit__(self, *exc: object) -> bool:
+        import time
+
+        self._t._span_depth -= 1
+        self._t._spans.append(
+            {
+                "name": self._name,
+                "type": self._type,
+                "depth": self._depth,
+                "duration_ms": int((time.perf_counter() - self._start) * 1000),
+                "error": exc[0] is not None,
+            }
+        )
         return False
 
 
@@ -82,6 +111,9 @@ class HttpDevTransport(RuntimeTransport):
         self._agent_key = agent_key
         self._tool_keys = list(platform_tool_keys or [])
         self._pending: list[Any] = []
+        #: dev 本地 trace —— span 记录 + 当前嵌套深度（_DevSpan 维护）
+        self._spans: list[dict[str, Any]] = []
+        self._span_depth: int = 0
 
     async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         import httpx
@@ -235,7 +267,11 @@ class HttpDevTransport(RuntimeTransport):
         )
 
     def span(self, name: str, *, type: str = "span") -> Any:
-        return _NullSpan()
+        return _DevSpan(self, name, type)
+
+    def drain_spans(self) -> list[dict[str, Any]]:
+        out, self._spans = self._spans, []
+        return out
 
     def track_usage(self, usage: dict[str, int] | None) -> None:
         return  # dev 不上报 usage（本地自测无计费/预算语义）

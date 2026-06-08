@@ -112,7 +112,23 @@ async def _invoke(man: AgentManifest, query: str, history: list[Any]) -> str:
         _flush_events()
         print(text)
         pieces.append(text or "")
+    _render_trace(transport)
     return "".join(pieces)
+
+
+def _render_trace(transport: Any) -> None:
+    """打印本轮 dev trace 树（span 名 + 耗时 + 嵌套）—— 本地可观测，替代 NullSpan。"""
+    spans = transport.drain_spans() if hasattr(transport, "drain_spans") else []
+    if not spans:
+        return
+    # span 按退出顺序记录（内层先）→ reverse 得外层在前，depth 缩进成树
+    print(f"{_DIM}  ── trace ──{_RESET}")
+    for s in reversed(spans):
+        indent = "  " * (s.get("depth", 0) + 1)
+        mark = "✗" if s.get("error") else "·"
+        name = s.get("name", "span")
+        dur = s.get("duration_ms", 0)
+        print(f"{_DIM}  {indent}{mark} {name} {dur}ms{_RESET}")
 
 
 def _cmd_lint(target: str) -> int:
