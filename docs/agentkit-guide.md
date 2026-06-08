@@ -91,6 +91,19 @@ print(await run_standalone(handle, "你好", transport=t))
   注册表（`ctx.call_agent/gather/route/handoff` 脱平台可用）。
 - 平台专属能力（`ctx.media` 多模态生成）standalone 下显式报错——部署到平台后自动可用。
 
+**⚠️ standalone 与平台的行为差异**（本地冒烟用，勿据此精调；保真验证用 dev 态 `/v1/dev/*`）：
+
+| 维度 | standalone | 平台 |
+|------|-----------|------|
+| 知识库检索 | 朴素子串/字符 bigram（中文粗糙） | hybrid+向量+rerank+查询扩展 |
+| trace / token usage | 无观测（span/usage no-op） | 全自动 trace 树 + 成本归集 |
+| 工具循环事件 | 不 emit tool_call/tool_result | 自动 emit + 流式可见 |
+| 子智能体 memory | 父快照（子改不回写） | end_user 跨 agent 共享 kv |
+| gather 预算闸 | 无（自带 key 本机） | 按分支均分 + 成本闸 |
+| 多模态 media | 报错（平台专属） | ComfyUI/DashScope 路由 |
+
+standalone 解决"任意环境起跑 + 快速迭代逻辑"；要"本地行为忠实预测线上"，用 dev 态（连站内已配置资源）。
+
 ## 5. 离线单测（`chameleon.agentkit.testing`）
 
 ```python

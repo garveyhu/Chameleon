@@ -76,6 +76,12 @@ class StandaloneTransport(RuntimeTransport):
         on_event: Callable[[Any], None] | None = None,
         _depth: int = 0,
     ) -> None:
+        if not (hasattr(model, "ainvoke") and hasattr(model, "astream")):
+            raise TypeError(
+                "StandaloneTransport(model=) 需一个 LangChain chat model（实现 ainvoke/astream/"
+                "bind_tools/with_structured_output），例如 langchain_openai.ChatOpenAI(...)；"
+                f"收到的是 {type(model).__name__}。"
+            )
         self._model = model
         self._kb = list(kb_docs or [])
         self._memory: dict[str, Any] = dict(memory or {})
@@ -104,7 +110,12 @@ class StandaloneTransport(RuntimeTransport):
         hyde: bool = False,
     ) -> list[Doc]:
         # 朴素本地检索：按 query 词在 doc.text 的命中数打分（standalone 不接向量库）。
+        # ⚠️ 召回质量远不及平台 hybrid+向量+rerank，仅供本地冒烟；勿据此调 RAG prompt。
         terms = [w for w in query.lower().split() if w]
+        if len(terms) <= 1 and query.strip():
+            # 无空格分词（中文等 CJK）→ 退化为字符 bigram，避免整串 count 必为 0 召回空
+            q = "".join(query.lower().split())
+            terms = [q[i : i + 2] for i in range(len(q) - 1)] or [q]
         scored: list[tuple[float, Doc]] = []
         for d in self._kb:
             text = (getattr(d, "text", "") or "").lower()
@@ -203,7 +214,8 @@ class StandaloneTransport(RuntimeTransport):
         )
 
     async def call_agent(self, target: str, *, input: str) -> str:
-        # 本地子智能体：从 agents 注册表取 handler，构造子 AgentRun（共享 model/memory/agents、
+        # 本地子智能体：从 agents 注册表取 handler，构造子 AgentRun（共享 model/agents、memory
+        # 传父**快照**——__init__ 浅拷贝，子改不回写父，与平台 end_user 跨 agent 共享 kv 不同；
         # 深度 +1）跑其 handle 并收集答案。深度红线防无限递归。
         if target not in self._agents:
             raise RuntimeError(

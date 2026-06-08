@@ -91,6 +91,30 @@ async def test_standalone_kb_local_search():
 
 
 @pytest.mark.asyncio
+async def test_standalone_kb_chinese_no_spaces():
+    """评审9 🔴：中文无空格 query 也能召回（字符 bigram 退化，不再因 split 单 token 召回空）。"""
+    docs = [Doc(text="北京今天晴天"), Doc(text="上海阴天有雨")]
+    t = StandaloneTransport(model=_FakeModel(), kb_docs=docs)
+
+    @agent(key="sa-kb-zh", name="k", kb=True, models=[ModelSlot("chat", "对话")])
+    async def handle(ctx: AgentRun):
+        hits = await ctx.kb.search("北京今天天气")  # 无空格
+        yield hits[0].text if hits else "无"
+
+    assert await run_standalone(handle, "北京", transport=t) == "北京今天晴天"
+
+
+@pytest.mark.asyncio
+async def test_standalone_rejects_non_langchain_model():
+    """评审9 🟠：传错模型类型（缺 ainvoke/astream）→ 清晰 TypeError 引导，非裸 AttributeError。"""
+    class _Bare:
+        pass
+
+    with pytest.raises(TypeError, match="LangChain chat model"):
+        StandaloneTransport(model=_Bare())
+
+
+@pytest.mark.asyncio
 async def test_standalone_media_raises_platform_only():
     @agent(key="sa-media", name="md", models=[ModelSlot("chat", "对话")])
     async def handle(ctx: AgentRun):
