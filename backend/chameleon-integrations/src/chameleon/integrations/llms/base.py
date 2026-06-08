@@ -12,10 +12,17 @@ isinstance 判断、文档可读、未来若需厂商差异化覆盖时有地方
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 from langchain_openai import ChatOpenAI as _BaseChatOpenAI
 from loguru import logger
+
+# 鲁棒性默认（评审12 错误路径）：langchain ChatOpenAI 裸默认 timeout=None（hung 上游无限阻塞）
+# + max_retries=2。显式化并经 env 可调：给客户端超时防永久挂死、保留 transient(429/5xx/超时) 的
+# 指数退避重试。任一可经构造 kwargs / config 覆盖（init_kwargs.setdefault）。
+_LLM_TIMEOUT = float(os.environ.get("CHAMELEON_LLM_TIMEOUT", "60"))
+_LLM_MAX_RETRIES = int(os.environ.get("CHAMELEON_LLM_MAX_RETRIES", "2"))
 
 
 class BaseLLM(_BaseChatOpenAI):
@@ -57,6 +64,9 @@ class BaseLLM(_BaseChatOpenAI):
 
         # 默认 temperature
         init_kwargs.setdefault("temperature", 0.7)
+        # 鲁棒性默认：超时防 hung 上游无限阻塞 + transient 错误重试退避（评审12）
+        init_kwargs.setdefault("request_timeout", _LLM_TIMEOUT)
+        init_kwargs.setdefault("max_retries", _LLM_MAX_RETRIES)
 
         logger.debug("LLM init | model={} | base={}", model, api_base)
         super().__init__(**init_kwargs)
