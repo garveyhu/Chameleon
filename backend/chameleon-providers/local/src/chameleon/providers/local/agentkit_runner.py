@@ -206,13 +206,16 @@ class InProcessTransport(RuntimeTransport):
             if not done:
                 raise RuntimeError("媒体生成未返回 done 事件")
             scope.response_payload = {"url": done.get("url"), "media_kind": done.get("media_kind")}
-            # 计费归集（失败不阻断生成）
+            # 计费归集（失败不阻断生成，但在 call_log 标记，避免静默 $0 漏计）
             cost_fn = get_media_cost_fn()
             if cost_fn:
                 try:
                     scope.cost_usd = await cost_fn(code, kind, params or {})
+                    if scope.cost_usd is None:
+                        scope.response_payload["billing_status"] = "no_price"  # 模型无价目
                 except Exception:  # noqa: BLE001
                     logger.warning("media 计费失败 model={} kind={}", code, kind)
+                    scope.response_payload["billing_status"] = "failed"
         result = MediaResult(
             url=done.get("url", ""),
             object_key=done.get("key", ""),
@@ -370,6 +373,11 @@ class InProcessTransport(RuntimeTransport):
             for _step in range(max_steps):
                 resp = await client.ainvoke(convo)
                 round_usage = extract_usage(resp)
+                if not (round_usage or {}).get("total_tokens"):
+                    # 模型未透出 usage → 成本闸本轮静默不咬（流式/部分模型已知现象），记 debug
+                    logger.debug(
+                        "tool-loop 本轮无 usage，成本闸未计费 agent={}", self._agent_key
+                    )
                 usage = merge_usage(usage, round_usage)
                 self._charge((round_usage or {}).get("total_tokens", 0))  # 计入成本闸
                 self.track_usage(round_usage)  # 计入本次运行 usage（供 A2A 上报）
@@ -448,6 +456,9 @@ class InProcessTransport(RuntimeTransport):
                 )
             )
             final = await client.ainvoke(convo)
+            final_usage = extract_usage(final)  # 收口这次也计账（评审2：否则截断后超支一次）
+            self._charge((final_usage or {}).get("total_tokens", 0))
+            self.track_usage(final_usage)
             text = _content_to_text(final)
             if text:
                 yield text

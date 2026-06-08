@@ -372,14 +372,20 @@ dependencies = [
 dev = [
     { name = "httpx" },
 ]
+test = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
+    { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "test"]
 
 [[package]]
 name = "chameleon-aikit"
@@ -389,6 +395,7 @@ dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-integrations" },
     { name = "langchain-core" },
+    { name = "langgraph" },
     { name = "loguru" },
     { name = "pydantic" },
 ]
@@ -398,6 +405,7 @@ requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-integrations", editable = "chameleon-integrations" },
     { name = "langchain-core", specifier = ">=0.3" },
+    { name = "langgraph", specifier = ">=0.2" },
     { name = "loguru", specifier = ">=0.7" },
     { name = "pydantic", specifier = ">=2.7" },
 ]
@@ -413,6 +421,7 @@ dependencies = [
     { name = "chameleon-integrations" },
     { name = "chameleon-providers-base" },
     { name = "fastapi" },
+    { name = "mcp" },
     { name = "openpyxl" },
     { name = "pydantic" },
     { name = "pypdf" },
@@ -429,6 +438,7 @@ requires-dist = [
     { name = "chameleon-integrations", editable = "chameleon-integrations" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "mcp", specifier = ">=1.27.2" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pypdf", specifier = ">=4.0" },
@@ -643,6 +653,7 @@ name = "chameleon-provider-comfyui"
 version = "0.1.0"
 source = { editable = "chameleon-providers/comfyui" }
 dependencies = [
+    { name = "chameleon-aikit" },
     { name = "chameleon-core" },
     { name = "chameleon-data" },
     { name = "chameleon-integrations" },
@@ -652,6 +663,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "chameleon-aikit", editable = "chameleon-aikit" },
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-data", editable = "chameleon-data" },
     { name = "chameleon-integrations", editable = "chameleon-integrations" },

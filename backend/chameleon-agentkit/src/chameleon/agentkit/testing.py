@@ -134,7 +134,9 @@ class FakeTransport(RuntimeTransport):
         max_steps: int,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        # 简化但确定：依次执行编程好的 tool_calls（命中本地工具），最后 yield reply
+        # 简化但确定：依次执行编程好的 tool_calls（命中本地工具），最后 yield reply。
+        # 注意：与站内 InProcess 不同，这里**不 emit** tool_call/tool_result/step 事件——
+        # 断言工具调用请用 self.tool_invocations，勿用 self.emitted（后者会是空，假阴性）。
         by_name = {s.name: s for s in local_tools}
         for tc in self._tool_calls:
             spec = by_name.get(tc.get("name"))
