@@ -32,6 +32,7 @@ from chameleon.agentkit._runtime import (
 from chameleon.agentkit._spec import (
     AgentManifest,
     Doc,
+    McpServerConfig,
     MediaResult,
     ModelSlot,
     Opt,
@@ -50,6 +51,7 @@ __all__ = [
     "BaseAgent",
     "Doc",
     "KbHandle",
+    "McpServerConfig",
     "MediaHandle",
     "MediaResult",
     "MemoryHandle",

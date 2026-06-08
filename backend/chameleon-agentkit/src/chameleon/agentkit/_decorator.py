@@ -14,7 +14,13 @@ import typing
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from chameleon.agentkit._spec import AgentManifest, ModelSlot, Opt, ToolSpec
+from chameleon.agentkit._spec import (
+    AgentManifest,
+    McpServerConfig,
+    ModelSlot,
+    Opt,
+    ToolSpec,
+)
 
 # 模块级声明登记表：import agent 模块即登记，发现机制注册期读取
 _DECLARED: dict[str, AgentManifest] = {}
@@ -33,6 +39,7 @@ def agent(
     tags: list[str] | None = None,
     tools: list[str] | None = None,
     sandboxed: bool = False,
+    mcp_servers: list[McpServerConfig] | None = None,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -57,6 +64,7 @@ def agent(
             tags=list(tags or []),
             tools=list(tools or []),
             sandboxed=sandboxed,
+            mcp_servers=list(mcp_servers or []),
             handler=target,
             is_class=isinstance(target, type),
         )

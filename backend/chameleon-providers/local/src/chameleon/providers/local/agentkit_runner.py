@@ -85,12 +85,15 @@ class InProcessTransport(RuntimeTransport):
         a2a_depth: int = 0,
         budget: int = 100_000,
         scope_ref: str | None = None,
+        mcp_tools: list[ToolSpec] | None = None,
     ) -> None:
         self._agent_key = agent_key
         self._bindings = bindings or {}
         self._slots = slots or {}
         #: 该 agent 启用的平台工具 key（manifest.tools ∩ web tool_bindings）
         self._tool_keys = list(tool_keys or [])
+        #: 外部 MCP server 工具（已适配成 ToolSpec），自动并入 run_tool_loop 本地工具
+        self._mcp_tools = list(mcp_tools or [])
         #: A2A 上下文（trace 根 / 当前深度 / 剩余预算）
         self._request_id = request_id
         self._session_id = session_id
@@ -323,6 +326,8 @@ class InProcessTransport(RuntimeTransport):
         # 平台工具：该 agent 绑定集 ∪ 本轮临时点名；去重保序
         plat = list(dict.fromkeys([*self._tool_keys, *(platform_keys or [])]))
         schemas = tool_schemas(plat)
+        # 本地工具 = 作者传入 + 该 agent 声明的 MCP server 工具（自动并入）
+        local_tools = [*local_tools, *self._mcp_tools]
         local_by_name = {s.name: s for s in local_tools}
         for s in local_tools:
             schemas.append(
@@ -638,6 +643,11 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         enabled_tools = [t for t in declared_tools if t in allowed]
 
     cvars = ctx.context_vars or {}
+
+    # 外部 MCP server 工具：连接 + 适配成 ToolSpec，自动并入 ctx.run_with_tools 的 ReAct
+    # 循环。运行结束统一 aclose 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
+    mcp_tools, mcp_stack = await _load_mcp_tools(ctx.agent_def.key, manifest)
+
     transport = InProcessTransport(
         agent_key=ctx.agent_def.key,
         bindings=cfg.get("model_bindings") or {},
@@ -648,6 +658,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         a2a_depth=int(cvars.get("_a2a_depth", 0)),
         budget=int(cvars.get("_a2a_budget", 100_000)),
         scope_ref=cvars.get("end_user_id") or ctx.session_id,
+        mcp_tools=mcp_tools,
     )
     run = AgentRun(
         transport=transport,
@@ -660,21 +671,57 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         attachments=ctx.attachments,
     )
 
-    if manifest.is_class:
-        # 新式类：定义了实例方法 handle(self, run) → 注入 AgentRun + transport，
-        # 与函数式共用同一 ctx（兑现「两层共用同一 ctx」）。
-        if hasattr(target, "handle"):
-            inst = target()
-            async for ev in _consume(inst.handle(run), transport):
+    try:
+        if manifest.is_class:
+            # 新式类：定义了实例方法 handle(self, run) → 注入 AgentRun + transport，
+            # 与函数式共用同一 ctx（兑现「两层共用同一 ctx」）。
+            if hasattr(target, "handle"):
+                inst = target()
+                async for ev in _consume(inst.handle(run), transport):
+                    yield ev
+                return
+            # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx 便利）
+            async for ev in target.astream(ctx):
                 yield ev
             return
-        # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx 便利）
-        async for ev in target.astream(ctx):
-            yield ev
-        return
 
-    async for ev in _consume(target(run), transport):
-        yield ev
+        async for ev in _consume(target(run), transport):
+            yield ev
+    finally:
+        if mcp_stack is not None:
+            from contextlib import suppress
+
+            with suppress(Exception):
+                await mcp_stack.aclose()
+
+
+async def _load_mcp_tools(agent_key: str, manifest: Any) -> tuple[list[ToolSpec], Any]:
+    """连声明的 MCP server，把其 tools 适配成 ToolSpec；返 (tools, 待关闭的连接栈)。
+
+    加载失败仅 warning + 返空（不拖垮 agent）。连接栈由 run_agentkit 在 finally 关闭。
+    """
+    servers = getattr(manifest, "mcp_servers", None) or []
+    if not servers:
+        return [], None
+    from dataclasses import asdict
+
+    from chameleon.integrations.mcp import load_mcp_tools
+
+    try:
+        descs, stack = await load_mcp_tools([asdict(s) for s in servers])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("agentkit MCP 工具加载失败 agent={}: {}", agent_key, e)
+        return [], None
+    tools = [
+        ToolSpec(
+            name=d.name,
+            description=d.description,
+            parameters_schema=d.parameters_schema,
+            handler=d.handler,
+        )
+        for d in descs
+    ]
+    return tools, stack
 
 
 async def _consume(

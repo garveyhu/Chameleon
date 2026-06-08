@@ -234,6 +234,40 @@ async def test_run_tool_loop_truncates_on_budget_exhausted():
 
 
 @pytest.mark.asyncio
+async def test_run_tool_loop_dispatches_mcp_tool():
+    """@agent(mcp_servers=) 加载的 MCP 工具（包成 ToolSpec 传 mcp_tools）自动进 ReAct 循环。"""
+    from chameleon.agentkit import ToolSpec
+
+    called: dict = {}
+
+    async def mcp_handler(**args):  # noqa: ANN003
+        called.update(args)
+        return {"ok": True, "data": "MCP结果"}
+
+    mcp_spec = ToolSpec(
+        name="fs_read",
+        description="读文件",
+        parameters_schema={"type": "object", "properties": {"path": {"type": "string"}}},
+        handler=mcp_handler,
+    )
+    t = InProcessTransport(agent_key="x", bindings={}, slots={}, mcp_tools=[mcp_spec])
+    responses = [
+        _FakeAI(tool_calls=[{"name": "fs_read", "args": {"path": "/a"}, "id": "c1"}]),
+        _FakeAI(content="答案含 MCP结果"),
+    ]
+    t.chat_model = lambda *, slot=None, model=None: _FakeModel(responses)  # type: ignore[method-assign]
+    out = [
+        d
+        async for d in t.run_tool_loop(
+            messages=[("user", "读")], slot="chat", model=None,
+            platform_keys=[], local_tools=[], max_steps=4,
+        )
+    ]
+    assert "MCP结果" in "".join(out)
+    assert called == {"path": "/a"}  # MCP 工具经本地路径被调用
+
+
+@pytest.mark.asyncio
 async def test_run_tool_loop_no_tool_calls_returns_text():
     t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[])
     t.chat_model = lambda *, slot=None, model=None: _FakeModel(  # type: ignore[method-assign]

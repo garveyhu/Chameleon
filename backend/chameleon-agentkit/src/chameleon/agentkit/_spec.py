@@ -60,6 +60,29 @@ class Doc:
 
 
 @dataclass(slots=True)
+class McpServerConfig:
+    """一个外部 MCP server 的连接配置（`@agent(mcp_servers=[...])` 声明）。
+
+    其 tools 在运行时自动适配进 `ctx.run_with_tools` 的 ReAct 循环（与本地 @tool /
+    平台工具混用）。纯数据，无 mcp SDK 依赖——作者 import agentkit 即可声明。
+
+    Attributes:
+        name: 标识（多 server 时作工具名前缀消歧）。
+        transport: stdio / http / sse。
+        command/args/env: stdio transport 的子进程命令（如 npx ...）。
+        url/headers: http / sse transport 的服务地址。
+    """
+
+    name: str = ""
+    transport: str = "stdio"
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] | None = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
+
+
+@dataclass(slots=True)
 class MediaResult:
     """`ctx.media.generate` 的产物（图/视频，已落平台对象存储）。"""
 
@@ -106,6 +129,8 @@ class AgentManifest:
     #: 是否要求在沙箱（隔离 runtime）执行 —— 多租户 / 不可信代码用。接口已预留；
     #: 真正容器隔离执行按部署需求启用（见 runner 决策点 + core/sandbox）。
     sandboxed: bool = False
+    #: 外部 MCP server 声明；其 tools 运行时自动并入 ctx.run_with_tools 的 ReAct 循环。
+    mcp_servers: list[McpServerConfig] = field(default_factory=list)
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False
