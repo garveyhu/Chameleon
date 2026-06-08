@@ -86,6 +86,23 @@ async def test_broker_run_tool_scope_rejects_undeclared():
 
 
 @pytest.mark.asyncio
+async def test_broker_scope_model_and_empty_tools():
+    """评审修复：model 点名未声明 → 拒；空工具声明 → 全拒（不再全放行）。"""
+    from chameleon.providers.local.sandbox.runtime import _resolve_rpc
+
+    class _Broker:
+        _bindings = {"chat": "qwen-plus"}
+        _tool_keys: list = []
+
+    # model 点名未声明 → 越权拒（防烧钱）
+    r1 = await _resolve_rpc(_Broker(), {"method": "chat", "args": {"model": "gpt-4o-贵", "messages": []}})
+    assert r1["ok"] is False and "越权" in r1["error"]
+    # 空工具声明 → 任意工具全拒
+    r2 = await _resolve_rpc(_Broker(), {"method": "run_tool", "args": {"name": "http", "args": {}}})
+    assert r2["ok"] is False and "越权" in r2["error"]
+
+
+@pytest.mark.asyncio
 async def test_run_sandboxed_streaming(tmp_path):
     (tmp_path / "sbx_stream_mod.py").write_text(_STREAM_AGENT, encoding="utf-8")
     deltas = []

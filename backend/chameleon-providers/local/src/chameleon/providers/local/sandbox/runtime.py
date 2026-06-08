@@ -55,12 +55,38 @@ def _to_messages(raw: list[dict[str, Any]]) -> list[Any]:
     return out
 
 
+def _model_scope_error(broker: Any, model: str | None) -> str | None:
+    """model 点名 scope 红线：不可信子进程不得点名未声明的模型（防越权烧钱）。
+
+    声明集 = broker 绑定的模型 code（_bindings.values()）。model=None 走 slot 绑定链（受
+    声明约束，放行）；点名 ∈ 声明集放行；声明集为空（无显式绑定）则无从约束，放行 + warn。
+    """
+    if not model:
+        return None
+    declared = {v for v in (getattr(broker, "_bindings", {}) or {}).values() if v}
+    if not declared:
+        logger.warning("sandbox model scope 无声明集，放行点名 {}", model)
+        return None
+    if model not in declared:
+        return f"越权：未声明的模型 {model}"
+    return None
+
+
+def _scoped_tool_keys(broker: Any, requested: list[str] | None) -> list[str]:
+    """平台工具 scope：请求集 ∩ agent 声明集（_tool_keys）。"""
+    declared = set(getattr(broker, "_tool_keys", []) or [])
+    return [k for k in (requested or []) if k in declared]
+
+
 async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
-    """主进程 broker 解析子进程的 ctx rpc，返 {ok, data|error}。scope 校验 Slice 3 严格化。"""
+    """主进程 broker 解析子进程的 ctx rpc，返 {ok, data|error}。带 scope 红线。"""
     method = frame.get("method")
     args = frame.get("args") or {}
     try:
         if method == "chat":
+            err = _model_scope_error(broker, args.get("model"))
+            if err:
+                return {"ok": False, "error": err}
             msgs = [(m.get("role", "user"), m.get("content", "")) for m in args.get("messages", [])]
             model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
             resp = await model.ainvoke(msgs)
@@ -72,9 +98,13 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
                 tool_schemas,
             )
 
+            err = _model_scope_error(broker, args.get("model"))
+            if err:
+                return {"ok": False, "error": err}
             msgs = _to_messages(args.get("messages", []))
             model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
-            schemas = tool_schemas(args.get("platform_tool_keys") or []) + (
+            # 平台工具只绑声明集内的（与 run_tool scope 一致）
+            schemas = tool_schemas(_scoped_tool_keys(broker, args.get("platform_tool_keys"))) + (
                 args.get("local_tool_schemas") or []
             )
             client = bind_schemas(model, schemas) if schemas else model
@@ -87,9 +117,9 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
             from chameleon.integrations.tools import run_tool
 
             name = args.get("name", "")
-            # scope 红线：只能调该 agent 声明的平台工具，不可越权
+            # scope 红线：只能调该 agent 声明的平台工具（空声明=一个都不能调，全拒）
             declared = set(getattr(broker, "_tool_keys", []) or [])
-            if declared and name not in declared:
+            if name not in declared:
                 return {"ok": False, "error": f"越权：未声明的工具 {name}"}
             res = await run_tool(name, args.get("args") or {}, caller="sandbox")
             return {"ok": True, "data": res}
@@ -134,6 +164,11 @@ async def _stream_chat(broker: Any, proc: Any, frame: dict[str, Any]) -> None:
     rid = frame["id"]
     args = frame.get("args") or {}
     try:
+        err = _model_scope_error(broker, args.get("model"))
+        if err:
+            proc.stdin.write(encode_frame({"t": "rpc_result", "id": rid, "ok": False, "error": err}))
+            await proc.stdin.drain()
+            return
         msgs = [(m.get("role", "user"), m.get("content", "")) for m in args.get("messages", [])]
         model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
         async for chunk in model.astream(msgs):
@@ -162,12 +197,20 @@ async def run_sandboxed(
     extra = {"PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
     extra.update(env_extra or {})
     env = scrub_env(dict(os.environ), extra=extra)
+    # ⚠️ Phase 2 子进程隔离 = env 凭据擦除 + 进程 + CPU/内存限 + ctx 经 broker scope。
+    # **不含**文件系统隔离（子进程仍可 open 盘上 .env/config 读凭据）+ 网络出站隔离。
+    # 真"接不可信陌生人代码"需 Phase 3 docker（network=none + 只读 rootfs，见 #29/#30）。
+    logger.warning(
+        "agentkit sandbox（子进程）：env 凭据已擦除，但 FS/网络未隔离 —— 不可信代码请用 "
+        "Phase 3 docker runtime；当前档适合半可信代码"
+    )
     proc = await asyncio.create_subprocess_exec(
         sys.executable, "-m", "chameleon.agentkit._sandbox_child",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=None,  # 继承父 stderr，避免管道缓冲死锁
         env=env,
+        limit=8 * 1024 * 1024,  # 单帧上限 8MB（默认 64KiB 会让 yield 大文本/base64 崩）
     )
     assert proc.stdin and proc.stdout
     proc.stdin.write(
@@ -179,10 +222,21 @@ async def run_sandboxed(
     await proc.stdin.drain()
     try:
         while True:
-            line = await asyncio.wait_for(proc.stdout.readline(), timeout=_CHILD_TIMEOUT)
+            try:
+                line = await asyncio.wait_for(proc.stdout.readline(), timeout=_CHILD_TIMEOUT)
+            except (ValueError, asyncio.LimitOverrunError):
+                # 单行超 limit（恶意/超大帧）→ 中止，不崩主流程
+                logger.warning("sandbox 子进程帧超限，中止")
+                yield StreamEvent(type=StreamEventType.error, data={"message": "智能体输出异常"})
+                break
             if not line:
                 break
-            frame = decode_frame(line)
+            try:
+                frame = decode_frame(line)
+            except (ValueError, TypeError):
+                logger.warning("sandbox 子进程畸形帧，中止")
+                yield StreamEvent(type=StreamEventType.error, data={"message": "智能体输出异常"})
+                break
             t = frame.get("t")
             if t == "rpc":
                 if frame.get("method") == "chat_stream":

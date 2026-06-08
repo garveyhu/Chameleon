@@ -89,6 +89,24 @@ provider 密钥等。child 即便被注入恶意代码也读不到任何凭据�
 - handle 死循环 → 超时被 kill，主进程不挂。
 - 每片 ruff/lint + 单测 + 真实 e2e + 聚焦 commit。
 
+## 6b. Phase 2 安全姿态（对抗评审纠偏 —— 诚实边界）
+
+**Phase 2 子进程隔离 = 半可信代码档，不是"接陌生人不可信代码"档。** 实测确认：
+
+隔离了（有效）：env 凭据擦除（scrub_env）+ 进程内存隔离 + CPU/NPROC rlimit + ctx 经 broker
+的 model/tool **scope 红线**（点名未声明 model/工具 → 拒）。
+
+**未隔离**（Phase 2 固有弱点，必须明确告知部署方，勿误当已隔离）：
+- **文件系统全开**：子进程可 `open(config/component.json)` 读 DB 明文密码、`open(config/.env)`，
+  且 `import chameleon.core.config.env_settings` 会 `load_dotenv` 把 .env 灌回子进程 os.environ
+  —— **env 擦除被磁盘副本绕过**。
+- **网络出站全开**：可 SSRF 打内网 / 外传数据。
+- **内存无上限**：RLIMIT_AS 未设（设错击穿合法大依赖 import），可 OOM 拖垮主机。
+
+→ 真"接不可信陌生人代码"必须 Phase 3 docker（`DockerSandboxRuntime` 已存在：network=none
++ tmpfs + 只读 rootfs + mem_limit + pids_limit；只需接到 agentkit untrusted 档）。在此之前
+sandbox 子进程档**只适合半可信代码**（自家/受控来源），运行时已 warning 明示。
+
 ## 7. 风险
 - stdio 分帧与子进程 buffering：child 每帧后 flush；parent 按行读。大 payload（图 base64）
   考虑 base64 单行或切片（Phase 4）。
