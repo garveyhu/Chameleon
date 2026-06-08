@@ -118,3 +118,50 @@ async def test_real_chatopenai_client_e2e_streaming():
 
     # 真客户端解析 SSE 增量 → ctx.stream 逐块 yield → 拼成完整答案
     assert out == "你好世界"
+
+
+def _openai_tool_call(name: str, args_json: str) -> dict:
+    return {
+        "id": "chatcmpl-t", "object": "chat.completion", "created": 0, "model": "gpt-4o-mini",
+        "choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
+            "role": "assistant", "content": None,
+            "tool_calls": [{"id": "call_1", "type": "function",
+                            "function": {"name": name, "arguments": args_json}}]}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+
+
+@pytest.mark.asyncio
+async def test_real_chatopenai_client_e2e_tool_calling():
+    """真 ChatOpenAI bind_tools + tool_calls 响应路径 e2e：ReAct 循环真执行本地工具再续跑。"""
+    from langchain_openai import ChatOpenAI
+
+    from chameleon.agentkit import tool
+
+    @tool(name="add", description="加法")
+    async def add(a: int, b: int) -> int:
+        return a + b
+
+    @agent(key="e2e-react", name="r", models=[ModelSlot("chat", "对话")])
+    async def react(ctx: AgentRun):
+        async for d in ctx.run_with_tools(user=ctx.query, tools=[add], max_steps=3):
+            yield d
+
+    def _responder(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        has_tool_result = any(m.get("role") == "tool" for m in body["messages"])
+        if has_tool_result:  # 第二轮：工具结果已回填 → 出最终答案
+            return httpx.Response(200, json=_openai_completion("2026 加 17 等于 2043"))
+        return httpx.Response(200, json=_openai_tool_call("add", '{"a": 2026, "b": 17}'))
+
+    events: list = []
+    with respx.mock:
+        respx.post(url__regex=r".*/chat/completions").mock(side_effect=_responder)
+        model = ChatOpenAI(model="gpt-4o-mini", api_key="sk-test")
+        t = StandaloneTransport(model=model, on_event=events.append)
+        out = await run_standalone(react, "今年加 17", transport=t)
+
+    # 真客户端 bind_tools→出 tool_calls→框架真执行 add(2026,17)=2043→回填→续跑出最终答案
+    tool_results = [e.data for e in events if getattr(e.type, "value", e.type) == "tool_result"]
+    assert tool_results and tool_results[0]["result"]["data"] == 2043  # 真工具执行结果
+    assert "2043" in out
