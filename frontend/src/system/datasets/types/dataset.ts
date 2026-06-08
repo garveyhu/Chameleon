@@ -1,9 +1,20 @@
 import type { EntityId } from '@/core/types/api';
 
+/** 数据集能力维度定义（样本归类 + 对比雷达的轴）。 */
+export interface CategoryDef {
+  key: string;
+  label: string;
+  description?: string | null;
+}
+
 export interface DatasetItem {
   id: EntityId;
   name: string;
   description: string | null;
+  /** 数据集级默认系统提示词（如 text2sql 的 schema）；评估运行预填到 prompt_override */
+  system_prompt?: string | null;
+  /** 能力维度定义（样本归类 + 对比雷达轴）；空 = 未配置 */
+  categories?: CategoryDef[] | null;
   item_count: number;
   created_at: string;
   updated_at: string;
@@ -21,6 +32,10 @@ export interface DatasetItemRow {
   input_payload: Record<string, unknown>;
   expected_output: Record<string, unknown> | null;
   meta: Record<string, unknown> | null;
+  /** 样本备注：描述这条样本用于评测什么（可空） */
+  note?: string | null;
+  /** 能力维度归类 key（指向数据集 categories） */
+  category?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +43,13 @@ export interface DatasetItemRow {
 export interface CreateDatasetRequest {
   name: string;
   description?: string;
+  /** 数据集级系统提示词（如 text2sql 的库表 schema）。 */
+  system_prompt?: string;
+  categories?: CategoryDef[];
+}
+
+export interface ClassifyItemsResult {
+  updated: number;
 }
 
 export type PiiStrategy = 'mask' | 'drop' | 'keep';
@@ -80,6 +102,8 @@ export interface BulkImportItem {
   input_payload: Record<string, unknown>;
   expected_output?: Record<string, unknown> | null;
   meta?: Record<string, unknown> | null;
+  note?: string | null;
+  category?: string | null;
 }
 
 export interface BulkImportRequest {
@@ -129,6 +153,8 @@ export interface CreateDatasetRunRequest {
   /** 评分方案「选模板」时透传：跑完按 template metrics 评分。 */
   eval_template_id?: EntityId;
   model_override?: string;
+  /** 系统提示词覆盖：作为被测模型的 system 提示（如 text2sql 的库表 schema）。 */
+  prompt_override?: string;
   agent_key?: string;
   /** 可选「归属 Key」：评测 token/成本/trace 计到该 Key 名下。雪花 id 以字符串传，禁 Number()。 */
   api_key_id?: EntityId;
@@ -161,6 +187,10 @@ export interface CompareItemCell {
   dataset_item_id: EntityId;
   input_preview: string | null;
   expected_output: Record<string, unknown> | null;
+  /** 样本备注（考察点） */
+  note?: string | null;
+  /** 能力维度归类 key（雷达据此分轴） */
+  category?: string | null;
   /** key = run_id（后端 dict[int] 序列化为 JSON object，key 是 string） */
   cells: Record<string, DatasetRunItemRow>;
 }
@@ -168,6 +198,13 @@ export interface CompareItemCell {
 export interface CompareRunsResult {
   runs: DatasetRunRow[];
   rows: CompareItemCell[];
+  /** 数据集配置的能力维度（雷达的轴）；空 = 未配置 → 不显示雷达 */
+  categories?: CategoryDef[] | null;
+}
+
+/** 运行对比的 AI 总结分析（markdown）。 */
+export interface CompareAnalysisResult {
+  analysis: string;
 }
 
 export interface ScoreBucket {
@@ -190,11 +227,15 @@ export interface ScoreDistributionResult {
   metrics: MetricDistribution[];
 }
 
-/** 样本编辑：改 input_payload / expected_output / meta */
+/** 样本编辑：改 input_payload / expected_output / meta / note */
 export interface UpdateItemRequest {
   input_payload?: Record<string, unknown> | null;
   expected_output?: Record<string, unknown> | null;
   meta?: Record<string, unknown> | null;
+  /** 备注；传字符串覆盖（空串清空），不传则不动 */
+  note?: string | null;
+  /** 能力维度归类 key；空串清空，不传不动 */
+  category?: string | null;
 }
 
 /** H2 电子表格「+新增行」：单条样本入参（input_payload 必填）。 */
@@ -202,6 +243,8 @@ export interface CreateItemRequest {
   input_payload: Record<string, unknown>;
   expected_output?: Record<string, unknown> | null;
   meta?: Record<string, unknown> | null;
+  note?: string | null;
+  category?: string | null;
   pii_strategy?: PiiStrategy;
 }
 
@@ -211,6 +254,10 @@ export interface AiGenCandidate {
   cid: string;
   user_input: string;
   answer: string;
+  /** AI 生成的样本备注（考察点说明，可编辑） */
+  note?: string;
+  /** AI 自动归类的能力维度 key（可改） */
+  category?: string | null;
   selected: boolean;
 }
 
@@ -228,6 +275,7 @@ export interface RefineCandidateRequest {
   candidate: {
     user_input: string;
     answer: string;
+    note?: string;
   };
   instruction?: string;
   mode: 'optimize' | 'regenerate';
@@ -237,6 +285,7 @@ export interface RefineCandidateRequest {
 export interface RefinedCandidate {
   user_input: string;
   answer: string | null;
+  note?: string | null;
 }
 
 /** H3：智能优化产出 —— 重写 prompt + 报告 + 前后对比 */

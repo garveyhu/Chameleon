@@ -4,11 +4,16 @@ import { Loader2, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
-import type { AiGenCandidate } from '@/system/datasets/types/dataset';
+import type {
+  AiGenCandidate,
+  CategoryDef,
+} from '@/system/datasets/types/dataset';
 
 interface Props {
   candidate: AiGenCandidate;
   index: number;
+  /** 数据集能力维度（显示 AI 自动归类的标签） */
+  categories?: CategoryDef[];
   /** optimize / regenerate 进行中（按钮转圈 + 禁用整卡操作）。 */
   refining: boolean;
   /** 是否显示「重新生成」（采样评审无 task 可重生，置 false 隐藏）。默认 true。 */
@@ -16,6 +21,7 @@ interface Props {
   onToggle: (cid: string) => void;
   onChangeInput: (cid: string, value: string) => void;
   onChangeAnswer: (cid: string, value: string) => void;
+  onChangeNote: (cid: string, value: string) => void;
   onOptimize: (cid: string) => void;
   onRegenerate: (cid: string) => void;
   onRemove: (cid: string) => void;
@@ -24,16 +30,21 @@ interface Props {
 export const AiGenCandidateCard = ({
   candidate,
   index,
+  categories,
   refining,
   showRegenerate = true,
   onToggle,
   onChangeInput,
   onChangeAnswer,
+  onChangeNote,
   onOptimize,
   onRegenerate,
   onRemove,
 }: Props) => {
-  const { cid, user_input, answer, selected } = candidate;
+  const { cid, user_input, answer, note, category, selected } = candidate;
+  const catLabel = category
+    ? (categories?.find(c => c.key === category)?.label ?? category)
+    : null;
 
   return (
     <div
@@ -109,6 +120,27 @@ export const AiGenCandidateCard = ({
             onChange={e => onChangeAnswer(cid, e.target.value)}
             rows={3}
             className="min-h-[56px] text-[12px]"
+          />
+        </div>
+        <div>
+          <label className="mb-1 flex items-center gap-2 text-[10.5px] font-medium text-stone-500">
+            备注（AI 生成的考察点，可改）
+            {catLabel && (
+              <span
+                className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-normal text-violet-700"
+                title="AI 自动归类的能力维度"
+              >
+                {catLabel}
+              </span>
+            )}
+          </label>
+          <Textarea
+            value={note ?? ''}
+            disabled={refining}
+            onChange={e => onChangeNote(cid, e.target.value)}
+            rows={1}
+            placeholder="说明此样本考察什么能力"
+            className="min-h-[28px] text-[12px]"
           />
         </div>
       </div>

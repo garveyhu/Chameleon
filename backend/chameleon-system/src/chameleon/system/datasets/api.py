@@ -22,6 +22,8 @@ from chameleon.system.datasets.schemas import (
     BatchDeleteItemsResult,
     BulkImportRequest,
     BulkImportResult,
+    CategoryDef,
+    ClassifyItemsResult,
     CompareRunsRequest,
     CompareRunsResult,
     CreateDatasetRequest,
@@ -40,6 +42,7 @@ from chameleon.system.datasets.schemas import (
     SamplePreviewResult,
     SampleResult,
     ScoreDistributionResult,
+    SuggestCategoriesRequest,
     UpdateDatasetRequest,
     UpdateItemRequest,
 )
@@ -133,6 +136,34 @@ async def update_dataset(
         request_id=audit.request_id,
     )
     return Result.ok(item)
+
+
+@router.post("/categories/suggest", response_model=Result[list[CategoryDef]])
+async def suggest_categories(
+    req: SuggestCategoriesRequest,
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[list[CategoryDef]]:
+    """AI 根据数据集用途（名/描述/系统提示词）建议一组能力维度（无状态，创建/编辑都用）。"""
+    cats = await ds_ai_generate.suggest_categories(
+        name=req.name,
+        description=req.description,
+        system_prompt=req.system_prompt,
+    )
+    return Result.ok([CategoryDef.model_validate(c) for c in cats])
+
+
+@router.post(
+    "/{dataset_id}/categories/classify",
+    response_model=Result[ClassifyItemsResult],
+)
+async def classify_items(
+    dataset_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("datasets:write")),
+) -> Result[ClassifyItemsResult]:
+    """AI 批量给未归类样本归类（一次 LLM 调用，最多 120 条）。"""
+    updated = await ds_ai_generate.classify_items(session, dataset_id)
+    return Result.ok(ClassifyItemsResult(updated=updated))
 
 
 @router.post("/{dataset_id}/delete", response_model=Result[None])

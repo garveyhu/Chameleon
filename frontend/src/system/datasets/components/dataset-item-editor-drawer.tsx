@@ -7,6 +7,13 @@ import { useState } from 'react';
 import { Button } from '@/core/components/ui/button';
 import { JsonEditor } from '@/core/components/ui/json-editor';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/core/components/ui/select';
+import {
   Sheet,
   SheetBody,
   SheetContent,
@@ -16,12 +23,18 @@ import {
 import { toast } from '@/core/lib/toast';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
+  CategoryDef,
   DatasetItemRow,
   UpdateItemRequest,
 } from '@/system/datasets/types/dataset';
 
+// Radix Select 不允许空串 value，用哨兵代表「未分类」
+const NONE = '__none__';
+
 interface Props {
   item: DatasetItemRow;
+  /** 数据集配置的能力维度（供「能力维度」下拉选项） */
+  categories?: CategoryDef[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -48,10 +61,17 @@ const parseField = (t: string): Parsed => {
   }
 };
 
-export const DatasetItemEditorDrawer = ({ item, onClose, onSaved }: Props) => {
+export const DatasetItemEditorDrawer = ({
+  item,
+  categories,
+  onClose,
+  onSaved,
+}: Props) => {
   const [input, setInput] = useState(() => toText(item.input_payload));
   const [expected, setExpected] = useState(() => toText(item.expected_output));
   const [meta, setMeta] = useState(() => toText(item.meta));
+  const [note, setNote] = useState(() => item.note ?? '');
+  const [category, setCategory] = useState(() => item.category ?? '');
 
   const mut = useMutation({
     mutationFn: (req: UpdateItemRequest) => datasetApi.updateItem(item.id, req),
@@ -79,6 +99,8 @@ export const DatasetItemEditorDrawer = ({ item, onClose, onSaved }: Props) => {
       input_payload: i.value,
       expected_output: e.value,
       meta: m.value,
+      note: note.trim(),
+      category: category || '',
     });
   };
 
@@ -128,6 +150,47 @@ export const DatasetItemEditorDrawer = ({ item, onClose, onSaved }: Props) => {
               minHeight="80px"
             />
           </div>
+          <div>
+            <div className="mb-1 text-[11.5px] text-stone-600">
+              备注
+              <span className="ml-1 text-[10.5px] text-stone-400">
+                描述这条样本用于评测什么，可选
+              </span>
+            </div>
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              rows={2}
+              placeholder="如：考察多表 JOIN / 嵌套子查询 / HAVING 过滤等"
+              className="w-full rounded-md border border-stone-200 bg-white px-2.5 py-1.5 text-[12.5px] leading-snug text-stone-800 outline-none transition placeholder:text-stone-300 focus:border-blue-300 focus:ring-1 focus:ring-blue-100"
+            />
+          </div>
+          {categories && categories.length > 0 && (
+            <div>
+              <div className="mb-1 text-[11.5px] text-stone-600">
+                能力维度
+                <span className="ml-1 text-[10.5px] text-stone-400">
+                  归到一个维度（对比雷达据此分轴），可选
+                </span>
+              </div>
+              <Select
+                value={category || NONE}
+                onValueChange={v => setCategory(v === NONE ? '' : v)}
+              >
+                <SelectTrigger className="h-9 text-[12.5px]">
+                  <SelectValue placeholder="未分类" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>未分类</SelectItem>
+                  {categories.map(c => (
+                    <SelectItem key={c.key} value={c.key}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </SheetBody>
         <div className="flex justify-end gap-2 border-t border-stone-100 px-4 py-3">
           <Button variant="ghost" size="sm" onClick={onClose}>

@@ -9,6 +9,7 @@ import { Eraser, Paperclip, Send, X } from 'lucide-react';
 
 import { Markdown } from '@/core/components/chat/markdown';
 import { Button } from '@/core/components/ui/button';
+import { NeonLoader } from '@/core/components/ui/neon-loader';
 import {
   Modal,
   ModalBody,
@@ -433,7 +434,7 @@ const Bubble = ({
             {m.content ? (
               <Markdown content={m.content} className="text-[12.5px]" />
             ) : m.streaming ? (
-              <span>思考中…</span>
+              <NeonLoader size="sm" label="思考中…" />
             ) : null}
           </div>
         )}

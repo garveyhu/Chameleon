@@ -116,6 +116,7 @@ async def run_dataset(
         model_override=model_override,
         prompt_override=prompt_override,
         judge=judge,
+        judge_config=judge_config,
         status="running",
         started_at=started_at,
     )
@@ -158,6 +159,8 @@ async def run_dataset(
                 )
             # 统一走分发器：需 LLM 的 judge 在本 item 的 channel='eval' TraceContext
             # scope 内调 LLM（成本/token 自动盖 eval 渠道章），否则旧函数 + 适配器。
+            # 裁判也吃到「用户问题 + 数据集系统提示词」，对任务有完整感知
+            # （如 text2sql 让裁判按 schema 判 SQL 表/字段是否合理，而非空对 SQL）
             result = await run_judge(
                 judge,
                 item.expected_output,
@@ -165,6 +168,8 @@ async def run_dataset(
                 reference=item.reference_output,
                 config=judge_config,
                 model_override=model_override,
+                question=_extract_query_text(item.input_payload),
+                task_context=prompt_override,
             )
             score = result.score
             reason = result.reason
@@ -352,20 +357,16 @@ async def _invoke_for_item(
     脱敏后 input_payload 没有原文（只有 preview），P18 暂用 preview 跑；
     需要原文的场景靠 admin 在 dataset_items 上人工补 expected_output 然后 LLM 跑回测。
     """
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.aikit import LLMRunner
 
     # 从 input_payload 提 query（脱敏后字段 preview / user_input.preview）
     query = _extract_query_text(input_payload)
-    msgs: list = []
-    if prompt_override:
-        msgs.append(SystemMessage(content=prompt_override))
-    msgs.append(HumanMessage(content=query))
-
-    client = get_llm(model_override)
-    ai = await client.ainvoke(msgs)
-    content = ai.content if hasattr(ai, "content") else str(ai)
+    content = await LLMRunner.run_text(
+        query,
+        model=model_override,
+        system=prompt_override or None,
+        retries=0,
+    )
     return {"answer": content}
 
 
@@ -389,6 +390,8 @@ async def run_judge(
     reference: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
     model_override: str | None = None,
+    question: str | None = None,
+    task_context: str | None = None,
 ) -> JudgeResult:
     """评分分发器：按 judge_key 路由到旧窄函数（+适配器）或 LLM judge。
 
@@ -407,9 +410,12 @@ async def run_judge(
     Returns:
         JudgeResult；score 恒为 [0, 1] 或 None。
     """
+    # 裁判模型独立于被测模型：judge_config.judge_model 优先，回退被测 model_override。
+    # 跨模型对比评测（如弱模型 text2sql）必须用独立强裁判，否则被测模型自评失真。
+    judge_model = (config or {}).get("judge_model") or model_override
     if judge_key == "dsl":
         return await _run_dsl_judge(
-            expected, actual, config=config, model_override=model_override
+            expected, actual, config=config, model_override=judge_model
         )
     if judge_key in LLM_JUDGES:
         return await _run_llm_judge(
@@ -418,7 +424,9 @@ async def run_judge(
             actual,
             reference=reference,
             config=config,
-            model_override=model_override,
+            model_override=judge_model,
+            question=question,
+            task_context=task_context,
         )
     judge_fn = JUDGES.get(judge_key)
     if judge_fn is None:
@@ -434,6 +442,8 @@ async def _run_llm_judge(
     reference: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
     model_override: str | None = None,
+    question: str | None = None,
+    task_context: str | None = None,
 ) -> JudgeResult:
     """LLM 评分编排：build prompt（纯函数）→ eval 渠道调 LLM → parse_score_result。
 
@@ -443,9 +453,7 @@ async def _run_llm_judge(
     - llm_score：按 config['criteria'] 出 1-5 档；expected 可空（纯按 criteria 评）。
     - gsb：按 reference 判 G/S/B；reference 缺失返 score=None（无参照不可评）。
     """
-    from langchain_core.messages import HumanMessage
-
-    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.aikit import LLMRunner
     from chameleon.system.datasets.judges import _flatten_str
 
     cfg = config or {}
@@ -454,36 +462,29 @@ async def _run_llm_judge(
     if judge_key == "gsb":
         if not _flatten_str(reference).strip():
             return JudgeResult(score=None, reason="GSB 缺参照回答，跳过")
-        prompt = build_gsb_prompt(reference, actual, criteria)
-        raw = await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt)
+        prompt = build_gsb_prompt(
+            reference, actual, criteria, question=question, task_context=task_context
+        )
+        raw = await LLMRunner.run_text(prompt, model=model_override, retries=0)
         return parse_gsb_result(raw)
 
     if judge_key == "llm_score":
-        prompt = build_llm_score_prompt(expected, actual, criteria)
-        raw = await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt)
+        prompt = build_llm_score_prompt(
+            expected, actual, criteria, question=question, task_context=task_context
+        )
+        raw = await LLMRunner.run_text(prompt, model=model_override, retries=0)
         return parse_score_result(raw, scale="1-5")
 
     # judge_key == "llm_judge"（基础 AI 评分）：无 criteria，expected 缺失不可评
     if not _flatten_str(expected).strip():
         return JudgeResult(score=None)
-    prompt = build_llm_score_prompt(expected, actual, criteria)
+    prompt = build_llm_score_prompt(
+        expected, actual, criteria, question=question, task_context=task_context
+    )
     return parse_score_result(
-        await _ainvoke_llm(get_llm, model_override, HumanMessage, prompt),
+        await LLMRunner.run_text(prompt, model=model_override, retries=0),
         scale="1-5",
     )
-
-
-async def _ainvoke_llm(
-    get_llm: Any,
-    model_override: str | None,
-    human_message_cls: Any,
-    prompt: str,
-) -> str:
-    """单次 LLM 调用取文本（在 eval TraceContext scope 内）。"""
-    client = get_llm(model_override)
-    ai = await client.ainvoke([human_message_cls(content=prompt)])
-    raw = ai.content if hasattr(ai, "content") else str(ai)
-    return str(raw)
 
 
 async def _run_dsl_judge(
@@ -493,13 +494,13 @@ async def _run_dsl_judge(
     config: dict[str, Any] | None = None,
     model_override: str | None = None,
 ) -> JudgeResult:
-    """DSL 评分：parse(config['dsl']) → evaluate（NL 规则用注入的 eval 渠道 LLM）。
+    """DSL 评分：parse(config['dsl']) → evaluate（NL 规则用注入的 eval 渠道补全）。
 
-    无规则 / 解析全错时返 score=None（reason 带解析错误摘要）；有规则则把 get_llm
-    取的客户端注入 evaluate（item 的 channel='eval' TraceContext 已在 run_dataset 外层
-    set，evaluator 内不再自建，复用同一 eval 渠道）。
+    无规则 / 解析全错时返 score=None（reason 带解析错误摘要）；有 NL 规则则注入一个
+    经 aikit LLMRunner 的 complete_fn（item 的 channel='eval' TraceContext 已在
+    run_dataset 外层 set，run_text 复用同一 eval 渠道）。
     """
-    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.aikit import LLMRunner
     from chameleon.system.datasets.dsl import evaluate as dsl_evaluate
     from chameleon.system.datasets.dsl import parse as parse_dsl
 
@@ -513,10 +514,13 @@ async def _run_dsl_judge(
         detail = "；".join(errors[:3]) if errors else "无有效规则"
         return JudgeResult(score=None, scale="1-5", reason=f"DSL 无可用规则：{detail}")
 
-    # 仅在有自然语言规则时才取 LLM —— 纯 field 规则 DSL 不需要 LLM，避免未配默认
-    # 模型时 LLMFactory 误抛 BusinessError（evaluate 支持 llm=None，仅 NL 规则用 llm）。
-    llm = get_llm(model_override) if spec.nl_rules else None
-    return await dsl_evaluate(spec, expected, actual, llm=llm)
+    # 仅在有自然语言规则时才注入 complete_fn —— 纯 field 规则 DSL 不调 LLM；run_text
+    # 内部惰性取 client，未配默认模型时也只在真有 NL 规则触发调用才会 raise。
+    async def _complete(prompt: str) -> str:
+        return await LLMRunner.run_text(prompt, model=model_override, retries=0)
+
+    complete_fn = _complete if spec.nl_rules else None
+    return await dsl_evaluate(spec, expected, actual, complete_fn=complete_fn)
 
 
 async def _invoke_via_agent(

@@ -34,6 +34,8 @@ from chameleon.system.datasets.pii import (
 from chameleon.system.datasets.schemas import (
     BulkImportRequest,
     BulkImportResult,
+    CategoryDef,
+    CompareAnalysisResult,
     CompareItemCell,
     CompareRunsResult,
     CreateDatasetRequest,
@@ -153,7 +155,15 @@ async def get_dataset(session: AsyncSession, dataset_id: int) -> DatasetItemDTO:
 async def create_dataset(
     session: AsyncSession, req: CreateDatasetRequest
 ) -> DatasetItemDTO:
-    row = Dataset(name=req.name, description=req.description, item_count=0)
+    row = Dataset(
+        name=req.name,
+        description=req.description,
+        system_prompt=req.system_prompt,
+        categories=[c.model_dump() for c in req.categories]
+        if req.categories
+        else None,
+        item_count=0,
+    )
     session.add(row)
     await session.flush()
     await session.refresh(row)
@@ -170,6 +180,11 @@ async def update_dataset(
         row.name = req.name
     if req.description is not None:
         row.description = req.description
+    if req.system_prompt is not None:
+        row.system_prompt = req.system_prompt
+    # categories：传了就覆盖（[] 清空），None 不动
+    if req.categories is not None:
+        row.categories = [c.model_dump() for c in req.categories]
     await session.flush()
     await session.refresh(row)
     item = DatasetItemDTO.model_validate(row)
@@ -255,6 +270,8 @@ async def create_item(
             "pii_strategy": pii_strategy,
             "added_at": datetime.now(timezone.utc).isoformat(),
         },
+        note=(req.note or None),
+        category=(req.category or None),
     )
     session.add(item)
     await session.flush()
@@ -324,6 +341,11 @@ async def update_item(
         row.expected_output = req.expected_output
     if req.meta is not None:
         row.meta = req.meta
+    # note：传入即覆盖；空串 → 清空（None 表示「不动」，由前端按需带上）
+    if req.note is not None:
+        row.note = req.note or None
+    if req.category is not None:
+        row.category = req.category or None
     await session.flush()
     await session.refresh(row)
     item = DatasetItemItem.model_validate(row)
@@ -564,6 +586,8 @@ async def bulk_import_items(
                 "pii_strategy": pii_strategy,
                 "imported_at": datetime.now(timezone.utc).isoformat(),
             },
+            note=(raw.note or None),
+            category=(raw.category or None),
         )
         session.add(item)
         added += 1
@@ -817,14 +841,134 @@ async def compare_runs(session: AsyncSession, run_ids: list[int]) -> CompareRuns
                 dataset_item_id=item.id,
                 input_preview=preview,
                 expected_output=item.expected_output,
+                note=item.note,
+                category=item.category,
                 cells=cells,
             )
         )
 
+    ds = await _load_dataset(session, dataset_id)
+    categories = (
+        [CategoryDef.model_validate(c) for c in ds.categories]
+        if ds.categories
+        else None
+    )
     return CompareRunsResult(
         runs=[DatasetRunRow.model_validate(r) for r in runs],
         rows=rows,
+        categories=categories,
     )
+
+
+def _cell_text(payload: Any) -> str:
+    """从 {answer/sql/output/...} 或 dict 取可读文本（对比/分析展示用）。"""
+    if payload is None:
+        return ""
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, dict):
+        for k in ("answer", "sql", "output", "text", "content", "value"):
+            v = payload.get(k)
+            if isinstance(v, str):
+                return v
+        return json.dumps(payload, ensure_ascii=False)
+    return str(payload)
+
+
+def _to5(score: float | None) -> str:
+    """归一 [0,1] → 1-5 档展示（None→'-'）。"""
+    return "-" if score is None else f"{round(score * 4 + 1)}"
+
+
+def _build_compare_digest(ds_name: str, result: CompareRunsResult) -> str:
+    """把对比结果压成喂给 LLM 的紧凑文摘：模型概览 + 逐题得分表 + 分歧题实际 SQL。"""
+    runs = result.runs
+    rows = result.rows
+    n = len(rows)
+
+    def mean_of(run: DatasetRunRow) -> float | None:
+        s = run.summary or {}
+        v = s.get("mean_score") if isinstance(s, dict) else None
+        return v if isinstance(v, (int, float)) else None
+
+    # 模型概览（均分 + 5 档分布）
+    lines: list[str] = [f"数据集：{ds_name}（{n} 题，满分按 1-5 档）", "", "参评模型："]
+    ordered = sorted(runs, key=lambda r: (mean_of(r) or 0), reverse=True)
+    for run in ordered:
+        rid = run.id
+        dist = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0}
+        for row in rows:
+            cell = row.cells.get(rid)
+            sc = cell.score if cell else None
+            if sc is None:
+                continue
+            dist[round(sc * 4 + 1)] += 1
+        m = mean_of(run)
+        m5 = f"{m * 4 + 1:.2f}" if m is not None else "-"
+        lines.append(
+            f"- {run.name}：均分 {m5}/5 ｜ 优{dist[5]} 良{dist[4]} 中{dist[3]} 差{dist[2]} 劣{dist[1]}"
+        )
+
+    # 逐题得分表
+    lines += ["", "逐题得分（数字为 1-5 档；考察点即样本备注）："]
+    header = "# | 考察点 | " + " | ".join(r.name for r in runs)
+    lines.append(header)
+    divergence: list[tuple[float, CompareItemCell]] = []
+    for i, row in enumerate(rows, 1):
+        scs = [row.cells.get(r.id).score if row.cells.get(r.id) else None for r in runs]
+        nums = [s for s in scs if s is not None]
+        spread = (max(nums) - min(nums)) if len(nums) >= 2 else 0.0
+        divergence.append((spread, row))
+        note = (row.note or "—")[:20]
+        lines.append(
+            f"{i} | {note} | " + " | ".join(_to5(s) for s in scs)
+        )
+
+    # 分歧最大的题：附各模型实际 SQL（最多 6 题，给 AI 引用具体例子）
+    top = [r for sp, r in sorted(divergence, key=lambda x: x[0], reverse=True) if sp > 0][:6]
+    if top:
+        lines += ["", "分歧最大的题（附预期与各模型实际 SQL）："]
+        for row in top:
+            lines.append(f"\n【问题】{row.input_preview or ''}（考察点：{row.note or '—'}）")
+            lines.append(f"  预期：{_cell_text(row.expected_output)[:200]}")
+            for run in runs:
+                cell = row.cells.get(run.id)
+                if cell is None:
+                    continue
+                lines.append(
+                    f"  {run.name}（{_to5(cell.score)}分）：{_cell_text(cell.actual_output)[:200]}"
+                )
+    return "\n".join(lines)
+
+
+async def analyze_comparison(
+    session: AsyncSession, run_ids: list[int]
+) -> CompareAnalysisResult:
+    """对 N 个运行的对比结果做 AI 总结分析（走 aikit，返回 markdown）。"""
+    from chameleon.aikit import LLMRunner
+
+    result = await compare_runs(session, run_ids)
+    ds = await _load_dataset(session, result.runs[0].dataset_id)
+    digest = _build_compare_digest(ds.name, result)
+
+    system = (
+        "你是资深的模型评测分析师。下面给你若干模型在同一评测数据集上的逐题得分对比"
+        "（含考察点 note 与分歧题的实际输出）。请输出一份简洁、有洞察的 **Markdown 分析报告**，"
+        "包含：\n"
+        "1. **总体结论**：综合排名与差距。\n"
+        "2. **各模型强弱**：每个模型擅长 / 不擅长哪类能力，**引用具体题目的考察点和得分**为证。\n"
+        "3. **共性难点**：所有模型都失分的题型及可能原因。\n"
+        "4. **选型建议**：按场景给出推荐。\n"
+        "用中文，结论先行，多用要点，不要复述原始表格。"
+    )
+    analysis = await LLMRunner.run_text(
+        digest,
+        system=system,
+        channel="internal",
+        retries=1,
+        fallback="（分析生成失败，请稍后重试）",
+    )
+    return CompareAnalysisResult(analysis=analysis.strip())
 
 
 def _extract_preview(input_payload: dict) -> str | None:

@@ -2,10 +2,20 @@
  *  多版本对比 = URL 带多个 id；对比上一版本 = ?ids=parent,child。复用 RunCompareMatrix。 */
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, GitCompare } from 'lucide-react';
+import {
+  ArrowLeft,
+  GitCompare,
+  Image as ImageIcon,
+  Loader2,
+  Sheet,
+} from 'lucide-react';
+import { useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { RunCompareMatrix } from '@/system/datasets/components/run-compare-matrix';
+import {
+  RunCompareMatrix,
+  type RunCompareHandle,
+} from '@/system/datasets/components/run-compare-matrix';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type { EntityId } from '@/core/types/api';
 
@@ -38,6 +48,12 @@ export const RunComparePage = () => {
     enabled: !!dsId,
   });
 
+  const matrixRef = useRef<RunCompareHandle>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const exportBtn =
+    'inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-stone-600 transition hover:border-stone-300 hover:text-stone-800 disabled:opacity-60';
+
   return (
     <div className="space-y-3">
       <header className="flex items-center gap-2">
@@ -53,6 +69,35 @@ export const RunComparePage = () => {
           <GitCompare className="h-3.5 w-3.5 text-stone-500" /> 运行对比
         </span>
         <span className="text-[11.5px] text-stone-400">· {runIds.length} 个运行</span>
+
+        {runIds.length >= 2 && (
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => matrixRef.current?.exportImage()}
+              disabled={exporting}
+              title="把对比统计（图表 + AI 分析）和得分表导出为图片，方便分享"
+              className={exportBtn}
+            >
+              {exporting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ImageIcon className="h-3.5 w-3.5 text-stone-400" />
+              )}
+              {exporting ? '导出中…' : '导出图片'}
+            </button>
+            <button
+              type="button"
+              onClick={() => matrixRef.current?.exportExcel()}
+              disabled={exporting}
+              title="把逐题明细（各模型得分 + 输出）导出为 Excel"
+              className={exportBtn}
+            >
+              <Sheet className="h-3.5 w-3.5 text-stone-400" />
+              导出数据
+            </button>
+          </div>
+        )}
       </header>
 
       {runIds.length < 2 ? (
@@ -60,7 +105,12 @@ export const RunComparePage = () => {
           至少选 2 个运行才能对比；从运行详情页「对比上一版本」或运行列表「对比所选」进入
         </div>
       ) : (
-        <RunCompareMatrix runIds={runIds} />
+        <RunCompareMatrix
+          ref={matrixRef}
+          runIds={runIds}
+          datasetName={dsQ.data?.name}
+          onExportingChange={setExporting}
+        />
       )}
     </div>
   );

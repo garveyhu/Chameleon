@@ -203,11 +203,13 @@ const TreeRow: React.FC<TreeRowProps> = ({
         <span className={cn('w-16 shrink-0 font-medium', colorCls)}>{otype}</span>
 
         <span className="min-w-0 flex-1 truncate text-stone-800">
-          {/* 节点 span / 子观测显示 node_id（request_id 的 "{root}.{node_id}" 后缀），
-              根 trace 显 agent_key —— 对齐 LangSmith 的节点名 */}
+          {/* 节点 span / 子观测显示 node_id（request_id 的 "{root}.{node_id}" 后缀）；
+              generation 优先显模型 code（被测 / 裁判一眼可辨）；否则 agent_key */}
           {node.request_id.includes('.')
             ? node.request_id.slice(node.request_id.indexOf('.') + 1)
-            : node.agent_key}
+            : otype === 'generation' && node.model_code
+              ? node.model_code
+              : node.agent_key}
           {node.success ? null : (
             <span className="ml-1.5 inline-flex items-center gap-0.5 text-rose-500">
               <AlertCircle className="h-3 w-3" />

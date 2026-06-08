@@ -10,10 +10,11 @@
 
 import { useMemo, useRef, useState } from 'react';
 
-import { Loader2, Sparkles, Square } from 'lucide-react';
+import { Sparkles, Square } from 'lucide-react';
 
 import { Button } from '@/core/components/ui/button';
 import { Modal, ModalContent, ModalFooter, ModalHeader, ModalTitle } from '@/core/components/ui/modal';
+import { NeonLoader } from '@/core/components/ui/neon-loader';
 import { Textarea } from '@/core/components/ui/textarea';
 import { cn } from '@/core/lib/cn';
 import { toast } from '@/core/lib/toast';
@@ -24,10 +25,13 @@ import type {
   AiGenCandidate,
   AiGenStreamChunk,
   BulkImportItem,
+  CategoryDef,
 } from '@/system/datasets/types/dataset';
 
 interface Props {
   datasetId: EntityId;
+  /** 数据集能力维度（候选卡显示 AI 自动归类的标签） */
+  categories?: CategoryDef[];
   onClose: () => void;
   onDone: () => void;
 }
@@ -40,9 +44,16 @@ interface DeltaData {
 interface CandidateData {
   user_input?: string;
   answer?: string;
+  note?: string;
+  category?: string | null;
 }
 
-export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
+export const AiGenerateStudio = ({
+  datasetId,
+  categories,
+  onClose,
+  onDone,
+}: Props) => {
   const [stage, setStage] = useState<Stage>('form');
   const [task, setTask] = useState('');
   const [count, setCount] = useState(5);
@@ -79,6 +90,8 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
           cid: nextCid(),
           user_input: d.user_input ?? '',
           answer: d.answer ?? '',
+          note: d.note ?? '',
+          category: d.category ?? null,
           selected: true,
         },
       ]);
@@ -140,6 +153,10 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
     setCandidates(prev =>
       prev.map(c => (c.cid === cid ? { ...c, answer: value } : c)),
     );
+  const changeNote = (cid: string, value: string) =>
+    setCandidates(prev =>
+      prev.map(c => (c.cid === cid ? { ...c, note: value } : c)),
+    );
   const removeOne = (cid: string) =>
     setCandidates(prev => prev.filter(c => c.cid !== cid));
 
@@ -150,13 +167,24 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
     try {
       const refined = await datasetApi.refineCandidate(datasetId, {
         task_description: task.trim(),
-        candidate: { user_input: target.user_input, answer: target.answer },
+        candidate: {
+          user_input: target.user_input,
+          answer: target.answer,
+          note: target.note,
+          category: target.category,
+        },
         mode,
       });
       setCandidates(prev =>
         prev.map(c =>
           c.cid === cid
-            ? { ...c, user_input: refined.user_input, answer: refined.answer ?? '' }
+            ? {
+                ...c,
+                user_input: refined.user_input,
+                answer: refined.answer ?? '',
+                note: refined.note ?? c.note,
+                category: refined.category ?? c.category,
+              }
             : c,
         ),
       );
@@ -184,6 +212,8 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
       input_payload: { user_input: c.user_input },
       expected_output: c.answer ? { answer: c.answer } : null,
       meta: { source: 'ai_generate' },
+      note: c.note?.trim() || null,
+      category: c.category ?? null,
     }));
     setImporting(true);
     try {
@@ -254,10 +284,12 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
                       key={c.cid}
                       candidate={c}
                       index={i}
+                      categories={categories}
                       refining={refiningCids.has(c.cid)}
                       onToggle={toggleOne}
                       onChangeInput={changeInput}
                       onChangeAnswer={changeAnswer}
+                      onChangeNote={changeNote}
                       onOptimize={cid => void refine(cid, 'optimize')}
                       onRegenerate={cid => void refine(cid, 'regenerate')}
                       onRemove={removeOne}
@@ -282,10 +314,11 @@ export const AiGenerateStudio = ({ datasetId, onClose, onDone }: Props) => {
           )}
           {stage === 'streaming' && (
             <>
-              <span className="mr-auto inline-flex items-center gap-1.5 text-[11.5px] text-stone-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" /> AI 正在生成…已产出{' '}
-                {candidates.length} 条候选
-              </span>
+              <NeonLoader
+                size="sm"
+                className="mr-auto"
+                label={`AI 正在生成…已产出 ${candidates.length} 条候选`}
+              />
               <Button variant="danger-outline" size="sm" onClick={stopStream}>
                 <Square className="mr-1 h-3.5 w-3.5" /> 停止
               </Button>

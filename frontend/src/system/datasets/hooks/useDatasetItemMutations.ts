@@ -65,6 +65,7 @@ export const useDatasetItemMutations = (datasetId: EntityId) => {
                   ? { expected_output: req.expected_output }
                   : {}),
                 ...(req.meta !== undefined ? { meta: req.meta } : {}),
+                ...(req.note !== undefined ? { note: req.note || null } : {}),
               }
             : r,
         ),

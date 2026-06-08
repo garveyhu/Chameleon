@@ -34,6 +34,7 @@ import type { DatasetItemRow } from '@/system/datasets/types/dataset';
 import {
   EXPECTED_COL_WIDTH,
   META_COL_WIDTH,
+  NOTE_COL_WIDTH,
   defaultHiddenColumns,
   getColumnLabel,
   getColumnWidth,
@@ -235,6 +236,32 @@ const JsonCellPopover = ({
 };
 
 /** 渲染一个单元格：按 CellKind 分派 文本编辑 / 只读脱敏 / JSON 弹层。 */
+/** 备注单元格：行内可编辑文本，失焦提交（值变了才发请求）。外部值变化由父级 key 重挂。 */
+const NoteCell = ({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (next: string) => void;
+}) => {
+  const [text, setText] = useState(value);
+  const commit = () => {
+    const next = text.trim();
+    if (next !== value.trim()) onCommit(next);
+  };
+  return (
+    <textarea
+      value={text}
+      onChange={e => setText(e.target.value)}
+      onBlur={commit}
+      rows={1}
+      placeholder="备注…"
+      title="说明这条样本用于评测什么"
+      className="w-full resize-none rounded border border-transparent bg-transparent px-1 py-0.5 text-[12px] leading-snug text-stone-600 outline-none transition placeholder:text-stone-300 hover:border-stone-200 focus:border-blue-300 focus:bg-white"
+    />
+  );
+};
+
 const Cell = ({
   item,
   cell,
@@ -367,7 +394,14 @@ export const DatasetSpreadsheet = ({
 
   const tableMinWidth = useMemo(() => {
     const dyn = visibleKeys.reduce((sum, k) => sum + getColumnWidth(k), 0);
-    return (selectable ? 36 : 0) + dyn + EXPECTED_COL_WIDTH + META_COL_WIDTH + 48;
+    return (
+      (selectable ? 36 : 0) +
+      dyn +
+      EXPECTED_COL_WIDTH +
+      META_COL_WIDTH +
+      NOTE_COL_WIDTH +
+      48
+    );
   }, [visibleKeys, selectable]);
 
   if (loading && items.length === 0) {
@@ -378,7 +412,7 @@ export const DatasetSpreadsheet = ({
     );
   }
 
-  const totalCols = visibleKeys.length + 2 + (selectable ? 2 : 1);
+  const totalCols = visibleKeys.length + 3 + (selectable ? 2 : 1);
 
   return (
     <div className="space-y-3">
@@ -395,6 +429,7 @@ export const DatasetSpreadsheet = ({
             ))}
             <col style={{ width: EXPECTED_COL_WIDTH }} />
             <col style={{ width: META_COL_WIDTH }} />
+            <col style={{ width: NOTE_COL_WIDTH }} />
             <col style={{ width: 48 }} />
           </colgroup>
           <thead className="border-b border-stone-200/70 bg-[var(--color-warm-2)]/40">
@@ -425,6 +460,9 @@ export const DatasetSpreadsheet = ({
               </th>
               <th className="sticky top-0 px-3 py-2.5 text-left font-medium">
                 <span className="block truncate">元数据</span>
+              </th>
+              <th className="sticky top-0 px-3 py-2.5 text-left font-medium">
+                <span className="block truncate">备注</span>
               </th>
               <th className="px-3 py-2.5" />
             </tr>
@@ -510,6 +548,18 @@ export const DatasetSpreadsheet = ({
                         {metaSummary(item)}
                       </span>
                     )}
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <NoteCell
+                      key={`${item.id}:${item.note ?? ''}`}
+                      value={item.note ?? ''}
+                      onCommit={next =>
+                        update.mutate({
+                          itemId: item.id,
+                          req: { note: next },
+                        })
+                      }
+                    />
                   </td>
                   <td className="px-3 py-2 text-right align-top">
                     <button

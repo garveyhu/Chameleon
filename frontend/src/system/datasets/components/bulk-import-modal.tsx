@@ -61,8 +61,8 @@ const PII_TOOLTIP =
   '敏感信息（PII）指邮箱、手机号、身份证号等可识别到个人的信息。导入会按所选策略处理，避免把真实个人信息带入评测集。';
 
 const EXAMPLE = `# 每行一个 JSON（JSONL）或粘贴整个 JSON 数组
-# input_payload = 输入（必填，对象）；expected_output = 预期输出（可选）
-{"input_payload":{"q":"什么是 RAG？"},"expected_output":{"answer":"检索增强生成"}}
+# input_payload = 输入（必填，对象）；expected_output = 预期输出（可选）；note = 备注（可选）
+{"input_payload":{"q":"什么是 RAG？"},"expected_output":{"answer":"检索增强生成"},"note":"考察基础概念"}
 {"input_payload":{"q":"什么是 Agent？"},"expected_output":{"answer":"自主智能体"}}`;
 
 export const BulkImportModal = ({ datasetId, onClose, onDone }: Props) => {
@@ -133,7 +133,7 @@ export const BulkImportModal = ({ datasetId, onClose, onDone }: Props) => {
               </div>
             </div>
             <p className="mb-1 text-[10.5px] leading-snug text-stone-400">
-              上传 Excel/CSV（列：输入 / 理想回答 / 元数据），解析后可在下方预览
+              上传 Excel/CSV（列：输入 / 理想回答 / 元数据 / 备注），解析后可在下方预览
               校对；也支持每行一个 JSON（JSONL）或整个 JSON 数组手工粘贴。
             </p>
             <Textarea
@@ -283,6 +283,7 @@ function validateItems(arr: unknown[]): ParseResult {
         | Record<string, unknown>
         | null,
       meta: (obj.meta ?? null) as Record<string, unknown> | null,
+      note: typeof obj.note === 'string' ? obj.note : null,
     });
   }
   if (out.length > 1000) {

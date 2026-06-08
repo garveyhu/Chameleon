@@ -7,7 +7,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { NeonLoader } from '@/core/components/ui/neon-loader';
 import { useState } from 'react';
 
 import { AgentPicker } from '@/core/components/common/agent-picker';
@@ -62,6 +62,8 @@ type TargetKind = 'model' | 'agent';
 interface NewEvaluationWizardProps {
   /** 在数据集上下文则预填并锁定数据集 */
   presetDatasetId?: EntityId;
+  /** 数据集级系统提示词，开窗时预填到「系统提示词」（可逐次覆盖） */
+  defaultSystemPrompt?: string | null;
   judges?: string[];
   onClose: () => void;
   /** 立即跑成功后回调（跳运行详情整页） */
@@ -80,6 +82,7 @@ const defaultRunName = (): string => {
 
 export const NewEvaluationWizard = ({
   presetDatasetId,
+  defaultSystemPrompt,
   judges,
   onClose,
   onRunStarted,
@@ -95,6 +98,11 @@ export const NewEvaluationWizard = ({
   const [name, setName] = useState(() => defaultRunName());
   const [targetKind, setTargetKind] = useState<TargetKind>('model');
   const [modelOverride, setModelOverride] = useState('');
+  // 系统提示词覆盖（作被测模型的 system；如 text2sql 的库表 schema）
+  // 惰性预填数据集级 system_prompt —— 弹窗按需挂载，开窗即拿当时值，无需 effect
+  const [promptOverride, setPromptOverride] = useState(
+    () => defaultSystemPrompt ?? '',
+  );
   const [agentKey, setAgentKey] = useState('');
   // 归属 Key（雪花 id 以字符串存，'' = 不归属/内部评测）
   const [apiKeyId, setApiKeyId] = useState('');
@@ -170,6 +178,8 @@ export const NewEvaluationWizard = ({
         ...schemeFields,
         model_override:
           targetKind === 'model' ? modelOverride || undefined : undefined,
+        prompt_override:
+          targetKind === 'model' ? promptOverride.trim() || undefined : undefined,
         agent_key: targetKind === 'agent' ? agentKey || undefined : undefined,
         api_key_id: apiKeyId || undefined,
       };
@@ -182,6 +192,8 @@ export const NewEvaluationWizard = ({
         target_kind: 'agent',
         target_key: targetKind === 'agent' ? agentKey || null : null,
         model_override: targetKind === 'model' ? modelOverride || null : null,
+        prompt_override:
+          targetKind === 'model' ? promptOverride.trim() || null : null,
         judge: schemeFields.judge,
         judge_config: schemeFields.judge_config ?? null,
         template_id:
@@ -257,6 +269,22 @@ export const NewEvaluationWizard = ({
             </div>
           </div>
 
+          {targetKind === 'model' && (
+            <div className="space-y-1.5">
+              <Label>系统提示词（可选）</Label>
+              <textarea
+                value={promptOverride}
+                onChange={e => setPromptOverride(e.target.value)}
+                placeholder="作为被测模型的 system 提示。如 text2sql：在此粘贴库表 schema（DDL）+「只输出 SQL」等指令。"
+                rows={4}
+                className="w-full rounded-md border border-stone-300/70 bg-white px-2.5 py-1.5 font-mono text-[12px] text-stone-800 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-200"
+              />
+              <p className="text-[10.5px] leading-snug text-stone-400">
+                数据集样本只有「问题」，模型需要靠这里的 schema 才知道表结构。智能体被测时由智能体自身提示词决定，无需在此填写。
+              </p>
+            </div>
+          )}
+
           {runMode === 'now' && (
             <div className="space-y-1.5">
               <Label>归属 Key（可选）</Label>
@@ -308,14 +336,15 @@ export const NewEvaluationWizard = ({
             )}
           </div>
 
-          {runMut.isPending && (
-            <div className="flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/60 px-3 py-2 text-[11.5px] text-blue-700">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              评测进行中，可能需要数十秒，请勿关闭…
-            </div>
-          )}
         </ModalBody>
         <ModalFooter>
+          {runMut.isPending && (
+            <NeonLoader
+              size="sm"
+              className="mr-auto"
+              label="评测进行中，可能需要数分钟，请勿关闭…"
+            />
+          )}
           <Button variant="ghost" onClick={onClose} disabled={pending}>
             取消
           </Button>

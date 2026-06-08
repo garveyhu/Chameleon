@@ -1,7 +1,8 @@
 /** Trace 一键导出：结构化文字（Markdown，带元信息）+ 图片（PNG）。
- *  方便排查时把溯源情况整段复制 / 截图发出去。 */
-
-import { toPng } from 'html-to-image';
+ *  方便排查时把溯源情况整段复制 / 截图发出去。
+ *
+ *  通用的 exportImage / downloadText 已下沉到 @/core/lib/dom-export，这里只保留
+ *  trace 专属的 buildTraceText，并把两个工具重新导出以兼容既有引用。 */
 
 import { formatCost, formatDateTime, formatDurationMs } from '@/core/lib/format';
 import {
@@ -75,45 +76,5 @@ export const buildTraceText = (node: CallLogDetail): string => {
   return L.join('\n');
 };
 
-/** 触发浏览器下载一个文本文件 */
-export const downloadText = (filename: string, content: string): void => {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-/** 把 DOM 元素截成 PNG 下载（2x，白底，四周留白）
- *
- * 关键：画布显式扩出 padding（content-box + 锁定内容宽度），否则给节点加 padding 会把
- * 内容挤进更窄的盒子导致右侧截断。
- */
-export const exportImage = async (el: HTMLElement, filename: string): Promise<void> => {
-  const pad = 28;
-  // 向上取整避免分数像素截断；overflow:visible 防止克隆体在离屏渲染时出现纵向滚动条
-  // 吃掉右侧宽度导致内容截断。
-  const w = Math.ceil(el.scrollWidth);
-  const h = Math.ceil(el.scrollHeight);
-  const dataUrl = await toPng(el, {
-    backgroundColor: '#ffffff',
-    pixelRatio: 2,
-    cacheBust: true,
-    width: w + pad * 2,
-    height: h + pad * 2,
-    style: {
-      boxSizing: 'content-box',
-      width: `${w}px`,
-      height: `${h}px`,
-      padding: `${pad}px`,
-      margin: '0',
-      overflow: 'visible',
-    },
-  });
-  const a = document.createElement('a');
-  a.href = dataUrl;
-  a.download = filename;
-  a.click();
-};
+// 兼容既有引用：从 core 重新导出通用工具
+export { downloadText, exportImage } from '@/core/lib/dom-export';

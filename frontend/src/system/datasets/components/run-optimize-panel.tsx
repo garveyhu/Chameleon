@@ -2,10 +2,11 @@
  *  原 Prompt + 报告 + 优化后 Prompt 并排；「用优化后 Prompt 跑新一轮」保留。 */
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Play, Sparkles, X } from 'lucide-react';
+import { Play, Sparkles, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/core/components/ui/button';
+import { NeonLoader } from '@/core/components/ui/neon-loader';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { datasetApi } from '@/system/datasets/services/dataset';
@@ -71,7 +72,7 @@ export const RunOptimizePanel = ({ runId, datasetId, onClose, onApplied }: Props
             <Button size="sm" disabled={mut.isPending} onClick={() => mut.mutate()}>
               {mut.isPending ? (
                 <>
-                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> 分析 + 重写中…
+                  <NeonLoader size="xs" className="mr-1" /> 分析 + 重写中…
                 </>
               ) : (
                 <>
@@ -128,7 +129,7 @@ export const RunOptimizePanel = ({ runId, datasetId, onClose, onApplied }: Props
           >
             {applyMut.isPending ? (
               <>
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> 评测进行中…数十秒
+                <NeonLoader size="xs" className="mr-1" /> 评测进行中…可能数分钟
               </>
             ) : (
               <>

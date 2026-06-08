@@ -95,6 +95,8 @@ def build_llm_score_prompt(
     expected: Any,
     actual: Any,
     criteria: str | None = None,
+    question: str | None = None,
+    task_context: str | None = None,
 ) -> str:
     """构造 LLM 评分 prompt：按 criteria 出 1-5 整数档 + reason。
 
@@ -102,6 +104,9 @@ def build_llm_score_prompt(
         expected: 金标准（可空——纯按 criteria 评时不依赖）
         actual: 被测模型回答
         criteria: 用户多行评分细则；为空则退化为 llm_judge 基础语义
+        question: 本条样本的用户问题（让裁判知道被测在答什么）
+        task_context: 任务背景 = 数据集系统提示词（如 text2sql 的表结构 / 角色设定），
+            让裁判对任务有完整感知（如按 schema 判 SQL 表/字段是否合理）
 
     Returns:
         发给 LLM 的完整 prompt 字符串。
@@ -109,13 +114,21 @@ def build_llm_score_prompt(
     exp = _flatten_str(expected).strip()
     act = _flatten_str(actual).strip()
     crit = (criteria or "").strip()
+    q = (question or "").strip()
+    ctx = (task_context or "").strip()
 
     lines: list[str] = [
         "你是严格的评测打分员。请按下述【评分标准】给【实际回答】打一个 1 到 5 的整数档分",
         "（1=很差，2=较差，3=及格，4=良好，5=优秀），并用一句话说明理由。",
     ]
+    if ctx:
+        lines.append(
+            f"\n【任务背景（被测系统提示词，含表结构 / 角色设定等，据此理解任务）】\n{ctx}"
+        )
     if crit:
         lines.append(f"\n【评分标准】\n{crit}")
+    if q:
+        lines.append(f"\n【用户问题】\n{q}")
     if exp:
         lines.append(f"\n【期望答案（参考）】\n{exp}")
     lines.append(f"\n【实际回答】\n{act}")
@@ -129,6 +142,8 @@ def build_gsb_prompt(
     reference: Any,
     actual: Any,
     criteria: str | None = None,
+    question: str | None = None,
+    task_context: str | None = None,
 ) -> str:
     """构造 GSB 对比 prompt：判 actual 相对 reference 是 Good / Same / Bad。
 
@@ -136,6 +151,8 @@ def build_gsb_prompt(
         reference: 参照回答（来自 DatasetItem.reference_output）
         actual: 被测模型回答
         criteria: 可选的对比侧重说明
+        question: 本条样本的用户问题
+        task_context: 任务背景 = 数据集系统提示词，让裁判对任务有完整感知
 
     Returns:
         发给 LLM 的完整 prompt 字符串。
@@ -143,13 +160,19 @@ def build_gsb_prompt(
     ref = _flatten_str(reference).strip()
     act = _flatten_str(actual).strip()
     crit = (criteria or "").strip()
+    q = (question or "").strip()
+    ctx = (task_context or "").strip()
 
     lines: list[str] = [
         "你是严格的评测对比员。请对比【模型回答】相对【参照回答】的优劣，",
         "判定为 G（模型回答更好）、S（两者相当）、B（模型回答更差）之一，并用一句话说明理由。",
     ]
+    if ctx:
+        lines.append(f"\n【任务背景（被测系统提示词，据此理解任务）】\n{ctx}")
     if crit:
         lines.append(f"\n【对比侧重】\n{crit}")
+    if q:
+        lines.append(f"\n【用户问题】\n{q}")
     lines.append(f"\n【参照回答】\n{ref}")
     lines.append(f"\n【模型回答】\n{act}")
     lines.append(
