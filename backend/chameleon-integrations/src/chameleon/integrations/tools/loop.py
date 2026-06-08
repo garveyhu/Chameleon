@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -134,10 +135,14 @@ async def run_tool_calls(
     graph 无关的通用版：调用方（graph LLMNode / agentkit runner）传入 caller /
     related_id / extra；底层统一走 `execute.run_tool`，不分叉。单个工具异常被收敛成
     {ok: False, error}，不打断整轮（让模型看到失败再决策）。
+
+    **并行执行**：单轮 LLM 返多个 tool_call 时并发跑（asyncio.gather，保序）——降延迟，且
+    符合 parallel tool calling 语义。run_tool 自包含（config 载入 + trace 记录各用独立
+    AsyncSessionLocal session），并发安全；ContextVar 父 observation 在 gather 时各子协程
+    拿副本 → trace 树里并行工具是同一 ReAct 轮下的兄弟节点。
     """
-    tool_messages: list[ToolMessage] = []
-    records: list[dict[str, Any]] = []
-    for tc in tool_calls:
+
+    async def _one(tc: dict[str, Any]) -> tuple[ToolMessage, dict[str, Any]]:
         name = tc.get("name") or ""
         args = tc.get("args") or {}
         call_id = tc.get("id") or name
@@ -148,11 +153,16 @@ async def run_tool_calls(
         except Exception as e:  # noqa: BLE001
             logger.warning("tool {} failed: {}", name, e)
             result = {"tool_key": name, "ok": False, "data": None, "error": str(e)[:300]}
-        tool_messages.append(
-            ToolMessage(
-                content=json.dumps(result, ensure_ascii=False, default=str),
-                tool_call_id=call_id,
-            )
+        msg = ToolMessage(
+            content=json.dumps(result, ensure_ascii=False, default=str),
+            tool_call_id=call_id,
         )
-        records.append({"name": name, "args": args, "id": tc.get("id"), "result": result})
+        record = {"name": name, "args": args, "id": tc.get("id"), "result": result}
+        return msg, record
+
+    if not tool_calls:
+        return [], []
+    pairs = await asyncio.gather(*(_one(tc) for tc in tool_calls))  # 保序
+    tool_messages = [m for m, _ in pairs]
+    records = [r for _, r in pairs]
     return tool_messages, records
