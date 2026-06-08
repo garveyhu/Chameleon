@@ -49,7 +49,7 @@ async def handle(ctx: AgentRun):
     models=[ModelSlot("chat", "对话")],         # 具名模型槽（web 绑具体 model code）
     kb=True,                                     # 启用知识库检索
     tools=["http", "sql"],                       # 可用平台工具集（web 可启停子集）
-    config=[Opt("temperature", default=0.7)],    # 运营可调项；ctx.config["temperature"] 自动取 default←web 覆盖
+    config=[Opt("temperature", "温度", default=0.7)],  # 运营可调项；ctx.config["temperature"] 取 default←web 覆盖
     mcp_servers=[McpServerConfig(...)],          # 外部 MCP server，其 tools 自动进 run_with_tools（见 §6）
     call_agents=["sub-agent"],                   # 可经 ctx.call_agent 调的子 agent（沙箱下强制白名单）
     sandboxed=True,                              # 不可信代码隔离执行（见 §7）
