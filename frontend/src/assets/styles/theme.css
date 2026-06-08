@@ -151,3 +151,75 @@
 }
 
 /* smooth 默认，不需要覆盖 */
+
+/* ── 霓虹 loading（组件 NeonLoader，长耗时 AI 任务复用） ──────── */
+.neon-loader__ring {
+  /* 尺寸由组件经 --neon-d（直径）/ --neon-t（环厚）注入，缺省 md */
+  width: var(--neon-d, 16px);
+  height: var(--neon-d, 16px);
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 90deg,
+    transparent 0%,
+    #8b5cf6 35%,
+    #d946ef 55%,
+    #22d3ee 75%,
+    transparent 100%
+  );
+  /* 中空成环 */
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--neon-t, 2.5px)),
+    #000 0
+  );
+  mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - var(--neon-t, 2.5px)),
+    #000 0
+  );
+  filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.85))
+    drop-shadow(0 0 7px rgba(34, 211, 238, 0.5));
+  animation: neon-spin 0.85s linear infinite;
+}
+@keyframes neon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 流光渐变文字 */
+.neon-loader__text {
+  background: linear-gradient(90deg, #7c3aed, #d946ef, #22d3ee, #7c3aed);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: neon-shimmer 2.6s linear infinite;
+}
+@keyframes neon-shimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* 容器柔和辉光底 + 呼吸 */
+.neon-loader--glow {
+  background: rgba(139, 92, 246, 0.05);
+  box-shadow:
+    0 0 0 1px rgba(139, 92, 246, 0.22),
+    0 0 16px rgba(139, 92, 246, 0.14);
+  animation: neon-breathe 2.4s ease-in-out infinite;
+}
+@keyframes neon-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(139, 92, 246, 0.22),
+      0 0 12px rgba(139, 92, 246, 0.12);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(217, 70, 239, 0.3),
+      0 0 20px rgba(34, 211, 238, 0.2);
+  }
+}
