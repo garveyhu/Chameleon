@@ -38,6 +38,12 @@ class EnvSettings(PydanticBaseSettings):
     # 设了才放行 /v1/dev/* 并要求请求带 X-Dev-Token 匹配；生产**不设**=端点全 404。
     CHAMELEON_DEV_TOKEN: str | None = None
 
+    # OTel 出站：设了 endpoint 则每条 trace 完成后导出到外部 OTLP 收集器（LangSmith /
+    # Langfuse / Phoenix / Arize 等），GenAI semconv 属性映射。解除 trace 锁定恐惧。
+    # endpoint 形如 http://host:4318/v1/traces；headers 形如 "k1=v1,k2=v2"（鉴权）。
+    CHAMELEON_OTEL_EXPORT_ENDPOINT: str | None = None
+    CHAMELEON_OTEL_EXPORT_HEADERS: str | None = None
+
     # 数据库 URL override（如果设了就用这个，否则从 component.json 拼）
     DATABASE_URL: str | None = None
 

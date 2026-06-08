@@ -481,6 +481,7 @@ async def invoke(
         model_code=rollup_model,
         cost_usd=rollup_cost,
     )
+    _maybe_export_otel(request_id)
 
     return InvokeResponse(
         session_id=conv.session_id,
@@ -542,6 +543,20 @@ async def _ensure_session(
             message="session_id 已绑定其他终端用户，不可跨用户访问",
         )
     return conv
+
+
+def _maybe_export_otel(request_id: str) -> None:
+    """trace 落库后 fire-and-forget 导出到外部 OTLP 收集器（配了 endpoint 才发）。
+
+    薄委托：判断 + 派发到 integrations.otel_export，不阻塞响应、失败不影响主流程。
+    """
+    import asyncio
+
+    from chameleon.integrations.otel_export import export_trace, should_export
+
+    if not should_export():
+        return
+    asyncio.create_task(export_trace(request_id))
 
 
 async def _media_cost_fallback(
@@ -973,6 +988,7 @@ async def _stream_finalize(
                 cost_usd=rollup_cost,
             )
             await session.commit()
+            _maybe_export_otel(request_id)
         except Exception:  # noqa: BLE001
             logger.exception("stream_finalize write failed | request_id={}", request_id)
             await session.rollback()
