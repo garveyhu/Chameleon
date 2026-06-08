@@ -25,6 +25,36 @@ from chameleon.providers.local.sandbox.env import scrub_env
 _CHILD_TIMEOUT = 120.0
 
 
+def _to_messages(raw: list[dict[str, Any]]) -> list[Any]:
+    """OpenAI 风格消息 dict → LangChain 消息（含 assistant tool_calls / tool 回填）。"""
+    from langchain_core.messages import (
+        AIMessage,
+        HumanMessage,
+        SystemMessage,
+        ToolMessage,
+    )
+
+    out: list[Any] = []
+    for m in raw:
+        role = m.get("role")
+        content = m.get("content") or ""
+        if role == "system":
+            out.append(SystemMessage(content=content))
+        elif role == "assistant":
+            tcs = m.get("tool_calls") or []
+            if tcs:
+                out.append(AIMessage(content=content, tool_calls=[
+                    {"name": t["name"], "args": t.get("args") or {}, "id": t.get("id")} for t in tcs
+                ]))
+            else:
+                out.append(AIMessage(content=content))
+        elif role == "tool":
+            out.append(ToolMessage(content=content, tool_call_id=m.get("tool_call_id") or m.get("id") or ""))
+        else:
+            out.append(HumanMessage(content=content))
+    return out
+
+
 async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
     """主进程 broker 解析子进程的 ctx rpc，返 {ok, data|error}。scope 校验 Slice 3 严格化。"""
     method = frame.get("method")
@@ -35,6 +65,29 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
             model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
             resp = await model.ainvoke(msgs)
             return {"ok": True, "data": getattr(resp, "content", "") or ""}
+        if method == "chat_tools":
+            from chameleon.integrations.tools.loop import (
+                bind_schemas,
+                extract_tool_calls,
+                tool_schemas,
+            )
+
+            msgs = _to_messages(args.get("messages", []))
+            model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
+            schemas = tool_schemas(args.get("platform_tool_keys") or []) + (
+                args.get("local_tool_schemas") or []
+            )
+            client = bind_schemas(model, schemas) if schemas else model
+            resp = await client.ainvoke(msgs)
+            return {"ok": True, "data": {
+                "content": getattr(resp, "content", "") or "",
+                "tool_calls": extract_tool_calls(resp),
+            }}
+        if method == "run_tool":
+            from chameleon.integrations.tools import run_tool
+
+            res = await run_tool(args.get("name", ""), args.get("args") or {}, caller="sandbox")
+            return {"ok": True, "data": res}
         if method == "kb_search":
             docs = await broker.kb_search(
                 args.get("query", ""), kbs=args.get("kbs"), top_k=args.get("top_k"),

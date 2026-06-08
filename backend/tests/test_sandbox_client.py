@@ -77,6 +77,44 @@ async def test_kb_search_returns_docs():
 
 
 @pytest.mark.asyncio
+async def test_run_tool_loop_local_tool_and_reframe():
+    from chameleon.agentkit import tool
+
+    @tool(name="sbxcalc", description="算")
+    async def sbxcalc(x: int) -> dict:
+        return {"v": x * 2}
+
+    state = {"n": 0}
+
+    def responder(f):
+        rid = f["id"]
+        if f["method"] == "chat_tools":
+            state["n"] += 1
+            if state["n"] == 1:
+                return {"t": "rpc_result", "id": rid, "ok": True, "data": {
+                    "content": "", "tool_calls": [{"name": "sbxcalc", "args": {"x": 5}, "id": "c1"}]}}
+            return {"t": "rpc_result", "id": rid, "ok": True, "data": {"content": "结果是10", "tool_calls": []}}
+        return {"t": "rpc_result", "id": rid, "ok": True, "data": {}}
+
+    io = _FakeIO(responder)
+    emitted: list = []
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=emitted.append)
+    chunks = [
+        c
+        async for c in t.run_tool_loop(
+            messages=[("user", "算 5*2")], slot="chat", model=None,
+            platform_keys=[], local_tools=[sbxcalc.__tool_spec__], max_steps=4,
+        )
+    ]
+    assert "结果是10" in "".join(chunks)
+    # 本地 @tool 在子进程执行（不走 run_tool rpc），结果经 tool_result 事件帧
+    assert any(
+        e["event"]["type"] == "tool_result" and e["event"]["data"]["result"]["data"] == {"v": 10}
+        for e in emitted
+    )
+
+
+@pytest.mark.asyncio
 async def test_emit_writes_event_frame():
     from chameleon.providers.base.types import StreamEvent, StreamEventType
 

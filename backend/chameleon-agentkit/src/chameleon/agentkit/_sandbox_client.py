@@ -155,8 +155,52 @@ class SandboxClientTransport(RuntimeTransport):
     def structured_model(self, *, slot=None, model=None, schema):  # noqa: ANN001, ANN201
         raise NotImplementedError("sandbox Slice 2+：structured 经 rpc")
 
-    def run_tool_loop(self, *, messages, slot, model, platform_keys, local_tools, max_steps, max_tokens=None):  # noqa: ANN001, ANN201
-        raise NotImplementedError("sandbox Slice 2：工具循环（在子进程跑，模型/平台工具经 rpc）")
+    async def run_tool_loop(  # noqa: ANN201
+        self, *, messages, slot, model, platform_keys, local_tools, max_steps, max_tokens=None,
+    ):  # noqa: ANN001
+        """ReAct 循环跑在子进程：每轮 chat_tools rpc（模型带工具）→ 本地 @tool 子进程执行 /
+        平台工具经 run_tool rpc → 回填续跑。模型/平台工具凭据仍只在主进程 broker。"""
+        local_by_name = {s.name: s for s in local_tools}
+        local_schemas = [
+            {"type": "function", "function": {
+                "name": s.name, "description": s.description, "parameters": s.parameters_schema}}
+            for s in local_tools
+        ]
+        convo = to_wire_messages(messages)
+        for _step in range(max_steps):
+            out = await self._rpc(
+                "chat_tools",
+                {"messages": convo, "slot": slot, "model": model,
+                 "platform_tool_keys": list(platform_keys or []), "local_tool_schemas": local_schemas},
+            ) or {}
+            calls = out.get("tool_calls") or []
+            if not calls:
+                text = out.get("content") or ""
+                if text:
+                    yield text
+                return
+            convo.append({"role": "assistant", "content": out.get("content") or "", "tool_calls": calls})
+            for c in calls:
+                self._emit_fn({"t": "event", "event": {"type": "tool_call", "data": c}})
+                name = c.get("name") or ""
+                args = c.get("args") or {}
+                if name in local_by_name:
+                    try:
+                        data = await local_by_name[name].handler(**args)
+                        result = {"tool_key": name, "ok": True, "data": data, "error": None}
+                    except Exception as e:  # noqa: BLE001
+                        result = {"tool_key": name, "ok": False, "data": None, "error": str(e)}
+                else:
+                    result = await self._rpc("run_tool", {"name": name, "args": args})
+                self._emit_fn({"t": "event", "event": {"type": "tool_result",
+                                                       "data": {"name": name, "result": result}}})
+                convo.append({"role": "tool", "tool_call_id": c.get("id") or name,
+                              "content": json.dumps(result, ensure_ascii=False, default=str)})
+        # 达上限收口（无强制工具）
+        final = await self._rpc("chat", {"messages": convo, "slot": slot, "model": model})
+        text = final if isinstance(final, str) else (final or {}).get("content", "")
+        if text:
+            yield text
 
     async def memory_get(self, key, default=None):  # noqa: ANN001, ANN201
         raise NotImplementedError("sandbox Slice 3：memory")
