@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 from loguru import logger
@@ -81,34 +82,39 @@ def _validate(spec_dict: dict[str, Any]) -> GraphSpec:
 
 async def generate_graph_spec(description: str) -> dict[str, Any]:
     """NL 描述 → 校验通过的 GraphSpec dict。失败把错误喂回重试一次。"""
-    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-    from chameleon.integrations.llms.factory import resolve_llm
+    from chameleon.aikit import LLMRunner
+    from chameleon.core.observe import TraceContext, open_trace_scope
 
-    client = await resolve_llm(None)
     messages: list[Any] = [
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(content=f"描述：{description}\n\n只输出 JSON。"),
     ]
 
     last_err = ""
-    for attempt in range(2):
-        ai = await client.ainvoke(messages)
-        text = ai.content if hasattr(ai, "content") else str(ai)
-        try:
-            spec_dict = _extract_json(str(text))
-            _validate(spec_dict)
-            logger.info("AI 编排生成成功 | attempt={}", attempt + 1)
-            return spec_dict
-        except Exception as e:  # noqa: BLE001
-            last_err = str(e)[:300]
-            logger.warning("AI 编排生成校验失败（attempt {}）: {}", attempt + 1, last_err)
-            messages.append(ai)
-            messages.append(
-                HumanMessage(
-                    content=f"上面的 JSON 校验失败：{last_err}。请修正后只重新输出 JSON。"
+    # 双轮（生成→校验失败喂回修正）共用一个 internal trace，两次 generation 归同一棵树
+    async with open_trace_scope(
+        TraceContext(request_id=uuid.uuid4().hex, channel="internal")
+    ):
+        for attempt in range(2):
+            text = await LLMRunner.run_text(messages, retries=0)
+            try:
+                spec_dict = _extract_json(str(text))
+                _validate(spec_dict)
+                logger.info("AI 编排生成成功 | attempt={}", attempt + 1)
+                return spec_dict
+            except Exception as e:  # noqa: BLE001
+                last_err = str(e)[:300]
+                logger.warning(
+                    "AI 编排生成校验失败（attempt {}）: {}", attempt + 1, last_err
                 )
-            )
+                messages.append(AIMessage(content=text))
+                messages.append(
+                    HumanMessage(
+                        content=f"上面的 JSON 校验失败：{last_err}。请修正后只重新输出 JSON。"
+                    )
+                )
 
     raise BusinessError(
         ResultCode.InternalError,
@@ -124,28 +130,19 @@ async def suggest_followups(
     model_code: 调用方按业务上下文（如嵌入式应用关联智能体的 default_model）
                 传入；None 时走系统默认 LLM。
     """
-    from langchain_core.messages import HumanMessage, SystemMessage
+    from chameleon.aikit import LLMRunner
 
-    from chameleon.integrations.llms.factory import resolve_llm
-
-    try:
-        client = await resolve_llm(model_code)
-        ai = await client.ainvoke(
-            [
-                SystemMessage(
-                    content="基于刚才的问答，给出 3 个用户可能想接着问的简短问题，"
-                    "每行一个，不要编号 / 不要多余文字。"
-                ),
-                HumanMessage(content=f"问题：{question}\n回答：{answer}\n\n3 个追问："),
-            ]
-        )
-        text = str(ai.content if hasattr(ai, "content") else ai)
-        lines = [
-            ln.strip("-•0123456789. 　\t").strip()
-            for ln in text.splitlines()
-            if ln.strip()
-        ]
-        return [ln for ln in lines if ln][:3]
-    except Exception as e:  # noqa: BLE001
-        logger.warning("suggest_followups failed: {}", e)
-        return []
+    text = await LLMRunner.run_text(
+        f"问题：{question}\n回答：{answer}\n\n3 个追问：",
+        model=model_code,
+        system="基于刚才的问答，给出 3 个用户可能想接着问的简短问题，"
+        "每行一个，不要编号 / 不要多余文字。",
+        retries=0,
+        fallback="",  # 失败返空串 → 解析得空列表（容错不抛）
+    )
+    lines = [
+        ln.strip("-•0123456789. 　\t").strip()
+        for ln in text.splitlines()
+        if ln.strip()
+    ]
+    return [ln for ln in lines if ln][:3]

@@ -1,25 +1,19 @@
 [project]
-name = "chameleon-engine"
+name = "chameleon-aikit"
 version = "1.0.0"
-description = "Chameleon 编排引擎层（graph 工作流引擎+节点 / retrieval 检索管线 / eval 评测 / a2a / jobs）"
+description = "Chameleon 对内 AI 任务库（系统内部用 LLM 丰富功能的统一执行层 + 通用任务 + 注册表）"
 requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
-    "chameleon-data",
     "chameleon-integrations",
-    "chameleon-aikit",
-    "pydantic>=2.7",
-    "sqlalchemy[asyncio]>=2.0",
     "langchain-core>=0.3",
-    "httpx>=0.27",
+    "pydantic>=2.7",
     "loguru>=0.7",
 ]
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
-chameleon-data = { workspace = true }
 chameleon-integrations = { workspace = true }
-chameleon-aikit = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

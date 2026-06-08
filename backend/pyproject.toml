@@ -1,6 +1,7 @@
 # Chameleon backend workspace 根 —— virtual workspace（root 本身非 project）
 # 包结构（清晰分层）：
 #   chameleon-core/                    基础设施 + AI infra + 共享 ORM
+#   chameleon-aikit/                   对内 AI 任务库（系统内部用 LLM 的统一执行层 + 通用任务 + 注册表）
 #   chameleon-providers/base/          Provider 协议（types / registry）
 #   chameleon-providers/local/         本地 in-process provider（BaseAgent 子类）
 #   chameleon-providers/dify/          远程 SaaS provider
@@ -16,6 +17,7 @@ members = [
     "chameleon-core",
     "chameleon-data",
     "chameleon-integrations",
+    "chameleon-aikit",
     "chameleon-engine",
     "chameleon-providers/*",
     "chameleon-agentkit",
@@ -75,6 +77,7 @@ root_packages = [
     "chameleon.core",
     "chameleon.data",
     "chameleon.integrations",
+    "chameleon.aikit",
     "chameleon.engine",
 ]
 include_external_packages = true
@@ -93,13 +96,15 @@ forbidden_modules = [
 # core 零 ignore：所有实现/便利 facade 已迁出 core 或删除，core 不 import 任何 integrations。
 
 [[tool.importlinter.contracts]]
-name = "分层基座单向：core ← data ← integrations ← engine（禁反向 / 越层）"
+name = "分层基座单向：core ← data ← integrations ← aikit ← engine（禁反向 / 越层）"
 type = "layers"
 layers = [
     "chameleon.engine",
+    "chameleon.aikit",
     "chameleon.integrations",
     "chameleon.data",
     "chameleon.core",
 ]
+# aikit 插在 integrations 上、engine 下：engine/system 可依赖 aikit；aikit 只依赖 core+integrations，零反向。
 # 零 ignore_imports：core 已是纯协议薄壳，对 integrations 零反向依赖。
 

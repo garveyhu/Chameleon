@@ -16,11 +16,6 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.core.api.exceptions import BusinessError, ResultCode
-from chameleon.core.observe import (
-    TraceContext,
-    reset_trace_context,
-    set_trace_context,
-)
 from chameleon.data.constants import Channel
 from chameleon.data.models import DatasetItem, DatasetRun, DatasetRunItem
 
@@ -150,9 +145,7 @@ def _short(v: Any) -> str:
 
 
 async def _llm_optimize(original: str, weak_block: str, n: int) -> dict[str, str]:
-    from langchain_core.messages import HumanMessage
-
-    from chameleon.integrations.llms.factory import llm as get_llm
+    from chameleon.aikit import LLMRunner
 
     prompt = (
         "你是 Prompt 优化专家。下面是一个 System Prompt 及它在评测中得分较低的样本"
@@ -163,20 +156,13 @@ async def _llm_optimize(original: str, weak_block: str, n: int) -> dict[str, str
         '只输出 JSON：{"optimized_prompt":"<重写后的完整 System Prompt>",'
         '"report":"<优化报告：低分共性缺陷 + 改了哪些点 + 为什么这样改>"}'
     )
-    request_id = uuid.uuid4().hex
-    token = set_trace_context(
-        TraceContext(
-            request_id=request_id,
-            channel=Channel.EVAL.value,
-            app_id=EVAL_APP_ID,
-            session_id=f"eval-opt-{request_id[:8]}",
-        )
+    raw = await LLMRunner.run_text(
+        prompt,
+        channel=Channel.EVAL.value,
+        app_id=EVAL_APP_ID,
+        session_id=f"eval-opt-{uuid.uuid4().hex[:8]}",
+        retries=0,
     )
-    try:
-        ai = await get_llm(None).ainvoke([HumanMessage(content=prompt)])
-        raw = ai.content if hasattr(ai, "content") else str(ai)
-    finally:
-        reset_trace_context(token)
     return _parse(str(raw))
 
 
