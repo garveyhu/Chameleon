@@ -38,6 +38,7 @@ async def handle(ctx: AgentRun):
 | 子智能体（A2A） | `await ctx.call_agent("other-agent", input=...)` | 进程内 A2A + 深度/预算闸 |
 | 并行扇出（map-reduce） | `await ctx.gather([("agent-a", q1), ("agent-b", q2)])` | 并发跑多子智能体 + 预算按分支均分防超支 + 保序返回 |
 | 路由分派（supervisor） | `await ctx.route(query, [("sql-bot","查库"),("doc-bot","查文档")])` | LLM 据能力描述选最合适子智能体委托 + 路由决策进 trace |
+| 移交（handoff） | `await ctx.handoff("refund-bot", instruction="处理退货")` | 把完整对话上下文（history+query）打包移交目标接手作答 |
 | 自定义追踪段 | `async with ctx.span("retrieve"): ...` | 自动 trace 树 + rollup |
 | 逃生口 | `m = ctx.wrap(my_langchain_model)` | 用自带模型（绕路由/计费，极端定制） |
 

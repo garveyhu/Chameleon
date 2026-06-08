@@ -404,6 +404,25 @@ class AgentRun:
         """
         return await self._t.gather(calls)
 
+    async def handoff(self, target: str, *, instruction: str | None = None) -> str:
+        """把当前对话**移交**给目标子智能体接手作答（控制权转移）。
+
+        与 call_agent 的区别：handoff 把本轮**完整对话上下文**（history + 当前 query）打包
+        进 input 传给目标，目标据全局上下文接续——适合"分诊后转专家"等场景。call_agent 只
+        传一条 input。A2A 路径有意不透传 history，故由此处按约定打包（见 engine a2a 设计）。
+        `instruction` 可选，给目标的额外接手指示。
+
+        注：这是"带上下文一次性委托"，非 OpenAI 式可来回的双向 handoff（目标答完即返）。
+        """
+        parts: list[str] = []
+        for m in self.history:
+            role = getattr(m, "role", "user")
+            parts.append(f"{role}: {m.text()}")
+        parts.append(f"user: {self.query}")
+        convo = "\n".join(parts)
+        head = instruction.strip() if instruction else "请接手以下对话并作答。"
+        return await self.call_agent(target, input=f"{head}\n\n对话上下文：\n{convo}")
+
     async def route(
         self,
         query: str,

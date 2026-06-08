@@ -396,6 +396,31 @@ async def test_route_supervisor_picks_and_delegates():
 
 
 @pytest.mark.asyncio
+async def test_handoff_packs_conversation_context():
+    """ctx.handoff：把完整对话上下文（history + query）打包移交目标接手。"""
+    import types
+
+    from chameleon.agentkit._runtime import AgentRun
+    from chameleon.agentkit.testing import FakeTransport
+
+    hist = [
+        types.SimpleNamespace(role="user", text=lambda: "我想退货"),
+        types.SimpleNamespace(role="assistant", text=lambda: "请提供订单号"),
+    ]
+    t = FakeTransport(call_agent_reply="EXPERT_ANSWER")
+    run = AgentRun(
+        transport=t, agent_key="triage", query="订单 12345", messages=[],
+        history=hist, session_id=None, config={},
+    )
+    ans = await run.handoff("refund-bot", instruction="处理退货")
+    assert ans == "EXPERT_ANSWER"
+    _kind, (target, inp) = t.invocations[-1]
+    assert target == "refund-bot"
+    # 完整上下文 + 接手指示都在 input 里（call_agent 只传一条 input，故打包）
+    assert "处理退货" in inp and "我想退货" in inp and "订单 12345" in inp
+
+
+@pytest.mark.asyncio
 async def test_route_single_candidate_direct():
     """单候选 → 直接委托，不走 LLM 路由。"""
     from chameleon.agentkit._runtime import AgentRun
