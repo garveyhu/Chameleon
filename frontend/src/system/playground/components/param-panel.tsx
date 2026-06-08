@@ -109,17 +109,20 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
     }
   };
 
-  // 会话恢复：有 invoke_agent_key 但缺生成模型信息 → 补拉，让右栏生成面板能渲染
+  // 会话恢复：缺生成模型信息 → 补拉，让右栏生成面板能渲染。
+  // 优先 invoke_agent_key；老会话（commit a202ce9 持久化前建的）只存了 bound_agent_key，
+  // 回退探测它是不是生成应用（source=comfyui），是则自愈回调用模式（补 invoke_agent_key）。
   useEffect(() => {
-    const key = params.invoke_agent_key;
+    const key = params.invoke_agent_key || params.bound_agent_key;
     if (!key || params.media_model_id) return;
     let cancelled = false;
     agentApi
       .prefillConfig(key)
       .then(cfg => {
-        if (cancelled || cfg.source !== 'comfyui') return;
+        if (cancelled || cfg.source !== 'comfyui' || !cfg.media_model_id) return;
         onChange({
           ...params,
+          invoke_agent_key: key,
           media_kind: cfg.media_kind ?? null,
           media_model_id: cfg.media_model_id ?? null,
         });
@@ -129,7 +132,7 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.invoke_agent_key, params.media_model_id]);
+  }, [params.invoke_agent_key, params.bound_agent_key, params.media_model_id]);
 
   return (
     <div className={cn('space-y-3 text-[12.5px]', className)}>
