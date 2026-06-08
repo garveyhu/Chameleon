@@ -83,3 +83,38 @@ async def test_real_chatopenai_client_e2e_single_complete():
         out = await run_standalone(solo, "你好", transport=t)
 
     assert out == "真实往返答案"
+
+
+def _openai_sse(chunks: list[str]) -> bytes:
+    """OpenAI chat.completion 流式 SSE 字节（delta 增量 + [DONE]）。"""
+    lines = []
+    for c in chunks:
+        payload = {"choices": [{"index": 0, "delta": {"content": c}, "finish_reason": None}]}
+        lines.append(f"data: {json.dumps(payload, ensure_ascii=False)}\n\n")
+    lines.append("data: [DONE]\n\n")
+    return "".join(lines).encode("utf-8")
+
+
+@pytest.mark.asyncio
+async def test_real_chatopenai_client_e2e_streaming():
+    """真 ChatOpenAI 流式客户端 e2e：ctx.stream → astream → SSE 解析（RAG 示例用的流式路径）。"""
+    from langchain_openai import ChatOpenAI
+
+    @agent(key="e2e-stream", name="s", models=[ModelSlot("chat", "对话")])
+    async def streamer(ctx: AgentRun):
+        async for delta in ctx.stream(system="助手", user=ctx.query):
+            yield delta
+
+    with respx.mock:
+        respx.post(url__regex=r".*/chat/completions").mock(
+            return_value=httpx.Response(
+                200,
+                content=_openai_sse(["你", "好", "世界"]),
+                headers={"content-type": "text/event-stream"},
+            )
+        )
+        model = ChatOpenAI(model="gpt-4o-mini", api_key="sk-test")
+        out = await run_standalone(streamer, "hi", transport=StandaloneTransport(model=model))
+
+    # 真客户端解析 SSE 增量 → ctx.stream 逐块 yield → 拼成完整答案
+    assert out == "你好世界"
