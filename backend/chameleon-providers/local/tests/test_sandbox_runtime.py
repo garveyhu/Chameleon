@@ -10,6 +10,19 @@ import pytest
 from chameleon.providers.base.types import StreamEventType
 from chameleon.providers.local.sandbox import run_sandboxed
 
+_DOCKER_AGENT = textwrap.dedent(
+    '''
+    import os
+    from chameleon.agentkit import agent, AgentRun, ModelSlot
+
+    @agent(key="dkr-iso", name="t", models=[ModelSlot("chat", "c")])
+    async def handle(ctx: AgentRun):
+        db = os.environ.get("DATABASE_URL", "<scrubbed>")
+        ans = await ctx.complete(system="s", user=ctx.query)
+        yield f"{ans}|db={db}"
+    '''
+)
+
 _AGENT = textwrap.dedent(
     '''
     from chameleon.agentkit import agent, AgentRun, ModelSlot
@@ -29,8 +42,8 @@ class _FakeMsg:
 
 class _FakeModel:
     async def ainvoke(self, messages, **_kw):
-        # 校验 user 消息过线
-        assert any(m[1] == "杭州" for m in messages if isinstance(m, tuple))
+        # 校验有 user 消息过线（不绑定具体内容，便于多用例复用）
+        assert any(isinstance(m, tuple) and m[0] == "user" for m in messages)
         return _FakeMsg("BROKER_RESOLVED")
 
     async def astream(self, messages, **_kw):
@@ -73,19 +86,64 @@ async def test_run_sandboxed_parent_loop_and_broker(tmp_path):
 
 
 def test_build_docker_command_isolation_flags():
-    """Phase 3 docker 命令烘焙全部隔离 flags（真不可信隔离的安全核心）。"""
+    """Phase 3 docker 命令烘焙全部隔离 flags（真不可信隔离的安全核心，含评审5 加固）。"""
     from chameleon.providers.local.sandbox import build_docker_command
 
-    cmd = build_docker_command("chm-sbx:latest", "/host/agent/src", mem_mb=256)
+    cmd = build_docker_command("chm-sbx:latest", "/host/agent/src", mem_mb=256, name="chm-sbx-x")
     s = " ".join(cmd)
     assert "--network none" in s  # 无网络出站（防 SSRF/外传）
     assert "--read-only" in s  # 只读 rootfs（host .env/config 不挂入→读不到盘上凭据）
+    assert "--user 65534:65534" in s  # 非 root（评审5 加固：与下层 runtime 对齐）
+    assert "--cap-drop ALL" in s  # 清空 capability（评审5 加固）
     assert "--memory 256m" in s and "--pids-limit 256" in s  # 内存/进程限
     assert "--security-opt no-new-privileges" in s
+    assert "--name chm-sbx-x" in s  # 确定性清理（finally docker kill 兜底）
     assert "/host/agent/src:/agent_src:ro" in s  # agent 源码只读挂载
     # 不挂 config/凭据目录、不传 host 凭据 env
     assert "component.json" not in s and "DATABASE_URL" not in s
     assert cmd[-3:] == ["python", "-m", "chameleon.agentkit._sandbox_child"]
+
+
+def _docker_image_ready(image: str) -> bool:
+    import shutil
+    import subprocess
+
+    if not shutil.which("docker"):
+        return False
+    try:
+        r = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True, timeout=10,
+        )
+        return r.returncode == 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_SBX_IMAGE = "chm-agent-sandbox:lean"
+
+
+@pytest.mark.skipif(
+    not _docker_image_ready(_SBX_IMAGE),
+    reason=f"需 docker + 预构镜像 {_SBX_IMAGE}（CI 先 docker build -f docker/sandbox.Dockerfile）",
+)
+@pytest.mark.asyncio
+async def test_run_sandboxed_docker_real_isolation(tmp_path, monkeypatch):
+    """真 docker 容器隔离 e2e：handle 在 --network none --read-only 容器跑，读不到 host 凭据。"""
+    (tmp_path / "dkr_iso_mod.py").write_text(_DOCKER_AGENT, encoding="utf-8")
+    monkeypatch.syspath_prepend(str(tmp_path))  # find_spec 定位 agent 源码
+    monkeypatch.setenv("CHAMELEON_SANDBOX_RUNTIME", "docker")
+    monkeypatch.setenv("CHAMELEON_SANDBOX_IMAGE", _SBX_IMAGE)
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://secret:pw@h:5432/db")  # 容器不应见
+    deltas = []
+    async for ev in run_sandboxed(
+        module="dkr_iso_mod", attr="handle", query="hi", broker=_FakeBroker(),
+    ):
+        if ev.type == StreamEventType.delta:
+            deltas.append(ev.data.get("text", ""))
+    text = "".join(deltas)
+    assert "BROKER_RESOLVED" in text  # broker over docker stdio 往返通
+    assert "db=<scrubbed>" in text  # 容器读不到 host DATABASE_URL（FS/env 真隔离）
 
 
 @pytest.mark.asyncio

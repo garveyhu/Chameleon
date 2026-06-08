@@ -79,6 +79,7 @@ root_packages = [
     "chameleon.integrations",
     "chameleon.aikit",
     "chameleon.engine",
+    "chameleon.agentkit",
 ]
 include_external_packages = true
 
@@ -107,4 +108,18 @@ layers = [
 ]
 # aikit 插在 integrations 上、engine 下：engine/system 可依赖 aikit；aikit 只依赖 core+integrations，零反向。
 # 零 ignore_imports：core 已是纯协议薄壳，对 integrations 零反向依赖。
+
+[[tool.importlinter.contracts]]
+name = "agentkit 公共 SDK 精简：禁依赖 data / 重 ORM（锁 lean 不变量）"
+type = "forbidden"
+source_modules = ["chameleon.agentkit"]
+forbidden_modules = [
+    "chameleon.data",
+    "sqlalchemy",
+    "langchain",
+    "langchain_openai",
+]
+# 运行时协议类型在 chameleon.core.runtime_types；agentkit 只依赖 core + mcp，不经
+# providers-base→data 拉重依赖链（保公共 SDK + 沙箱子进程镜像精简）。providers 非 root_package
+# 故以 data/sqlalchemy 为代理捕获"拉重依赖"回退。
 

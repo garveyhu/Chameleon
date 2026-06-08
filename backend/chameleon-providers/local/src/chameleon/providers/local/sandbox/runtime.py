@@ -199,30 +199,36 @@ async def _stream_chat(broker: Any, proc: Any, frame: dict[str, Any]) -> None:
 
 
 def build_docker_command(
-    image: str, agent_src: str, *, mem_mb: int = 512, cpus: str = "1.0"
+    image: str, agent_src: str, *, mem_mb: int = 512, cpus: str = "1.0", name: str | None = None
 ) -> list[str]:
     """构造 Phase 3 docker 隔离执行命令（烘焙全部隔离 flags）。
 
     真"接不可信陌生人代码"档：--network none（无出站）+ --read-only（只读 rootfs，host
-    .env/config 根本不挂入 → 读不到盘上凭据）+ mem/pids/cpus 限 + no-new-privileges +
-    agent 源码只读挂载（无凭据）+ 不传任何 host env。stdio 帧协议与子进程档一致。镜像须
-    预装 chameleon-agentkit（child 只需 agentkit + agent 包，模型调用在主进程 broker）。
+    .env/config 根本不挂入 → 读不到盘上凭据）+ 非 root（--user nobody）+ --cap-drop ALL +
+    no-new-privileges + mem/pids/cpus 限 + agent 源码只读挂载（无凭据）+ 不传任何 host env。
+    stdio 帧协议与子进程档一致。镜像须预装 chameleon-agentkit（child 只需 agentkit + agent
+    包，模型调用在主进程 broker）。--name 供确定性清理（finally 显式 docker kill 兜底）。
     """
-    return [
-        "docker", "run", "--rm", "-i",
+    cmd = ["docker", "run", "--rm", "-i"]
+    if name:
+        cmd += ["--name", name]
+    cmd += [
         "--network", "none",
         "--read-only",
+        "--user", "65534:65534",          # nobody:nogroup —— 容器内非 root（与下层 runtime 对齐）
+        "--cap-drop", "ALL",              # 清空 capability
+        "--security-opt", "no-new-privileges",
         "--tmpfs", "/tmp:size=64m",
         "--memory", f"{mem_mb}m", "--memory-swap", f"{mem_mb}m",
         "--pids-limit", "256",
         "--cpus", cpus,
-        "--security-opt", "no-new-privileges",
         "-v", f"{agent_src}:/agent_src:ro",
         "-e", "PYTHONPATH=/agent_src",
         "-e", "CHAMELEON_SANDBOX=1",
         image,
         "python", "-m", "chameleon.agentkit._sandbox_child",
     ]
+    return cmd
 
 
 def _agent_src_root(module: str) -> str | None:
@@ -261,16 +267,20 @@ async def run_sandboxed(
     或 subprocess（默认，半可信——env 凭据擦除但 FS/网络未隔离）。stdio 帧协议两者一致。
     """
     runtime = os.environ.get("CHAMELEON_SANDBOX_RUNTIME", "subprocess").strip().lower()
+    container_name: str | None = None
     if runtime == "docker":
+        import uuid
+
         image = os.environ.get("CHAMELEON_SANDBOX_IMAGE", "").strip()
         agent_src = _agent_src_root(module)
         if not image or not agent_src:
             raise RuntimeError(
                 "CHAMELEON_SANDBOX_RUNTIME=docker 需 CHAMELEON_SANDBOX_IMAGE + 可定位 agent 源码"
             )
-        cmd = build_docker_command(image, agent_src)
+        container_name = f"chm-sbx-{uuid.uuid4().hex[:16]}"
+        cmd = build_docker_command(image, agent_src, name=container_name)
         spawn_env = None  # docker 不传 host env（凭据全留主进程）
-        logger.info("agentkit sandbox（docker 真隔离）image={}", image)
+        logger.info("agentkit sandbox（docker 真隔离）image={} name={}", image, container_name)
     else:
         extra = {"PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
         extra.update(env_extra or {})
@@ -339,3 +349,14 @@ async def run_sandboxed(
                 await asyncio.wait_for(proc.wait(), timeout=5)
             except (TimeoutError, asyncio.TimeoutError):
                 proc.kill()
+        # docker：显式 kill 容器兜底（SIGTERM 给的是 docker run 客户端，daemon 卡时容器可能
+        # 残留；--name + docker kill 确定性清理，--rm 随后回收）。
+        if container_name:
+            try:
+                killer = await asyncio.create_subprocess_exec(
+                    "docker", "kill", container_name,
+                    stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(killer.wait(), timeout=5)
+            except Exception:  # noqa: BLE001
+                pass

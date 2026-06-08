@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from chameleon.providers.base.types import InvokeContext, StreamEvent
+    from chameleon.core.runtime_types import InvokeContext, StreamEvent
 
 
 @dataclass
