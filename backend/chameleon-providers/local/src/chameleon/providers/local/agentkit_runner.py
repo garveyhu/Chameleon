@@ -86,6 +86,7 @@ class InProcessTransport(RuntimeTransport):
         budget: int = 100_000,
         scope_ref: str | None = None,
         mcp_tools: list[ToolSpec] | None = None,
+        call_agents: list[str] | None = None,
     ) -> None:
         self._agent_key = agent_key
         self._bindings = bindings or {}
@@ -94,6 +95,8 @@ class InProcessTransport(RuntimeTransport):
         self._tool_keys = list(tool_keys or [])
         #: 外部 MCP server 工具（已适配成 ToolSpec），自动并入 run_tool_loop 本地工具
         self._mcp_tools = list(mcp_tools or [])
+        #: ctx.call_agent allow-list（沙箱强制 target ∈ 此集；进程内不强制）
+        self._call_agents = list(call_agents or [])
         #: A2A 上下文（trace 根 / 当前深度 / 剩余预算）
         self._request_id = request_id
         self._session_id = session_id
@@ -684,6 +687,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             budget=int(cvars.get("_a2a_budget", 100_000)),
             scope_ref=cvars.get("end_user_id") or ctx.session_id,
             mcp_tools=mcp_tools,
+            call_agents=list(manifest.call_agents or []),
         )
         # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
         # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。

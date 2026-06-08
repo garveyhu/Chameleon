@@ -131,6 +131,9 @@ class AgentManifest:
     sandboxed: bool = False
     #: 外部 MCP server 声明；其 tools 运行时自动并入 ctx.run_with_tools 的 ReAct 循环。
     mcp_servers: list[McpServerConfig] = field(default_factory=list)
+    #: 声明可经 ctx.call_agent 调用的子 agent key（A2A allow-list）。沙箱（不可信）执行下
+    #: 强制 target ∈ 此集（未声明=沙箱内拒，防横向越权）；进程内（可信）不强制。
+    call_agents: list[str] = field(default_factory=list)
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False

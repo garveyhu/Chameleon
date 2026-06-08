@@ -40,6 +40,7 @@ def agent(
     tools: list[str] | None = None,
     sandboxed: bool = False,
     mcp_servers: list[McpServerConfig] | None = None,
+    call_agents: list[str] | None = None,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -65,6 +66,7 @@ def agent(
             tools=list(tools or []),
             sandboxed=sandboxed,
             mcp_servers=list(mcp_servers or []),
+            call_agents=list(call_agents or []),
             handler=target,
             is_class=isinstance(target, type),
         )

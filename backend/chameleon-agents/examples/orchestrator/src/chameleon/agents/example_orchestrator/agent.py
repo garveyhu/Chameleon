@@ -16,6 +16,8 @@ from chameleon.agentkit import AgentRun, ModelSlot, agent
     description="把计算任务委托给子智能体 example-tool-use（A2A 演示）",
     tags=["example", "a2a", "orchestrator"],
     models=[ModelSlot("chat", "对话模型")],
+    # A2A allow-list：声明可调的子 agent（沙箱执行下据此 scope；进程内不强制）
+    call_agents=["example-tool-use"],
 )
 async def handle(ctx: AgentRun):
     sub_answer = await ctx.call_agent("example-tool-use", input=ctx.query)

@@ -131,7 +131,13 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
         if method == "memory_all":
             return {"ok": True, "data": await broker.memory_all()}
         if method == "call_agent":
-            ans = await broker.call_agent(args.get("target", ""), input=args.get("input", ""))
+            # scope 红线：沙箱（不可信）只能调声明的子 agent（call_agents allow-list）；
+            # 未声明=拒（防横向越权调任意 agent）。depth/budget 闸仍在 broker.call_agent 内。
+            target = args.get("target", "")
+            allowed = set(getattr(broker, "_call_agents", []) or [])
+            if target not in allowed:
+                return {"ok": False, "error": f"越权：未声明可调的子 agent {target}"}
+            ans = await broker.call_agent(target, input=args.get("input", ""))
             return {"ok": True, "data": ans}
         if method == "media_generate":
             r = await broker.media_generate(

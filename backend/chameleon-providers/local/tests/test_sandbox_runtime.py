@@ -127,6 +127,29 @@ async def test_broker_scope_model_and_empty_tools():
 
 
 @pytest.mark.asyncio
+async def test_broker_call_agent_allowlist():
+    """call_agent allow-list：沙箱只能调声明的子 agent，未声明 target 拒。"""
+    from chameleon.providers.local.sandbox.runtime import _resolve_rpc
+
+    called: dict = {}
+
+    class _Broker:
+        _call_agents = ["sub-ok"]
+
+        async def call_agent(self, target, *, input):  # noqa: ANN001
+            called["t"] = target
+            return "子答案"
+
+    # 声明内 → 通
+    ok = await _resolve_rpc(_Broker(), {"method": "call_agent", "args": {"target": "sub-ok", "input": "q"}})
+    assert ok["ok"] is True and ok["data"] == "子答案" and called["t"] == "sub-ok"
+    # 声明外 → 越权拒（未真调）
+    called.clear()
+    bad = await _resolve_rpc(_Broker(), {"method": "call_agent", "args": {"target": "any-other", "input": "q"}})
+    assert bad["ok"] is False and "越权" in bad["error"] and "t" not in called
+
+
+@pytest.mark.asyncio
 async def test_run_sandboxed_streaming(tmp_path):
     (tmp_path / "sbx_stream_mod.py").write_text(_STREAM_AGENT, encoding="utf-8")
     deltas = []
