@@ -35,6 +35,7 @@ async def handle(ctx: AgentRun):
 | 工具循环（ReAct） | `async for d in ctx.run_with_tools(user=..., tools=[my_tool], tool_keys=["http"])` | 平台工具闸门 / 本地 @tool / 自动 tool_call·result 事件 |
 | 跨会话记忆 | `await ctx.memory.set(k, v)` / `await ctx.memory.get(k)` | KV 按 end_user 隔离 |
 | 检查点/恢复（durable） | `await ctx.checkpoint(state)` / `state = await ctx.restore(default={})` | 长任务进度快照，崩溃/中断后续跑（持久化复用 memory） |
+| 人在环暂停（HITL，需 `@agent(durable=True)`） | `ans = await ctx.ask_human("批准吗？")` | memoization 重放 + 暂停等人工输入，恢复续跑（见 §10） |
 | 多模态生成 | `await ctx.media.generate(kind="image", prompt=..., model=...)` | ComfyUI/DashScope 路由 + MinIO 存储 + 计费 |
 | 子智能体（A2A） | `await ctx.call_agent("other-agent", input=...)` | 进程内 A2A + 深度/预算闸 |
 | 并行扇出（map-reduce） | `await ctx.gather([("agent-a", q1), ("agent-b", q2)])` | 并发跑多子智能体 + 预算按分支均分防超支 + 保序返回 |
@@ -185,3 +186,36 @@ async def handle(ctx):
 
 离线鲁棒性套件（无需 DB/真 LLM）由 `.github/workflows/agentkit-ci.yml` 自动阻断；真 LLM 端到端
 （八能力 + 结构化 + 路由）由 `scripts/e2e_real_agents.py` 起平台手跑。
+
+## 10. 人在环 / 可恢复执行（HITL · durable）
+
+`@agent(durable=True)` 开启 **memoization 重放**：每个 ctx 外部调用首跑记进 journal（复用平台
+记忆持久化，免迁移），暂停/崩溃后**重新 invoke 时按调用序重放记录值、不重调模型**（不重复计费/
+副作用）。在此之上 `ctx.ask_human` 实现人在环暂停（对标 LangGraph `interrupt`）：
+
+```python
+@agent(key="approver", name="审批助手", models=[ModelSlot("chat", "对话")], durable=True)
+async def handle(ctx: AgentRun):
+    draft = await ctx.complete(system="拟一封邮件", user=ctx.query)
+    decision = await ctx.ask_human(f"草稿如下，批准发送吗？\n{draft}")   # 暂停点：无答案则挂起
+    yield f"已{decision}：{draft}"
+```
+
+- **暂停**：`ask_human` 首次到达且无答案 → 落 pending + 发 `human_input_pending` 事件（status=
+  `paused`，带 `prompt`/`call_index`/`run_id`）+ 本次流优雅结束（非失败）。
+- **恢复**：以**同一 `run_id`（= 首跑 request_id）**重新 invoke 并回填答案 → journal 重放至 ask 点
+  取答案续跑。`ctx.complete` 等已记录的调用在重放时直接返记录值，不重新花钱。
+
+### 当前边界（务必知道，越界即报错而非静默坑你）
+
+- **durable 仅 memoize `ctx.complete`（文本）+ `ctx.ask_human`**。`run_with_tools` / `call_agent` /
+  `gather` / `route` / `complete(schema=)` / `stream` 在 durable handle 里**直接报错**——它们尚未
+  接入 journal，重放会重执行（重复扣费/副作用）。后续 slice 接入后放开。
+- **控制流必须确定性**：禁依赖 `random` / 时间 / 未 journal 的外部状态做分支——否则重放时调用序
+  错位。框架按 `method + 入参指纹`校验，错位即报错（不静默返错值）。
+- **需持久化 scope**：durable 依赖 end_user / session 身份持久化 journal；无身份调用直接拒
+  （绝不静默退化成坏 journal）。
+- 需要可视化 time-travel / 分叉 / 跨重启的复杂长任务编排：用平台的**图引擎**（两条 authoring
+  路线各擅其长）。
+
+仅崩溃恢复（无需暂停人工）用更轻的 `ctx.checkpoint(state)` / `ctx.restore()`（见 §2 表）。
