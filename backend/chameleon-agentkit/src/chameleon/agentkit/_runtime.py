@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from chameleon.agentkit._spec import Doc, MediaResult, ToolSpec
 
 if TYPE_CHECKING:
-    from chameleon.providers.base.types import Message, StreamEvent
+    from chameleon.core.runtime_types import Message, StreamEvent
 
 
 class KbHandle(Protocol):

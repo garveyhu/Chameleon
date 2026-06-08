@@ -4,8 +4,10 @@ version = "0.1.0"
 description = "Chameleon 本地智能体作者 SDK —— @agent / AgentRun / ModelSlot / Opt"
 requires-python = ">=3.12"
 dependencies = [
+    # 只依赖精简 core（运行时协议类型已迁 chameleon.core.runtime_types）；不再依赖
+    # providers-base（避免经 providers-base→data 拉入 sqlalchemy/asyncpg 等重依赖链），
+    # 让公共 SDK + 沙箱子进程镜像保持精简。
     "chameleon-core",
-    "chameleon-providers-base",
     # MCP（Model Context Protocol）—— @agent 消费外部 MCP server 工具（authoring 关注点）
     "mcp>=1.27.2",
 ]
@@ -21,7 +23,6 @@ agentkit = "chameleon.agentkit._cli:main"
 
 [tool.uv.sources]
 chameleon-core = { workspace = true }
-chameleon-providers-base = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

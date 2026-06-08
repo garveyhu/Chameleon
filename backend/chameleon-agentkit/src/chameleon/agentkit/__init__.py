@@ -42,7 +42,7 @@ from chameleon.agentkit._spec import (
 # 高级用法（有状态 / 多节点）+ 流事件类型：从既有包 re-export，
 # 让作者只依赖 agentkit 一处。
 from chameleon.core.base import AgentMetadata, BaseAgent
-from chameleon.providers.base.types import Message, StreamEvent, StreamEventType
+from chameleon.core.runtime_types import Message, StreamEvent, StreamEventType
 
 __all__ = [
     "AgentManifest",
