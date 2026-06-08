@@ -52,11 +52,12 @@ async def test_full_pause_resolve_resume_cycle():
         await _drive(_run(t, durable=True, run_id="r1"), _approval_handle)
     assert len(t.invocations) == 1
 
-    # 人答复回填 journal（运行时/resume 端点干的事）@ask 的 call_index=1
-    await t.memory_set("__chm_journal__r1__1__", {"method": "ask_human", "output": "同意"})
+    # 人答复经框架 resume API 回填 journal（resume 端点/run_agentkit 干的事）@ask 的 call_index=1
+    resume_ctx = _run(t, durable=True, run_id="r1")
+    await resume_ctx._seed_resume(1, "同意")
 
     # 重放：complete@0 取记录值不重调模型 + ask@1 返答案 → handle 续跑完成
-    out = await _drive(_run(t, durable=True, run_id="r1"), _approval_handle)
+    out = await _drive(resume_ctx, _approval_handle)
     assert out == ["你好/同意"]
     assert len(t.invocations) == 1  # +0：重放零模型调用（省钱/不重复副作用）
 

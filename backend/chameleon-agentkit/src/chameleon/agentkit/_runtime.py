@@ -631,6 +631,14 @@ class AgentRun:
         )
         raise AgentPaused(prompt=prompt, call_index=idx, run_id=self._journal_run_id, schema=schema)
 
+    async def _seed_resume(self, call_index: int, answer: Any) -> None:
+        """resume 入口（框架内部，非作者 API）：把人工答案回填进 journal 的 ask 点，使本次重放
+        在该 call_index 的 ctx.ask_human 返此答案、续跑过暂停点。须与首跑同 run_id（per-run）。"""
+        if not self._journal_enabled:
+            return
+        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{call_index}__"
+        await self._t.memory_set(key, {"method": "ask_human", "output": answer})
+
 
 class _MediaProxy:
     """`ctx.media` 的实现：转发给 transport（结构上满足 MediaHandle）。"""

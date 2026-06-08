@@ -790,6 +790,11 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             run_id=ctx.request_id,
         )
 
+        # durable resume：resume 端点以同 request_id 重新 invoke 并经 context_vars 带回人工答案，
+        # 跑 handle 前回填进 journal 的 ask 点，使重放在该 call_index 取答案续跑过暂停点。
+        if manifest.durable and "_resume_answer" in cvars:
+            await run._seed_resume(int(cvars["_resume_call_index"]), cvars["_resume_answer"])
+
         # 沙箱路由：@agent(sandboxed=True) 在生产/force 下走隔离子进程执行（handle 在子
         # 进程，ctx 资源经 broker=transport 受控解析；凭据/DB 只在主进程）。
         if _should_sandbox(manifest):
