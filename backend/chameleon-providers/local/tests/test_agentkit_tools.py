@@ -76,6 +76,41 @@ async def test_run_tool_loop_dispatches_local_tool():
     assert StreamEventType.tool_result in types
 
 
+@pytest.mark.asyncio
+async def test_tool_loop_budget_gate_truncates_real():
+    """成本闸真触发（评审12）：预算耗尽时工具循环第 1 轮后截断收口，非跑满 max_steps、非超支。
+
+    模型“总想调工具”（每轮都返 tool_calls），唯一能停它的是预算闸——故能区分“预算耗尽截断”
+    vs“达 max_steps 上限”。budget=1，_FakeAI 每轮 total_tokens=2 → 第 1 轮 charge 后 budget→0。
+    """
+    @tool(name="calc", description="计算")
+    async def calc(expression: str) -> dict:
+        return {"value": 1}
+
+    spec = calc.__tool_spec__
+    t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[], budget=1)
+    # 全部是 tool_calls 响应（>max_steps+收口）：闸坏会跑满 10 轮“达上限”，闸好第 1 轮后“预算耗尽”
+    responses = [
+        _FakeAI(tool_calls=[{"name": "calc", "args": {"expression": "1"}, "id": f"c{i}"}])
+        for i in range(12)
+    ]
+    t.chat_model = lambda *, slot=None, model=None: _FakeModel(responses)  # type: ignore[method-assign]
+
+    async for _ in t.run_tool_loop(
+        messages=[("user", "算")], slot="chat", model=None,
+        platform_keys=[], local_tools=[spec], max_steps=10,
+    ):
+        pass
+
+    events = t.drain()
+    notes = [e.data.get("output", {}).get("note", "")
+             for e in events if e.type == StreamEventType.step]
+    assert any("预算耗尽" in n for n in notes), f"预算闸应触发截断，实际 notes={notes}"
+    # 第 1 轮后即截断：仅 1 轮 tool_call（非跑满 max_steps=10），证是预算闸而非上限
+    n_tool_rounds = sum(1 for e in events if e.type == StreamEventType.tool_call)
+    assert n_tool_rounds == 1, f"预算闸应在第 1 轮后截断，实际跑了 {n_tool_rounds} 轮"
+
+
 class _FakeStructured:
     def __init__(self, inst):
         self._inst = inst
