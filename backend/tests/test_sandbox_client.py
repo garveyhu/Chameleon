@@ -115,6 +115,34 @@ async def test_run_tool_loop_local_tool_and_reframe():
 
 
 @pytest.mark.asyncio
+async def test_memory_call_agent_media_rpc():
+    seen: list = []
+
+    def responder(f):
+        seen.append((f["method"], f.get("args")))
+        rid = f["id"]
+        data = {
+            "memory_get": "记住的值",
+            "memory_all": {"k": "v"},
+            "call_agent": "子答案",
+            "media_generate": {"url": "minio://x", "object_key": "k", "media_kind": "image"},
+            "memory_set": None,
+        }.get(f["method"])
+        return {"t": "rpc_result", "id": rid, "ok": True, "data": data}
+
+    io = _FakeIO(responder)
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda e: None)
+    assert await t.memory_get("k") == "记住的值"
+    await t.memory_set("k", "v")
+    assert await t.memory_all() == {"k": "v"}
+    assert await t.call_agent("sub", input="问") == "子答案"
+    media = await t.media_generate(kind="image", prompt="猫")
+    assert media.url == "minio://x" and media.media_kind == "image"
+    methods = [m for m, _ in seen]
+    assert {"memory_get", "memory_set", "memory_all", "call_agent", "media_generate"} <= set(methods)
+
+
+@pytest.mark.asyncio
 async def test_emit_writes_event_frame():
     from chameleon.providers.base.types import StreamEvent, StreamEventType
 

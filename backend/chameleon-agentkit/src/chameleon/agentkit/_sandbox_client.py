@@ -203,19 +203,31 @@ class SandboxClientTransport(RuntimeTransport):
             yield text
 
     async def memory_get(self, key, default=None):  # noqa: ANN001, ANN201
-        raise NotImplementedError("sandbox Slice 3：memory")
+        val = await self._rpc("memory_get", {"key": key})
+        return val if val is not None else default
 
     async def memory_set(self, key, value):  # noqa: ANN001, ANN201
-        raise NotImplementedError("sandbox Slice 3：memory")
+        await self._rpc("memory_set", {"key": key, "value": value})
 
     async def memory_all(self):  # noqa: ANN201
-        raise NotImplementedError("sandbox Slice 3：memory")
+        return await self._rpc("memory_all", {}) or {}
 
     async def media_generate(self, *, kind, prompt, slot=None, model=None, params=None, input_images=None):  # noqa: ANN001, ANN201
-        raise NotImplementedError("sandbox Slice 3：media")
+        from chameleon.agentkit._spec import MediaResult
+
+        d = await self._rpc(
+            "media_generate",
+            {"kind": kind, "prompt": prompt, "slot": slot, "model": model,
+             "params": params, "input_images": input_images},
+        ) or {}
+        return MediaResult(
+            url=d.get("url", ""), object_key=d.get("object_key", ""),
+            media_kind=d.get("media_kind", kind), mime_type=d.get("mime_type"),
+            filename=d.get("filename"),
+        )
 
     async def call_agent(self, target, *, input):  # noqa: ANN001, ANN201
-        raise NotImplementedError("sandbox Slice 3：call_agent")
+        return await self._rpc("call_agent", {"target": target, "input": input}) or ""
 
 
 def encode_frame(obj: dict[str, Any]) -> bytes:

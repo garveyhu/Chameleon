@@ -28,6 +28,21 @@ def _send(frame: dict[str, Any]) -> None:
     sys.stdout.buffer.flush()
 
 
+def _apply_rlimits() -> None:
+    """资源限额（防 compute-bound 死循环 / fork 炸弹）——POSIX；其它平台静默跳过。
+
+    只限 CPU 秒（计算时间，非墙钟——正常 agent 多在等 rpc，CPU 低）+ 进程数。不限内存
+    （RLIMIT_AS 太激进会击穿合法大依赖 import）；内存/网络隔离靠 Phase 3 docker。
+    """
+    try:
+        import resource
+
+        resource.setrlimit(resource.RLIMIT_CPU, (60, 90))  # 软 60s / 硬 90s CPU
+        resource.setrlimit(resource.RLIMIT_NPROC, (256, 512))
+    except Exception:  # noqa: BLE001  # 非 POSIX / 受限环境
+        pass
+
+
 async def _stdin_reader() -> asyncio.StreamReader:
     loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()
@@ -38,6 +53,7 @@ async def _stdin_reader() -> asyncio.StreamReader:
 async def main() -> None:
     import importlib
 
+    _apply_rlimits()
     reader = await _stdin_reader()
 
     async def recv_fn() -> dict[str, Any]:

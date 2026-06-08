@@ -73,6 +73,19 @@ async def test_run_sandboxed_parent_loop_and_broker(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_broker_run_tool_scope_rejects_undeclared():
+    """broker scope 红线：子进程调未声明的平台工具 → 拒绝（不执行）。"""
+    from chameleon.providers.local.sandbox.runtime import _resolve_rpc
+
+    class _Broker:
+        _tool_keys = ["http"]  # 只声明了 http
+
+    # 调声明外的工具 → 越权拒
+    res = await _resolve_rpc(_Broker(), {"method": "run_tool", "args": {"name": "sql", "args": {}}})
+    assert res["ok"] is False and "越权" in res["error"]
+
+
+@pytest.mark.asyncio
 async def test_run_sandboxed_streaming(tmp_path):
     (tmp_path / "sbx_stream_mod.py").write_text(_STREAM_AGENT, encoding="utf-8")
     deltas = []

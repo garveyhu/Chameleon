@@ -86,8 +86,33 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
         if method == "run_tool":
             from chameleon.integrations.tools import run_tool
 
-            res = await run_tool(args.get("name", ""), args.get("args") or {}, caller="sandbox")
+            name = args.get("name", "")
+            # scope 红线：只能调该 agent 声明的平台工具，不可越权
+            declared = set(getattr(broker, "_tool_keys", []) or [])
+            if declared and name not in declared:
+                return {"ok": False, "error": f"越权：未声明的工具 {name}"}
+            res = await run_tool(name, args.get("args") or {}, caller="sandbox")
             return {"ok": True, "data": res}
+        if method == "memory_get":
+            return {"ok": True, "data": await broker.memory_get(args.get("key", ""))}
+        if method == "memory_set":
+            await broker.memory_set(args.get("key", ""), args.get("value"))
+            return {"ok": True, "data": None}
+        if method == "memory_all":
+            return {"ok": True, "data": await broker.memory_all()}
+        if method == "call_agent":
+            ans = await broker.call_agent(args.get("target", ""), input=args.get("input", ""))
+            return {"ok": True, "data": ans}
+        if method == "media_generate":
+            r = await broker.media_generate(
+                kind=args.get("kind", "image"), prompt=args.get("prompt", ""),
+                slot=args.get("slot"), model=args.get("model"),
+                params=args.get("params"), input_images=args.get("input_images"),
+            )
+            return {"ok": True, "data": {
+                "url": r.url, "object_key": r.object_key, "media_kind": r.media_kind,
+                "mime_type": r.mime_type, "filename": r.filename,
+            }}
         if method == "kb_search":
             docs = await broker.kb_search(
                 args.get("query", ""), kbs=args.get("kbs"), top_k=args.get("top_k"),
