@@ -22,22 +22,27 @@ def _run(t: SandboxClientTransport) -> AgentRun:
 
 
 class _FakeIO:
-    """内存假 stdio：send 收集帧，recv 按最近 rpc 调 responder 产响应帧。"""
+    """内存假 stdio：send 把该 rpc 的响应帧入队，recv 从队列取（空则阻塞，拟真单读帧泵）。
+
+    读帧泵会持续 await recv —— 故 recv 必须在无帧时**阻塞**（而非瞬返/热循环），与真实
+    stdin 读一致；否则泵不让出事件循环会卡死整个 loop。
+    """
 
     def __init__(self, responder):
         self.sent: list = []
         self._responder = responder
-        self._pending: list = []
+        self._q: asyncio.Queue = asyncio.Queue()
 
     def send(self, frame):
         self.sent.append(frame)
+        if frame.get("t") != "rpc":
+            return
+        frames = self._responder(frame)
+        for fr in (frames if isinstance(frames, list) else [frames]):
+            self._q.put_nowait(fr)
 
     async def recv(self):
-        if self._pending:
-            return self._pending.pop(0)
-        frames = self._responder(self.sent[-1])
-        self._pending = list(frames) if isinstance(frames, list) else [frames]
-        return self._pending.pop(0)
+        return await self._q.get()  # 队列空 → 阻塞（不热循环）
 
 
 @pytest.mark.asyncio
@@ -171,23 +176,59 @@ def test_frame_codec_roundtrip():
 
 
 @pytest.mark.asyncio
-async def test_concurrent_rpc_channel_lock_no_frame_steal():
-    """评审7 🟠 根治：并发 _rpc 经通道锁串行化，互不偷帧（即便 recv 返回序与发送序相反）。"""
+async def test_concurrent_rpc_pump_no_frame_steal():
+    """评审7 🟠 根治：并发 _rpc 经读帧泵 per-id demux，互不偷帧（即便 recv 返回序与发送序反）。"""
     from chameleon.agentkit._sandbox_client import SandboxClientTransport
 
-    sent: list[int] = []  # 已发未答的 rid
+    sent: list[int] = []
+    drained = asyncio.Event()
 
     def _send(frame):
         if frame.get("t") == "rpc":
             sent.append(frame["id"])
 
     async def _recv():
-        # LIFO 返回最近未答 rid 的结果——无锁会让先发的 rpc 偷到后发的帧/对方挂起；
-        # 有锁时任一时刻只一个 in-flight rid，恒正确。
-        rid = sent.pop()
-        return {"t": "rpc_result", "id": rid, "ok": True, "data": f"r{rid}"}
+        if sent:
+            rid = sent.pop()  # LIFO：无多路复用会偷帧/挂起；泵按 id 派发恒正确
+            return {"t": "rpc_result", "id": rid, "ok": True, "data": f"r{rid}"}
+        await drained.wait()  # 空了阻塞（泵静候）
+        return None
 
     t = SandboxClientTransport(send_fn=_send, recv_fn=_recv, emit_fn=lambda f: None)
     a, b = await asyncio.gather(t._rpc("m", {}), t._rpc("m", {}))
-    # 两个并发 rpc 各拿到自己的结果（不混、不挂）；锁保证 in-flight 唯一
     assert {a, b} == {"r1", "r2"}
+    drained.set()
+    if t._pump_task:
+        t._pump_task.cancel()
+
+
+@pytest.mark.asyncio
+async def test_stream_with_nested_rpc_no_deadlock():
+    """评审8 🔴 修复：流式期间嵌套 rpc（async for ctx.stream(): await ctx.kb...）不重入死锁。
+
+    用请求驱动 _FakeIO（send 才入队响应，拟真 broker）：chat_stream → [块, 结束]；嵌套 rpc
+    发出后才入队其结果。旧"持锁跨 yield"实现下嵌套 rpc 会等流持有的锁→死锁；泵实现无锁→通。
+    """
+
+    def responder(f):
+        if f.get("method") == "chat_stream":
+            return [
+                {"t": "stream_chunk", "id": f["id"], "chunk": "c1"},
+                {"t": "rpc_result", "id": f["id"], "ok": True},
+            ]
+        return {"t": "rpc_result", "id": f["id"], "ok": True, "data": "nested"}
+
+    io = _FakeIO(responder)
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda f: None)
+
+    async def _drive():
+        collected = []
+        async for delta in t._rpc_stream("chat_stream", {}):  # rid=1
+            collected.append(delta)
+            collected.append(await t._rpc("kb", {}))  # 嵌套 rid=2——旧通道锁此处死锁
+        return collected
+
+    out = await asyncio.wait_for(_drive(), timeout=3)  # 3s 内完成=不死锁
+    assert out == ["c1", "nested"]
+    if t._pump_task:
+        t._pump_task.cancel()

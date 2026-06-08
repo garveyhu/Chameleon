@@ -75,6 +75,9 @@ SendFn = Callable[[dict[str, Any]], None]
 RecvFn = Callable[[], Awaitable[dict[str, Any]]]
 
 
+_STREAM_DONE = object()  # _rpc_stream 队列的结束哨兵（区别于 None chunk）
+
+
 class SandboxClientTransport(RuntimeTransport):
     """子进程内 ctx transport：资源调用 → stdio JSON-RPC 往返；emit → event 帧。
 
@@ -89,44 +92,79 @@ class SandboxClientTransport(RuntimeTransport):
         self._recv = recv_fn
         self._emit_fn = emit_fn
         self._rpc_id = 0
-        # 单 stdio 通道串行化：并发 ctx 调用（作者显式 asyncio.gather(ctx.complete, ctx.kb...)）
-        # 若同时读帧会互相偷帧/挂起（评审7 🟠）。此锁保证任一时刻只一个 rpc 占用通道——
-        # 并发调用排队、正确返回（sandbox 受限环境下正确性优先；真并行需 per-rid 读帧泵，后续）。
-        self._chan_lock = asyncio.Lock()
+        # 单读帧泵多路复用：泵独占 recv_fn、按 id 把帧 demux 到 per-rid 等待者。这样并发 ctx
+        # 调用（作者 asyncio.gather）不偷帧（评审7 🟠），且**不持锁跨 yield**——流式期间嵌套
+        # rpc（async for ctx.stream(): await ctx.kb.search()）不会重入死锁（评审8 🔴）。
+        self._pending: dict[int, asyncio.Future[Any]] = {}
+        self._streams: dict[int, asyncio.Queue[Any]] = {}
+        self._pump_task: asyncio.Task[None] | None = None
 
     def _next_id(self) -> int:
         self._rpc_id += 1
         return self._rpc_id
 
-    async def _rpc(self, method: str, args: dict[str, Any]) -> Any:
-        async with self._chan_lock:
-            rid = self._next_id()
-            self._send({"t": "rpc", "id": rid, "method": method, "args": args})
+    def _ensure_pump(self) -> None:
+        if self._pump_task is None:
+            self._pump_task = asyncio.ensure_future(self._pump())
+
+    async def _pump(self) -> None:
+        """读帧泵：独占 recv，按 frame.id 派发到对应 Future（rpc）/ Queue（stream）。"""
+        try:
             while True:
                 frame = await self._recv()
-                if frame.get("t") == "rpc_result" and frame.get("id") == rid:
-                    if not frame.get("ok"):
-                        raise RuntimeError(frame.get("error") or f"sandbox rpc 失败: {method}")
-                    return frame.get("data")
+                if frame is None:
+                    raise RuntimeError("sandbox 通道关闭")
+                fid = frame.get("id")
+                ft = frame.get("t")
+                if ft == "stream_chunk":
+                    q = self._streams.get(fid)
+                    if q is not None:
+                        q.put_nowait(frame.get("chunk"))
+                elif ft == "rpc_result":
+                    ok, err, data = frame.get("ok"), frame.get("error"), frame.get("data")
+                    fut = self._pending.pop(fid, None)
+                    if fut is not None and not fut.done():
+                        if ok:
+                            fut.set_result(data)
+                        else:
+                            fut.set_exception(RuntimeError(err or "sandbox rpc 失败"))
+                    else:
+                        q = self._streams.get(fid)
+                        if q is not None:
+                            q.put_nowait(
+                                _STREAM_DONE if ok else RuntimeError(err or "sandbox rpc 失败")
+                            )
+        except Exception as e:  # noqa: BLE001  recv EOF/失败：让所有等待者失败，别永久挂
+            for fut in self._pending.values():
+                if not fut.done():
+                    fut.set_exception(e)
+            for q in self._streams.values():
+                q.put_nowait(e)
+
+    async def _rpc(self, method: str, args: dict[str, Any]) -> Any:
+        self._ensure_pump()
+        rid = self._next_id()
+        fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        self._pending[rid] = fut
+        self._send({"t": "rpc", "id": rid, "method": method, "args": args})
+        return await fut
 
     async def _rpc_stream(self, method: str, args: dict[str, Any]) -> AsyncIterator[Any]:
-        # 流式全程持锁（含各 stream_chunk yield 间），防与其它 rpc 的帧在通道交错。
-        await self._chan_lock.acquire()
+        self._ensure_pump()
+        rid = self._next_id()
+        q: asyncio.Queue[Any] = asyncio.Queue()
+        self._streams[rid] = q
+        self._send({"t": "rpc", "id": rid, "method": method, "args": args})
         try:
-            rid = self._next_id()
-            self._send({"t": "rpc", "id": rid, "method": method, "args": args})
             while True:
-                frame = await self._recv()
-                if frame.get("id") != rid:
-                    continue
-                if frame.get("t") == "stream_chunk":
-                    yield frame.get("chunk")
-                elif frame.get("t") == "rpc_result":
-                    if not frame.get("ok"):
-                        raise RuntimeError(frame.get("error") or f"sandbox rpc 失败: {method}")
+                item = await q.get()
+                if item is _STREAM_DONE:
                     return
+                if isinstance(item, BaseException):
+                    raise item
+                yield item
         finally:
-            self._chan_lock.release()
+            self._streams.pop(rid, None)  # 消费者提前 break 也清理，不泄漏
 
     def chat_model(self, *, slot: str | None = None, model: str | None = None) -> Any:
         return _SandboxChatModel(self, slot, model)
