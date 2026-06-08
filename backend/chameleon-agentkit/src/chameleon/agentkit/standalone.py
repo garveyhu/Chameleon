@@ -169,6 +169,7 @@ class StandaloneTransport(RuntimeTransport):
             for c in calls:
                 name = c.get("name") or ""
                 args = c.get("args") or {}
+                self._emit_tool_event("tool_call", c)  # 对齐 run_with_tools 契约（评审9 🟠）
                 spec = by_name.get(name)
                 if spec is not None:
                     try:
@@ -178,6 +179,7 @@ class StandaloneTransport(RuntimeTransport):
                         result = {"ok": False, "error": str(e)[:300]}
                 else:
                     result = {"ok": False, "error": f"未知工具 {name}"}
+                self._emit_tool_event("tool_result", {"name": name, "result": result})
                 import json
                 convo.append(ToolMessage(
                     content=json.dumps(result, ensure_ascii=False, default=str),
@@ -248,6 +250,15 @@ class StandaloneTransport(RuntimeTransport):
     def emit(self, event: Any) -> None:
         if self._on_event is not None:
             self._on_event(event)
+
+    def _emit_tool_event(self, etype: str, data: dict[str, Any]) -> None:
+        """ReAct 循环里发 tool_call/tool_result 事件（对齐 run_with_tools 契约，经 on_event 透出）。"""
+        from chameleon.core.runtime_types import StreamEvent, StreamEventType
+
+        try:
+            self.emit(StreamEvent(type=StreamEventType(etype), data=data))
+        except Exception:  # noqa: BLE001  事件透传不应影响主流程
+            pass
 
 
 async def run_standalone(

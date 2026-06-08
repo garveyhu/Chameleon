@@ -179,3 +179,25 @@ async def test_standalone_react_tool_loop():
     t = StandaloneTransport(model=model)
     out = await run_standalone(handle, "1+2", transport=t)
     assert out == "结果是3"  # 真 ReAct：bind 工具→执行→回填→最终答案
+
+
+@pytest.mark.asyncio
+async def test_standalone_react_emits_tool_events():
+    """评审9 🟠：standalone ReAct 也 emit tool_call/tool_result（对齐 run_with_tools 契约）。"""
+    @tool(name="mul", description="乘法")
+    async def mul(a: int, b: int) -> int:
+        return a * b
+
+    @agent(key="sa-ev", name="e", models=[ModelSlot("chat", "对话")])
+    async def handle(ctx: AgentRun):
+        async for d in ctx.run_with_tools(user=ctx.query, tools=[mul]):
+            yield d
+
+    events: list = []
+    model = _FakeModel(
+        answer="6", tool_rounds=[[{"name": "mul", "args": {"a": 2, "b": 3}, "id": "c1"}], []]
+    )
+    t = StandaloneTransport(model=model, on_event=events.append)
+    await run_standalone(handle, "2*3", transport=t)
+    types = [getattr(e.type, "value", e.type) for e in events]
+    assert "tool_call" in types and "tool_result" in types  # 工具事件经 on_event 透出

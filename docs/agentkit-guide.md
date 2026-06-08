@@ -98,7 +98,7 @@ print(await run_standalone(handle, "你好", transport=t))
 |------|-----------|------|
 | 知识库检索 | 朴素子串/字符 bigram（中文粗糙） | hybrid+向量+rerank+查询扩展 |
 | trace / token usage | 无观测（span/usage no-op） | 全自动 trace 树 + 成本归集 |
-| 工具循环事件 | 不 emit tool_call/tool_result | 自动 emit + 流式可见 |
+| 工具循环事件 | emit tool_call/tool_result（经 on_event） | 自动 emit + 流式可见 |
 | 子智能体 memory | 父快照（子改不回写） | end_user 跨 agent 共享 kv |
 | gather 预算闸 | 无（自带 key 本机） | 按分支均分 + 成本闸 |
 | 多模态 media | 报错（平台专属） | ComfyUI/DashScope 路由 |
