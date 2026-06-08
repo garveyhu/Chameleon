@@ -39,6 +39,7 @@ from chameleon.providers.base.types import (
     Usage,
     flatten_to_text,
     normalize_content,
+    sanitize_context_vars,
 )
 
 __all__ = [
@@ -54,6 +55,7 @@ __all__ = [
     "TextBlock",
     "flatten_to_text",
     "normalize_content",
+    "sanitize_context_vars",
     "PROVIDERS",
     "Provider",
     "ProviderAuthError",

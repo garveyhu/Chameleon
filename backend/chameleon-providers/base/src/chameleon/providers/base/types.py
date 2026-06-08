@@ -147,6 +147,25 @@ class AgentDef(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+#: context_vars 中「平台内部保留」键的前缀。外部调用方（req.context）传入的
+#: 此前缀键一律剥除——防止客户端注入 `_a2a_budget` / `_a2a_depth` 等绕过 A2A
+#: 预算 / 深度红线。内部保留键只能由平台代码（service / a2a）权威写入。
+RESERVED_CONTEXT_PREFIX = "_"
+
+
+def sanitize_context_vars(raw: dict[str, Any] | None) -> dict[str, Any]:
+    """剥除外部传入 context 里的平台保留键（`_` 前缀），返回安全的业务键子集。
+
+    用于 service 层构造 InvokeContext.context_vars 时过滤 `req.context`，以及
+    A2A 透传子调用 context_vars 时净化，确保 `_a2a_*` 等红线键不可被客户端篡改。
+    """
+    if not raw:
+        return {}
+    return {
+        k: v for k, v in raw.items() if not str(k).startswith(RESERVED_CONTEXT_PREFIX)
+    }
+
+
 class InvokeContext(BaseModel):
     """每次调用打包好的上下文
 

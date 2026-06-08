@@ -36,6 +36,7 @@ from chameleon.providers.base import (
     InvokeContext,
     InvokeResult,
     Message,
+    sanitize_context_vars,
 )
 
 #: 跨 agent 调用嵌套深度上限（防递归爆栈）
@@ -139,9 +140,12 @@ class AgentRunner:
                 session_id=spec.session_id or f"a2a-{spec.trace_id[:16]}",
                 provider_conv_id=None,
                 context_vars={
-                    **(spec.context_vars or {}),
+                    # 净化调用方透传的 context_vars（剥 _ 前缀），再由平台权威注入
+                    # _a2a_* —— 子调用同样不可被篡改预算 / 深度
+                    **sanitize_context_vars(spec.context_vars),
                     "_a2a_source": spec.source_agent_key,
                     "_a2a_depth": spec.depth,
+                    "_a2a_budget": spec.budget_remaining,
                     "_a2a_trace": spec.trace_id,
                 },
                 options=spec.options or {},

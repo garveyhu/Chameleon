@@ -52,10 +52,25 @@ from chameleon.providers.base.types import (
     StreamEventType,
     TextBlock,
     _StreamAggregator,
+    sanitize_context_vars,
 )
 from chameleon.providers.base.types import Message as ProviderMessage
 from chameleon.system.api_key import service as api_key_service
 from chameleon.system.pricing import resolve_agent_media_cost
+
+#: 顶层调用的默认 A2A token 预算（子智能体调用链累计上限）。由 service 权威写入
+#: context_vars["_a2a_budget"]，runner / a2a 据此守预算红线——绝不信任客户端传值。
+#: TODO(T4-4)：接 ApiKey 配额后改为按 key 剩余余额动态下发。
+_DEFAULT_A2A_BUDGET = 200_000
+
+
+def _resolve_initial_budget(current_app: CurrentApp) -> int:
+    """服务端权威计算本次顶层调用的 A2A 预算（不信任客户端 context）。
+
+    当前返回系统默认；配额体系（T4-4）落地后改为读 key 的 token 余额。
+    """
+    return _DEFAULT_A2A_BUDGET
+
 
 # ── agent 列表 / 详情（注册表只读访问） ──────────────────
 
@@ -330,9 +345,11 @@ async def invoke(
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
         context_vars={
-            **req.context,
+            **sanitize_context_vars(req.context),  # 剥客户端 _ 前缀键，防 A2A 预算注入
             "session_file_citations": rag_hits,
             "end_user_id": conv.end_user_id,
+            "_a2a_budget": _resolve_initial_budget(current_app),  # 平台权威下发
+            "_a2a_depth": 0,
         },
         options=req.options,
         app_id=current_app.app_id,
@@ -834,9 +851,11 @@ async def _prepare_invocation(
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
         context_vars={
-            **req.context,
+            **sanitize_context_vars(req.context),  # 剥客户端 _ 前缀键，防 A2A 预算注入
             "session_file_citations": rag_hits,
             "end_user_id": conv.end_user_id,
+            "_a2a_budget": _resolve_initial_budget(current_app),  # 平台权威下发
+            "_a2a_depth": 0,
         },
         options=req.options,
         app_id=current_app.app_id,
