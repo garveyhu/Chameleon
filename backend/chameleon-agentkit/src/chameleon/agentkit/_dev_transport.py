@@ -82,6 +82,31 @@ class _RemoteMsg:
         self.tool_calls = tool_calls
 
 
+class _RemoteStructured:
+    """ctx.complete(schema=) 的 dev 实现：经 /v1/dev/structured 拿 dict，本地还原 pydantic。"""
+
+    def __init__(self, transport: HttpDevTransport, model: str | None, schema: type) -> None:
+        self._t = transport
+        self._model = model
+        self._schema = schema
+
+    async def ainvoke(self, messages: Any, **_kw: Any) -> Any:
+        json_schema = (
+            self._schema.model_json_schema()
+            if hasattr(self._schema, "model_json_schema")
+            else self._schema
+        )
+        out = await self._t._post(
+            "/v1/dev/structured",
+            {"messages": _to_openai(messages), "schema": json_schema, "model": self._model},
+        )
+        data = out if isinstance(out, dict) else {}
+        # 还原成作者的 pydantic 实例（与站内 InProcessTransport 契约一致）
+        if hasattr(self._schema, "model_validate"):
+            return self._schema.model_validate(data)
+        return data
+
+
 def _to_openai(messages: Any) -> list[dict[str, Any]]:
     """把 (role, content) 元组列表 / 已是 dict 的列表归一成 OpenAI 风格 dict。"""
     out: list[dict[str, Any]] = []
@@ -136,10 +161,7 @@ class HttpDevTransport(RuntimeTransport):
     def structured_model(
         self, *, slot: str | None = None, model: str | None = None, schema: type
     ) -> Any:
-        raise NotImplementedError(
-            "dev 模式暂不支持 ctx.complete(schema=...) 结构化输出；"
-            "请在站内（提交后 InProcessTransport）验证该路径。"
-        )
+        return _RemoteStructured(self, model, schema)
 
     async def kb_search(
         self,
@@ -250,13 +272,16 @@ class HttpDevTransport(RuntimeTransport):
             yield text
 
     async def memory_get(self, key: str, default: Any = None) -> Any:
-        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+        out = await self._post("/v1/dev/memory", {"action": "get", "key": key})
+        val = out.get("result") if isinstance(out, dict) else None
+        return val if val is not None else default
 
     async def memory_set(self, key: str, value: Any) -> None:
-        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+        await self._post("/v1/dev/memory", {"action": "set", "key": key, "value": value})
 
     async def memory_all(self) -> dict[str, Any]:
-        raise NotImplementedError("dev 模式暂不支持 ctx.memory；请在站内验证该路径。")
+        out = await self._post("/v1/dev/memory", {"action": "all"})
+        return out.get("result") or {} if isinstance(out, dict) else {}
 
     async def media_generate(self, *, kind, prompt, slot=None, model=None, params=None, input_images=None):  # noqa: ANN001, ANN201
         raise NotImplementedError("dev 模式暂不支持 ctx.media；请在站内验证该路径。")

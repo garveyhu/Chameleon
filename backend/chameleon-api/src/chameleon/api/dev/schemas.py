@@ -20,6 +20,19 @@ class DevLlmResponse(BaseModel):
     usage: dict[str, int] | None = None
 
 
+class DevStructuredRequest(BaseModel):
+    messages: list[dict[str, Any]] = Field(default_factory=list)
+    #: 客户端传来的 JSON schema（作者 pydantic 类的 model_json_schema()）
+    schema_: dict[str, Any] = Field(alias="schema")
+    model: str | None = None
+
+
+class DevMemoryRequest(BaseModel):
+    action: str  # get / set / all
+    key: str = ""
+    value: Any = None
+
+
 class DevKbSearchRequest(BaseModel):
     query: str
     kbs: list[str] = Field(default_factory=list)

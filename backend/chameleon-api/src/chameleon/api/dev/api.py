@@ -14,6 +14,8 @@ from chameleon.api.dev.schemas import (
     DevKbSearchRequest,
     DevLlmRequest,
     DevLlmResponse,
+    DevMemoryRequest,
+    DevStructuredRequest,
     DevToolExecRequest,
     DevToolItem,
 )
@@ -46,6 +48,24 @@ async def dev_llm(
         local_tool_schemas=req.local_tool_schemas,
     )
     return Result.ok(DevLlmResponse(**out))
+
+
+@router.post("/structured", response_model=Result[dict])
+async def dev_structured(
+    req: DevStructuredRequest, _: None = Depends(require_dev_token)
+) -> Result[dict]:
+    out = await service.dev_structured(
+        messages=req.messages, schema=req.schema_, model=req.model
+    )
+    return Result.ok(out)
+
+
+@router.post("/memory", response_model=Result[dict])
+async def dev_memory(
+    req: DevMemoryRequest, _: None = Depends(require_dev_token)
+) -> Result[dict]:
+    out = await service.dev_memory(action=req.action, key=req.key, value=req.value)
+    return Result.ok({"result": out})
 
 
 @router.post("/kb/search", response_model=Result[list[DevDoc]])

@@ -99,6 +99,87 @@ async def dev_llm(
     }
 
 
+async def dev_structured(
+    *,
+    messages: list[dict[str, Any]],
+    schema: dict[str, Any],
+    model: str | None = None,
+) -> dict[str, Any]:
+    """结构化输出：用客户端传来的 JSON schema 走 with_structured_output，返 dict。
+
+    客户端（HttpDevTransport）持原 pydantic 类，拿到 dict 后自行 model_validate 还原实例
+    —— dev 与站内 InProcessTransport 的 ctx.complete(schema=) 契约一致。
+    """
+    base = llm_by_name(model) if model else llm()
+    # 客户端传的是 JSON schema dict（非 pydantic 类）→ langchain with_structured_output
+    # 不直接吃裸 schema，包成 OpenAI function（name+parameters）走 function_calling。
+    func = {
+        "name": schema.get("title") or "structured_output",
+        "description": schema.get("description", ""),
+        "parameters": schema,
+    }
+    structured = base.with_structured_output(func, method="function_calling")
+    resp = await structured.ainvoke(_to_messages(messages))
+    if isinstance(resp, dict):
+        return resp
+    if hasattr(resp, "model_dump"):
+        return resp.model_dump()
+    return dict(resp)
+
+
+#: dev 记忆固定命名空间（本地自测无 end_user 身份；隔离于站内真实记忆）
+_DEV_MEMORY_AGENT = "__dev__"
+_DEV_MEMORY_SCOPE = "__dev__"
+
+
+async def dev_memory(*, action: str, key: str = "", value: Any = None) -> Any:
+    """dev 跨会话记忆 get/set/all —— 复用 AgentMemory 表的 dev 命名空间。"""
+    from sqlalchemy import select
+
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import AgentMemory
+
+    async with AsyncSessionLocal() as session:
+        if action == "set":
+            row = (
+                await session.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == _DEV_MEMORY_AGENT,
+                        AgentMemory.scope_ref == _DEV_MEMORY_SCOPE,
+                        AgentMemory.mkey == key,
+                    )
+                )
+            ).scalar_one_or_none()
+            # 与 InProcessTransport 一致：JSON 列存 {"v": <值>} 信封（兼容标量）
+            if row is None:
+                session.add(
+                    AgentMemory(
+                        agent_key=_DEV_MEMORY_AGENT,
+                        scope_ref=_DEV_MEMORY_SCOPE,
+                        mkey=key,
+                        value={"v": value},
+                    )
+                )
+            else:
+                row.value = {"v": value}
+            await session.commit()
+            return {"ok": True}
+        rows = (
+            await session.execute(
+                select(AgentMemory).where(
+                    AgentMemory.agent_key == _DEV_MEMORY_AGENT,
+                    AgentMemory.scope_ref == _DEV_MEMORY_SCOPE,
+                )
+            )
+        ).scalars().all()
+        store = {
+            r.mkey: (r.value.get("v") if isinstance(r.value, dict) else None) for r in rows
+        }
+        if action == "all":
+            return store
+        return store.get(key)  # get
+
+
 async def dev_kb_search(
     *,
     query: str,
