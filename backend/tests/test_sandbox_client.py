@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from chameleon.agentkit._runtime import AgentRun
@@ -166,3 +168,26 @@ def test_frame_codec_roundtrip():
     obj = {"t": "rpc", "id": 3, "args": {"x": "中文"}}
     assert decode_frame(encode_frame(obj)) == obj
     assert encode_frame(obj).endswith(b"\n")  # 换行分帧
+
+
+@pytest.mark.asyncio
+async def test_concurrent_rpc_channel_lock_no_frame_steal():
+    """评审7 🟠 根治：并发 _rpc 经通道锁串行化，互不偷帧（即便 recv 返回序与发送序相反）。"""
+    from chameleon.agentkit._sandbox_client import SandboxClientTransport
+
+    sent: list[int] = []  # 已发未答的 rid
+
+    def _send(frame):
+        if frame.get("t") == "rpc":
+            sent.append(frame["id"])
+
+    async def _recv():
+        # LIFO 返回最近未答 rid 的结果——无锁会让先发的 rpc 偷到后发的帧/对方挂起；
+        # 有锁时任一时刻只一个 in-flight rid，恒正确。
+        rid = sent.pop()
+        return {"t": "rpc_result", "id": rid, "ok": True, "data": f"r{rid}"}
+
+    t = SandboxClientTransport(send_fn=_send, recv_fn=_recv, emit_fn=lambda f: None)
+    a, b = await asyncio.gather(t._rpc("m", {}), t._rpc("m", {}))
+    # 两个并发 rpc 各拿到自己的结果（不混、不挂）；锁保证 in-flight 唯一
+    assert {a, b} == {"r1", "r2"}
