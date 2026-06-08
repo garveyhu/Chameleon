@@ -841,6 +841,13 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             # 重新 invoke，journal 重放至 ask 点取答案续跑。
             logger.info("agentkit agent {} 暂停等人工输入 @call_index={}",
                         ctx.agent_def.key, paused.call_index)
+            # 评审 #5：先 drain pause 前已 emit 但未产出的缓冲事件（citation/tool_result/step），
+            # 再上报 pre-pause 累计 usage——否则暂停时这些 trace 事件丢失、pre-pause token 漏计。
+            for ev in transport.drain():
+                yield ev
+            u = transport.usage_total()
+            if u.get("total_tokens"):
+                yield StreamEvent(type=StreamEventType.metadata, data={"usage": u})
             yield StreamEvent(
                 type=StreamEventType.step,
                 data={"name": "human_input_pending", "status": "paused",

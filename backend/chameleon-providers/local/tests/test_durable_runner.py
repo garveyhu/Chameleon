@@ -15,11 +15,12 @@ import types
 
 import pytest
 
-from chameleon.agentkit import AgentRun, ModelSlot, agent
+from chameleon.agentkit import AgentRun, ModelSlot, StreamEvent, StreamEventType, agent
 from chameleon.providers.base.types import AgentDef, InvokeContext
-from chameleon.providers.local.agentkit_runner import run_agentkit
+from chameleon.providers.local.agentkit_runner import InProcessTransport, run_agentkit
 
 _MOD = "chameleon._test_durable_runner.hitl"
+_EMIT_MOD = "chameleon._test_durable_runner.emit"
 
 
 def _register_durable_agent() -> None:
@@ -37,6 +38,36 @@ def _register_durable_agent() -> None:
     sys.modules[_MOD] = mod
 
 
+def _register_emit_agent() -> None:
+    if _EMIT_MOD in sys.modules:
+        return
+
+    @agent(key="_t_hitl_emit", name="引用后审批", models=[ModelSlot("chat", "c")], durable=True)
+    async def handle(ctx: AgentRun):
+        ctx.emit(StreamEvent(type=StreamEventType.citation, data={"text": "ref"}))
+        decision = await ctx.ask_human("批准这步吗？")  # call_index 0（citation emit 不计 index）
+        yield f"决定：{decision}"
+
+    mod = types.ModuleType(_EMIT_MOD)
+    mod.handle = handle  # type: ignore[attr-defined]
+    handle.__module__ = _EMIT_MOD
+    sys.modules[_EMIT_MOD] = mod
+
+
+def _mock_memory(monkeypatch) -> None:  # noqa: ANN001
+    """把 InProcessTransport 的 DB memory 换成内存 dict（按 scope_ref+key），免 DB 测真 scope 路径。"""
+    store: dict = {}
+
+    async def _get(self, key, default=None):  # noqa: ANN001
+        return store.get((self._scope_ref, key), default)
+
+    async def _set(self, key, value):  # noqa: ANN001
+        store[(self._scope_ref, key)] = value
+
+    monkeypatch.setattr(InProcessTransport, "memory_get", _get)
+    monkeypatch.setattr(InProcessTransport, "memory_set", _set)
+
+
 @pytest.mark.asyncio
 async def test_run_agentkit_durable_without_scope_fails_fast():
     """durable + 无 scope（session_id/end_user 均空）→ run_agentkit fail-closed 报错，不静默
@@ -52,3 +83,36 @@ async def test_run_agentkit_durable_without_scope_fails_fast():
     )
     with pytest.raises(RuntimeError, match="需持久化 scope"):
         _ = [ev async for ev in run_agentkit(ctx)]
+
+
+@pytest.mark.asyncio
+async def test_run_agentkit_pause_drain_and_resume_cycle(monkeypatch):
+    """评审 #4/#5：真 scope（mock 内存）下完整 pause→resume——
+    ① 暂停时 drain pause 前 emit 的 citation（不丢）+ emit pending step；
+    ② resume（同 request_id + 答案经 context_vars→_seed_resume 回填）重放续跑完成。
+    这是真 scope 路径（非 session_id=None 的 no-op 退化路径，评审指出后者是假验证）。"""
+    _mock_memory(monkeypatch)
+    _register_emit_agent()
+    adef = AgentDef(
+        key="_t_hitl_emit", provider="local",
+        config={"__agentkit_module__": _EMIT_MOD, "__agentkit_attr__": "handle"},
+    )
+
+    def _ctx(cvars: dict | None = None) -> InvokeContext:
+        return InvokeContext(
+            agent_def=adef, input="hi", history=[], app_id="app1",
+            session_id="s1", request_id="req-cycle", stream=True, context_vars=cvars or {},
+        )
+
+    # run 1：暂停。citation 在 ask_human 前 emit、AgentPaused 时经 drain 产出（评审 #5）
+    ev1 = [e async for e in run_agentkit(_ctx())]
+    assert any(e.type == StreamEventType.citation for e in ev1), "pause 前 citation 应被 drain"
+    assert any(
+        e.type == StreamEventType.step and e.data.get("name") == "human_input_pending" for e in ev1
+    )
+    assert not [e for e in ev1 if e.type == StreamEventType.delta]  # 暂停未产出答案
+
+    # run 2：resume（同 request_id + 答案经 context_vars 回填 journal）→ 重放续跑完成
+    ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 0}))]
+    out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
+    assert out == "决定：同意"
