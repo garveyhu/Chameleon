@@ -657,10 +657,27 @@ class AgentRun:
 
     async def _seed_resume(self, call_index: int, answer: Any) -> None:
         """resume 入口（框架内部，非作者 API）：把人工答案回填进 journal 的 ask 点，使本次重放
-        在该 call_index 的 ctx.ask_human 返此答案、续跑过暂停点。须与首跑同 run_id（per-run）。"""
+        在该 call_index 的 ctx.ask_human 返此答案、续跑过暂停点。须与首跑同 run_id（per-run）。
+
+        校验 pending（评审17）：① 该 run 必须真处暂停态（pending 存在且 call_index 匹配）——否则
+        错/缺 run_id 会静默开新 journal + 真重调模型（假 resume）；② 不覆盖非 ask_human 的 journal
+        记录——否则错位的 resume_call_index 会损坏 complete 记录、不可逆 brick 该 run。
+        """
         if not self._journal_enabled:
             return
+        pending = await self._t.memory_get(_PENDING_KEY, None)
+        if not pending or pending.get("call_index") != call_index:
+            raise RuntimeError(
+                f"无匹配的暂停可恢复：run_id={self._journal_run_id!r} 未处暂停态，或 run_id 错、"
+                f"或 resume_call_index={call_index} 与 pending（{(pending or {}).get('call_index')}）不符"
+            )
         key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{call_index}__"
+        existing = await self._t.memory_get(key, None)
+        if existing is not None and existing.get("method") != "ask_human":
+            raise RuntimeError(
+                f"resume_call_index={call_index} 错位：journal 记录为 {existing.get('method')!r} 非 "
+                f"ask_human，拒绝覆盖（防损坏 journal / brick run）"
+            )
         await self._t.memory_set(key, {"method": "ask_human", "output": answer})
 
 

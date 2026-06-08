@@ -174,11 +174,16 @@ async def dev_call_agent(
         request_id=rid,
     )
     parts: list[str] = []
+    done_answer = ""  # 非流式 agent（如非流式 graph）答案只在 done 事件，不在 delta（评审17 回退）
     pending: dict[str, Any] | None = None
     try:
         async for ev in provider.stream(ctx):
             if ev.type == StreamEventType.delta:
                 parts.append(ev.data.get("text", ""))
+            elif ev.type == StreamEventType.done:
+                # 镜像 _StreamAggregator：done 带非空 answer 时覆盖 delta 累积（非流式答案节点的图
+                # 作 A2A 子智能体时答案只在此，否则 delta-only 扫描会静默丢答案）。
+                done_answer = (ev.data or {}).get("answer") or done_answer
             elif (
                 ev.type == StreamEventType.step
                 and ev.data.get("name") == "human_input_pending"
@@ -196,7 +201,7 @@ async def dev_call_agent(
 
         logger.exception("dev call_agent 失败 target={}", target)
         return {"answer": "", "error": "子智能体执行失败", "run_id": rid}
-    out: dict[str, Any] = {"answer": "".join(parts), "run_id": rid}
+    out: dict[str, Any] = {"answer": done_answer or "".join(parts), "run_id": rid}
     if pending is not None:
         out["pending"] = pending
     return out
