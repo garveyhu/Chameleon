@@ -101,7 +101,21 @@ class InProcessTransport(RuntimeTransport):
         self._budget = budget
         #: ctx.memory 作用域（end_user_id 优先，退化 session_id）
         self._scope_ref = scope_ref
+        #: 本次运行累计 token 用量（complete/stream/工具循环/子调用共账）；run_agentkit
+        #: 流末 emit → InvokeResult.usage 非空 → A2A budget_consumed 真实
+        self._usage_total: dict[str, int] = {
+            "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+        }
         self._pending: list[StreamEvent] = []
+
+    def track_usage(self, usage: dict[str, int] | None) -> None:
+        if not usage:
+            return
+        for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            self._usage_total[k] += int(usage.get(k) or 0)
+
+    def usage_total(self) -> dict[str, int]:
+        return dict(self._usage_total)
 
     def _resolve_code(self, slot: str) -> str | None:
         s = self._slots.get(slot)
@@ -358,6 +372,7 @@ class InProcessTransport(RuntimeTransport):
                 round_usage = extract_usage(resp)
                 usage = merge_usage(usage, round_usage)
                 self._charge((round_usage or {}).get("total_tokens", 0))  # 计入成本闸
+                self.track_usage(round_usage)  # 计入本次运行 usage（供 A2A 上报）
                 calls = extract_tool_calls(resp)
                 if not calls:
                     text = _content_to_text(resp)
@@ -562,7 +577,10 @@ class InProcessTransport(RuntimeTransport):
             depth=self._a2a_depth + 1,
         )
         # 成本闸：扣减子智能体实际消耗，扇出多次调用累计受限（不再每次满额放行）
-        self._charge(out.get("tokens", 0))
+        child_tokens = int(out.get("tokens") or 0)
+        self._charge(child_tokens)
+        # 子调用消耗计入本 agent 上报 usage（让本 agent 的 A2A 调用方预算也递减，子树共账）
+        self.track_usage({"total_tokens": child_tokens})
         return out.get("answer") or ""
 
     def span(self, name: str, *, type: str = "span") -> Any:
@@ -679,21 +697,20 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             attachments=ctx.attachments,
         )
 
-        if manifest.is_class:
-            # 新式类：定义了实例方法 handle(self, run) → 注入 AgentRun + transport，
-            # 与函数式共用同一 ctx（兑现「两层共用同一 ctx」）。
-            if hasattr(target, "handle"):
-                inst = target()
-                async for ev in _consume(inst.handle(run), transport):
-                    yield ev
-                return
-            # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx 便利）
+        if manifest.is_class and not hasattr(target, "handle"):
+            # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx/usage 上报）
             async for ev in target.astream(ctx):
                 yield ev
             return
 
-        async for ev in _consume(target(run), transport):
+        # 函数式 / 新式类（handle(self, run) 注入 AgentRun）共用 _consume + 流末上报 usage
+        result = target().handle(run) if manifest.is_class else target(run)
+        async for ev in _consume(result, transport):
             yield ev
+        # 流末上报累计 usage → InvokeResult.usage 非空 → A2A budget_consumed 真实
+        u = transport.usage_total()
+        if u.get("total_tokens"):
+            yield StreamEvent(type=StreamEventType.metadata, data={"usage": u})
     finally:
         if mcp_stack is not None:
             from contextlib import suppress

@@ -293,6 +293,33 @@ async def test_ctx_wrap_passthrough():
     assert run.wrap(sentinel) is sentinel
 
 
+def test_track_usage_accumulates():
+    """transport.track_usage 累计 → usage_total 求和（A2A 上报基础，评审2 #25）。"""
+    t = InProcessTransport(agent_key="x", bindings={}, slots={})
+    t.track_usage({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
+    t.track_usage({"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5})
+    t.track_usage(None)  # None 安全
+    assert t.usage_total() == {
+        "prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20,
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_tool_loop_accumulates_usage_for_reporting():
+    """工具循环每轮模型 usage 计入 transport，供 run_agentkit 流末上报 → A2A 计账非 no-op。"""
+    t = InProcessTransport(agent_key="x", bindings={}, slots={})
+    t.chat_model = lambda *, slot=None, model=None: _FakeModel([_FakeAI(content="答案")])  # type: ignore[method-assign]
+    _ = [
+        d
+        async for d in t.run_tool_loop(
+            messages=[("user", "q")], slot="chat", model=None,
+            platform_keys=[], local_tools=[], max_steps=4,
+        )
+    ]
+    # _FakeAI usage_metadata total=2 → 累计进 usage_total
+    assert t.usage_total()["total_tokens"] >= 2
+
+
 @pytest.mark.asyncio
 async def test_run_tool_loop_no_tool_calls_returns_text():
     t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[])

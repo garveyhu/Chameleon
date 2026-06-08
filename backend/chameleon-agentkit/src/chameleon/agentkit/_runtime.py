@@ -189,6 +189,15 @@ class RuntimeTransport(ABC):
         """透传一个自定义 StreamEvent 到输出流。"""
         ...
 
+    @abstractmethod
+    def track_usage(self, usage: dict[str, int] | None) -> None:
+        """累计本次运行的 token 用量（complete/stream/工具循环/子调用共账）。
+
+        run_agentkit 流末把累计值 emit 成 usage 事件 → InvokeResult.usage 非空 →
+        A2A budget_consumed 真实 → 扇出预算闸生效（否则成本闸对 agentkit 子 agent no-op）。
+        """
+        ...
+
 
 class AgentRun:
     """注入给作者 `handle(ctx)` / `astream` 的运行时上下文。
@@ -260,10 +269,13 @@ class AgentRun:
                 slot=None if model else slot, model=model, schema=schema
             )
             async with self._t.span("llm.complete", type="span"):
-                return await structured.ainvoke(msgs, **kw)
+                resp = await structured.ainvoke(msgs, **kw)
+            self._t.track_usage(_usage_of(resp))
+            return resp
         chat = self._t.chat_model(slot=None if model else slot, model=model)
         async with self._t.span("llm.complete", type="span"):
             resp = await chat.ainvoke(msgs, **kw)
+        self._t.track_usage(_usage_of(resp))
         return _content_to_text(resp)
 
     async def stream(
@@ -281,6 +293,7 @@ class AgentRun:
         msgs = self._build_messages(system, user, context)
         async with self._t.span("llm.stream", type="span"):
             async for chunk in chat.astream(msgs, **kw):
+                self._t.track_usage(_usage_of(chunk))  # usage 通常在末 chunk
                 text = _content_to_text(chunk)
                 if text:
                     yield text
@@ -460,6 +473,26 @@ class _KbProxy:
             expand=expand,
             hyde=hyde,
         )
+
+
+def _usage_of(resp: Any) -> dict[str, int] | None:
+    """从 LangChain message/chunk 抽 token 用量（duck-typed，不 import langchain）。"""
+    meta = getattr(resp, "usage_metadata", None) or {}
+    if not meta:
+        rm = getattr(resp, "response_metadata", None) or {}
+        meta = rm.get("token_usage", {}) if isinstance(rm, dict) else {}
+    if not meta:
+        return None
+    prompt = meta.get("input_tokens") or meta.get("prompt_tokens") or 0
+    completion = meta.get("output_tokens") or meta.get("completion_tokens") or 0
+    total = meta.get("total_tokens") or (prompt + completion)
+    if not total:
+        return None
+    return {
+        "prompt_tokens": int(prompt),
+        "completion_tokens": int(completion),
+        "total_tokens": int(total),
+    }
 
 
 def _content_to_text(resp: Any) -> str:

@@ -237,6 +237,9 @@ class HttpDevTransport(RuntimeTransport):
     def span(self, name: str, *, type: str = "span") -> Any:
         return _NullSpan()
 
+    def track_usage(self, usage: dict[str, int] | None) -> None:
+        return  # dev 不上报 usage（本地自测无计费/预算语义）
+
     def emit(self, event: Any) -> None:
         self._pending.append(event)
 

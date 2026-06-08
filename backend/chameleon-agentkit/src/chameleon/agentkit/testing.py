@@ -92,6 +92,7 @@ class FakeTransport(RuntimeTransport):
         self.invocations: list[tuple[str, Any]] = []
         self.tool_invocations: list[tuple[str, dict, Any]] = []
         self.emitted: list[Any] = []
+        self.usage_tracked: list[dict] = []
 
     def _next_reply(self) -> str:
         if not self._replies:
@@ -177,6 +178,10 @@ class FakeTransport(RuntimeTransport):
 
     def span(self, name: str, *, type: str = "span") -> Any:
         return _NullSpan()
+
+    def track_usage(self, usage: dict[str, int] | None) -> None:
+        if usage:
+            self.usage_tracked.append(usage)
 
     def emit(self, event: Any) -> None:
         self.emitted.append(event)

@@ -435,20 +435,17 @@ async def invoke(
             provider_conv_id=result.provider_conv_id,
         )
 
-    # 兜底填 usage/cost/model：provider 自身没透出（如图引擎下多 LLM 节点）时，从
-    # BaseLLM 回调写下的 generation 子行聚合补回根行；不影响 provider 已给 usage 的情况。
-    rollup_cost = None
-    rollup_model = None
-    if result.usage is None:
-        from chameleon.providers.base.types import Usage
+    # 始终从 generation 子行聚合 cost 补回根行 —— 根行常无自身 model/cost（agentkit/图引擎
+    # 是包装行，真实 LLM/媒体 cost 落在 BaseLLM 回调 / record_scope 写的子行）。仅当
+    # provider 未透出 usage 时，同时用聚合 token 补 usage（agentkit 现会透出 usage 供 A2A
+    # 计账，故 usage 补填与 cost 汇总必须解耦，否则 usage 一旦非空就漏掉根行 cost 归集）。
+    from chameleon.providers.base.types import Usage
 
-        p, c, t, rollup_cost, rollup_model = (
-            await api_key_service.aggregate_generation_rollup(session, request_id)
-        )
-        if any(v is not None for v in (p, c, t)):
-            result.usage = Usage(
-                prompt_tokens=p, completion_tokens=c, total_tokens=t
-            )
+    p, c, t, rollup_cost, rollup_model = await api_key_service.aggregate_generation_rollup(
+        session, request_id
+    )
+    if result.usage is None and any(v is not None for v in (p, c, t)):
+        result.usage = Usage(prompt_tokens=p, completion_tokens=c, total_tokens=t)
 
     # ⑨ 审计（root trace 行 —— generation 子行由 BaseLLM 回调自动落）
     rollup_cost, rollup_model = await _media_cost_fallback(
@@ -919,10 +916,11 @@ async def _stream_finalize(
                         provider_conv_id=result.provider_conv_id,
                     )
 
-            # 兜底填 usage/cost/model：provider 没透出时从 generation 子行聚合补根行
+            # 始终从 generation 子行聚合 cost 补根行（根行常无自身 cost）；usage 仅 provider
+            # 未透出时用聚合 token 补（与 cost 汇总解耦，详见非流式路径同款注释）。
             rollup_cost = None
             rollup_model = None
-            if result.usage is None and not failed:
+            if not failed:
                 from chameleon.providers.base.types import Usage
 
                 p, c, t, rollup_cost, rollup_model = (
@@ -930,7 +928,7 @@ async def _stream_finalize(
                         session, request_id
                     )
                 )
-                if any(v is not None for v in (p, c, t)):
+                if result.usage is None and any(v is not None for v in (p, c, t)):
                     result.usage = Usage(
                         prompt_tokens=p, completion_tokens=c, total_tokens=t
                     )
