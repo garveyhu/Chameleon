@@ -73,7 +73,12 @@ async def dev_memory(
 async def dev_call_agent(
     req: DevCallAgentRequest, _: None = Depends(require_dev_token)
 ) -> Result[dict]:
-    return Result.ok(await service.dev_call_agent(target=req.target, input=req.input))
+    return Result.ok(
+        await service.dev_call_agent(
+            target=req.target, input=req.input, run_id=req.run_id,
+            resume_call_index=req.resume_call_index, resume_answer=req.resume_answer,
+        )
+    )
 
 
 @router.post("/kb/search", response_model=Result[list[DevDoc]])

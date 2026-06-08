@@ -100,6 +100,28 @@ def _check_route_decision(client, headers) -> bool:
     return ok
 
 
+def _check_hitl_cycle(client, headers) -> bool:
+    """durable HITL 完整循环：example-hitl 在 ctx.ask_human 暂停 → 返 run_id+pending → 带 run_id+
+    答案重调 → journal 重放（complete 不重调）续跑完成。验真平台 durable/HITL 端到端。"""
+    payload = {"target": "example-hitl", "input": "删除生产库 orders 表"}
+    try:
+        d1 = (client.post(f"{BASE}/v1/dev/call_agent", headers=headers, json=payload).json()
+              .get("data") or {})
+        pend = d1.get("pending") or {}
+        if not d1.get("run_id") or pend.get("call_index") is None:
+            print(f"❌ {'hitl-cycle':24} → 未暂停/无 pending：{d1}")
+            return False
+        d2 = (client.post(f"{BASE}/v1/dev/call_agent", headers=headers, json={
+            **payload, "run_id": d1["run_id"],
+            "resume_call_index": pend["call_index"], "resume_answer": "拒绝",
+        }).json().get("data") or {})
+        ok = "拒绝" in d2.get("answer", "")
+    except Exception:  # noqa: BLE001
+        d2, ok = {}, False
+    print(f"{'✅' if ok else '❌'} {'hitl-cycle (durable)':24} → {re.sub(r'[\s]+', ' ', str(d2.get('answer', d2)))[:60]}")
+    return ok
+
+
 def main() -> int:
     token = _dev_token()
     headers = {"X-Dev-Token": token, "Content-Type": "application/json"}
@@ -121,8 +143,8 @@ def main() -> int:
             print(f"{status} {key:24} → {snippet}")
             passed += ok
             failed += not ok
-        # 结构化输出 + 路由决策（route/complete schema 根基）单独走 /v1/dev/structured
-        for fn in (_check_structured, _check_route_decision):
+        # 结构化输出 + 路由决策 + durable HITL 循环（特殊路径，非单次 call_agent）
+        for fn in (_check_structured, _check_route_decision, _check_hitl_cycle):
             ok = fn(client, headers)
             passed += ok
             failed += not ok

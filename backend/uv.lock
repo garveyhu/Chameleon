@@ -10,6 +10,7 @@ resolution-markers = [
 members = [
     "chameleon-agent-example-classic",
     "chameleon-agent-example-echo",
+    "chameleon-agent-example-hitl",
     "chameleon-agent-example-imagegen",
     "chameleon-agent-example-mcp-use",
     "chameleon-agent-example-orchestrator",
@@ -275,6 +276,17 @@ requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" 
 name = "chameleon-agent-example-echo"
 version = "0.1.0"
 source = { editable = "chameleon-agents/examples/echo" }
+dependencies = [
+    { name = "chameleon-agentkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
+
+[[package]]
+name = "chameleon-agent-example-hitl"
+version = "0.1.0"
+source = { editable = "chameleon-agents/examples/hitl" }
 dependencies = [
     { name = "chameleon-agentkit" },
 ]

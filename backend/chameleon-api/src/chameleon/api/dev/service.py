@@ -127,15 +127,27 @@ async def dev_structured(
     return dict(resp)
 
 
-async def dev_call_agent(*, target: str, input: str) -> dict[str, Any]:
-    """dev 子智能体调用：服务端按 key 调目标 agent 返答案（ctx.call_agent 的 dev 实现）。
+async def dev_call_agent(
+    *,
+    target: str,
+    input: str,
+    run_id: str | None = None,
+    resume_call_index: int | None = None,
+    resume_answer: Any = None,
+) -> dict[str, Any]:
+    """dev 子智能体调用 + durable HITL 续跑（ctx.call_agent / resume 的 dev 实现）。
 
-    本地自测时作者的 ctx.call_agent 经此回调，目标 agent 用站内已配置资源跑——与站内
-    InProcessTransport 的进程内 A2A 契约一致（dev 不做深度/预算闸，仅打通调用）。
+    本地自测时作者的 ctx.call_agent 经此回调，目标 agent 用站内已配置资源跑。durable agent
+    若 ctx.ask_human 暂停 → 返 run_id + pending（call_index/prompt）；带 run_id + resume_call_index
+    + resume_answer 重调即回填答案、journal 重放至 ask 点续跑。
+
+    run_id 同时作 request_id（journal run 标识）+ session_id（durable journal 的持久化 scope）——
+    resume 须复用首跑的 run_id 才能命中 journal。走 stream 扫描以捕获 pause 信号（invoke 聚合会丢）。
     """
     import uuid
 
     from chameleon.providers.base import AGENTS, PROVIDERS, InvokeContext
+    from chameleon.providers.base.types import StreamEventType
 
     adef = AGENTS.get(target)
     if adef is None:
@@ -143,26 +155,51 @@ async def dev_call_agent(*, target: str, input: str) -> dict[str, Any]:
     provider = PROVIDERS.get(adef.provider)
     if provider is None:
         return {"answer": "", "error": f"provider 未注册: {adef.provider}"}
+
+    rid = run_id or uuid.uuid4().hex
+    cvars: dict[str, Any] = {"_a2a_budget": 200_000, "_a2a_depth": 0}
+    if resume_answer is not None and resume_call_index is not None:
+        cvars["_resume_answer"] = resume_answer
+        cvars["_resume_call_index"] = resume_call_index
     ctx = InvokeContext(
         agent_def=adef,
         input=input,
         history=[],
-        session_id=f"dev-a2a-{uuid.uuid4().hex[:12]}",
+        session_id=rid,  # durable journal 的 scope；resume 须同 run_id 才命中
         provider_conv_id=None,
-        context_vars={"_a2a_budget": 200_000, "_a2a_depth": 0},
+        context_vars=cvars,
         options={},
         app_id="dev",
-        stream=False,
-        request_id=uuid.uuid4().hex,
+        stream=True,
+        request_id=rid,
     )
+    parts: list[str] = []
+    pending: dict[str, Any] | None = None
     try:
-        result = await provider.invoke(ctx)
-    except Exception as e:  # noqa: BLE001
+        async for ev in provider.stream(ctx):
+            if ev.type == StreamEventType.delta:
+                parts.append(ev.data.get("text", ""))
+            elif (
+                ev.type == StreamEventType.step
+                and ev.data.get("name") == "human_input_pending"
+            ):
+                pending = {
+                    "call_index": ev.data.get("call_index"),
+                    "prompt": ev.data.get("prompt"),
+                    "run_id": ev.data.get("run_id"),
+                }
+            elif ev.type == StreamEventType.error:
+                return {"answer": "", "error": ev.data.get("message", "子智能体执行失败"),
+                        "run_id": rid}
+    except Exception:
         from loguru import logger
 
         logger.exception("dev call_agent 失败 target={}", target)
-        return {"answer": "", "error": f"子智能体执行失败: {type(e).__name__}"}
-    return {"answer": result.answer or ""}
+        return {"answer": "", "error": "子智能体执行失败", "run_id": rid}
+    out: dict[str, Any] = {"answer": "".join(parts), "run_id": rid}
+    if pending is not None:
+        out["pending"] = pending
+    return out
 
 
 #: dev 记忆固定命名空间（本地自测无 end_user 身份；隔离于站内真实记忆）
