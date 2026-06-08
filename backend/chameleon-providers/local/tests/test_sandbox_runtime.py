@@ -72,6 +72,22 @@ async def test_run_sandboxed_parent_loop_and_broker(tmp_path):
     assert not any(e.type == StreamEventType.error for e in events)
 
 
+def test_build_docker_command_isolation_flags():
+    """Phase 3 docker 命令烘焙全部隔离 flags（真不可信隔离的安全核心）。"""
+    from chameleon.providers.local.sandbox import build_docker_command
+
+    cmd = build_docker_command("chm-sbx:latest", "/host/agent/src", mem_mb=256)
+    s = " ".join(cmd)
+    assert "--network none" in s  # 无网络出站（防 SSRF/外传）
+    assert "--read-only" in s  # 只读 rootfs（host .env/config 不挂入→读不到盘上凭据）
+    assert "--memory 256m" in s and "--pids-limit 256" in s  # 内存/进程限
+    assert "--security-opt no-new-privileges" in s
+    assert "/host/agent/src:/agent_src:ro" in s  # agent 源码只读挂载
+    # 不挂 config/凭据目录、不传 host 凭据 env
+    assert "component.json" not in s and "DATABASE_URL" not in s
+    assert cmd[-3:] == ["python", "-m", "chameleon.agentkit._sandbox_child"]
+
+
 @pytest.mark.asyncio
 async def test_broker_run_tool_scope_rejects_undeclared():
     """broker scope 红线：子进程调未声明的平台工具 → 拒绝（不执行）。"""

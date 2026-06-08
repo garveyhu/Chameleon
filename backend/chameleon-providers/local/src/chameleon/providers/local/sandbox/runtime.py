@@ -198,6 +198,53 @@ async def _stream_chat(broker: Any, proc: Any, frame: dict[str, Any]) -> None:
     await proc.stdin.drain()
 
 
+def build_docker_command(
+    image: str, agent_src: str, *, mem_mb: int = 512, cpus: str = "1.0"
+) -> list[str]:
+    """构造 Phase 3 docker 隔离执行命令（烘焙全部隔离 flags）。
+
+    真"接不可信陌生人代码"档：--network none（无出站）+ --read-only（只读 rootfs，host
+    .env/config 根本不挂入 → 读不到盘上凭据）+ mem/pids/cpus 限 + no-new-privileges +
+    agent 源码只读挂载（无凭据）+ 不传任何 host env。stdio 帧协议与子进程档一致。镜像须
+    预装 chameleon-agentkit（child 只需 agentkit + agent 包，模型调用在主进程 broker）。
+    """
+    return [
+        "docker", "run", "--rm", "-i",
+        "--network", "none",
+        "--read-only",
+        "--tmpfs", "/tmp:size=64m",
+        "--memory", f"{mem_mb}m", "--memory-swap", f"{mem_mb}m",
+        "--pids-limit", "256",
+        "--cpus", cpus,
+        "--security-opt", "no-new-privileges",
+        "-v", f"{agent_src}:/agent_src:ro",
+        "-e", "PYTHONPATH=/agent_src",
+        "-e", "CHAMELEON_SANDBOX=1",
+        image,
+        "python", "-m", "chameleon.agentkit._sandbox_child",
+    ]
+
+
+def _agent_src_root(module: str) -> str | None:
+    """安全定位 agent 包源码根（find_spec，不 import → 不在主进程执行不可信代码）。"""
+    import importlib.util
+    from pathlib import Path
+
+    try:
+        spec = importlib.util.find_spec(module)
+    except Exception:  # noqa: BLE001
+        return None
+    origin = getattr(spec, "origin", None) if spec else None
+    if not origin:
+        return None
+    # module 形如 chameleon.agents.X.agent → 上溯到含顶层包 chameleon/ 的 src 根
+    parts = module.split(".")
+    p = Path(origin).resolve()
+    for _ in parts:  # 退到 src 根（origin 文件 → 去掉各级包目录）
+        p = p.parent
+    return str(p)
+
+
 async def run_sandboxed(
     *,
     module: str,
@@ -208,23 +255,37 @@ async def run_sandboxed(
     config: dict[str, Any] | None = None,
     env_extra: dict[str, str] | None = None,
 ) -> AsyncIterator[StreamEvent]:
-    """在隔离子进程跑 module:attr 的 handle，ctx 资源经 broker 解析，产出 StreamEvent 流。"""
-    extra = {"PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
-    extra.update(env_extra or {})
-    env = scrub_env(dict(os.environ), extra=extra)
-    # ⚠️ Phase 2 子进程隔离 = env 凭据擦除 + 进程 + CPU/内存限 + ctx 经 broker scope。
-    # **不含**文件系统隔离（子进程仍可 open 盘上 .env/config 读凭据）+ 网络出站隔离。
-    # 真"接不可信陌生人代码"需 Phase 3 docker（network=none + 只读 rootfs，见 #29/#30）。
-    logger.warning(
-        "agentkit sandbox（子进程）：env 凭据已擦除，但 FS/网络未隔离 —— 不可信代码请用 "
-        "Phase 3 docker runtime；当前档适合半可信代码"
-    )
+    """在隔离环境跑 module:attr 的 handle，ctx 资源经 broker 解析，产出 StreamEvent 流。
+
+    runtime 由 CHAMELEON_SANDBOX_RUNTIME 选：docker（真隔离，需 CHAMELEON_SANDBOX_IMAGE）
+    或 subprocess（默认，半可信——env 凭据擦除但 FS/网络未隔离）。stdio 帧协议两者一致。
+    """
+    runtime = os.environ.get("CHAMELEON_SANDBOX_RUNTIME", "subprocess").strip().lower()
+    if runtime == "docker":
+        image = os.environ.get("CHAMELEON_SANDBOX_IMAGE", "").strip()
+        agent_src = _agent_src_root(module)
+        if not image or not agent_src:
+            raise RuntimeError(
+                "CHAMELEON_SANDBOX_RUNTIME=docker 需 CHAMELEON_SANDBOX_IMAGE + 可定位 agent 源码"
+            )
+        cmd = build_docker_command(image, agent_src)
+        spawn_env = None  # docker 不传 host env（凭据全留主进程）
+        logger.info("agentkit sandbox（docker 真隔离）image={}", image)
+    else:
+        extra = {"PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+        extra.update(env_extra or {})
+        spawn_env = scrub_env(dict(os.environ), extra=extra)
+        cmd = [sys.executable, "-m", "chameleon.agentkit._sandbox_child"]
+        logger.warning(
+            "agentkit sandbox（子进程）：env 凭据已擦除，但 FS/网络未隔离 —— 不可信代码请用 "
+            "CHAMELEON_SANDBOX_RUNTIME=docker；当前档适合半可信代码"
+        )
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, "-m", "chameleon.agentkit._sandbox_child",
+        *cmd,
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=None,  # 继承父 stderr，避免管道缓冲死锁
-        env=env,
+        env=spawn_env,
         limit=8 * 1024 * 1024,  # 单帧上限 8MB（默认 64KiB 会让 yield 大文本/base64 崩）
     )
     assert proc.stdin and proc.stdout
