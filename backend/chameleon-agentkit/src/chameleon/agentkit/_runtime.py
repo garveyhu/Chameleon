@@ -220,6 +220,10 @@ class RuntimeTransport(ABC):
 
 #: ctx.checkpoint/restore 在 memory 里的保留键（前缀防与作者自定义 key 冲突）。
 _CHECKPOINT_KEY = "__chm_checkpoint__"
+#: durable Slice1 memoization journal 键前缀（复用 AgentMemory，免迁移）。完整键
+#: `__chm_journal__<run_id>__<idx>__`——首尾 __chm_/__ 命中 _MemoryProxy.all() 保留键过滤，
+#: 对作者 memory 视图不可见。per-run（run_id）隔离：ctx.memory 是跨会话的，不加 run_id 会串。
+_JOURNAL_PREFIX = "__chm_journal__"
 
 
 class _RouteChoice(BaseModel):
@@ -247,6 +251,8 @@ class AgentRun:
         session_id: str | None,
         config: dict[str, Any],
         attachments: list[dict[str, Any]] | None = None,
+        durable: bool = False,
+        run_id: str | None = None,
     ) -> None:
         self._t = transport
         self.agent_key = agent_key
@@ -255,6 +261,11 @@ class AgentRun:
         self.history = history
         self.session_id = session_id
         self.config = config
+        #: durable Slice1：开启后 ctx 外部调用（当前 ctx.complete 文本路径）首跑记录进 journal、
+        #: 重放返记录值不重调（memoization 确定性重放）。需 run_id 做 per-run 隔离；默认关。
+        self._journal_enabled = bool(durable and run_id)
+        self._journal_run_id = run_id
+        self._call_index = 0
         #: 本次调用附带的附件原始 dict（{object_url, filename, mime, size}）。
         #: 图/音已由 service 翻进 messages 多模态 ContentBlock，作者主要拿这里
         #: 的元信息做条件分支；文档/数据类异步入临时 KB，通过 ctx.kb.search()
@@ -302,11 +313,39 @@ class AgentRun:
                 resp = await structured.ainvoke(msgs, **kw)
             self._t.track_usage(_usage_of(resp))
             return resp
-        chat = self._t.chat_model(slot=None if model else slot, model=model)
-        async with self._t.span("llm.complete", type="span"):
-            resp = await chat.ainvoke(msgs, **kw)
-        self._t.track_usage(_usage_of(resp))
-        return _content_to_text(resp)
+        async def _call() -> str:
+            chat = self._t.chat_model(slot=None if model else slot, model=model)
+            async with self._t.span("llm.complete", type="span"):
+                resp = await chat.ainvoke(msgs, **kw)
+            self._t.track_usage(_usage_of(resp))
+            return _content_to_text(resp)
+
+        return await self._memoize("complete", _call)
+
+    async def _memoize(self, method: str, producer: Any) -> Any:
+        """durable Slice1 memoization：首跑调 producer 并把输出记进 journal（AgentMemory，免迁移）；
+        同一 run 重放（resume/崩溃恢复）按 call_index 返记录值、不重调模型——不重复计费/副作用。
+
+        关：直接执行不记录。重放时 method 不匹配（handle 控制流非确定性，依赖了非 ctx 的随机性
+        导致 call 序列错位）→ 报错而非静默错乱（确定性契约红线）。仅 JSON 可序列化输出可记
+        （当前 ctx.complete 文本路径；schema/stream/工具循环的 journal 归后续 slice）。
+        """
+        if not self._journal_enabled:
+            return await producer()
+        idx = self._call_index
+        self._call_index += 1
+        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
+        cached = await self._t.memory_get(key, None)
+        if cached is not None:
+            if cached.get("method") != method:
+                raise RuntimeError(
+                    f"durable 重放 call_index={idx} method 不匹配"
+                    f"（记录 {cached.get('method')!r} ≠ 当前 {method!r}）：handle 控制流非确定性"
+                )
+            return cached["output"]
+        output = await producer()
+        await self._t.memory_set(key, {"method": method, "output": output})
+        return output
 
     async def stream(
         self,
