@@ -70,6 +70,34 @@ def _check_structured(client, headers) -> bool:
     return ok
 
 
+def _check_route_decision(client, headers) -> bool:
+    """真模型路由选择（评审12 🔴：route 此前从未经真模型）：复现 ctx.route 的结构化决策，
+    候选里正确答案是**非首位**——验真 Qwen 按 query 选对、而非静默兜底 keys[0]。"""
+    try:
+        r = client.post(
+            f"{BASE}/v1/dev/structured", headers=headers,
+            json={
+                "schema": {"type": "object",
+                           "properties": {"agent_key": {"type": "string"}, "reason": {"type": "string"}},
+                           "required": ["agent_key"]},
+                "messages": [
+                    {"role": "system", "content": "你是任务路由器。根据用户问题，从候选智能体里选"
+                     "最合适处理的那一个，返回它的 agent_key（必须是候选之一）。"},
+                    # doc-bot 在前、sql-bot 在后：算数问题正确答案是非首位的 sql-bot
+                    {"role": "user", "content": "候选智能体：\n- doc-bot: 查文档资料\n"
+                     "- sql-bot: 查数据库 / 做算数计算\n\n用户问题：帮我算 99 乘以 99"},
+                ],
+                "model": "qwen-plus",
+            },
+        )
+        d = r.json().get("data") or {}
+        ok = d.get("agent_key") == "sql-bot"  # 选了非首位的正确候选 → 真决策非兜底
+    except Exception:  # noqa: BLE001
+        d, ok = {}, False
+    print(f"{'✅' if ok else '❌'} {'route-decision':24} → {d}")
+    return ok
+
+
 def main() -> int:
     token = _dev_token()
     headers = {"X-Dev-Token": token, "Content-Type": "application/json"}
@@ -91,10 +119,11 @@ def main() -> int:
             print(f"{status} {key:24} → {snippet}")
             passed += ok
             failed += not ok
-        # 结构化输出（route/complete schema 的根基）单独一案，走 /v1/dev/structured
-        sok = _check_structured(client, headers)
-        passed += sok
-        failed += not sok
+        # 结构化输出 + 路由决策（route/complete schema 根基）单独走 /v1/dev/structured
+        for fn in (_check_structured, _check_route_decision):
+            ok = fn(client, headers)
+            passed += ok
+            failed += not ok
     print(f"\n{passed}/{passed + failed} passed")
     return 0 if failed == 0 else 1
 
