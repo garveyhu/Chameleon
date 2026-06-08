@@ -45,7 +45,14 @@ const http: AxiosInstance = axios.create({
       try {
         return JSON.parse(preserveBigIntIds(data));
       } catch {
-        return data;
+        // preserveBigIntIds 的正则可能误伤「逗号拼接的大整数字符串」（如
+        // scope_ref="id1,id2,id3"）破坏 JSON。后端全局走 SafeIntJSONResponse
+        // （大整数本就是字符串），故直接 plain parse 必然正确，作兜底。
+        try {
+          return JSON.parse(data);
+        } catch {
+          return data;
+        }
       }
     },
   ],
