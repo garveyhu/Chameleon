@@ -510,32 +510,39 @@ class InProcessTransport(RuntimeTransport):
         if not self._scope_ref:
             return
         from sqlalchemy import select
+        from sqlalchemy.exc import IntegrityError
 
         from chameleon.data.infra.db import AsyncSessionLocal
         from chameleon.data.models import AgentMemory
 
+        def _q():  # noqa: ANN202
+            return select(AgentMemory).where(
+                AgentMemory.agent_key == self._agent_key,
+                AgentMemory.scope_ref == self._scope_ref,
+                AgentMemory.mkey == key,
+            )
+
         async with AsyncSessionLocal() as s:
-            row = (
-                await s.execute(
-                    select(AgentMemory).where(
-                        AgentMemory.agent_key == self._agent_key,
-                        AgentMemory.scope_ref == self._scope_ref,
-                        AgentMemory.mkey == key,
-                    )
-                )
-            ).scalar_one_or_none()
+            row = (await s.execute(_q())).scalar_one_or_none()
             if row is None:
                 s.add(
                     AgentMemory(
-                        agent_key=self._agent_key,
-                        scope_ref=self._scope_ref,
-                        mkey=key,
-                        value={"v": value},
+                        agent_key=self._agent_key, scope_ref=self._scope_ref,
+                        mkey=key, value={"v": value},
                     )
                 )
             else:
                 row.value = {"v": value}
-            await s.commit()
+            try:
+                await s.commit()
+            except IntegrityError:
+                # 并发：另一事务已 insert 同 (agent_key,scope_ref,mkey)（uq 约束）——durable journal
+                # 在同 run_id 并发/双击 resume 下会撞。回滚改 update，幂等 upsert（评审 #6）。
+                await s.rollback()
+                existing = (await s.execute(_q())).scalar_one_or_none()
+                if existing is not None:
+                    existing.value = {"v": value}
+                    await s.commit()
 
     async def memory_all(self) -> dict[str, Any]:
         if not self._scope_ref:
