@@ -20,8 +20,12 @@ frontend/                 React + Vite + TS（yarn）
 docs/plans/               设计方案 SSOT
 ```
 
-依赖铁律：`core ← data ← integrations ← engine ← 上层`，单向不可反向（`uv run
-lint-imports` 守门，2 契约必须 GREEN）。
+依赖铁律：`core ← data ← integrations ← aikit ← engine ← 上层`，单向不可反向
+（`uv run lint-imports` 守门，**3 契约必须 GREEN**）：
+1. core 保持纯抽象（禁 sqlalchemy / langchain 系）；
+2. 分层基座单向（禁反向 / 越层）；
+3. agentkit 公共 SDK 精简（禁依赖 data / 重 ORM —— 保 `pip install chameleon-agentkit`
+   只拉 core + mcp，不被动拖 sqlalchemy/fastapi）。
 
 ## 本地起环境
 
@@ -55,8 +59,12 @@ async def handle(ctx: AgentRun):
         yield d
 ```
 
-ctx 能力面见 `backend/chameleon-agentkit/README.md`。本地自测：
-`agentkit lint/run/chat <module>`（需 dev token）。
+ctx 能力面见 `backend/chameleon-agentkit/README.md`。本地自测三态（同一份 handle）：
+- **脱平台**（最低摩擦，不连任何站点）：`pip install chameleon-agentkit` + 自带 LangChain
+  模型 → `StandaloneTransport` + `run_standalone`（见 `chameleon-agentkit/examples/`）。
+- **dev 服务**：`agentkit lint/run/chat <module>`（需 `CHAMELEON_DEV_TOKEN`，经 dev 端点用站内资源）。
+- **站内**：提交后 `InProcessTransport` 进程内跑。
+脱平台 vs 平台的行为差异（kb/trace/工具事件等）见 `docs/agentkit-guide.md`「完全脱平台跑」。
 
 ## 提交规范
 
@@ -73,8 +81,13 @@ cd backend && .venv/bin/python -m pytest <path>          # 后端
 cd frontend && yarn test:run                              # 前端
 ```
 
-注：全套件存在一批 pre-existing 失败（跨测试状态污染 / event-loop 级联），新增改动
-不应引入**新**失败。
+- agentkit 离线单测：`chameleon.agentkit.testing.FakeTransport`（可编程模型/kb/工具，确定性，
+  无需服务），见 `chameleon-agentkit/tests/`。
+- 真客户端 e2e（零 API 花费）：`respx` 拦 httpx 让真 `langchain_openai.ChatOpenAI` 跑 canned
+  响应，演练真实 SDK 集成（见 `test_standalone_real_client_e2e.py`，覆盖 complete/stream/gather/工具）。
+- 集成测试不 mock 数据库（用 test 库）；并发/子进程测试加硬超时看门狗。
+- 注：全套件存在一批 pre-existing 失败（跨测试状态污染 / event-loop 级联），新增改动不应
+  引入**新**失败。
 
 ## 行为准则
 
