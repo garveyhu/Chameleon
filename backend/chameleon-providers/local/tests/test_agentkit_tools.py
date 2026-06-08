@@ -355,6 +355,26 @@ async def test_gather_empty():
 
 
 @pytest.mark.asyncio
+async def test_gather_charges_successful_on_partial_failure(monkeypatch):
+    """评审7 🔴：一支失败时，成功兄弟分支已花的钱仍结清（成本闸不泄漏），再重抛异常。"""
+    import chameleon.providers.base.a2a_bridge as bridge
+
+    async def _caller(*, source, target, input, trace_id, budget_remaining, depth):
+        if target == "bad":
+            raise RuntimeError("boom")
+        return {"answer": f"ok-{target}", "tokens": 50}
+
+    monkeypatch.setattr(bridge, "get_a2a_caller", lambda: _caller)
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="r", budget=900
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        await t.gather([("good", "q1"), ("bad", "q2")])
+    # 成功分支 good（50 token）已结清：900-50=850，不因 bad 失败被洗白
+    assert t._budget == 850
+
+
+@pytest.mark.asyncio
 async def test_route_supervisor_picks_and_delegates():
     """ctx.route：LLM 据描述选最合适子智能体并委托（supervisor 编排模式）。"""
     import types

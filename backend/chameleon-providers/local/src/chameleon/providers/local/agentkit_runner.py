@@ -640,10 +640,17 @@ class InProcessTransport(RuntimeTransport):
                 depth=self._a2a_depth + 1,
             )
 
-        outs = await asyncio.gather(*(_one(t, i) for t, i in calls))
-        total = sum(int(o.get("tokens") or 0) for o in outs)
-        self._charge(total)  # 事后按实际总消耗统一扣减（成本闸在并发下仍收口）
+        # return_exceptions=True：即使某分支失败，也要先结清已成功分支的预算/usage——
+        # 否则一支抛异常会让 _charge/track_usage 整体跳过，成功兄弟已花的钱被"洗白"
+        # （成本闸在部分失败场景泄漏，评审7 🔴）。结清后再重抛首个异常保留 fail-fast 语义。
+        outs = await asyncio.gather(*(_one(t, i) for t, i in calls), return_exceptions=True)
+        ok = [o for o in outs if not isinstance(o, BaseException)]
+        total = sum(int(o.get("tokens") or 0) for o in ok)
+        self._charge(total)
         self.track_usage({"total_tokens": total})
+        errs = [o for o in outs if isinstance(o, BaseException)]
+        if errs:
+            raise errs[0]
         return [o.get("answer") or "" for o in outs]
 
     def span(self, name: str, *, type: str = "span") -> Any:

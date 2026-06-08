@@ -229,6 +229,11 @@ class SandboxClientTransport(RuntimeTransport):
     async def call_agent(self, target, *, input):  # noqa: ANN001, ANN201
         return await self._rpc("call_agent", {"target": target, "input": input}) or ""
 
+    async def gather(self, calls):  # noqa: ANN001, ANN201
+        # 沙箱单 stdio 通道无多路复用：并发 _rpc 会乱序吞帧（评审7 🟠）+ 预算无均分会超支。
+        # 故沙箱档**串行**委托 call_agent（正确性优先；真并行待 per-rid Future 读帧泵落地）。
+        return [await self.call_agent(t, input=i) for t, i in calls]
+
 
 def encode_frame(obj: dict[str, Any]) -> bytes:
     return (json.dumps(obj, ensure_ascii=False, default=str) + "\n").encode("utf-8")

@@ -434,7 +434,10 @@ class AgentRun:
             "返回它的 agent_key（必须是候选之一）。",
             user=f"候选智能体：\n{options}\n\n用户问题：{query}",
         )
-        chosen = choice.agent_key if choice.agent_key in keys else keys[0]
+        # LLM 选了候选集外的 key → 回退首个，但 fallback 标进 trace（不静默掩盖模型不遵循
+        # 指令的信号，评审7 🟡）。
+        fallback = choice.agent_key not in keys
+        chosen = keys[0] if fallback else choice.agent_key
         from chameleon.core.runtime_types import StreamEvent, StreamEventType
 
         self.emit(
@@ -443,7 +446,11 @@ class AgentRun:
                 data={
                     "name": f"路由到 {chosen}",
                     "status": "success",
-                    "output": {"chosen": chosen, "reason": getattr(choice, "reason", "")},
+                    "output": {
+                        "chosen": chosen,
+                        "fallback": fallback,
+                        "reason": getattr(choice, "reason", ""),
+                    },
                 },
             )
         )
