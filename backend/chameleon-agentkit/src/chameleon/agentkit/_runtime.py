@@ -340,7 +340,11 @@ class AgentRun:
             self._t.track_usage(_usage_of(resp))
             return _content_to_text(resp)
 
-        return await self._memoize("complete", _fingerprint(system, user), _call)
+        # 指纹纳入全部影响输出的入参（评审16 🟠：仅 system+user 漏 slot/model/context → 换 model
+        # 重放会静默返旧答案）。这样换 model/context 即指纹不符、重放报错而非静默错乱。
+        return await self._memoize(
+            "complete", _fingerprint(system, user, slot, model, context), _call
+        )
 
     def _durable_guard(self, name: str) -> None:
         """durable 当前仅 memoize ctx.complete 文本 + ctx.ask_human。其余有副作用/计费的 ctx 调用

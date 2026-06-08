@@ -116,3 +116,67 @@ async def test_run_agentkit_pause_drain_and_resume_cycle(monkeypatch):
     ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 0}))]
     out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
     assert out == "决定：同意"
+
+
+_CMPL_MOD = "chameleon._test_durable_runner.complete"
+
+
+def _register_complete_agent() -> None:
+    if _CMPL_MOD in sys.modules:
+        return
+
+    @agent(key="_t_hitl_cmpl", name="先complete再审批", models=[ModelSlot("chat", "c")], durable=True)
+    async def handle(ctx: AgentRun):
+        greeting = await ctx.complete(user="打招呼")        # call_index 0（journaled）
+        decision = await ctx.ask_human("批准吗？")           # call_index 1（暂停点）
+        yield f"{greeting}/{decision}"
+
+    mod = types.ModuleType(_CMPL_MOD)
+    mod.handle = handle  # type: ignore[attr-defined]
+    handle.__module__ = _CMPL_MOD
+    sys.modules[_CMPL_MOD] = mod
+
+
+@pytest.mark.asyncio
+async def test_run_agentkit_complete_replay_no_remodel_on_resume(monkeypatch):
+    """评审 #6 覆盖空白：runner 路径下 complete 重放不重调模型（此前仅 FakeTransport 级覆盖）。
+    durable handle 先 complete 再 ask_human；resume 时 complete@0 走 journal 返记录值、模型零再调。"""
+    _mock_memory(monkeypatch)
+
+    calls = {"n": 0}
+
+    class _FakeMsg:
+        def __init__(self, content: str) -> None:
+            self.content = content
+            self.tool_calls: list = []
+            self.usage_metadata = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+
+    class _FakeChat:
+        def bind_tools(self, schemas):  # noqa: ANN001
+            return self
+
+        async def ainvoke(self, messages, **kw):  # noqa: ANN001
+            calls["n"] += 1
+            return _FakeMsg("你好")
+
+    monkeypatch.setattr(InProcessTransport, "chat_model", lambda self, *, slot=None, model=None: _FakeChat())
+    _register_complete_agent()
+    adef = AgentDef(
+        key="_t_hitl_cmpl", provider="local",
+        config={"__agentkit_module__": _CMPL_MOD, "__agentkit_attr__": "handle"},
+    )
+
+    def _ctx(cvars: dict | None = None) -> InvokeContext:
+        return InvokeContext(
+            agent_def=adef, input="hi", history=[], app_id="app1",
+            session_id="s1", request_id="req-cmpl", stream=True, context_vars=cvars or {},
+        )
+
+    # run 1：complete 真调模型 1 次 + journaled，ask_human 暂停
+    _ = [e async for e in run_agentkit(_ctx())]
+    assert calls["n"] == 1
+    # run 2：resume → complete@0 走 journal（模型零再调）+ ask@1 返答案 → 续跑完成
+    ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 1}))]
+    out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
+    assert out == "你好/同意"
+    assert calls["n"] == 1, f"complete 重放应零再调模型，实际累计 {calls['n']} 次"
