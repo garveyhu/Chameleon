@@ -16,6 +16,7 @@ dependencies = [
     "docker>=7.1",
     "pynacl>=1.5",
     "loguru>=0.7",
+    "mcp>=1.27.2",
 ]
 
 [tool.uv.sources]
