@@ -1,5 +1,6 @@
 """agentkit CLI —— 本地开发自测。
 
+    agentkit new   <name> [-d DIR]            脚手架：生成新 @agent 包骨架
     agentkit lint  <module[:attr]>            校验 @agent 声明
     agentkit run   <module[:attr]> -i "..."   单次跑一句
     agentkit chat  <module[:attr]>            交互式 REPL
@@ -146,6 +147,21 @@ def _cmd_chat(target: str) -> int:
     return 0
 
 
+def _cmd_new(name: str, dest: str) -> int:
+    from chameleon.agentkit._scaffold import write_scaffold
+
+    try:
+        root = write_scaffold(name, dest)
+    except (FileExistsError, ValueError) as e:
+        print(f"✗ {e}")
+        return 1
+    print(f"{_CYAN}✓ 已生成 @agent 包{_RESET} {root}")
+    print(f"  {_DIM}1. 编辑 {root.name}/src/chameleon/agents/*/agent.py 写业务逻辑")
+    print("  2. 丢进 backend/chameleon-agents/ 即被自动发现（dev 起服务后）")
+    print(f"  3. 本地自测：agentkit chat {root.name.replace('-', '_')}.agent{_RESET}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentkit", description="agentkit 本地开发自测")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -154,6 +170,9 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("target", help="作者模块，如 my_pkg.agent 或 my_pkg.agent:handle")
         if name == "run":
             p.add_argument("-i", "--input", required=True, help="单次输入")
+    pn = sub.add_parser("new", help="脚手架：生成一个新 @agent 包骨架")
+    pn.add_argument("name", help="agent 名（kebab-case，如 weather-bot）")
+    pn.add_argument("-d", "--dir", default=".", help="生成目录（默认当前目录）")
     ns = parser.parse_args(argv)
     if ns.cmd == "lint":
         return _cmd_lint(ns.target)
@@ -161,6 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_run(ns.target, ns.input)
     if ns.cmd == "chat":
         return _cmd_chat(ns.target)
+    if ns.cmd == "new":
+        return _cmd_new(ns.name, ns.dir)
     return 1
 
 
