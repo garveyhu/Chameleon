@@ -130,6 +130,10 @@ class InProcessTransport(RuntimeTransport):
         kbs: list[str] | None = None,
         top_k: int | None = None,
         min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | None = None,
+        expand: int = 0,
+        hyde: bool = False,
     ) -> list[Doc]:
         # kbs 给定=代码点名；否则用该 agent web 关联的 KB（agent_kb_link）
         if kbs:
@@ -140,28 +144,50 @@ class InProcessTransport(RuntimeTransport):
         if not kb_keys:
             return []
 
-        merged = []
+        # 高级检索桥（hybrid/rerank/multi-query/HyDE）；未接桥或未要求高级参数时回退基础向量
+        from chameleon.providers.base.retrieval_bridge import get_retrieve_fn
+
+        retrieve_fn = get_retrieve_fn()
+        use_advanced = retrieve_fn is not None and (
+            mode is not None or rerank is not None or expand or hyde
+        )
+
+        # 归一成 (kb_key, content, score, doc_id, seq, meta)
+        merged: list[tuple[str, str, float, int, int, dict]] = []
         async with observe(
             observation_type="retrieval",
             name="kb.search",
             request_id=_scoped_observation_id("kb.search"),
         ):
             for kb_key in kb_keys:
-                hits = await search_kb(
-                    kb_key, query, top_k=top_k, min_score=min_score
-                )
-                for h in hits:
-                    merged.append((kb_key, h))
-        merged.sort(key=lambda kh: getattr(kh[1], "score", 0.0), reverse=True)
+                if use_advanced:
+                    rows = await retrieve_fn(  # type: ignore[misc]
+                        kb_key, query, top_k=top_k, min_score=min_score,
+                        mode=mode, rerank=rerank, expand=expand, hyde=hyde,
+                    )
+                    for r in rows:
+                        merged.append((
+                            kb_key, r.get("content", ""), r.get("score", 0.0),
+                            r.get("doc_id", 0), r.get("seq", 0), r.get("meta") or {},
+                        ))
+                else:
+                    hits = await search_kb(
+                        kb_key, query, top_k=top_k, min_score=min_score
+                    )
+                    for h in hits:
+                        merged.append((
+                            kb_key, h.content, h.score, h.doc_id, h.seq, h.meta or {}
+                        ))
+        merged.sort(key=lambda r: r[2], reverse=True)
         merged = merged[: (top_k or 5)]
 
         docs: list[Doc] = []
-        for kb_key, h in merged:
+        for kb_key, content, score, doc_id, seq, meta in merged:
             doc = Doc(
-                text=h.content,
-                score=h.score,
-                source=f"{kb_key}#doc{h.doc_id}#{h.seq}",
-                metadata={"kb_key": kb_key, "doc_id": h.doc_id, "seq": h.seq, **(h.meta or {})},
+                text=content,
+                score=score,
+                source=f"{kb_key}#doc{doc_id}#{seq}",
+                metadata={"kb_key": kb_key, "doc_id": doc_id, "seq": seq, **meta},
             )
             docs.append(doc)
             # 自动 citation：作者无需手动 yield
@@ -170,8 +196,8 @@ class InProcessTransport(RuntimeTransport):
                     type=StreamEventType.citation,
                     data=Citation(
                         source=doc.source,
-                        score=h.score,
-                        snippet=h.content[:200],
+                        score=score,
+                        snippet=content[:200],
                         meta=doc.metadata,
                     ).model_dump(),
                 )

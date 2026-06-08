@@ -116,12 +116,20 @@ class HttpDevTransport(RuntimeTransport):
         kbs: list[str] | None = None,
         top_k: int | None = None,
         min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | None = None,
+        expand: int = 0,
+        hyde: bool = False,
     ) -> list[Doc]:
         if not kbs:
             return []  # dev 无 agent 关联上下文，需显式 kbs
         out = await self._post(
             "/v1/dev/kb/search",
-            {"query": query, "kbs": list(kbs), "top_k": top_k, "min_score": min_score},
+            {
+                "query": query, "kbs": list(kbs), "top_k": top_k,
+                "min_score": min_score, "mode": mode, "rerank": rerank,
+                "expand": expand, "hyde": hyde,
+            },
         )
         rows = out if isinstance(out, list) else out.get("data", [])
         return [

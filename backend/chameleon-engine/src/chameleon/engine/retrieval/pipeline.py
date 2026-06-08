@@ -272,17 +272,15 @@ async def _empty_recall(_q: str, _n: int) -> list[Hit]:
 
 
 def default_complete_fn() -> CompleteFn:
-    """生产用 LLM 文本补全适配器（multi-query / HyDE）"""
-    from langchain_core.messages import HumanMessage
+    """生产用 LLM 文本补全适配器（multi-query / HyDE）。
 
-    from chameleon.integrations.llms.factory import resolve_llm
+    经 aikit 统一执行：已处于检索请求的 trace scope 内则复用其归属，否则自开
+    channel='internal' 补记账。multi-query / HyDE 失败由 expander 自身 fallback 兜。
+    """
+    from chameleon.aikit import LLMRunner
 
     async def complete(prompt: str) -> str:
-        # #30：per-request 经 channel 路由解析 LLM（无 session → 自开短 session）
-        client = await resolve_llm()
-        resp = await client.ainvoke([HumanMessage(content=prompt)])
-        content = resp.content
-        return content if isinstance(content, str) else str(content)
+        return await LLMRunner.run_text(prompt, retries=0)
 
     return complete
 
@@ -403,3 +401,72 @@ async def retrieve(
         kw_capture=kw_capture,
         complete_fn=complete_fn,
     )
+
+
+def wire_retrieval_bridge() -> None:
+    """app 启动注入高级检索 fn 到 providers-base 的 IoC 桥。
+
+    让 agentkit ctx.kb.search（providers-local，不依赖 engine）用上 hybrid+rerank+
+    multi-query+HyDE。fn 自解析 kb_key→KB 配置→RetrievalParams→retrieve，返纯 dict。
+    """
+    from chameleon.providers.base.retrieval_bridge import set_retrieve_fn
+
+    async def _fn(
+        kb_key: str,
+        query: str,
+        *,
+        top_k: int | None = None,
+        min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | dict | None = None,
+        expand: int = 0,
+        hyde: bool = False,
+    ) -> list[dict]:
+        from sqlalchemy import select as _select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import KnowledgeBase
+
+        async with AsyncSessionLocal() as s:
+            kb = (
+                await s.execute(
+                    _select(KnowledgeBase).where(
+                        KnowledgeBase.kb_key == kb_key,
+                        KnowledgeBase.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if kb is None:
+                return []
+            kb_meta = kb.meta or {}
+            # rerank: dict=显式配置 / True/None=跟随 KB 配置 / False=关
+            if isinstance(rerank, dict):
+                reranker_cfg = rerank
+            elif rerank is False:
+                reranker_cfg = None
+            else:
+                reranker_cfg = kb_meta.get("reranker")
+            params = RetrievalParams(
+                kb_id=kb.id,
+                embedding_model=kb.embedding_model,
+                top_k=top_k or 5,
+                recall_mode=mode or kb.recall_mode or "hybrid",
+                include_images=bool(kb_meta.get("include_images")),
+                multi_query_count=expand or 0,
+                use_hyde=bool(hyde),
+                reranker_config=reranker_cfg,
+                min_score=min_score,
+            )
+            hits = await retrieve(s, params, query)
+        return [
+            {
+                "content": h.content,
+                "score": h.score,
+                "doc_id": h.doc_id,
+                "seq": h.seq,
+                "meta": h.meta or {},
+            }
+            for h in hits
+        ]
+
+    set_retrieve_fn(_fn)

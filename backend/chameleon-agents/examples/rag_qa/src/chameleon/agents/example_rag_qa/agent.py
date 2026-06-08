@@ -27,7 +27,8 @@ SYSTEM_PROMPT = (
     kb=True,
 )
 async def handle(ctx: AgentRun):
-    docs = await ctx.kb.search(ctx.query, top_k=5)
+    # 高级检索：hybrid（向量+BM25 融合）+ multi-query 扩展 + 跟随 KB 配置的重排
+    docs = await ctx.kb.search(ctx.query, top_k=5, mode="hybrid", expand=2)
     async for delta in ctx.stream(
         slot="chat", system=SYSTEM_PROMPT, context=docs or None, user=ctx.query
     ):

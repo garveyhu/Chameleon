@@ -31,8 +31,17 @@ class KbHandle(Protocol):
         kbs: list[str] | None = None,
         top_k: int | None = None,
         min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | None = None,
+        expand: int = 0,
+        hyde: bool = False,
     ) -> list[Doc]:
-        """kbs 给定=代码点名这些已配置 KB；否则用该 agent web 关联的 KB。"""
+        """kbs 给定=代码点名这些已配置 KB；否则用该 agent web 关联的 KB。
+
+        高级检索（接平台 hybrid 管道）：mode=vector/keyword/hybrid（默认跟随 KB 配置→
+        hybrid）；rerank=是否重排（None 跟随 KB 配置）；expand=multi-query 变体数；
+        hyde=是否用假设答案 embed。平台未接桥时回退基础向量检索。
+        """
         ...
 
 
@@ -78,8 +87,15 @@ class RuntimeTransport(ABC):
         kbs: list[str] | None = None,
         top_k: int | None = None,
         min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | None = None,
+        expand: int = 0,
+        hyde: bool = False,
     ) -> list[Doc]:
-        """检索；自动记 citation。kbs 校验须命中已配置 KB。"""
+        """检索；自动记 citation。kbs 校验须命中已配置 KB。
+
+        mode/rerank/expand/hyde 走平台高级检索管道（接桥）；未接桥回退基础向量。
+        """
         ...
 
     @abstractmethod
@@ -346,9 +362,20 @@ class _KbProxy:
         kbs: list[str] | None = None,
         top_k: int | None = None,
         min_score: float = 0.0,
+        mode: str | None = None,
+        rerank: bool | None = None,
+        expand: int = 0,
+        hyde: bool = False,
     ) -> list[Doc]:
         return await self._t.kb_search(
-            query, kbs=kbs, top_k=top_k, min_score=min_score
+            query,
+            kbs=kbs,
+            top_k=top_k,
+            min_score=min_score,
+            mode=mode,
+            rerank=rerank,
+            expand=expand,
+            hyde=hyde,
         )
 
 

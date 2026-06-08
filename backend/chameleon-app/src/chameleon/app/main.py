@@ -181,11 +181,19 @@ def _wire_a2a_bridge() -> None:
     wire_a2a_bridge()
 
 
+def _wire_retrieval_bridge() -> None:
+    """注入高级检索 fn，让 agentkit ctx.kb.search 用上 engine hybrid+rerank（不反向依赖）。"""
+    from chameleon.engine.retrieval.pipeline import wire_retrieval_bridge
+
+    wire_retrieval_bridge()
+
+
 def create_app() -> FastAPI:
     setup_logger()
     _register_observation_sink()
     _wire_agent_bridges()
     _wire_a2a_bridge()
+    _wire_retrieval_bridge()
 
     app = FastAPI(
         title="Chameleon",
