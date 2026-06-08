@@ -39,11 +39,35 @@ CASES: list[tuple[str, str, object]] = [
     ("qwen-chat", "用一句话介绍你自己", lambda a: len(a) > 4),
     ("example-tool-use", "用工具算 (123+456)*7", lambda a: "4053" in a),
     ("example-orchestrator", "帮我算 99 乘以 99", lambda a: "9801" in a),
-    ("example-rag-qa", "知识库里讲了什么？", lambda a: len(a) > 8),
-    ("example-triage", "我要投诉服务太差", lambda a: len(a) > 4),
+    # RAG：断言答案含 KB 特征词（证真用了检索内容、非通用幻觉），非仅 len 形同虚设
+    ("example-rag-qa", "知识库里讲了什么？", lambda a: any(k in a for k in ("AI驾驭力", "SkillHub", "SpecHub"))),
+    # triage：投诉应得处理导向回应（含致歉/处理/核实等），非仅 len
+    ("example-triage", "我要投诉服务太差", lambda a: any(k in a for k in ("抱歉", "处理", "核实", "反馈", "改进", "解决"))),
     # MCP client：外部 stdio MCP server 的 _STOCK 里 A100=42；模型不调真工具无法知道此值
     ("example-mcp-use", "查 A100 的库存", lambda a: "42" in a),
 ]
+
+
+def _check_structured(client, headers) -> bool:
+    """真模型结构化输出（route/complete(schema=) 的根基，评审12 🔴 盲区）：验 function_calling
+    返合法 typed 结构，非静默兜底。"""
+    try:
+        r = client.post(
+            f"{BASE}/v1/dev/structured", headers=headers,
+            json={
+                "schema": {"type": "object",
+                           "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+                           "required": ["name", "age"]},
+                "messages": [{"role": "user", "content": "提取：张三今年28岁。"}],
+                "model": "qwen-plus",
+            },
+        )
+        d = r.json().get("data") or {}
+        ok = d.get("name") == "张三" and d.get("age") == 28  # 值正确 + age 是 int 非 str
+    except Exception:  # noqa: BLE001
+        d, ok = {}, False
+    print(f"{'✅' if ok else '❌'} {'structured-output':24} → {d}")
+    return ok
 
 
 def main() -> int:
@@ -67,6 +91,10 @@ def main() -> int:
             print(f"{status} {key:24} → {snippet}")
             passed += ok
             failed += not ok
+        # 结构化输出（route/complete schema 的根基）单独一案，走 /v1/dev/structured
+        sok = _check_structured(client, headers)
+        passed += sok
+        failed += not sok
     print(f"\n{passed}/{passed + failed} passed")
     return 0 if failed == 0 else 1
 
