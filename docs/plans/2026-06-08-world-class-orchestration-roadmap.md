@@ -299,7 +299,11 @@ marketplace 从 plugin 扩到 agent（`type='agent'` bundle + `agentkit publish`
   "docker 真隔离 image=chm-agent-sandbox:lean name=chm-sbx-…"。安全旗舰 + 真模型端到端打通。
   （验毕已还原 server 正常态，无 docker-sandbox env。）
 
-至此"陌生人能跑通 + 真 LLM 出真结果"的真实运行证据**已具备**，且 **7 大旗舰**（对话/工具/A2A/
-RAG/多模型/MCP/沙箱）全经真 Qwen 验证 + 可重跑门固化。框架从"全面验证的强候选（7.0）"推进到
-**"全旗舰真实运行验证通过（~7.8/10）"**——剩余距顶级的差距是**外部真实采用规模**（社区
-star/PR/生产案例），属时间 + 运营，非技术。
+- ✅ **多模态生成 ctx.media**（example-imagegen，z-image-turbo/ComfyUI）：`ctx.media.generate(kind=
+  "image")` → 真出 PNG → 存 MinIO（HTTP 206 image/png 可取）→ 预签名 URL；媒体计费真记
+  （z-image-turbo $0.05 / qwen-image-2.0 $0.20，按产物计价）。
+
+至此"陌生人能跑通 + 真 LLM/真后端 出真结果"的真实运行证据**已具备**，且 **8 大能力**（对话/工具/
+A2A/RAG/多模型/MCP/沙箱/多模态生成）全经真后端端到端验证、文本 6 项固化进可重跑门。框架从"全面
+验证的强候选（7.0）"推进到 **"全能力真实运行验证通过（~7.8/10）"**——剩余距顶级的差距是**外部
+真实采用规模**（社区 star/PR/生产案例），属时间 + 运营，非技术。
