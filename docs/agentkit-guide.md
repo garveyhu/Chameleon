@@ -73,6 +73,24 @@ agentkit chat my_pkg.agent                        # 交互 REPL
 dev 态 ctx 的模型/KB/工具/结构化/记忆/子智能体/MCP 工具都经 `/v1/dev/*` 用站内已配置资源跑，
 作者无需本地凭据。每轮答完打印本地 **trace 树**（各段耗时+嵌套）。
 
+### 完全脱平台跑（`pip install` 即用，不连任何站点）
+
+`StandaloneTransport` 让你**只装 SDK + 自带模型 key** 就能在任意环境跑 @agent——无需 Chameleon
+平台/dev 服务。同一份 `handle` 代码，换 transport 即换运行环境：
+
+```python
+from chameleon.agentkit.standalone import StandaloneTransport, run_standalone
+from langchain_openai import ChatOpenAI
+
+t = StandaloneTransport(model=ChatOpenAI(model="gpt-4o-mini"))   # 自己的 key
+print(await run_standalone(handle, "你好", transport=t))
+```
+
+- 模型→你传入的 LangChain model；记忆→本地 dict；知识库→`kb_docs=[Doc(...)]` 朴素检索；
+  工具→真 ReAct（`ctx.run_with_tools` 跑你的 `@tool`）；子智能体→`agents={key: handler}` 本地
+  注册表（`ctx.call_agent/gather/route/handoff` 脱平台可用）。
+- 平台专属能力（`ctx.media` 多模态生成）standalone 下显式报错——部署到平台后自动可用。
+
 ## 5. 离线单测（`chameleon.agentkit.testing`）
 
 ```python
