@@ -144,8 +144,17 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
                 "mime_type": r.mime_type, "filename": r.filename,
             }}
         if method == "kb_search":
+            # kb scope 红线：点名的 kbs 必须 ∈ agent 关联的 KB（越权的剔除）；不点名走
+            # broker 的 linked KB（已受约束）。防不可信子进程检索任意/他人知识库。
+            requested = args.get("kbs")
+            scoped = requested
+            if requested:
+                from chameleon.integrations.knowledge import list_linked_kb_metas
+
+                linked = {m.kb_key for m in await list_linked_kb_metas(broker._agent_key)}
+                scoped = [k for k in requested if k in linked]
             docs = await broker.kb_search(
-                args.get("query", ""), kbs=args.get("kbs"), top_k=args.get("top_k"),
+                args.get("query", ""), kbs=scoped, top_k=args.get("top_k"),
                 min_score=args.get("min_score", 0.0), mode=args.get("mode"),
                 rerank=args.get("rerank"), expand=args.get("expand", 0), hyde=args.get("hyde", False),
             )

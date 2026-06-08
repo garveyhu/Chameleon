@@ -86,6 +86,30 @@ async def test_broker_run_tool_scope_rejects_undeclared():
 
 
 @pytest.mark.asyncio
+async def test_broker_kb_scope_filters_unlinked(monkeypatch):
+    """kb scope：点名的 kbs ∩ agent 关联 KB，越权的剔除（防检索他人知识库）。"""
+    from chameleon.providers.local.sandbox import runtime as rt
+
+    async def _fake_linked(agent_key):
+        return [type("M", (), {"kb_key": "kb-allowed"})()]
+
+    monkeypatch.setattr("chameleon.integrations.knowledge.list_linked_kb_metas", _fake_linked)
+    received: dict = {}
+
+    class _Broker:
+        _agent_key = "a"
+
+        async def kb_search(self, query, *, kbs=None, **kw):  # noqa: ANN001, ANN002, ANN003
+            received["kbs"] = kbs
+            return []
+
+    await rt._resolve_rpc(
+        _Broker(), {"method": "kb_search", "args": {"query": "q", "kbs": ["kb-allowed", "kb-越权"]}}
+    )
+    assert received["kbs"] == ["kb-allowed"]  # 越权 kb-越权 被剔除
+
+
+@pytest.mark.asyncio
 async def test_broker_scope_model_and_empty_tools():
     """评审修复：model 点名未声明 → 拒；空工具声明 → 全拒（不再全放行）。"""
     from chameleon.providers.local.sandbox.runtime import _resolve_rpc
