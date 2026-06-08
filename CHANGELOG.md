@@ -4,6 +4,21 @@ All notable changes to Chameleon. Format follows [Keep a Changelog](https://keep
 
 ## [Unreleased]
 
+### agentkit 编码智能体 SDK 能力补全 + 世界顶级路线图（在途）
+
+> 定位：以代码为核心的智能体编排框架。作者只写 `@agent` + `handle(ctx)`，平台隐式
+> 提供模型/KB/向量/会话/追踪/计费/工具/子智能体/嵌入式。路线图 SSOT：
+> `docs/plans/2026-06-08-world-class-orchestration-roadmap.md`。
+
+- **feat(agentkit)**: 工具调用 ReAct（`@tool` 本地工具 + `@agent(tools=[])` 平台工具 + `ctx.run_with_tools` 自动循环，双源代码优先）
+- **feat(agentkit)**: 结构化输出 `ctx.complete(schema=)` / 子智能体 `ctx.call_agent`（收口 a2a）/ 跨会话记忆 `ctx.memory` / 类式 `handle(self, run)` 共用 ctx
+- **feat(agentkit)**: 本地开发闭环 —— `agentkit lint/run/chat` CLI + `HttpDevTransport` + `/v1/dev/*`（dev token 闸门）
+- **feat(agentkit)**: 高级检索 `ctx.kb.search(mode="hybrid", rerank=, expand=, hyde=)` 接平台检索管道
+- **feat(agentkit)**: 多模态生成 `ctx.media.generate(kind="image"/"video")` 复用平台生成模型 + 对象存储
+- **feat(agentkit)**: workspace agent 零样板自动发现 —— 源码丢进 `chameleon-agents/` 即注册（dev 态），无需改 app 依赖
+- **fix(security)**: 修复 A2A 预算客户端注入漏洞 —— 剥外部 context 的 `_` 前缀保留键，预算/深度由服务端权威下发
+- **note**: 沙箱执行（`@agent(sandboxed=True)`）当前接口预留 + 进程内运行；不可信多租户容器隔离按部署需求启用
+
 ### v1.0 收尾（深度审计 + 体验 polish）
 
 - **fix(frontend)**: `/traces` 列表 404 修复 + sidebar 术语统一为 Trace
