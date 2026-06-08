@@ -650,7 +650,7 @@ def _resolve_sandbox_policy(agent_key: str, manifest: Any) -> None:
             agent_key,
         )
         return
-    allow = os.environ.get("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "").lower()
+    allow = os.environ.get("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "").strip().lower()
     if allow in ("1", "true", "yes"):
         logger.warning(
             "agentkit agent {} sandboxed=True 按显式豁免进程内运行"

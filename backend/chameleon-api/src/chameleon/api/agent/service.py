@@ -481,6 +481,9 @@ async def invoke(
         model_code=rollup_model,
         cost_usd=rollup_cost,
     )
+    # 先提交根行再导出：export_trace 自开 session 跨事务读，未提交则读不到根行
+    # （导致导出 trace 缺根 span + 子 span 悬空 parentSpanId）。
+    await session.commit()
     _maybe_export_otel(request_id)
 
     return InvokeResponse(
@@ -545,10 +548,15 @@ async def _ensure_session(
     return conv
 
 
+#: fire-and-forget 导出任务的强引用集 —— 防未引用 task 被 GC 静默丢弃（评审3 #2）
+_otel_tasks: set = set()
+
+
 def _maybe_export_otel(request_id: str) -> None:
     """trace 落库后 fire-and-forget 导出到外部 OTLP 收集器（配了 endpoint 才发）。
 
     薄委托：判断 + 派发到 integrations.otel_export，不阻塞响应、失败不影响主流程。
+    调用前须确保根行已提交（export_trace 跨 session 读）。
     """
     import asyncio
 
@@ -556,7 +564,9 @@ def _maybe_export_otel(request_id: str) -> None:
 
     if not should_export():
         return
-    asyncio.create_task(export_trace(request_id))
+    task = asyncio.create_task(export_trace(request_id))
+    _otel_tasks.add(task)
+    task.add_done_callback(_otel_tasks.discard)
 
 
 async def _media_cost_fallback(

@@ -64,10 +64,19 @@ def _row_to_span(row: dict[str, Any], trace_id: str) -> dict[str, Any]:
         attrs.append(_attr("gen_ai.request.model", model))
         if otype == "generation":
             attrs.append(_attr("gen_ai.system", model))
+    # CallLog 无 name 列 → 派生有意义的 span 名（否则全叫 trace/generation/span）
+    if row.get("name"):
+        span_name = row["name"]
+    elif otype == "trace":
+        span_name = row.get("agent_key") or "trace"
+    elif otype == "generation" and model:
+        span_name = f"llm:{model}"
+    else:
+        span_name = otype
     span: dict[str, Any] = {
         "traceId": trace_id,
         "spanId": _hex(row.get("request_id"), 16),
-        "name": row.get("name") or otype,
+        "name": span_name,
         "kind": 1,  # SPAN_KIND_INTERNAL
         "startTimeUnixNano": str(start_ns),
         "endTimeUnixNano": str(end_ns),

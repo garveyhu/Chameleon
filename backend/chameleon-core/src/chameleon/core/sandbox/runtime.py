@@ -178,5 +178,9 @@ def list_runtime_names() -> list[str]:
 
 
 def is_production() -> bool:
-    """生产环境识别 —— mock runtime 加载时检查这个"""
-    return os.environ.get("CHAMELEON_ENV", "").lower() == "production"
+    """生产环境识别 —— mock runtime 加载时检查这个。
+
+    strip 容忍部署脚本常见的前后空格/换行，避免 "production\\n" 静默判 False 绕过
+    sandbox fail-closed 闸（安全相关）。
+    """
+    return os.environ.get("CHAMELEON_ENV", "").strip().lower() == "production"

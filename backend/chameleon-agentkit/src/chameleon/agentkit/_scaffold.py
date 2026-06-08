@@ -17,6 +17,8 @@ def _slug(name: str) -> tuple[str, str]:
         raise ValueError("agent 名非法：需含字母/数字")
     key = base
     pkg = base.replace("-", "_")
+    if pkg[0].isdigit():  # 数字开头不是合法 Python 标识符 / 包名
+        pkg = f"agent_{pkg}"
     return key, pkg
 
 
