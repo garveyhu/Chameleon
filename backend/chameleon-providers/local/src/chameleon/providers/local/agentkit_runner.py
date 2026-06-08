@@ -625,31 +625,44 @@ def is_agentkit_agent(ctx: InvokeContext) -> bool:
 
 
 def _resolve_sandbox_policy(agent_key: str, manifest: Any) -> None:
-    """沙箱执行决策点（接口预留）。
+    """沙箱执行决策点 —— Phase 1 fail-closed（T4-2 子方案）。
 
-    `@agent(sandboxed=True)` 表达「该 agent 需在隔离 runtime 执行」（多租户 / 不可信
-    代码）。**真正的容器隔离执行（把 handle 放进 SandboxRuntime + ctx 资源经受控 RPC
-    回主进程）按部署需求启用**——core/sandbox 的协议 + registry（get_runtime /
-    is_production）已就绪，是后续接线点。当前默认进程内执行：
-    - 非生产：直接进程内跑（开发便利），仅记一条 info。
-    - 生产 + 要求沙箱：记 warning 提示「隔离未启用，按信任源码运行」，由部署方决定是否
-      上 docker runtime（不在此静默假装隔离）。
+    `@agent(sandboxed=True)` 表达「该 agent 需隔离执行」（多租户 / 不可信代码）。真隔离
+    runtime（handle 进沙箱 + ctx 经受控 RPC 回主进程）见 T4-2 子方案 Phase 2-4，尚未接。
+    在此之前：
+    - 非生产：进程内跑（开发便利），info 一行。
+    - 生产 + sandboxed：**fail-closed**——默认 raise 拒绝进程内裸跑（不可信代码裸跑 =
+      读 .env/DB/内网 = RCE，绝不静默假装隔离）。部署方确信源码可信时显式设
+      CHAMELEON_SANDBOX_ALLOW_INPROCESS=1 豁免。
+
+    Raises:
+        RuntimeError: 生产 + sandboxed + 无真隔离 + 无显式豁免。
     """
     if not getattr(manifest, "sandboxed", False):
         return
+    import os
+
     from chameleon.core.sandbox import is_production
 
-    if is_production():
-        logger.warning(
-            "agentkit agent {} 声明 sandboxed=True 但隔离执行未启用：当前按信任源码"
-            "进程内运行；多租户/不可信场景请接 core/sandbox docker runtime。",
-            agent_key,
-        )
-    else:
+    if not is_production():
         logger.info(
-            "agentkit agent {} sandboxed=True（开发态进程内运行；隔离执行接口已预留）",
+            "agentkit agent {} sandboxed=True（开发态进程内运行；真隔离见 T4-2 子方案）",
             agent_key,
         )
+        return
+    allow = os.environ.get("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "").lower()
+    if allow in ("1", "true", "yes"):
+        logger.warning(
+            "agentkit agent {} sandboxed=True 按显式豁免进程内运行"
+            "（CHAMELEON_SANDBOX_ALLOW_INPROCESS）——确认源码可信",
+            agent_key,
+        )
+        return
+    raise RuntimeError(
+        f"agent {agent_key} 声明 sandboxed=True，但生产环境未接真隔离 runtime；"
+        "fail-closed 拒绝进程内裸跑（防不可信代码 RCE）。接 SandboxTransport（T4-2 子方案）"
+        "或显式 CHAMELEON_SANDBOX_ALLOW_INPROCESS=1（确认源码可信）后重试。"
+    )
 
 
 async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:

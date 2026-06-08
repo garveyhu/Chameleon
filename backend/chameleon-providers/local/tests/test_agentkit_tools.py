@@ -293,6 +293,29 @@ async def test_ctx_wrap_passthrough():
     assert run.wrap(sentinel) is sentinel
 
 
+def test_sandbox_policy_fail_closed(monkeypatch):
+    """生产 + sandboxed + 无真隔离 + 无豁免 → 拒绝裸跑（T4-2 Phase 1 fail-closed）。"""
+    from chameleon.providers.local.agentkit_runner import _resolve_sandbox_policy
+
+    class _M:
+        sandboxed = True
+
+    # 非沙箱：生产也不拦
+    monkeypatch.setenv("CHAMELEON_ENV", "production")
+    _resolve_sandbox_policy("a", type("N", (), {"sandboxed": False})())
+    # 非生产：进程内跑，不拦
+    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    monkeypatch.delenv("CHAMELEON_SANDBOX_ALLOW_INPROCESS", raising=False)
+    _resolve_sandbox_policy("a", _M())
+    # 生产 + sandboxed + 无豁免 → raise
+    monkeypatch.setenv("CHAMELEON_ENV", "production")
+    with pytest.raises(RuntimeError, match="fail-closed"):
+        _resolve_sandbox_policy("a", _M())
+    # 生产 + 显式豁免 → 放行
+    monkeypatch.setenv("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "1")
+    _resolve_sandbox_policy("a", _M())
+
+
 def test_track_usage_accumulates():
     """transport.track_usage 累计 → usage_total 求和（A2A 上报基础，评审2 #25）。"""
     t = InProcessTransport(agent_key="x", bindings={}, slots={})
