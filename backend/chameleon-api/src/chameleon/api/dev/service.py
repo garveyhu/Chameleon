@@ -127,6 +127,38 @@ async def dev_structured(
     return dict(resp)
 
 
+async def dev_call_agent(*, target: str, input: str) -> dict[str, Any]:
+    """dev 子智能体调用：服务端按 key 调目标 agent 返答案（ctx.call_agent 的 dev 实现）。
+
+    本地自测时作者的 ctx.call_agent 经此回调，目标 agent 用站内已配置资源跑——与站内
+    InProcessTransport 的进程内 A2A 契约一致（dev 不做深度/预算闸，仅打通调用）。
+    """
+    import uuid
+
+    from chameleon.providers.base import AGENTS, PROVIDERS, InvokeContext
+
+    adef = AGENTS.get(target)
+    if adef is None:
+        return {"answer": "", "error": f"agent 不存在: {target}"}
+    provider = PROVIDERS.get(adef.provider)
+    if provider is None:
+        return {"answer": "", "error": f"provider 未注册: {adef.provider}"}
+    ctx = InvokeContext(
+        agent_def=adef,
+        input=input,
+        history=[],
+        session_id=f"dev-a2a-{uuid.uuid4().hex[:12]}",
+        provider_conv_id=None,
+        context_vars={},
+        options={},
+        app_id="dev",
+        stream=False,
+        request_id=uuid.uuid4().hex,
+    )
+    result = await provider.invoke(ctx)
+    return {"answer": result.answer or ""}
+
+
 #: dev 记忆固定命名空间（本地自测无 end_user 身份；隔离于站内真实记忆）
 _DEV_MEMORY_AGENT = "__dev__"
 _DEV_MEMORY_SCOPE = "__dev__"

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 
 from chameleon.api.dev import service
 from chameleon.api.dev.schemas import (
+    DevCallAgentRequest,
     DevDoc,
     DevKbSearchRequest,
     DevLlmRequest,
@@ -66,6 +67,13 @@ async def dev_memory(
 ) -> Result[dict]:
     out = await service.dev_memory(action=req.action, key=req.key, value=req.value)
     return Result.ok({"result": out})
+
+
+@router.post("/call_agent", response_model=Result[dict])
+async def dev_call_agent(
+    req: DevCallAgentRequest, _: None = Depends(require_dev_token)
+) -> Result[dict]:
+    return Result.ok(await service.dev_call_agent(target=req.target, input=req.input))
 
 
 @router.post("/kb/search", response_model=Result[list[DevDoc]])

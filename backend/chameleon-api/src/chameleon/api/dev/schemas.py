@@ -33,6 +33,11 @@ class DevMemoryRequest(BaseModel):
     value: Any = None
 
 
+class DevCallAgentRequest(BaseModel):
+    target: str
+    input: str = ""
+
+
 class DevKbSearchRequest(BaseModel):
     query: str
     kbs: list[str] = Field(default_factory=list)

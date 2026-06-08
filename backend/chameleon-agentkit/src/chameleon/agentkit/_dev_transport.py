@@ -287,9 +287,8 @@ class HttpDevTransport(RuntimeTransport):
         raise NotImplementedError("dev 模式暂不支持 ctx.media；请在站内验证该路径。")
 
     async def call_agent(self, target: str, *, input: str) -> str:
-        raise NotImplementedError(
-            "dev 模式暂不支持 ctx.call_agent 子智能体调用；请在站内验证该路径。"
-        )
+        out = await self._post("/v1/dev/call_agent", {"target": target, "input": input})
+        return out.get("answer", "") if isinstance(out, dict) else ""
 
     def span(self, name: str, *, type: str = "span") -> Any:
         return _DevSpan(self, name, type)
