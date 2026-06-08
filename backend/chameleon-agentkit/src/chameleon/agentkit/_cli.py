@@ -67,8 +67,15 @@ def _build_run(man: AgentManifest, query: str, history: list[Any]) -> tuple[Agen
     token = os.environ.get("CHAMELEON_DEV_TOKEN", "")
     if not token:
         raise SystemExit("缺少 CHAMELEON_DEV_TOKEN 环境变量（须与服务端 .env 一致）")
+    from dataclasses import asdict
+
     transport = HttpDevTransport(
-        base_url=base, token=token, agent_key=man.key, platform_tool_keys=man.tools
+        base_url=base,
+        token=token,
+        agent_key=man.key,
+        platform_tool_keys=man.tools,
+        # @agent(mcp_servers=) 本地直连：带 MCP 的 agent 也能本地自测（与站内一致）
+        mcp_servers=[asdict(s) for s in (man.mcp_servers or [])],
     )
     run = AgentRun(
         transport=transport,

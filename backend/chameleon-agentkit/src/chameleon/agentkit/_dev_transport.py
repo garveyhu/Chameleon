@@ -131,11 +131,14 @@ class HttpDevTransport(RuntimeTransport):
         token: str,
         agent_key: str = "dev",
         platform_tool_keys: list[str] | None = None,
+        mcp_servers: list[dict[str, Any]] | None = None,
     ) -> None:
         self._base = base_url.rstrip("/")
         self._token = token
         self._agent_key = agent_key
         self._tool_keys = list(platform_tool_keys or [])
+        #: @agent(mcp_servers=) 声明（dict 形态）——dev 本地直连 MCP server，与站内一致
+        self._mcp_servers = list(mcp_servers or [])
         self._pending: list[Any] = []
         #: dev 本地 trace —— span 记录 + 当前嵌套深度（_DevSpan 维护）
         self._spans: list[dict[str, Any]] = []
@@ -209,6 +212,51 @@ class HttpDevTransport(RuntimeTransport):
         max_tokens: int | None = None,  # dev 不强制预算，仅签名一致
     ) -> AsyncIterator[str]:
         plat = list(dict.fromkeys([*self._tool_keys, *(platform_keys or [])]))
+        # dev 本地直连 @agent(mcp_servers=) 的 MCP server，把工具并入本地工具集（与站内
+        # InProcessTransport 一致）——让带 MCP 的 agent 也能本地自测。结束统一 aclose。
+        mcp_stack = None
+        if self._mcp_servers:
+            from chameleon.agentkit._mcp import load_mcp_tools
+            from chameleon.agentkit._spec import ToolSpec
+
+            try:
+                descs, mcp_stack = await load_mcp_tools(self._mcp_servers)
+                local_tools = [
+                    *local_tools,
+                    *[
+                        ToolSpec(
+                            name=d.name,
+                            description=d.description,
+                            parameters_schema=d.parameters_schema,
+                            handler=d.handler,
+                        )
+                        for d in descs
+                    ],
+                ]
+            except Exception:  # noqa: BLE001
+                mcp_stack = None
+        try:
+            async for chunk in self._run_tool_loop_inner(
+                messages=messages, model=model, plat=plat,
+                local_tools=local_tools, max_steps=max_steps,
+            ):
+                yield chunk
+        finally:
+            if mcp_stack is not None:
+                from contextlib import suppress
+
+                with suppress(Exception):
+                    await mcp_stack.aclose()
+
+    async def _run_tool_loop_inner(
+        self,
+        *,
+        messages: list[Any],
+        model: str | None,
+        plat: list[str],
+        local_tools: list[ToolSpec],
+        max_steps: int,
+    ) -> AsyncIterator[str]:
         local_by_name = {s.name: s for s in local_tools}
         local_schemas = [
             {

@@ -12,7 +12,7 @@ import textwrap
 
 import pytest
 
-from chameleon.integrations.mcp import load_mcp_tools
+from chameleon.agentkit._mcp import load_mcp_tools
 
 # 极简 stdio MCP server（FastMCP，单工具）—— 写到临时文件经 stdio 拉起
 _SERVER_SRC = textwrap.dedent(

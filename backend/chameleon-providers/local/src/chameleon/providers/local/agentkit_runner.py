@@ -753,7 +753,7 @@ async def _load_mcp_tools(agent_key: str, manifest: Any) -> tuple[list[ToolSpec]
         return [], None
     from dataclasses import asdict
 
-    from chameleon.integrations.mcp import load_mcp_tools
+    from chameleon.agentkit._mcp import load_mcp_tools
 
     try:
         descs, stack = await load_mcp_tools([asdict(s) for s in servers])

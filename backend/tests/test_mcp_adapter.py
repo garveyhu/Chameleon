@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chameleon.integrations.mcp.adapter import _make_descriptor
-from chameleon.integrations.mcp.client import flatten_tool_result
+from chameleon.agentkit._mcp import _make_descriptor, flatten_tool_result
 
 
 class _TextContent:

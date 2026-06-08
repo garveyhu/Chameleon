@@ -6,6 +6,8 @@ requires-python = ">=3.12"
 dependencies = [
     "chameleon-core",
     "chameleon-providers-base",
+    # MCP（Model Context Protocol）—— @agent 消费外部 MCP server 工具（authoring 关注点）
+    "mcp>=1.27.2",
 ]
 
 # 本地自测 CLI（agentkit chat/run）额外依赖；站内运行时不需要

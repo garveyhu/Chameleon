@@ -366,6 +366,7 @@ source = { editable = "chameleon-agentkit" }
 dependencies = [
     { name = "chameleon-core" },
     { name = "chameleon-providers-base" },
+    { name = "mcp" },
 ]
 
 [package.optional-dependencies]
@@ -382,6 +383,7 @@ requires-dist = [
     { name = "chameleon-core", editable = "chameleon-core" },
     { name = "chameleon-providers-base", editable = "chameleon-providers/base" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
+    { name = "mcp", specifier = ">=1.27.2" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.23" },
 ]
@@ -624,7 +626,6 @@ dependencies = [
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "loguru" },
-    { name = "mcp" },
     { name = "pgvector" },
     { name = "pydantic" },
     { name = "pynacl" },
@@ -641,7 +642,6 @@ requires-dist = [
     { name = "langchain-core", specifier = ">=0.3" },
     { name = "langchain-openai", specifier = ">=0.3" },
     { name = "loguru", specifier = ">=0.7" },
-    { name = "mcp", specifier = ">=1.27.2" },
     { name = "pgvector", specifier = ">=0.3" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pynacl", specifier = ">=1.5" },
