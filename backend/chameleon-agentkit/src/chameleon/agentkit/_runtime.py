@@ -324,6 +324,7 @@ class AgentRun:
         """
         msgs = self._build_messages(system, user, context)
         if schema is not None:
+            self._durable_guard("complete(schema=)")  # 结构化输出重放需序列化 pydantic，归后续 slice
             structured = self._t.structured_model(
                 slot=None if model else slot, model=model, schema=schema
             )
@@ -331,6 +332,7 @@ class AgentRun:
                 resp = await structured.ainvoke(msgs, **kw)
             self._t.track_usage(_usage_of(resp))
             return resp
+
         async def _call() -> str:
             chat = self._t.chat_model(slot=None if model else slot, model=model)
             async with self._t.span("llm.complete", type="span"):
@@ -338,15 +340,25 @@ class AgentRun:
             self._t.track_usage(_usage_of(resp))
             return _content_to_text(resp)
 
-        return await self._memoize("complete", _call)
+        return await self._memoize("complete", _fingerprint(system, user), _call)
 
-    async def _memoize(self, method: str, producer: Any) -> Any:
+    def _durable_guard(self, name: str) -> None:
+        """durable 当前仅 memoize ctx.complete 文本 + ctx.ask_human。其余有副作用/计费的 ctx 调用
+        （工具循环/子 agent/结构化/流式/媒体）重放时会**真重执行**（重复扣费/重复副作用）——硬拦
+        防静默踩坑（评审 #3/#4）。后续 slice 把它们接入 journal 后再放开此守卫。"""
+        if self._journal_enabled:
+            raise RuntimeError(
+                f"durable run 暂不支持 ctx.{name}（重放会重复执行/计费）；当前 durable 仅 "
+                "ctx.complete(文本) + ctx.ask_human 可用。控制流也须确定性（禁依赖 random/时间分支）。"
+            )
+
+    async def _memoize(self, method: str, fingerprint: str, producer: Any) -> Any:
         """durable Slice1 memoization：首跑调 producer 并把输出记进 journal（AgentMemory，免迁移）；
         同一 run 重放（resume/崩溃恢复）按 call_index 返记录值、不重调模型——不重复计费/副作用。
 
-        关：直接执行不记录。重放时 method 不匹配（handle 控制流非确定性，依赖了非 ctx 的随机性
-        导致 call 序列错位）→ 报错而非静默错乱（确定性契约红线）。仅 JSON 可序列化输出可记
-        （当前 ctx.complete 文本路径；schema/stream/工具循环的 journal 归后续 slice）。
+        关：直接执行不记录。重放时 method+fingerprint（调用入参指纹）不匹配 → 报错而非静默错乱
+        ——fingerprint 挡同-method 错位（两次 complete 因控制流非确定性换序，仅比 method 挡不住，
+        评审 #1）。仅 JSON 可序列化输出可记（当前 ctx.complete 文本路径）。
         """
         if not self._journal_enabled:
             return await producer()
@@ -355,14 +367,15 @@ class AgentRun:
         key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
         cached = await self._t.memory_get(key, None)
         if cached is not None:
-            if cached.get("method") != method:
+            if cached.get("method") != method or cached.get("fp") != fingerprint:
                 raise RuntimeError(
-                    f"durable 重放 call_index={idx} method 不匹配"
-                    f"（记录 {cached.get('method')!r} ≠ 当前 {method!r}）：handle 控制流非确定性"
+                    f"durable 重放 call_index={idx} 与记录不符"
+                    f"（记录 {cached.get('method')!r}/{cached.get('fp')!r} ≠ 当前 {method!r}/"
+                    f"{fingerprint!r}）：handle 控制流非确定性（依赖了 random/时间/未 journal 的状态）"
                 )
             return cached["output"]
         output = await producer()
-        await self._t.memory_set(key, {"method": method, "output": output})
+        await self._t.memory_set(key, {"method": method, "fp": fingerprint, "output": output})
         return output
 
     async def stream(
@@ -376,6 +389,7 @@ class AgentRun:
         **kw: Any,
     ) -> AsyncIterator[str]:
         """高层糖：流式出文本（逐增量 yield），自动 span + usage。"""
+        self._durable_guard("stream")
         chat = self._t.chat_model(slot=None if model else slot, model=model)
         msgs = self._build_messages(system, user, context)
         async with self._t.span("llm.stream", type="span"):
@@ -409,6 +423,7 @@ class AgentRun:
           yield），自动 trace + usage 累加。`max_steps` 防无限循环；`max_tokens`
           为本轮循环 token 上限（与 agent 总预算共同构成成本闸）。
         """
+        self._durable_guard("run_with_tools")
         user_text = user if user is not None else self.query
         local: list[ToolSpec] = []
         for t in tools or []:
@@ -459,6 +474,7 @@ class AgentRun:
         source / trace_id / depth+1 / 预算自动从本次运行上下文透传；嵌套深度、
         token 预算、trace 串联等红线由底层 engine a2a 统一守。
         """
+        self._durable_guard("call_agent")
         return await self._t.call_agent(target, input=input)
 
     async def gather(
@@ -473,6 +489,7 @@ class AgentRun:
         例：`a, b = await ctx.gather([("agent-a", q1), ("agent-b", q2)])`
         `timeout`（秒）：每分支超时上限，防某子智能体 hang 拖垮整个扇出；None=不限。
         """
+        self._durable_guard("gather")
         return await self._t.gather(calls, timeout=timeout)
 
     async def handoff(self, target: str, *, instruction: str | None = None) -> str:
@@ -510,6 +527,7 @@ class AgentRun:
 
         例：`ans = await ctx.route(ctx.query, [("sql-bot","查数据库"),("doc-bot","查文档")])`
         """
+        self._durable_guard("route")
         if not agents:
             raise ValueError("ctx.route 至少需要一个候选 agent")
         keys = [k for k, _ in agents]
@@ -714,6 +732,15 @@ class _KbProxy:
             expand=expand,
             hyde=hyde,
         )
+
+
+def _fingerprint(*parts: Any) -> str:
+    """durable journal 调用指纹：入参稳定短哈希。重放时与记录比对，挡同-method 错位（如两次
+    ctx.complete 因控制流非确定性换序，仅比 method 挡不住——指纹不同即报错，评审 #1）。"""
+    import hashlib
+
+    raw = "\x00".join("" if p is None else str(p) for p in parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 def _usage_of(resp: Any) -> dict[str, int] | None:

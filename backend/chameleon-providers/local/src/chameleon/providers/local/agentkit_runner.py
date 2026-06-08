@@ -756,6 +756,15 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
 
     # 连上 MCP 后所有路径都纳入 try/finally —— 即便 transport / AgentRun 构造抛异常，
     # 也保证 finally 关闭 MCP 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
+    scope_ref = cvars.get("end_user_id") or ctx.session_id
+    # durable fail-closed（评审 #2）：journal/HITL 落 AgentMemory 按 scope_ref 持久化；无身份
+    # （scope_ref 空）则 memory no-op → journal 永久失效、ask_human resume 后无限重暂停。绝不
+    # 静默退化：durable 需持久化 scope，缺则直接拒（而非跑成坏 journal）。
+    if manifest.durable and not scope_ref:
+        raise RuntimeError(
+            f"durable agent '{ctx.agent_def.key}' 需持久化 scope（end_user_id 或 session_id）"
+            f"才能 journal 重放 / HITL resume；当前无身份。请在带会话/end_user 的上下文调用。"
+        )
     try:
         transport = InProcessTransport(
             agent_key=ctx.agent_def.key,
@@ -766,7 +775,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             session_id=ctx.session_id,
             a2a_depth=int(cvars.get("_a2a_depth", 0)),
             budget=int(cvars.get("_a2a_budget", 100_000)),
-            scope_ref=cvars.get("end_user_id") or ctx.session_id,
+            scope_ref=scope_ref,
             mcp_tools=mcp_tools,
             call_agents=list(manifest.call_agents or []),
         )

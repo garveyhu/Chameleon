@@ -57,10 +57,39 @@ async def test_durable_disabled_means_no_journal():
 async def test_durable_replay_method_mismatch_raises():
     """确定性契约：journal 记录的 method 与当前 call 不符（控制流非确定性致序列错位）→ 报错。"""
     t = FakeTransport(replies=["x"])
-    await t.memory_set("__chm_journal__run-1__0__", {"method": "kb_search", "output": "stale"})
+    await t.memory_set("__chm_journal__run-1__0__", {"method": "kb_search", "fp": "z", "output": "stale"})
     r = _run(t, durable=True, run_id="run-1")
-    with pytest.raises(RuntimeError, match="method 不匹配"):
+    with pytest.raises(RuntimeError, match="与记录不符"):
         await r.complete(user="x")
+
+
+@pytest.mark.asyncio
+async def test_durable_fingerprint_catches_same_method_reorder():
+    """评审 #1：两次 complete 因控制流非确定性换序，method 都是 'complete'——仅比 method 挡不住，
+    入参指纹不同即报错（否则 idx0 静默返了属于另一调用的值）。"""
+    t = FakeTransport(replies=["原本是问 A 的答案"])
+    # 首跑只记了 idx0 = complete(user='A')
+    r1 = _run(t, durable=True, run_id="run-1")
+    await r1.complete(user="A")
+    # 重放时 idx0 却来了个 complete(user='B')（控制流换序）→ 指纹不符 → 报错而非静默返 A 的答案
+    r2 = _run(t, durable=True, run_id="run-1")
+    with pytest.raises(RuntimeError, match="与记录不符"):
+        await r2.complete(user="B")
+
+
+@pytest.mark.asyncio
+async def test_durable_guards_unjournaled_calls():
+    """评审 #3/#4：durable 下未 journal 的有副作用/计费调用硬拦（防重放重执行），非静默踩坑。"""
+    t = FakeTransport(replies=["x"], call_agent_reply="sub")
+    r = _run(t, durable=True, run_id="run-1")
+    for coro in (
+        r.call_agent("sub", input="q"),
+        r.complete(user="q", schema=int),  # 结构化输出路径
+        r.gather([("a", "q")]),
+        r.route("q", [("a", "x"), ("b", "y")]),
+    ):
+        with pytest.raises(RuntimeError, match="durable run 暂不支持"):
+            await coro
 
 
 @pytest.mark.asyncio

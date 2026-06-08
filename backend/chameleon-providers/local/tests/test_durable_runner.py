@@ -1,8 +1,11 @@
-"""durable Slice2b —— run_agentkit 集成：@agent(durable=True) 的 ctx.ask_human 暂停时，
-run_agentkit 捕获 AgentPaused 并 emit human_input_pending step 事件（不当失败 error 上抛）。
+"""durable Slice2b/评审#2 —— run_agentkit 集成：
 
-不依赖 DB：session_id=None → journal no-op，但 ask_human 仍抛 AgentPaused → run_agentkit 捕获，
-正好验证 Slice2b 新增的捕获→step 信号路径（journal 重放/resume 续跑的 DB 路径属真 e2e/Slice2c）。
+durable agent 无持久化 scope（end_user/session 均空）时 run_agentkit fail-closed 直接拒——
+journal/HITL 落 AgentMemory 按 scope_ref 持久化，无 scope 则 memory no-op、journal 永久失效、
+resume 后无限重暂停。故无 scope 必须显式报错而非静默跑成坏 journal（评审 #2）。
+
+注：带真 scope 的完整 ask→paused→resolve→续跑 e2e 需真 DB（journal 持久化），属 Slice2c-endpoint；
+agentkit 侧机制（含完整 pause→resume 循环）已由 test_durable_hitl.py 经 FakeTransport 覆盖。
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import types
 import pytest
 
 from chameleon.agentkit import AgentRun, ModelSlot, agent
-from chameleon.providers.base.types import AgentDef, InvokeContext, StreamEventType
+from chameleon.providers.base.types import AgentDef, InvokeContext
 from chameleon.providers.local.agentkit_runner import run_agentkit
 
 _MOD = "chameleon._test_durable_runner.hitl"
@@ -35,7 +38,9 @@ def _register_durable_agent() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_agentkit_emits_pending_on_ask_human():
+async def test_run_agentkit_durable_without_scope_fails_fast():
+    """durable + 无 scope（session_id/end_user 均空）→ run_agentkit fail-closed 报错，不静默
+    跑成 no-op journal（评审 #2：否则 resume 后无限重暂停）。"""
     _register_durable_agent()
     agent_def = AgentDef(
         key="_t_hitl_runner", provider="local",
@@ -45,16 +50,5 @@ async def test_run_agentkit_emits_pending_on_ask_human():
         agent_def=agent_def, input="hi", history=[], app_id="app1",
         session_id=None, request_id="req-hitl-1", stream=True,
     )
-    events = [ev async for ev in run_agentkit(ctx)]
-
-    pending = [
-        e for e in events
-        if e.type == StreamEventType.step and e.data.get("name") == "human_input_pending"
-    ]
-    assert pending, f"应 emit human_input_pending step，实际：{[e.type for e in events]}"
-    assert pending[0].data["status"] == "paused"
-    assert pending[0].data["prompt"] == "批准这步吗？"
-    assert pending[0].data["run_id"] == "req-hitl-1"
-    # 暂停不算失败：无 error 事件、handle 未产出正常答案
-    assert not [e for e in events if e.type == StreamEventType.error]
-    assert not [e for e in events if e.type == StreamEventType.delta]
+    with pytest.raises(RuntimeError, match="需持久化 scope"):
+        _ = [ev async for ev in run_agentkit(ctx)]
