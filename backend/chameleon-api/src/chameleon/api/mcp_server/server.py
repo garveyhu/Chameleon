@@ -34,6 +34,61 @@ async def exec_platform_tool(name: str, arguments: dict[str, Any]) -> str:
     return json.dumps(result, ensure_ascii=False, default=str)
 
 
+#: agent MCP 工具名前缀 —— 与平台工具区分（外部 client 看到 agent.<key>）
+AGENT_TOOL_PREFIX = "agent."
+
+
+def list_agent_tools() -> list[dict[str, Any]]:
+    """列已注册 agent 为 MCP tool —— 让外部 MCP client（Claude Desktop/Cursor）当工具调。"""
+    from chameleon.providers.base import AGENTS
+
+    out: list[dict[str, Any]] = []
+    for key, adef in AGENTS.items():
+        desc = getattr(adef, "name", None) or getattr(adef, "description", None) or key
+        out.append(
+            {
+                "name": f"{AGENT_TOOL_PREFIX}{key}",
+                "description": f"Chameleon 智能体：{desc}",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string", "description": "用户输入"}},
+                    "required": ["query"],
+                },
+            }
+        )
+    return out
+
+
+async def exec_agent(agent_key: str, query: str) -> str:
+    """按 key 调一个已注册 agent，返回答案文本（外部 MCP client 把 agent 当工具用）。"""
+    import uuid
+
+    from chameleon.providers.base import AGENTS, PROVIDERS, InvokeContext
+
+    adef = AGENTS.get(agent_key)
+    if adef is None:
+        return json.dumps({"ok": False, "error": f"agent 不存在: {agent_key}"}, ensure_ascii=False)
+    provider = PROVIDERS.get(adef.provider)
+    if provider is None:
+        return json.dumps(
+            {"ok": False, "error": f"provider 未注册: {adef.provider}"}, ensure_ascii=False
+        )
+    ctx = InvokeContext(
+        agent_def=adef,
+        input=query,
+        history=[],
+        session_id=f"mcp-{uuid.uuid4().hex[:16]}",
+        provider_conv_id=None,
+        context_vars={},
+        options={},
+        app_id="mcp-server",
+        stream=False,
+        request_id=uuid.uuid4().hex,
+    )
+    result = await provider.invoke(ctx)
+    return result.answer or ""
+
+
 def build_mcp_server() -> Any:
     """构造暴露平台工具的低层 MCP Server（list_tools + call_tool 接 registry）。"""
     from mcp import types
@@ -43,16 +98,20 @@ def build_mcp_server() -> Any:
 
     @server.list_tools()
     async def _list_tools() -> list[Any]:
+        # 平台工具 + 已注册 agent（agent.<key>）都暴露给外部 MCP client
         return [
             types.Tool(
                 name=t["name"], description=t["description"], inputSchema=t["inputSchema"]
             )
-            for t in list_platform_tools()
+            for t in (*list_platform_tools(), *list_agent_tools())
         ]
 
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict[str, Any]) -> list[Any]:
-        text = await exec_platform_tool(name, arguments)
+        if name.startswith(AGENT_TOOL_PREFIX):
+            text = await exec_agent(name[len(AGENT_TOOL_PREFIX):], (arguments or {}).get("query", ""))
+        else:
+            text = await exec_platform_tool(name, arguments)
         return [types.TextContent(type="text", text=text)]
 
     return server
