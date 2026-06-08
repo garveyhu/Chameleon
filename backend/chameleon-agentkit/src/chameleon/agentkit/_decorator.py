@@ -42,6 +42,7 @@ def agent(
     trust_tier: str = "internal",
     mcp_servers: list[McpServerConfig] | None = None,
     call_agents: list[str] | None = None,
+    durable: bool = False,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -69,6 +70,7 @@ def agent(
             trust_tier=trust_tier,
             mcp_servers=list(mcp_servers or []),
             call_agents=list(call_agents or []),
+            durable=durable,
             handler=target,
             is_class=isinstance(target, type),
         )

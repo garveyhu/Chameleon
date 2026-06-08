@@ -21,7 +21,7 @@ from typing import Any
 
 from loguru import logger
 
-from chameleon.agentkit import AgentRun, RuntimeTransport
+from chameleon.agentkit import AgentPaused, AgentRun, RuntimeTransport
 from chameleon.agentkit._runtime import _content_to_text
 from chameleon.agentkit._spec import Doc, MediaResult, ModelSlot, ToolSpec
 from chameleon.core.observe.context import (
@@ -784,6 +784,10 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             session_id=ctx.session_id,
             config={**opt_defaults, **(cfg.get("opts") or {})},
             attachments=ctx.attachments,
+            # durable：开 journal memoization + ctx.ask_human HITL；run_id 用 request_id 做 per-run
+            # 隔离。resume 时须以同 request_id 重新 invoke（重放至 ask 点续跑）。
+            durable=manifest.durable,
+            run_id=ctx.request_id,
         )
 
         # 沙箱路由：@agent(sandboxed=True) 在生产/force 下走隔离子进程执行（handle 在子
@@ -814,8 +818,22 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
 
         # 函数式 / 新式类（handle(self, run) 注入 AgentRun）共用 _consume + 流末上报 usage
         result = target().handle(run) if manifest.is_class else target(run)
-        async for ev in _consume(result, transport):
-            yield ev
+        try:
+            async for ev in _consume(result, transport):
+                yield ev
+        except AgentPaused as paused:
+            # durable HITL：ctx.ask_human 无答案 → run 暂停等人工输入。不算失败：发 step 暂停信号
+            # （pending 已落 AgentMemory），本次流优雅结束。resume 端点回填答案后以同 request_id
+            # 重新 invoke，journal 重放至 ask 点取答案续跑。
+            logger.info("agentkit agent {} 暂停等人工输入 @call_index={}",
+                        ctx.agent_def.key, paused.call_index)
+            yield StreamEvent(
+                type=StreamEventType.step,
+                data={"name": "human_input_pending", "status": "paused",
+                      "prompt": paused.prompt, "call_index": paused.call_index,
+                      "run_id": paused.run_id},
+            )
+            return
         # 流末上报累计 usage → InvokeResult.usage 非空 → A2A budget_consumed 真实
         u = transport.usage_total()
         if u.get("total_tokens"):

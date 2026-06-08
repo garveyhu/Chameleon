@@ -139,6 +139,9 @@ class AgentManifest:
     #: 声明可经 ctx.call_agent 调用的子 agent key（A2A allow-list）。沙箱（不可信）执行下
     #: 强制 target ∈ 此集（未声明=沙箱内拒，防横向越权）；进程内（可信）不强制。
     call_agents: list[str] = field(default_factory=list)
+    #: durable execution：开启后 ctx 外部调用走 memoization journal（崩溃/暂停后重放不重调），
+    #: 且 ctx.ask_human 可暂停 run 等人工输入（HITL）。免迁移复用 AgentMemory（per request_id）。
+    durable: bool = False
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False
