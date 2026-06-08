@@ -235,14 +235,16 @@ def _mount_mcp_server(app: FastAPI) -> None:
     """
     from chameleon.core.config.env_settings import env_settings
 
-    if not env_settings.CHAMELEON_DEV_TOKEN:
+    token = env_settings.CHAMELEON_DEV_TOKEN
+    if not token:
         return
     from chameleon.api.mcp_server.server import build_streamable_app
 
-    asgi_handler, manager = build_streamable_app()
+    # 裸 ASGI mount 绕过 FastAPI Depends → handler 内自校验 X-Dev-Token（否则未鉴权 SSRF）
+    asgi_handler, manager = build_streamable_app(auth_token=token)
     app.state.mcp_session_manager = manager
     app.mount("/mcp", asgi_handler)
-    logger.info("MCP server mounted at /mcp（暴露平台工具）")
+    logger.info("MCP server mounted at /mcp（暴露平台工具，X-Dev-Token 鉴权）")
 
 
 def _mount_routers(app: FastAPI) -> None:

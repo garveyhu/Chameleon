@@ -648,33 +648,37 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     # 循环。运行结束统一 aclose 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
     mcp_tools, mcp_stack = await _load_mcp_tools(ctx.agent_def.key, manifest)
 
-    transport = InProcessTransport(
-        agent_key=ctx.agent_def.key,
-        bindings=cfg.get("model_bindings") or {},
-        slots=slots,
-        tool_keys=enabled_tools,
-        request_id=ctx.request_id,
-        session_id=ctx.session_id,
-        a2a_depth=int(cvars.get("_a2a_depth", 0)),
-        budget=int(cvars.get("_a2a_budget", 100_000)),
-        scope_ref=cvars.get("end_user_id") or ctx.session_id,
-        mcp_tools=mcp_tools,
-    )
-    # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
-    # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。
-    opt_defaults = {o.key: o.default for o in (manifest.config or []) if o.default is not None}
-    run = AgentRun(
-        transport=transport,
-        agent_key=ctx.agent_def.key,
-        query=_extract_query(ctx),
-        messages=ctx.input if isinstance(ctx.input, list) else [],
-        history=ctx.history,
-        session_id=ctx.session_id,
-        config={**opt_defaults, **(cfg.get("opts") or {})},
-        attachments=ctx.attachments,
-    )
-
+    # 连上 MCP 后所有路径都纳入 try/finally —— 即便 transport / AgentRun 构造抛异常，
+    # 也保证 finally 关闭 MCP 连接栈（防 stdio 子进程 / HTTP 连接泄漏）。
     try:
+        transport = InProcessTransport(
+            agent_key=ctx.agent_def.key,
+            bindings=cfg.get("model_bindings") or {},
+            slots=slots,
+            tool_keys=enabled_tools,
+            request_id=ctx.request_id,
+            session_id=ctx.session_id,
+            a2a_depth=int(cvars.get("_a2a_depth", 0)),
+            budget=int(cvars.get("_a2a_budget", 100_000)),
+            scope_ref=cvars.get("end_user_id") or ctx.session_id,
+            mcp_tools=mcp_tools,
+        )
+        # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
+        # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。
+        opt_defaults = {
+            o.key: o.default for o in (manifest.config or []) if o.default is not None
+        }
+        run = AgentRun(
+            transport=transport,
+            agent_key=ctx.agent_def.key,
+            query=_extract_query(ctx),
+            messages=ctx.input if isinstance(ctx.input, list) else [],
+            history=ctx.history,
+            session_id=ctx.session_id,
+            config={**opt_defaults, **(cfg.get("opts") or {})},
+            attachments=ctx.attachments,
+        )
+
         if manifest.is_class:
             # 新式类：定义了实例方法 handle(self, run) → 注入 AgentRun + transport，
             # 与函数式共用同一 ctx（兑现「两层共用同一 ctx」）。

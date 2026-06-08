@@ -58,12 +58,15 @@ def build_mcp_server() -> Any:
     return server
 
 
-def build_streamable_app() -> tuple[Any, Any]:
+def build_streamable_app(auth_token: str | None = None) -> tuple[Any, Any]:
     """构造 streamable-http ASGI handler + session manager。
 
     返回 (asgi_handler, session_manager)：handler 挂到 FastAPI 的 /mcp；session_manager
     的 `.run()` 须在 app lifespan 内进入（管理内部任务组）。stateless + json_response
     简化会话生命周期（每请求独立，无需持久 SSE 会话）。
+
+    auth_token：非空则每请求校验 `X-Dev-Token` header（裸 ASGI mount 绕过 FastAPI
+    Depends，必须自校验——否则未鉴权即可经 http 工具构成 SSRF）。
     """
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 
@@ -71,6 +74,19 @@ def build_streamable_app() -> tuple[Any, Any]:
     manager = StreamableHTTPSessionManager(app=server, stateless=True, json_response=True)
 
     async def asgi_handler(scope: Any, receive: Any, send: Any) -> None:
+        if auth_token:
+            headers = dict(scope.get("headers") or [])
+            presented = headers.get(b"x-dev-token", b"").decode() or ""
+            if presented != auth_token:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 401,
+                        "headers": [(b"content-type", b"text/plain; charset=utf-8")],
+                    }
+                )
+                await send({"type": "http.response.body", "body": b"Unauthorized"})
+                return
         await manager.handle_request(scope, receive, send)
 
     return asgi_handler, manager
