@@ -1,7 +1,7 @@
 """真 LLM 端到端验证 —— 经 /v1/dev/call_agent 用真模型实跑核心 agent，断言结果。
 
-把"真模型出真结果"从一次性手验固化为**可重跑脚本**（退出码可作 CI 门，但当前仓库无
-.github/workflows，仍是按需手跑——接入 CI 需在 runner 起平台 + 配真模型 + token）。需：
+离线套件已由 .github/workflows/agentkit-ci.yml 自动跑；本脚本是其**真 LLM 部分**——退出码可作
+门，但需真模型故按需手跑（接入 CI 需在 runner 起平台 + 配真模型 + token）。需：
 ① 起着的平台（默认 http://localhost:7009）② 平台已注册可跑模型（如线上 qwen-plus）③ token。
 
     cd backend

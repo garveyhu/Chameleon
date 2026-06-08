@@ -2,7 +2,10 @@
 
 Chameleon 编码智能体作者 SDK。**只写业务逻辑**——模型、知识库、工具、追踪、记忆、子智能体、多模态都从一个绑定了「本 agent 配置 + 本次请求」的运行时 `ctx` 隐式拿到。同一份 `handle` 代码，换 transport 即换运行环境：本机脱平台跑 → 连 dev 服务自测 → 提交进 `chameleon-agents/` 站内运行，零改动。
 
-## 30 秒 quickstart（脱平台，`pip install` 即用）
+## 30 秒 quickstart（脱平台）
+
+> ⚠️ 尚未发布到 PyPI。当前请从仓库 workspace 本地装：`cd backend && uv sync`（或
+> `pip install -e chameleon-agentkit`）。下方 `pip install chameleon-agentkit` 是发布后的目标用法。
 
 只装 SDK + 自带模型 key，不连任何站点：
 

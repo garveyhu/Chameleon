@@ -89,7 +89,7 @@ cd frontend && yarn test:run                              # 前端
 - 真客户端 e2e（零 API 花费）：`respx` 拦 httpx 让真 `langchain_openai.ChatOpenAI` 跑 canned
   响应，演练真实 SDK 集成（见 `test_standalone_real_client_e2e.py`，覆盖 complete/stream/gather/工具）。
 - 真 LLM 端到端验证门（需起平台 + 真模型 + dev token）：`scripts/e2e_real_agents.py`——经
-  `/v1/dev/call_agent` 用真模型实跑五大 agent 模式（对话/工具/A2A/RAG/多模型）并断言，任一失败退非 0。
+  `/v1/dev/call_agent` 用真模型实跑八项（对话/工具/A2A/RAG/多模型/MCP/结构化/路由）并断言，任一失败退非 0。
 - 集成测试不 mock 数据库（用 test 库）；并发/子进程测试加硬超时看门狗。
 - 注：全套件存在一批 pre-existing 失败（跨测试状态污染 / event-loop 级联），新增改动不应
   引入**新**失败。
