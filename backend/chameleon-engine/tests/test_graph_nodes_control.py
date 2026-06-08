@@ -173,13 +173,18 @@ async def test_tool_node_unknown_key_raises():
 
 
 async def test_tool_node_with_registered_tool():
-    """P18.2 后 register_tool 注入：ToolNode 能跑通"""
+    """register_tool 注入：ToolNode 能跑通（对齐 Tool ABC + run_tool 直返契约）。"""
+    from chameleon.core.tools.base import Tool, ToolResult
 
-    class _PingTool:
+    class _PingTool(Tool):
         tool_key = "ping"
+        description = "ping"
 
-        async def run(self, args, ctx):
-            return {"ok": True, "received": args}
+        def parameters_schema(self) -> dict:
+            return {"type": "object", "properties": {"target": {"type": "string"}}}
+
+        async def run(self, args, ctx) -> ToolResult:
+            return ToolResult(ok=True, data={"received": args})
 
     register_tool(_PingTool)
     node = ToolNode(
@@ -190,12 +195,10 @@ async def test_tool_node_with_registered_tool():
         )
     )
     out = await node.execute(_ctx(), {"extra": "z"})
-    assert out["tool_key"] == "ping"
+    # ToolNode 直返 run_tool dict：{tool_key, ok, data, error, meta}（无旧 "result" 包装）
+    assert out["tool_key"] == "ping" and out["ok"] is True
     # input 与 args 合并；args 优先
-    assert out["result"]["received"] == {
-        "extra": "z",
-        "target": "1.1.1.1",
-    }
+    assert out["data"]["received"] == {"extra": "z", "target": "1.1.1.1"}
 
 
 # ── 端到端：if_else 走 true 分支 → end ───────────────────

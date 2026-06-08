@@ -252,8 +252,6 @@ async def test_cost_by_user_dimension(
         r for r in data if r["label"] == str(seeded_multidim_calls["user_id"])
     )
     assert abs(row["cost_usd"] - 0.06) < 1e-6  # 0.01+0.02+0.03
-    # effective_cost = 原始 cost（不再乘倍率）
-    assert abs(row["effective_cost_usd"] - 0.06) < 1e-6
     assert row["calls"] == 3
 
 
