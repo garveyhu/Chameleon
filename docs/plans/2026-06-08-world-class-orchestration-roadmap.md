@@ -288,6 +288,18 @@ marketplace 从 plugin 扩到 agent（`type='agent'` bundle + `agentkit publish`
 - ✅ **A2A 编排**（example-orchestrator）：真 Qwen 委托子 agent → `99×99 = 9801`（正确）。
 - ✅ **可观测/计费**：call_logs 真 generation span（model=qwen-plus）+ 真 token（275~429）+ 真 cost（~$0.0003/次）+ success。
 
-至此"陌生人能跑通 + 真 LLM 出真结果"的真实运行证据**已具备**（此前受本地 LLM 不可达阻塞）。
-框架从"全面验证的强候选（7.0）"推进到"真实运行验证通过"——剩余距顶级的差距是**外部真实
-采用规模**（社区 star/PR/生产案例），属时间 + 运营，非技术。
+后续补齐**全部 7 大旗舰**真模型验证（固化进 `backend/scripts/e2e_real_agents.py` 可重跑门）：
+- ✅ **RAG 检索**（example-rag-qa）：真 KB 命中 + 真 Qwen 综合，有据作答。
+- ✅ **多模型槽**（example-triage）：fast 判意图 + chat 作答。
+- ✅ **MCP client 旗舰**（example-mcp-use）：spawn 外部 stdio MCP server，A100→42 / C300→999（精确
+  匹配 server `_STOCK`，模型不调真工具无法知此值）→ 证 MCP 双向 client 端真实可用。
+- ✅ **docker 沙箱 + 真模型（终极验证）**（example-classic, sandboxed=True，重启带
+  `CHAMELEON_SANDBOX_RUNTIME=docker` + FORCE）：handle 在 `--network none --read-only --user
+  nobody` 真容器内跑，`ctx.stream` 经 broker(stdio) → 主进程 → 真 Qwen → 真答案；日志确认
+  "docker 真隔离 image=chm-agent-sandbox:lean name=chm-sbx-…"。安全旗舰 + 真模型端到端打通。
+  （验毕已还原 server 正常态，无 docker-sandbox env。）
+
+至此"陌生人能跑通 + 真 LLM 出真结果"的真实运行证据**已具备**，且 **7 大旗舰**（对话/工具/A2A/
+RAG/多模型/MCP/沙箱）全经真 Qwen 验证 + 可重跑门固化。框架从"全面验证的强候选（7.0）"推进到
+**"全旗舰真实运行验证通过（~7.8/10）"**——剩余距顶级的差距是**外部真实采用规模**（社区
+star/PR/生产案例），属时间 + 运营，非技术。
