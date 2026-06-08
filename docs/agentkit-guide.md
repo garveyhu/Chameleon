@@ -70,6 +70,7 @@ export CHAMELEON_DEV_TOKEN=<与服务端一致>
 agentkit lint my_pkg.agent                       # 校验 @agent 声明
 agentkit run  my_pkg.agent -i "北京天气"          # 单次跑（ctx 经 HttpDevTransport 回调站内资源）
 agentkit chat my_pkg.agent                        # 交互 REPL
+agentkit dev  my_pkg.agent -i "北京天气"          # watch 源文件，改动即热重载重跑（编辑-反馈闭环）
 ```
 
 dev 态 ctx 的模型/KB/工具/结构化/记忆/子智能体/MCP 工具都经 `/v1/dev/*` 用站内已配置资源跑，

@@ -4,6 +4,7 @@
     agentkit lint  <module[:attr]>            校验 @agent 声明
     agentkit run   <module[:attr]> -i "..."   单次跑一句
     agentkit chat  <module[:attr]>            交互式 REPL
+    agentkit dev   <module[:attr]> -i "..."   watch 源文件，改动即热重载重跑（本地迭代闭环）
 
 作者代码不变：ctx 的模型 / KB / 工具经 HttpDevTransport 回调站内 dev 服务
 （同一份代码提交后走 InProcessTransport 进程内跑）。
@@ -21,6 +22,7 @@ import importlib
 import inspect
 import os
 import sys
+import time
 from typing import Any
 
 from chameleon.agentkit._decorator import declared_agents
@@ -170,6 +172,57 @@ def _cmd_chat(target: str) -> int:
     return 0
 
 
+def _module_source(mod_path: str) -> str:
+    """该模块的源文件路径（watch 目标）。"""
+    mod = sys.modules.get(mod_path) or importlib.import_module(mod_path)
+    src = getattr(mod, "__file__", None)
+    if not src:
+        raise SystemExit(f"无法定位模块源文件：{mod_path}")
+    return src
+
+
+def _reload_and_resolve(target: str) -> AgentManifest:
+    """热重载作者模块并重新解析 manifest。先清掉该模块在 _DECLARED 的登记，使 reload 重新执行
+    @agent 时不撞"重复声明的 agent key"。"""
+    mod_path = target.partition(":")[0]
+    from chameleon.agentkit import _decorator
+
+    for k, m in list(_decorator._DECLARED.items()):
+        if getattr(m.handler, "__module__", "").startswith(mod_path):
+            _decorator._DECLARED.pop(k, None)
+    importlib.invalidate_caches()  # 清 finder 缓存，确保 reload 见到文件变更
+    importlib.reload(sys.modules[mod_path])
+    return _load_manifest(target)
+
+
+def _cmd_dev(target: str, text: str, interval: float = 0.5) -> int:
+    """watch 源文件 mtime，改动即热重载 + 重跑——本地编辑 agent 的即时反馈闭环。"""
+    man = _load_manifest(target)
+    src = _module_source(target.partition(":")[0])
+    print(f"{_CYAN}agentkit dev{_RESET} · {man.name} ({man.key}) · watch {src} · Ctrl-C 退出")
+    asyncio.run(_invoke(man, text, []))
+    last = os.path.getmtime(src)
+    try:
+        while True:
+            time.sleep(interval)
+            try:
+                cur = os.path.getmtime(src)
+            except OSError:
+                continue  # 编辑器原子写瞬间文件可能不存在，跳过本轮
+            if cur == last:
+                continue
+            last = cur
+            print(f"\n{_DIM}── 源文件变更，热重载重跑 ──{_RESET}")
+            try:
+                man = _reload_and_resolve(target)
+                asyncio.run(_invoke(man, text, []))
+            except Exception as e:  # noqa: BLE001 —— 作者改出语法/运行错不该崩 watch 循环
+                print(f"{_DIM}✗ 重载失败（修正后保存即重试）：{type(e).__name__}: {e}{_RESET}")
+    except KeyboardInterrupt:
+        print()
+        return 0
+
+
 def _cmd_new(name: str, dest: str) -> int:
     from chameleon.agentkit._scaffold import write_scaffold
 
@@ -188,11 +241,11 @@ def _cmd_new(name: str, dest: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentkit", description="agentkit 本地开发自测")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("lint", "run", "chat"):
+    for name in ("lint", "run", "chat", "dev"):
         p = sub.add_parser(name)
         p.add_argument("target", help="作者模块，如 my_pkg.agent 或 my_pkg.agent:handle")
-        if name == "run":
-            p.add_argument("-i", "--input", required=True, help="单次输入")
+        if name in ("run", "dev"):
+            p.add_argument("-i", "--input", required=True, help="单次输入（dev 下每次热重载重跑它）")
     pn = sub.add_parser("new", help="脚手架：生成一个新 @agent 包骨架")
     pn.add_argument("name", help="agent 名（kebab-case，如 weather-bot）")
     pn.add_argument("-d", "--dir", default=".", help="生成目录（默认当前目录）")
@@ -203,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_run(ns.target, ns.input)
     if ns.cmd == "chat":
         return _cmd_chat(ns.target)
+    if ns.cmd == "dev":
+        return _cmd_dev(ns.target, ns.input)
     if ns.cmd == "new":
         return _cmd_new(ns.name, ns.dir)
     return 1

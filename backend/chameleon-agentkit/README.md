@@ -83,6 +83,7 @@ export CHAMELEON_DEV_TOKEN=<同上 token>
 agentkit lint my_agent          # 校验 @agent 声明
 agentkit run  my_agent -i "用 calc 算 (123+456)*7"   # 单次跑
 agentkit chat my_agent          # 交互 REPL
+agentkit dev  my_agent -i "..."  # watch 源文件，改动即热重载重跑（编辑-反馈闭环）
 ```
 
 模型 / KB / 工具调用经 `HttpDevTransport` 回调站内 dev 服务，用平台已配置资源跑。
