@@ -1,0 +1,19 @@
+[project]
+name = "chameleon-agent-example-mcp-use"
+version = "0.1.0"
+description = "示例：MCP 工具助手 —— 消费外部 MCP server 工具"
+requires-python = ">=3.12"
+dependencies = ["chameleon-agentkit"]
+
+[tool.uv.sources]
+chameleon-agentkit = { workspace = true }
+
+[project.entry-points."chameleon.agents"]
+example-mcp-use = "chameleon.agents.example_mcp_use"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chameleon"]

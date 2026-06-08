@@ -11,6 +11,7 @@ members = [
     "chameleon-agent-example-classic",
     "chameleon-agent-example-echo",
     "chameleon-agent-example-imagegen",
+    "chameleon-agent-example-mcp-use",
     "chameleon-agent-example-orchestrator",
     "chameleon-agent-example-rag-qa",
     "chameleon-agent-example-tool-use",
@@ -285,6 +286,17 @@ requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" 
 name = "chameleon-agent-example-imagegen"
 version = "0.1.0"
 source = { editable = "chameleon-agents/examples/imagegen" }
+dependencies = [
+    { name = "chameleon-agentkit" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chameleon-agentkit", editable = "chameleon-agentkit" }]
+
+[[package]]
+name = "chameleon-agent-example-mcp-use"
+version = "0.1.0"
+source = { editable = "chameleon-agents/examples/mcp_use" }
 dependencies = [
     { name = "chameleon-agentkit" },
 ]
