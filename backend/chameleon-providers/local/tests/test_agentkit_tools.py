@@ -323,6 +323,34 @@ def test_should_sandbox_routing(monkeypatch):
     assert _should_sandbox(_M()) is True
 
 
+def test_untrusted_fail_closed_requires_docker(monkeypatch):
+    """评审6：untrusted 信任级生产必须 docker 真隔离，无 docker runtime 则拒绝运行（fail-closed）。"""
+    import pytest
+
+    from chameleon.providers.local.agentkit_runner import _assert_isolation_for_tier
+
+    class _Untrusted:
+        trust_tier = "untrusted"
+
+    class _Internal:
+        trust_tier = "internal"
+
+    monkeypatch.setenv("CHAMELEON_ENV", "production")
+    # untrusted + 生产 + 非 docker runtime → 拒绝（不静默退化到漏隔离子进程）
+    monkeypatch.setenv("CHAMELEON_SANDBOX_RUNTIME", "subprocess")
+    with pytest.raises(RuntimeError, match="docker 真隔离"):
+        _assert_isolation_for_tier(_Untrusted(), "u")
+    # untrusted + docker runtime → 放行
+    monkeypatch.setenv("CHAMELEON_SANDBOX_RUNTIME", "docker")
+    _assert_isolation_for_tier(_Untrusted(), "u")  # 不抛
+    # internal 信任级：子进程档即可，不强制 docker
+    monkeypatch.setenv("CHAMELEON_SANDBOX_RUNTIME", "subprocess")
+    _assert_isolation_for_tier(_Internal(), "i")  # 不抛
+    # untrusted 但非生产：dev 便利，不强制（_should_sandbox 已挡 dev 进沙箱）
+    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    _assert_isolation_for_tier(_Untrusted(), "u")  # 不抛
+
+
 def test_track_usage_accumulates():
     """transport.track_usage 累计 → usage_total 求和（A2A 上报基础，评审2 #25）。"""
     t = InProcessTransport(agent_key="x", bindings={}, slots={})

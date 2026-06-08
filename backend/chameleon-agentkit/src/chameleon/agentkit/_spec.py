@@ -129,6 +129,11 @@ class AgentManifest:
     #: 是否要求在沙箱（隔离 runtime）执行 —— 多租户 / 不可信代码用。接口已预留；
     #: 真正容器隔离执行按部署需求启用（见 runner 决策点 + core/sandbox）。
     sandboxed: bool = False
+    #: 信任级别，决定 sandboxed 执行的隔离强度要求（路线图 §6）：
+    #: - "internal"（默认）：自家可信代码，子进程档（env 擦除）即可。
+    #: - "untrusted"：陌生人/外部代码，**生产强制 docker 真隔离**；无 docker runtime 则
+    #:   fail-closed 拒绝运行（绝不静默退化到 FS/网络未隔离的子进程）。
+    trust_tier: str = "internal"
     #: 外部 MCP server 声明；其 tools 运行时自动并入 ctx.run_with_tools 的 ReAct 循环。
     mcp_servers: list[McpServerConfig] = field(default_factory=list)
     #: 声明可经 ctx.call_agent 调用的子 agent key（A2A allow-list）。沙箱（不可信）执行下

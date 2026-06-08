@@ -109,7 +109,7 @@ async def handle(ctx):
 
 ## 7. 不可信代码隔离（`sandboxed=True`）
 
-`@agent(sandboxed=True)` 声明该 agent 需隔离执行。运行档由部署决定：
+`@agent(sandboxed=True, trust_tier=...)` 声明该 agent 需隔离执行。运行档由部署决定：
 
 - **dev / 默认**：进程内（便利）。
 - **生产真隔离**（`CHAMELEON_SANDBOX_RUNTIME=docker` + `CHAMELEON_SANDBOX_IMAGE`）：handle 在
@@ -117,6 +117,10 @@ async def handle(ctx):
   网络、无文件系统访问**；ctx 资源调用经 stdio JSON-RPC 回主进程 broker 受控解析，broker 施加
   scope 红线（只能用声明的 model/tool/kb/call_agent）。镜像见 `docker/sandbox.Dockerfile`。
 - 子进程档（半可信）：env 凭据擦除 + CPU/进程限，但不隔离 FS/网络。
+
+**信任级 `trust_tier`**（决定隔离强度）：
+- `"internal"`（默认）：自家可信代码，子进程档即可。
+- `"untrusted"`：陌生人/外部代码，**生产强制 docker 真隔离**；若部署未配 `CHAMELEON_SANDBOX_RUNTIME=docker`，**fail-closed 拒绝运行**（绝不静默退化到漏隔离子进程，防 RCE）。
 
 凭据/DB 永远只在主进程；不可信 agent 代码碰不到。
 

@@ -650,6 +650,28 @@ def _should_sandbox(manifest: Any) -> bool:
     return allow not in ("1", "true", "yes")
 
 
+def _assert_isolation_for_tier(manifest: Any, key: str) -> None:
+    """untrusted 信任级的 fail-closed 闸：生产必须 docker 真隔离，否则拒绝运行。
+
+    子进程档只擦 env 凭据，不隔离 FS/网络——对"陌生人代码"不够。untrusted agent 若部署未配
+    CHAMELEON_SANDBOX_RUNTIME=docker，宁可拒绝运行也不静默退化到漏隔离子进程（防 RCE）。
+    """
+    import os
+
+    if getattr(manifest, "trust_tier", "internal") != "untrusted":
+        return
+    from chameleon.core.sandbox import is_production
+
+    if not is_production():
+        return
+    runtime = os.environ.get("CHAMELEON_SANDBOX_RUNTIME", "subprocess").strip().lower()
+    if runtime != "docker":
+        raise RuntimeError(
+            f"untrusted agent {key} 要求 docker 真隔离，但 CHAMELEON_SANDBOX_RUNTIME≠docker；"
+            f"拒绝在 FS/网络未隔离的子进程档运行不可信代码（fail-closed）。请配置 docker runtime。"
+        )
+
+
 async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     """运行一个 @agent 声明的本地智能体，产出 StreamEvent 流。"""
     cfg = ctx.agent_def.config
@@ -710,6 +732,9 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         if _should_sandbox(manifest):
             from chameleon.providers.local.sandbox import run_sandboxed
 
+            # fail-closed：untrusted（陌生人代码）生产必须 docker 真隔离；无 docker runtime
+            # 时拒绝运行，绝不静默退化到 FS/网络未隔离的子进程（路线图 §6 信任级闸）。
+            _assert_isolation_for_tier(manifest, ctx.agent_def.key)
             logger.info("agentkit agent {} 走沙箱隔离执行", ctx.agent_def.key)
             async for ev in run_sandboxed(
                 module=cfg["__agentkit_module__"],

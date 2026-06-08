@@ -39,6 +39,7 @@ def agent(
     tags: list[str] | None = None,
     tools: list[str] | None = None,
     sandboxed: bool = False,
+    trust_tier: str = "internal",
     mcp_servers: list[McpServerConfig] | None = None,
     call_agents: list[str] | None = None,
 ) -> Callable[[T], T]:
@@ -65,6 +66,7 @@ def agent(
             tags=list(tags or []),
             tools=list(tools or []),
             sandboxed=sandboxed,
+            trust_tier=trust_tier,
             mcp_servers=list(mcp_servers or []),
             call_agents=list(call_agents or []),
             handler=target,
