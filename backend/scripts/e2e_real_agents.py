@@ -41,6 +41,8 @@ CASES: list[tuple[str, str, object]] = [
     ("example-orchestrator", "帮我算 99 乘以 99", lambda a: "9801" in a),
     ("example-rag-qa", "知识库里讲了什么？", lambda a: len(a) > 8),
     ("example-triage", "我要投诉服务太差", lambda a: len(a) > 4),
+    # MCP client：外部 stdio MCP server 的 _STOCK 里 A100=42；模型不调真工具无法知道此值
+    ("example-mcp-use", "查 A100 的库存", lambda a: "42" in a),
 ]
 
 
