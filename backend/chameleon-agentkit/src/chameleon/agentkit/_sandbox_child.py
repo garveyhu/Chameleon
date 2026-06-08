@@ -40,23 +40,18 @@ async def main() -> None:
 
     reader = await _stdin_reader()
 
-    async def rpc_fn(frame: dict[str, Any]) -> dict[str, Any]:
-        _send(frame)
-        # 阻塞读，直到拿到匹配 id 的 rpc_result（Slice 1 顺序模型）
-        while True:
-            line = await reader.readline()
-            if not line:
-                raise RuntimeError("broker 关闭（无响应）")
-            resp = decode_frame(line)
-            if resp.get("t") == "rpc_result" and resp.get("id") == frame["id"]:
-                return resp
+    async def recv_fn() -> dict[str, Any]:
+        line = await reader.readline()
+        if not line:
+            raise RuntimeError("broker 关闭（无响应）")
+        return decode_frame(line)
 
     init = decode_frame(await reader.readline())
     try:
         mod = importlib.import_module(init["module"])
         target = getattr(mod, init["attr"])
         manifest = target.__agent_manifest__
-        transport = SandboxClientTransport(rpc_fn=rpc_fn, emit_fn=_send)
+        transport = SandboxClientTransport(send_fn=_send, recv_fn=recv_fn, emit_fn=_send)
         run = AgentRun(
             transport=transport,
             agent_key=manifest.key,

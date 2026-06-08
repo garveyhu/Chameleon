@@ -35,10 +35,39 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
             model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
             resp = await model.ainvoke(msgs)
             return {"ok": True, "data": getattr(resp, "content", "") or ""}
+        if method == "kb_search":
+            docs = await broker.kb_search(
+                args.get("query", ""), kbs=args.get("kbs"), top_k=args.get("top_k"),
+                min_score=args.get("min_score", 0.0), mode=args.get("mode"),
+                rerank=args.get("rerank"), expand=args.get("expand", 0), hyde=args.get("hyde", False),
+            )
+            return {"ok": True, "data": [
+                {"text": d.text, "score": d.score, "source": d.source, "metadata": d.metadata}
+                for d in docs
+            ]}
         return {"ok": False, "error": f"sandbox 未支持的 rpc: {method}"}
     except Exception as e:  # noqa: BLE001
         logger.warning("sandbox rpc 解析失败 method={}: {}", method, e)
         return {"ok": False, "error": "资源调用失败"}  # 脱敏
+
+
+async def _stream_chat(broker: Any, proc: Any, frame: dict[str, Any]) -> None:
+    """chat_stream rpc：broker.astream 逐块回 stream_chunk 帧 + 末 rpc_result。"""
+    rid = frame["id"]
+    args = frame.get("args") or {}
+    try:
+        msgs = [(m.get("role", "user"), m.get("content", "")) for m in args.get("messages", [])]
+        model = broker.chat_model(slot=args.get("slot"), model=args.get("model"))
+        async for chunk in model.astream(msgs):
+            text = getattr(chunk, "content", "") or ""
+            if text:
+                proc.stdin.write(encode_frame({"t": "stream_chunk", "id": rid, "chunk": text}))
+                await proc.stdin.drain()
+        proc.stdin.write(encode_frame({"t": "rpc_result", "id": rid, "ok": True, "data": None}))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("sandbox chat_stream 失败: {}", e)
+        proc.stdin.write(encode_frame({"t": "rpc_result", "id": rid, "ok": False, "error": "资源调用失败"}))
+    await proc.stdin.drain()
 
 
 async def run_sandboxed(
@@ -78,9 +107,12 @@ async def run_sandboxed(
             frame = decode_frame(line)
             t = frame.get("t")
             if t == "rpc":
-                result = await _resolve_rpc(broker, frame)
-                proc.stdin.write(encode_frame({"t": "rpc_result", "id": frame["id"], **result}))
-                await proc.stdin.drain()
+                if frame.get("method") == "chat_stream":
+                    await _stream_chat(broker, proc, frame)
+                else:
+                    result = await _resolve_rpc(broker, frame)
+                    proc.stdin.write(encode_frame({"t": "rpc_result", "id": frame["id"], **result}))
+                    await proc.stdin.drain()
             elif t == "event":
                 ev = frame["event"]
                 yield StreamEvent(type=StreamEventType(ev["type"]), data=ev.get("data") or {})

@@ -33,10 +33,26 @@ class _FakeModel:
         assert any(m[1] == "杭州" for m in messages if isinstance(m, tuple))
         return _FakeMsg("BROKER_RESOLVED")
 
+    async def astream(self, messages, **_kw):
+        for piece in ("流", "式", "块"):
+            yield _FakeMsg(piece)
+
 
 class _FakeBroker:
     def chat_model(self, *, slot=None, model=None):
         return _FakeModel()
+
+
+_STREAM_AGENT = textwrap.dedent(
+    '''
+    from chameleon.agentkit import agent, AgentRun, ModelSlot
+
+    @agent(key="_sbx_stream", name="t", models=[ModelSlot("chat", "c")])
+    async def handle(ctx: AgentRun):
+        async for d in ctx.stream(system="s", user=ctx.query):
+            yield d
+    '''
+)
 
 
 @pytest.mark.asyncio
@@ -54,3 +70,17 @@ async def test_run_sandboxed_parent_loop_and_broker(tmp_path):
     deltas = [e.data.get("text", "") for e in events if e.type == StreamEventType.delta]
     assert "".join(deltas) == "答:BROKER_RESOLVED"  # 子进程 ctx.complete 经 broker 解析回流
     assert not any(e.type == StreamEventType.error for e in events)
+
+
+@pytest.mark.asyncio
+async def test_run_sandboxed_streaming(tmp_path):
+    (tmp_path / "sbx_stream_mod.py").write_text(_STREAM_AGENT, encoding="utf-8")
+    deltas = []
+    async for ev in run_sandboxed(
+        module="sbx_stream_mod", attr="handle", query="杭州", broker=_FakeBroker(),
+        env_extra={"PYTHONPATH": __import__("os").pathsep.join([str(tmp_path), *sys.path])},
+    ):
+        if ev.type == StreamEventType.delta:
+            deltas.append(ev.data.get("text", ""))
+    # 子进程 ctx.stream → chat_stream rpc → broker.astream 多块经 stream_chunk 帧回流
+    assert "".join(deltas) == "流式块"

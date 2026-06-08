@@ -19,20 +19,61 @@ def _run(t: SandboxClientTransport) -> AgentRun:
     )
 
 
+class _FakeIO:
+    """内存假 stdio：send 收集帧，recv 按最近 rpc 调 responder 产响应帧。"""
+
+    def __init__(self, responder):
+        self.sent: list = []
+        self._responder = responder
+        self._pending: list = []
+
+    def send(self, frame):
+        self.sent.append(frame)
+
+    async def recv(self):
+        if self._pending:
+            return self._pending.pop(0)
+        frames = self._responder(self.sent[-1])
+        self._pending = list(frames) if isinstance(frames, list) else [frames]
+        return self._pending.pop(0)
+
+
 @pytest.mark.asyncio
 async def test_complete_does_chat_rpc_roundtrip():
-    sent: list = []
-
-    async def fake_rpc(frame):
-        sent.append(frame)
-        return {"t": "rpc_result", "id": frame["id"], "ok": True, "data": "沙箱回答"}
-
-    t = SandboxClientTransport(rpc_fn=fake_rpc, emit_fn=lambda e: None)
+    io = _FakeIO(lambda f: {"t": "rpc_result", "id": f["id"], "ok": True, "data": "沙箱回答"})
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda e: None)
     out = await _run(t).complete(system="s", user="问题")
     assert out == "沙箱回答"
-    assert sent[0]["t"] == "rpc" and sent[0]["method"] == "chat"
-    assert sent[0]["id"] == 1
-    assert sent[0]["args"]["messages"][-1]["content"] == "问题"  # user 消息过线
+    assert io.sent[0]["t"] == "rpc" and io.sent[0]["method"] == "chat"
+    assert io.sent[0]["id"] == 1
+    assert io.sent[0]["args"]["messages"][-1]["content"] == "问题"  # user 消息过线
+
+
+@pytest.mark.asyncio
+async def test_stream_yields_chunks():
+    def responder(f):
+        rid = f["id"]
+        return [
+            {"t": "stream_chunk", "id": rid, "chunk": "你"},
+            {"t": "stream_chunk", "id": rid, "chunk": "好"},
+            {"t": "rpc_result", "id": rid, "ok": True, "data": None},
+        ]
+
+    io = _FakeIO(responder)
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda e: None)
+    chunks = [c async for c in _run(t).stream(system="s", user="q")]
+    assert "".join(chunks) == "你好"
+    assert io.sent[0]["method"] == "chat_stream"
+
+
+@pytest.mark.asyncio
+async def test_kb_search_returns_docs():
+    io = _FakeIO(lambda f: {"t": "rpc_result", "id": f["id"], "ok": True,
+                            "data": [{"text": "命中", "score": 0.9, "source": "doc1"}]})
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda e: None)
+    docs = await t.kb_search("查询", kbs=["kb1"], mode="hybrid")
+    assert len(docs) == 1 and docs[0].text == "命中" and docs[0].score == 0.9
+    assert io.sent[0]["method"] == "kb_search" and io.sent[0]["args"]["mode"] == "hybrid"
 
 
 @pytest.mark.asyncio
@@ -40,11 +81,8 @@ async def test_emit_writes_event_frame():
     from chameleon.providers.base.types import StreamEvent, StreamEventType
 
     frames: list = []
-
-    async def fake_rpc(f):
-        return {"ok": True, "data": ""}
-
-    t = SandboxClientTransport(rpc_fn=fake_rpc, emit_fn=frames.append)
+    io = _FakeIO(lambda f: {"ok": True, "data": ""})
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=frames.append)
     t.emit(StreamEvent(type=StreamEventType.tool_call, data={"name": "calc"}))
     assert frames[0]["t"] == "event"
     assert frames[0]["event"]["data"] == {"name": "calc"}
@@ -52,10 +90,8 @@ async def test_emit_writes_event_frame():
 
 @pytest.mark.asyncio
 async def test_rpc_error_raises():
-    async def fake_rpc(f):
-        return {"ok": False, "error": "越权: 未声明 model"}
-
-    t = SandboxClientTransport(rpc_fn=fake_rpc, emit_fn=lambda e: None)
+    io = _FakeIO(lambda f: {"t": "rpc_result", "id": f["id"], "ok": False, "error": "越权: 未声明 model"})
+    t = SandboxClientTransport(send_fn=io.send, recv_fn=io.recv, emit_fn=lambda e: None)
     with pytest.raises(RuntimeError, match="越权"):
         await _run(t).complete(system="s", user="q")
 
