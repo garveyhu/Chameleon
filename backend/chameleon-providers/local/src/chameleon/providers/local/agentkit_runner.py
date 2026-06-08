@@ -571,6 +571,12 @@ class InProcessTransport(RuntimeTransport):
     async def call_agent(self, target: str, *, input: str) -> str:
         from chameleon.providers.base.a2a_bridge import get_a2a_caller
 
+        # 开放 A2A 出站（Slice A.2）：target 是 http(s) URL → 调远程 A2A agent；进程内 key 走下方
+        # a2a_bridge。URL 须在 call_agents 声明白名单内（统一 scope：声明你调的远程端点，防任意
+        # egress/SSRF——尤其沙箱不可信代码经 broker 发远程调用）。
+        if target.startswith(("http://", "https://")):
+            return await self._call_remote_a2a(target, input)
+
         caller = get_a2a_caller()
         if caller is None:
             raise RuntimeError(
@@ -605,6 +611,32 @@ class InProcessTransport(RuntimeTransport):
         # 子调用消耗计入本 agent 上报 usage（让本 agent 的 A2A 调用方预算也递减，子树共账）
         self.track_usage({"total_tokens": child_tokens})
         return out.get("answer") or ""
+
+    async def _call_remote_a2a(self, url: str, input: str) -> str:
+        """出站调远程 A2A agent（开放 A2A）。红线：URL 须声明在 call_agents（防任意 egress）；
+        远程上报 token 不可信→按答案长度本地估算扣预算（远程实际计费在远端）；远程输出当 untrusted。"""
+        if url not in self._call_agents:
+            raise RuntimeError(
+                f"远程 A2A 目标未声明：{url} 不在 @agent(call_agents=[...]) 白名单内"
+                f"（声明你调用的远程端点，防任意网络出站）"
+            )
+        from chameleon.integrations.a2a import A2AClient
+
+        tc = current_trace_context()
+        trace_id = self._request_id or (tc.request_id if tc else None) or self._session_id
+        self.emit(
+            StreamEvent(
+                type=StreamEventType.step,
+                data={"name": f"调用远程 A2A {url}", "status": "success",
+                      "output": {"target": url, "remote": True}},
+            )
+        )
+        answer = await A2AClient(url).call(input, trace_id=trace_id)
+        # 成本闸：远程 token 不可信，按答案长度本地粗估扣本 agent 预算（≈chars/4）
+        est = max(1, len(answer) // 4)
+        self._charge(est)
+        self.track_usage({"total_tokens": est})
+        return answer
 
     async def gather(
         self, calls: list[tuple[str, str]], *, timeout: float | None = None
