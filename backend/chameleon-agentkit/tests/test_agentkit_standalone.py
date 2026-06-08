@@ -161,6 +161,38 @@ async def test_standalone_checkpoint_restore():
 
 
 @pytest.mark.asyncio
+async def test_checkpoint_reserved_key_not_in_memory_all():
+    """评审10 🟠：ctx.checkpoint 的保留键不污染作者 ctx.memory.all() 视图。"""
+    t = StandaloneTransport(model=_FakeModel())
+
+    @agent(key="sa-ck-iso", name="c", models=[ModelSlot("chat", "对话")])
+    async def handle(ctx: AgentRun):
+        await ctx.memory.set("user_pref", "dark")
+        await ctx.checkpoint({"step": 1})
+        keys = sorted((await ctx.memory.all()).keys())
+        yield ",".join(keys)
+
+    out = await run_standalone(handle, "x", transport=t)
+    assert out == "user_pref"  # 只见作者键，无 __chm_checkpoint__
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_rejects_non_serializable():
+    """评审10 🟠：不可 JSON 序列化的 checkpoint state 前置友好报错（平台/standalone 一致）。"""
+    import datetime
+
+    t = StandaloneTransport(model=_FakeModel())
+
+    @agent(key="sa-ck-ser", name="c", models=[ModelSlot("chat", "对话")])
+    async def handle(ctx: AgentRun):
+        await ctx.checkpoint({"when": datetime.datetime(2026, 6, 8)})  # 不可序列化
+        yield "x"
+
+    with pytest.raises(ValueError, match="JSON 可序列化"):
+        await run_standalone(handle, "x", transport=t)
+
+
+@pytest.mark.asyncio
 async def test_standalone_react_tool_loop():
     @tool(name="add", description="加法")
     async def add(a: int, b: int) -> int:

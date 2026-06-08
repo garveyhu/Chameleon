@@ -100,6 +100,7 @@ print(await run_standalone(handle, "你好", transport=t))
 | trace / token usage | 无观测（span/usage no-op） | 全自动 trace 树 + 成本归集 |
 | 工具循环事件 | emit tool_call/tool_result（经 on_event） | 自动 emit + 流式可见 |
 | 子智能体 memory | 父快照（子改不回写） | end_user 跨 agent 共享 kv |
+| checkpoint 状态 | 存活引用（先 checkpoint 后 mutate 会变） | JSON 快照冻结（须 JSON 可序列化，已前置校验） |
 | gather 预算闸 | 无（自带 key 本机） | 按分支均分 + 成本闸 |
 | 多模态 media | 报错（平台专属） | ComfyUI/DashScope 路由 |
 

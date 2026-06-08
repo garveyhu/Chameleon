@@ -527,6 +527,16 @@ class AgentRun:
         底层复用 ctx.memory 的持久化（按 end_user 隔离），故 `state` 须 JSON 可序列化。
         这是 durable execution 的崩溃恢复底座；HITL 暂停/重放（ctx.ask_human）见路线图后续分片。
         """
+        import json
+
+        # 平台落 JSON 列：不可序列化的 state（datetime/自定义类）在 commit 时才裸炸；这里前置
+        # 校验给友好报错，且让 standalone（存活引用、不序列化）与平台行为一致（评审10 🟠）。
+        try:
+            json.dumps(state)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"ctx.checkpoint(state) 的 state 须 JSON 可序列化（落库持久化）；当前不可序列化：{e}"
+            ) from e
         await self._t.memory_set(_CHECKPOINT_KEY, state)
 
     async def restore(self, default: Any = None) -> Any:
@@ -573,7 +583,11 @@ class _MemoryProxy:
         await self._t.memory_set(key, value)
 
     async def all(self) -> dict[str, Any]:
-        return await self._t.memory_all()
+        # 滤掉框架保留键（如 ctx.checkpoint 的 __chm_checkpoint__），不污染作者 memory 视图。
+        return {
+            k: v for k, v in (await self._t.memory_all()).items()
+            if not (k.startswith("__chm_") and k.endswith("__"))
+        }
 
 
 class _KbProxy:
