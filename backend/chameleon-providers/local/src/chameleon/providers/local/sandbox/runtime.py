@@ -325,6 +325,12 @@ async def run_sandboxed(
         while True:
             try:
                 line = await asyncio.wait_for(proc.stdout.readline(), timeout=_CHILD_TIMEOUT)
+            except (TimeoutError, asyncio.TimeoutError):
+                # 子进程墙钟超时（死循环 / 卡住 handle / OOM 假死）→ 优雅 error 事件 + break，
+                # 交由 finally 杀进程。此前未接 TimeoutError 会把裸异常抛给调用方（评审12）。
+                logger.warning("sandbox 子进程超时（{}s），杀死并中止 module={}", _CHILD_TIMEOUT, module)
+                yield StreamEvent(type=StreamEventType.error, data={"message": "智能体执行超时"})
+                break
             except (ValueError, asyncio.LimitOverrunError):
                 # 单行超 limit（恶意/超大帧）→ 中止，不崩主流程
                 logger.warning("sandbox 子进程帧超限，中止")
