@@ -23,6 +23,7 @@
 
 from chameleon.agentkit._decorator import agent, declared_agents, tool
 from chameleon.agentkit._runtime import (
+    AgentPaused,
     AgentRun,
     KbHandle,
     MediaHandle,
@@ -47,6 +48,7 @@ from chameleon.core.runtime_types import Message, StreamEvent, StreamEventType
 __all__ = [
     "AgentManifest",
     "AgentMetadata",
+    "AgentPaused",
     "AgentRun",
     "BaseAgent",
     "Doc",

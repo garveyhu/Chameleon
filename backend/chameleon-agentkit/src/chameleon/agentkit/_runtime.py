@@ -224,6 +224,24 @@ _CHECKPOINT_KEY = "__chm_checkpoint__"
 #: `__chm_journal__<run_id>__<idx>__`——首尾 __chm_/__ 命中 _MemoryProxy.all() 保留键过滤，
 #: 对作者 memory 视图不可见。per-run（run_id）隔离：ctx.memory 是跨会话的，不加 run_id 会串。
 _JOURNAL_PREFIX = "__chm_journal__"
+#: durable Slice2 HITL 待人工输入标记键（复用 AgentMemory，免迁移）。
+_PENDING_KEY = "__chm_pending__"
+
+
+class AgentPaused(Exception):  # noqa: N818 —— 控制流信号非错误，沿用 LangGraph interrupt 命名直觉
+    """ctx.ask_human 无答案时抛出，表示 run 暂停等待人工输入（HITL）。
+
+    非异常错误而是控制流信号——运行时在 run 边界捕获，标 run 为 paused、落 pending、结束本次
+    流（不算失败）。人工答复回填 journal 后重新 invoke handle，重放至 ask 点取答案续跑。
+    """
+
+    def __init__(self, *, prompt: str, call_index: int, run_id: str | None,
+                 schema: Any = None) -> None:
+        super().__init__(f"agent paused for human input @call_index={call_index}: {prompt}")
+        self.prompt = prompt
+        self.call_index = call_index
+        self.run_id = run_id
+        self.schema = schema
 
 
 class _RouteChoice(BaseModel):
@@ -581,6 +599,37 @@ class AgentRun:
     async def restore(self, default: Any = None) -> Any:
         """取回上次 `ctx.checkpoint()` 存的状态快照；无则返 `default`。"""
         return await self._t.memory_get(_CHECKPOINT_KEY, default)
+
+    # —— durable Slice2：人在环（HITL 暂停 / 恢复）——
+
+    async def ask_human(self, prompt: str, *, schema: Any = None) -> Any:
+        """暂停 run 等人工输入（HITL）：首次到达且无答案 → 落 pending + 抛 AgentPaused（运行时标
+        run 为 paused、结束本次流）；人答复回填 journal 后重新 invoke，重放至此返答案续跑。
+
+        与 ctx.complete 共享 call_index 序列（memoization 重放按序回放），故须 durable 运行
+        （平台 durable agent / 传了 run_id）。`schema` 是给前端渲染输入控件的提示，存进 pending。
+        """
+        if not self._journal_enabled:
+            raise RuntimeError(
+                "ctx.ask_human 需 durable 运行（平台 durable agent，或构造 AgentRun 传 run_id）"
+            )
+        idx = self._call_index
+        self._call_index += 1
+        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
+        cached = await self._t.memory_get(key, None)
+        if cached is not None:
+            if cached.get("method") != "ask_human":
+                raise RuntimeError(
+                    f"durable 重放 call_index={idx} method 不匹配"
+                    f"（记录 {cached.get('method')!r} ≠ 'ask_human'）：handle 控制流非确定性"
+                )
+            return cached["output"]  # 答案已回填 → 重放续跑
+        # 无答案：落 pending（前端/运营据此渲染输入），抛 AgentPaused 暂停本次 run
+        await self._t.memory_set(
+            _PENDING_KEY,
+            {"call_index": idx, "prompt": prompt, "run_id": self._journal_run_id},
+        )
+        raise AgentPaused(prompt=prompt, call_index=idx, run_id=self._journal_run_id, schema=schema)
 
 
 class _MediaProxy:
