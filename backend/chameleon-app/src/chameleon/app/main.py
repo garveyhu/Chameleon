@@ -188,12 +188,20 @@ def _wire_retrieval_bridge() -> None:
     wire_retrieval_bridge()
 
 
+def _wire_media_cost_bridge() -> None:
+    """注入媒体计费 fn，让 agentkit ctx.media 成本归集进 trace/rollup（不反向依赖）。"""
+    from chameleon.system.pricing import wire_media_cost_bridge
+
+    wire_media_cost_bridge()
+
+
 def create_app() -> FastAPI:
     setup_logger()
     _register_observation_sink()
     _wire_agent_bridges()
     _wire_a2a_bridge()
     _wire_retrieval_bridge()
+    _wire_media_cost_bridge()
 
     app = FastAPI(
         title="Chameleon",
