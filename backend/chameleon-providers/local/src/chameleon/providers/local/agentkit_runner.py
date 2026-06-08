@@ -597,6 +597,55 @@ class InProcessTransport(RuntimeTransport):
         self.track_usage({"total_tokens": child_tokens})
         return out.get("answer") or ""
 
+    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
+        """并行扇出子智能体（预算均分防超支版）。
+
+        N 个并行分支若各读同一 self._budget 会各拿全额→可能超支；故按分支数均分预算
+        （每支 budget//N），事后按实际总消耗统一扣减 + 计入 usage。trace_id/depth/scope
+        与 call_agent 一致。保序返回（asyncio.gather 保序）。
+        """
+        import asyncio
+
+        from chameleon.providers.base.a2a_bridge import get_a2a_caller
+
+        n = len(calls)
+        if n == 0:
+            return []
+        caller = get_a2a_caller()
+        if caller is None:
+            raise RuntimeError("A2A caller 未注入（app 启动应调 wire_a2a_bridge）")
+        tc = current_trace_context()
+        trace_id = self._request_id or (tc.request_id if tc else None) or self._session_id
+        if not trace_id:
+            raise RuntimeError("ctx.gather 需要 trace_id / session_id 至少其一")
+        share = max(1, self._budget // n)  # 预算均分：防并行分支各拿全额超支
+        self.emit(
+            StreamEvent(
+                type=StreamEventType.step,
+                data={
+                    "name": f"并行调用 {n} 个子智能体",
+                    "status": "success",
+                    "output": {"targets": [t for t, _ in calls]},
+                },
+            )
+        )
+
+        async def _one(target: str, inp: str) -> dict[str, Any]:
+            return await caller(
+                source=self._agent_key,
+                target=target,
+                input=inp,
+                trace_id=trace_id,
+                budget_remaining=share,
+                depth=self._a2a_depth + 1,
+            )
+
+        outs = await asyncio.gather(*(_one(t, i) for t, i in calls))
+        total = sum(int(o.get("tokens") or 0) for o in outs)
+        self._charge(total)  # 事后按实际总消耗统一扣减（成本闸在并发下仍收口）
+        self.track_usage({"total_tokens": total})
+        return [o.get("answer") or "" for o in outs]
+
     def span(self, name: str, *, type: str = "span") -> Any:
         return observe(
             observation_type=type,

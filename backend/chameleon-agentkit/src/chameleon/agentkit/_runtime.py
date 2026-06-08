@@ -179,6 +179,16 @@ class RuntimeTransport(ABC):
         """
         ...
 
+    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
+        """并行扇出调用多个子智能体（map-reduce），返回与入参同序的答案列表。
+
+        默认实现：并发跑各 call_agent（dev/fake/sandbox 直接可用）。生产 InProcess 档覆盖
+        为「预算按分支数均分」防并行分支各拿全额超支（成本闸在并发下仍收口）。
+        """
+        import asyncio
+
+        return list(await asyncio.gather(*(self.call_agent(t, input=i) for t, i in calls)))
+
     @abstractmethod
     def span(self, name: str, *, type: str = "span") -> Any:
         """打开一个 observe span（async context manager）。"""
@@ -373,6 +383,17 @@ class AgentRun:
         token 预算、trace 串联等红线由底层 engine a2a 统一守。
         """
         return await self._t.call_agent(target, input=input)
+
+    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
+        """并行扇出调用多个子智能体（map-reduce），返回与入参同序的答案列表。
+
+        每项为 `(target_agent_key, input)`。比手写 `asyncio.gather(ctx.call_agent(...))`
+        多了预算协调——生产档把剩余预算按分支数均分给各并行分支，防并行各拿全额超支。
+        嵌套深度 / trace 串联 / scope 等红线与 call_agent 一致。
+
+        例：`a, b = await ctx.gather([("agent-a", q1), ("agent-b", q2)])`
+        """
+        return await self._t.gather(calls)
 
     # —— 知识库 ——
 

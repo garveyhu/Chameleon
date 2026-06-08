@@ -323,6 +323,66 @@ def test_should_sandbox_routing(monkeypatch):
     assert _should_sandbox(_M()) is True
 
 
+@pytest.mark.asyncio
+async def test_gather_budget_split_and_order(monkeypatch):
+    """ctx.gather 并行扇出：预算按分支数均分（防超支）+ 保序 + 事后扣实际总额。"""
+    import chameleon.providers.base.a2a_bridge as bridge
+
+    seen_budgets: list[int] = []
+
+    async def _fake_caller(*, source, target, input, trace_id, budget_remaining, depth):
+        seen_budgets.append(budget_remaining)
+        return {"answer": f"ans-{target}", "tokens": 100}
+
+    monkeypatch.setattr(bridge, "get_a2a_caller", lambda: _fake_caller)
+
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="req-1", budget=900
+    )
+    answers = await t.gather([("a", "q1"), ("b", "q2"), ("c", "q3")])
+    # 保序
+    assert answers == ["ans-a", "ans-b", "ans-c"]
+    # 预算均分：900 // 3 = 300 给每个并行分支（防各拿全额 900 超支）
+    assert seen_budgets == [300, 300, 300]
+    # 事后按实际总消耗扣减：900 - 3×100 = 600
+    assert t._budget == 600
+
+
+@pytest.mark.asyncio
+async def test_gather_empty():
+    t = InProcessTransport(agent_key="x", bindings={}, slots={})
+    assert await t.gather([]) == []
+
+
+@pytest.mark.asyncio
+async def test_gather_default_path_via_agentrun():
+    """公共面 ctx.gather 委托 transport，默认实现（非 InProcess）= 并发 call_agent 保序。"""
+    from chameleon.agentkit._runtime import AgentRun, RuntimeTransport
+
+    class _T(RuntimeTransport):  # 只实现 call_agent，gather 走 ABC 默认实现
+        async def call_agent(self, target, *, input):
+            return f"{target}:{input}"
+
+        def chat_model(self, **k): ...
+        def structured_model(self, **k): ...
+        async def kb_search(self, *a, **k): ...
+        async def run_tool_loop(self, **k): ...
+        async def memory_get(self, *a, **k): ...
+        async def memory_set(self, *a, **k): ...
+        async def memory_all(self): ...
+        async def media_generate(self, **k): ...
+        def span(self, name, *, type="span"): ...
+        def emit(self, event): ...
+        def track_usage(self, usage): ...
+
+    run = AgentRun(
+        transport=_T(), agent_key="x", query="q", messages=[], history=[],
+        session_id=None, config={},
+    )
+    out = await run.gather([("a", "1"), ("b", "2")])
+    assert out == ["a:1", "b:2"]  # 保序
+
+
 def test_untrusted_fail_closed_requires_docker(monkeypatch):
     """评审6：untrusted 信任级生产必须 docker 真隔离，无 docker runtime 则拒绝运行（fail-closed）。"""
     import pytest

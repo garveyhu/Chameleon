@@ -36,6 +36,7 @@ async def handle(ctx: AgentRun):
 | 跨会话记忆 | `await ctx.memory.set(k, v)` / `await ctx.memory.get(k)` | KV 按 end_user 隔离 |
 | 多模态生成 | `await ctx.media.generate(kind="image", prompt=..., model=...)` | ComfyUI/DashScope 路由 + MinIO 存储 + 计费 |
 | 子智能体（A2A） | `await ctx.call_agent("other-agent", input=...)` | 进程内 A2A + 深度/预算闸 |
+| 并行扇出（map-reduce） | `await ctx.gather([("agent-a", q1), ("agent-b", q2)])` | 并发跑多子智能体 + 预算按分支均分防超支 + 保序返回 |
 | 自定义追踪段 | `async with ctx.span("retrieve"): ...` | 自动 trace 树 + rollup |
 | 逃生口 | `m = ctx.wrap(my_langchain_model)` | 用自带模型（绕路由/计费，极端定制） |
 
