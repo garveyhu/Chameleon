@@ -181,15 +181,22 @@ class RuntimeTransport(ABC):
         """
         ...
 
-    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
+    async def gather(
+        self, calls: list[tuple[str, str]], *, timeout: float | None = None
+    ) -> list[str]:
         """并行扇出调用多个子智能体（map-reduce），返回与入参同序的答案列表。
 
         默认实现：并发跑各 call_agent（dev/fake/sandbox 直接可用）。生产 InProcess 档覆盖
         为「预算按分支数均分」防并行分支各拿全额超支（成本闸在并发下仍收口）。
+        timeout（秒）：每分支超时上限，防某支 hang 永等（评审8 🟠）；None=不限。
         """
         import asyncio
 
-        return list(await asyncio.gather(*(self.call_agent(t, input=i) for t, i in calls)))
+        async def _one(t: str, i: str) -> str:
+            coro = self.call_agent(t, input=i)
+            return await (asyncio.wait_for(coro, timeout) if timeout else coro)
+
+        return list(await asyncio.gather(*(_one(t, i) for t, i in calls)))
 
     @abstractmethod
     def span(self, name: str, *, type: str = "span") -> Any:
@@ -393,7 +400,9 @@ class AgentRun:
         """
         return await self._t.call_agent(target, input=input)
 
-    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
+    async def gather(
+        self, calls: list[tuple[str, str]], *, timeout: float | None = None
+    ) -> list[str]:
         """并行扇出调用多个子智能体（map-reduce），返回与入参同序的答案列表。
 
         每项为 `(target_agent_key, input)`。比手写 `asyncio.gather(ctx.call_agent(...))`
@@ -401,8 +410,9 @@ class AgentRun:
         嵌套深度 / trace 串联 / scope 等红线与 call_agent 一致。
 
         例：`a, b = await ctx.gather([("agent-a", q1), ("agent-b", q2)])`
+        `timeout`（秒）：每分支超时上限，防某子智能体 hang 拖垮整个扇出；None=不限。
         """
-        return await self._t.gather(calls)
+        return await self._t.gather(calls, timeout=timeout)
 
     async def handoff(self, target: str, *, instruction: str | None = None) -> str:
         """把当前对话**移交**给目标子智能体接手作答（控制权转移）。
@@ -445,18 +455,23 @@ class AgentRun:
         if len(agents) == 1:
             return await self.call_agent(keys[0], input=query)
         options = "\n".join(f"- {k}: {d}" for k, d in agents)
-        choice = await self.complete(
-            slot=slot,
-            model=model,
-            schema=_RouteChoice,
-            system="你是任务路由器。根据用户问题，从候选智能体里选最合适处理的那一个，"
-            "返回它的 agent_key（必须是候选之一）。",
-            user=f"候选智能体：\n{options}\n\n用户问题：{query}",
-        )
-        # LLM 选了候选集外的 key → 回退首个，但 fallback 标进 trace（不静默掩盖模型不遵循
-        # 指令的信号，评审7 🟡）。
-        fallback = choice.agent_key not in keys
-        chosen = keys[0] if fallback else choice.agent_key
+        # 结构化路由：模型不支持 function_calling / 调用失败时不让 route 整体炸——回退首个
+        # 候选并把失败诊断标进 trace（评审8 🟠）。LLM 选了候选集外的 key 同样回退（评审7 🟡）。
+        try:
+            choice = await self.complete(
+                slot=slot,
+                model=model,
+                schema=_RouteChoice,
+                system="你是任务路由器。根据用户问题，从候选智能体里选最合适处理的那一个，"
+                "返回它的 agent_key（必须是候选之一）。",
+                user=f"候选智能体：\n{options}\n\n用户问题：{query}",
+            )
+            fallback = choice.agent_key not in keys
+            chosen = keys[0] if fallback else choice.agent_key
+            reason = getattr(choice, "reason", "")
+        except Exception as e:  # noqa: BLE001
+            chosen, fallback = keys[0], True
+            reason = f"结构化路由失败({type(e).__name__})，回退首个候选"
         from chameleon.core.runtime_types import StreamEvent, StreamEventType
 
         self.emit(
@@ -465,11 +480,7 @@ class AgentRun:
                 data={
                     "name": f"路由到 {chosen}",
                     "status": "success",
-                    "output": {
-                        "chosen": chosen,
-                        "fallback": fallback,
-                        "reason": getattr(choice, "reason", ""),
-                    },
+                    "output": {"chosen": chosen, "fallback": fallback, "reason": reason},
                 },
             )
         )

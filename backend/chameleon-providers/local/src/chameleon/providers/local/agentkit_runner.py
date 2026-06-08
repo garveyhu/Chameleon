@@ -597,8 +597,10 @@ class InProcessTransport(RuntimeTransport):
         self.track_usage({"total_tokens": child_tokens})
         return out.get("answer") or ""
 
-    async def gather(self, calls: list[tuple[str, str]]) -> list[str]:
-        """并行扇出子智能体（预算均分防超支版）。
+    async def gather(
+        self, calls: list[tuple[str, str]], *, timeout: float | None = None
+    ) -> list[str]:
+        """并行扇出子智能体（预算均分防超支版）。timeout 秒每分支超时上限（评审8 🟠）。
 
         N 个并行分支若各读同一 self._budget 会各拿全额→可能超支；故按分支数均分预算
         （每支 budget//N），事后按实际总消耗统一扣减 + 计入 usage。trace_id/depth/scope
@@ -631,7 +633,7 @@ class InProcessTransport(RuntimeTransport):
         )
 
         async def _one(target: str, inp: str) -> dict[str, Any]:
-            return await caller(
+            coro = caller(
                 source=self._agent_key,
                 target=target,
                 input=inp,
@@ -639,6 +641,7 @@ class InProcessTransport(RuntimeTransport):
                 budget_remaining=share,
                 depth=self._a2a_depth + 1,
             )
+            return await (asyncio.wait_for(coro, timeout) if timeout else coro)
 
         # return_exceptions=True：即使某分支失败，也要先结清已成功分支的预算/usage——
         # 否则一支抛异常会让 _charge/track_usage 整体跳过，成功兄弟已花的钱被"洗白"

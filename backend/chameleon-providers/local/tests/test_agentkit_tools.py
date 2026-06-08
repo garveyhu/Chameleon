@@ -437,6 +437,46 @@ async def test_route_single_candidate_direct():
 
 
 @pytest.mark.asyncio
+async def test_route_structured_failure_falls_back():
+    """评审8 🟠：结构化路由失败（模型不支持/返 None）→ 回退首个候选，route 不整体炸。"""
+    from chameleon.agentkit._runtime import AgentRun
+    from chameleon.agentkit.testing import FakeTransport
+
+    t = FakeTransport(call_agent_reply="FB")  # structured 默认 None → choice.agent_key 抛 → 兜底
+    run = AgentRun(
+        transport=t, agent_key="s", query="q", messages=[], history=[],
+        session_id=None, config={},
+    )
+    ans = await run.route("q", [("a", "x"), ("b", "y")])
+    assert ans == "FB"
+    assert ("call_agent", ("a", "q")) in t.invocations  # 回退首个候选 a
+
+
+@pytest.mark.asyncio
+async def test_gather_timeout_per_branch(monkeypatch):
+    """评审8 🟠：gather timeout 让 hang 的分支超时失败，不永等；成功分支仍结清。"""
+    import asyncio
+    import time
+
+    import chameleon.providers.base.a2a_bridge as bridge
+
+    async def _caller(*, source, target, input, trace_id, budget_remaining, depth):
+        if target == "slow":
+            await asyncio.sleep(10)
+        return {"answer": f"ok-{target}", "tokens": 30}
+
+    monkeypatch.setattr(bridge, "get_a2a_caller", lambda: _caller)
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="r", budget=600
+    )
+    start = time.monotonic()
+    with pytest.raises((TimeoutError, asyncio.TimeoutError)):
+        await t.gather([("fast", "q1"), ("slow", "q2")], timeout=0.15)
+    assert time.monotonic() - start < 3  # 不等满 10s
+    assert t._budget == 570  # fast(30) 已结清，slow 超时不影响 fast 计账
+
+
+@pytest.mark.asyncio
 async def test_route_empty_raises():
     from chameleon.agentkit._runtime import AgentRun
     from chameleon.agentkit.testing import FakeTransport
