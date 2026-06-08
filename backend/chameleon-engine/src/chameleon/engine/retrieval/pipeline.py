@@ -31,13 +31,14 @@ from loguru import logger
 from sqlalchemy import func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chameleon.data.models import Chunk, Document
-from chameleon.data.utils import tokenizer
-from chameleon.engine.retrieval.expander import (
+from chameleon.aikit.tasks.retrieval import (
     CompleteFn,
+    default_complete_fn,
     expand_queries,
     hyde_query,
 )
+from chameleon.data.models import Chunk, Document
+from chameleon.data.utils import tokenizer
 from chameleon.engine.retrieval.hybrid import Hit, HybridConfig, HybridPipeline
 from chameleon.engine.retrieval.rerankers import build_reranker
 from chameleon.integrations.embedding import get_embedding_client
@@ -269,20 +270,6 @@ def _build_keyword_recall(
 
 async def _empty_recall(_q: str, _n: int) -> list[Hit]:
     return []
-
-
-def default_complete_fn() -> CompleteFn:
-    """生产用 LLM 文本补全适配器（multi-query / HyDE）。
-
-    经 aikit 统一执行：已处于检索请求的 trace scope 内则复用其归属，否则自开
-    channel='internal' 补记账。multi-query / HyDE 失败由 expander 自身 fallback 兜。
-    """
-    from chameleon.aikit import LLMRunner
-
-    async def complete(prompt: str) -> str:
-        return await LLMRunner.run_text(prompt, retries=0)
-
-    return complete
 
 
 RecallFn = Callable[[str, int], Awaitable[list[Hit]]]

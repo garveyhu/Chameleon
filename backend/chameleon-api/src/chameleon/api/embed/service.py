@@ -900,7 +900,7 @@ async def suggest_followups_for_embed(
 
     api 层只做鉴权 + 调本函数；模型推断、trace 编排都在这里完成。
     """
-    from chameleon.system.graphs import generator as graph_generator
+    from chameleon.aikit.tasks.graph import suggest_followups
 
     # 1. 推 model_code：embed.agent_id → Agent.default_model_code（字符串 key，
     #    跟 model_bindings JSON 内的 key 风格一致；不再做 Model FK 跳转）
@@ -932,8 +932,8 @@ async def suggest_followups_for_embed(
     started = _time.monotonic()
     ok = True
     try:
-        return await graph_generator.suggest_followups(
-            question, answer, model_code=model_code
+        return await suggest_followups(
+            question, answer, model=model_code
         )
     except Exception:
         ok = False

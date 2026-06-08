@@ -18,7 +18,7 @@ from loguru import logger
 
 from chameleon.system.datasets.dsl.functions import DslError, get_function
 from chameleon.system.datasets.dsl.spec import DslSpec, NlRule
-from chameleon.system.datasets.judges import JudgeResult
+from chameleon.aikit.tasks.eval.judges import JudgeResult
 
 #: NL 规则评分用的 LLM 文本补全 callable（prompt → completion）；由 runner 注入，
 #: 内部经 aikit LLMRunner 执行（与 retrieval expander 的 CompleteFn 同款注入式纯算子）。
@@ -48,7 +48,7 @@ def _normalize_1_5(mean_1_5: float) -> float:
 
 def _build_nl_prompt(nl_rules: list[NlRule], actual: Any) -> str:
     """构造 NL 规则批量评分 prompt：逐条列出，要求 LLM 逐条打 1-5 分 + 理由。"""
-    from chameleon.system.datasets.judges import _flatten_str
+    from chameleon.aikit.tasks.eval.judges import _flatten_str
 
     act = _flatten_str(actual).strip()
     rule_lines = [

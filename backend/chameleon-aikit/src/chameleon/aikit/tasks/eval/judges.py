@@ -1,19 +1,17 @@
-"""Eval judges —— 把 (expected, actual) 评成 [0, 1] 分数（统一 JudgeResult 契约）
+"""Eval judges（系统 AI 任务，eval 域）—— 把 (expected, actual) 评成 [0, 1] 分数。
 
-设计（模块 G judge 多模式地基）：
-- JudgeResult 是统一契约：score 始终内部恒 [0, 1]；scale 仅作 UI 展示标记；
-  reason 一句话理由；field_scores 逐字段 / 原档位等附加结构。
-- 旧三函数（exact_match / contains）保留窄签名（返 float | None），由 runner 调用处
-  用适配器包成 JudgeResult，保向后兼容、零行为变化。
-- 需 LLM 的 judge（llm_judge / llm_score / gsb）只在本文件出 **纯函数**：prompt 构造 +
-  结果解析（parse_score_result）。真正的 LLM 调用留在 runner.py（编排层可依赖
-  integrations），本文件【绝不】import LLM / integrations，守分层纯逻辑。
-- dsl judge 本期只登记 key 占位；解析器（chameleon.system.datasets.dsl）由 dsl-parser
-  领域产出，runner 收到 dsl 时 try-import，未就位则返 score=None。
+统一 JudgeResult 契约 + judge 注册表。需 LLM 的 judge（llm_judge / llm_score / gsb）
+只出**纯函数**：prompt 构造 + 结果解析；真正的 LLM 调用留在评测域 runner（编排层），
+本模块【绝不】import LLM / integrations，守分层纯逻辑。
+
+- JudgeResult：统一契约，score 始终内部恒 [0, 1]；scale 仅 UI 展示标记；reason 一句话；
+  field_scores 逐字段 / 原档位等附加结构。
+- 旧三函数（exact_match / contains）保留窄签名（返 float | None），runner 调用处用适配器
+  包成 JudgeResult。
+- dsl judge 本期只登记 key 占位；解析器（system.datasets.dsl）由 dsl-parser 领域产出。
 
 量纲红线（D3）：score 永远落归一 [0, 1]。1-5 模式把 n 档归一为 (n-1)/4 落 score，
 原始档位放 field_scores；gsb 三态 G/S/B 落 {1.0, 0.5, 0.0}，verdict 入 field_scores。
-mean_score / RAGAS / score_distribution 桶一律读 [0, 1] score，不读 scale/field_scores。
 """
 
 from __future__ import annotations

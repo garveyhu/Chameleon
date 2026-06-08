@@ -661,25 +661,6 @@ async def _stream_llm(
     yield event_end(usage=usage)
 
 
-def _build_rewrite_prompt(
-    current_prompt: str, answer: str, instruction: str
-) -> str:
-    """组装「基于回答改写 System Prompt」的 LLM 提示词（强约束只回纯文本）。"""
-    base = current_prompt.strip() or "（当前没有 System Prompt）"
-    return (
-        "你是提示词工程助手。下面给你三样东西：\n"
-        "1) 当前的 System Prompt\n"
-        "2) 在该 System Prompt 下，模型对某次提问产出的一条不理想回答\n"
-        "3) 用户对回答的改写诉求\n\n"
-        "请基于这三者，改写出一个更好的 System Prompt，使模型按用户诉求作答。\n"
-        f"=== 当前 System Prompt ===\n{base}\n\n"
-        f"=== 这条不理想的模型回答 ===\n{answer.strip()}\n\n"
-        f"=== 用户的改写诉求 ===\n{instruction.strip()}\n\n"
-        "只输出改写后的完整 System Prompt 纯文本，"
-        "不要任何解释、前后缀、Markdown 代码块或 JSON 包裹。"
-    )
-
-
 async def rewrite_prompt(
     session: AsyncSession,
     *,
@@ -709,22 +690,14 @@ async def rewrite_prompt(
     Raises:
         BusinessError: LLM 返回空内容。
     """
-    from chameleon.aikit import LLMRunner
+    from chameleon.aikit.tasks.playground import rewrite_prompt as _rewrite
 
-    prompt = _build_rewrite_prompt(current_prompt, answer, instruction)
-
-    raw = await LLMRunner.run_text(
-        prompt,
+    return await _rewrite(
+        current_prompt,
+        answer,
+        instruction,
         model=model_code,
         channel=Channel.EVAL.value,
         app_id=EVAL_APP_ID,
         session_id=f"eval-rewrite-{uuid.uuid4().hex[:8]}",
-        retries=0,
     )
-
-    rewritten = str(raw).strip()
-    if not rewritten:
-        raise BusinessError(
-            ResultCode.Fail, message="改写失败，请调整需求后重试"
-        )
-    return rewritten

@@ -7,6 +7,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.aikit.tasks.graph import suggest_followups as gen_followups
 from chameleon.core.api.response import PageResult, Result
 from chameleon.core.api.sse import sse_response
 from chameleon.data.infra.db import get_session
@@ -104,7 +105,7 @@ async def suggest_followups(
     _: object = Depends(require_permission("graphs:read")),
 ) -> Result[list[str]]:
     """A2：基于一轮问答生成 3 个建议追问。"""
-    return Result.ok(await graph_generator.suggest_followups(req.question, req.answer))
+    return Result.ok(await gen_followups(req.question, req.answer))
 
 
 @router.post("/{graph_id}/update", response_model=Result[GraphDetail])

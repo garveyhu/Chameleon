@@ -1,17 +1,17 @@
-"""Query 扩展 —— Multi-query（PR B1）+ HyDE（PR B2）
+"""检索 Query 扩展 —— Multi-query + HyDE（系统 AI 任务，retrieval 域）。
 
-纯算子模块：LLM 以 `complete_fn` callable 注入（prompt → completion text），
-不依赖 LLM 工厂 / langchain，便于单测注 stub。
+纯算子：LLM 以 ``complete_fn`` callable 注入（prompt → completion text），便于单测
+注 stub、不绑定具体 LLM 实现。默认适配器 ``default_complete_fn`` 经 aikit ``LLMRunner``
+统一执行 + trace（已处于检索请求 trace scope 内则复用归属，否则自开 internal 补记账）。
 
 两类扩展：
-1. expand_queries  —— LLM 把原 query 改写成 N 个语义等价但措辞不同的变体；
-   多变体分别召回再 RRF 融合，提升长尾 query 召回率（FastGPT dataset.search 同思路）。
-2. hyde_query      —— LLM 先"假设性回答"原问题，用假答案反向 embed 召回；
-   假答案与文档同分布，向量更贴近（Gao et al. 2022 HyDE）。
+1. expand_queries —— LLM 把原 query 改写成 N 个语义等价但措辞不同的变体；多变体分别
+   召回再 RRF 融合，提升长尾 query 召回率。
+2. hyde_query     —— LLM 先"假设性回答"原问题，用假答案反向 embed 召回（HyDE）。
 
 红线：
 - ⛔ LLM 失败 / 超时 → fallback 到 [原 query]（绝不让扩展拖垮主检索）
-- ⛔ 不在本模块直接调 embedding / vector store（保持纯函数 + 可测）
+- ⛔ 不在本模块直接碰 embedding / 向量库（保持纯函数 + 可测）
 """
 
 from __future__ import annotations
@@ -20,7 +20,9 @@ from collections.abc import Awaitable, Callable
 
 from loguru import logger
 
-#: complete_fn 签名：prompt → completion text（由 pipeline 注入真实 LLM）
+from chameleon.aikit.base import LLMRunner
+
+#: complete_fn 签名：prompt → completion text（pipeline 注入真实 LLM；默认见下）
 CompleteFn = Callable[[str], Awaitable[str]]
 
 DEFAULT_MULTI_QUERY_N = 3
@@ -48,8 +50,17 @@ _HYDE_PROMPT = """\
 """
 
 
+def default_complete_fn() -> CompleteFn:
+    """生产用 LLM 文本补全适配器（multi-query / HyDE），经 aikit LLMRunner 执行 + trace。"""
+
+    async def complete(prompt: str) -> str:
+        return await LLMRunner.run_text(prompt, retries=0)
+
+    return complete
+
+
 def _clean_lines(text: str) -> list[str]:
-    """LLM 多行输出 → 去序号 / 引号 / 空行的干净列表"""
+    """LLM 多行输出 → 去序号 / 引号 / 空行的干净列表。"""
     out: list[str] = []
     for raw in (text or "").splitlines():
         line = raw.strip()
@@ -73,16 +84,16 @@ async def expand_queries(
     n: int = DEFAULT_MULTI_QUERY_N,
     include_original: bool = True,
 ) -> list[str]:
-    """把 query 改写成 n 个变体
+    """把 query 改写成 n 个变体。
 
     Args:
         query: 原始查询
-        complete_fn: 注入的 LLM 文本补全 callable
+        complete_fn: 注入的 LLM 文本补全 callable（默认 ``default_complete_fn()``）
         n: 期望生成的变体数（不含原 query）
         include_original: 结果是否包含原 query（默认包含，排首位）
 
     Returns:
-        去重后的 query 列表；LLM 失败时退化为 [query]。
+        去重后的 query 列表；LLM 失败时退化为 ``[query]``。
     """
     base = [query] if include_original else []
     if n <= 0:
@@ -117,7 +128,7 @@ async def hyde_query(
     *,
     complete_fn: CompleteFn,
 ) -> str:
-    """生成 HyDE 假设性答案；用它替代 / 补充原 query 做 embed
+    """生成 HyDE 假设性答案；用它替代 / 补充原 query 做 embed。
 
     失败时 fallback 返回原 query（调用方据此决定是否退化为普通向量检索）。
     """

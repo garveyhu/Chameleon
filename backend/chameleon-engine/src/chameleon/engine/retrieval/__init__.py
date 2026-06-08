@@ -17,11 +17,6 @@ Pipeline（6 步）：
 - ⛔ quarantined chunks 不应出现在结果（半软删保留）
 """
 
-from chameleon.engine.retrieval.expander import (
-    CompleteFn,
-    expand_queries,
-    hyde_query,
-)
 from chameleon.engine.retrieval.hybrid import (
     Hit,
     HybridConfig,
@@ -59,7 +54,6 @@ __all__ = [
     "CaptionFn",
     "CaptionResult",
     "CohereReranker",
-    "CompleteFn",
     "HybridConfig",
     "Hit",
     "HybridPipeline",
@@ -71,12 +65,10 @@ __all__ = [
     "apply_rerank_scores",
     "build_reranker",
     "dedupe_by_chunk_id",
-    "expand_queries",
     "fuse_rrf",
     "fuse_rrf_many",
     "generate_caption",
     "generate_captions_batch",
-    "hyde_query",
     "make_client_reranker",
     "make_dedupe_reranker",
     "make_dedupe_then_judge_reranker",

@@ -15,7 +15,7 @@ from chameleon.system.datasets import ai_generate as ds_ai_generate
 from chameleon.system.datasets import optimizer as ds_optimizer
 from chameleon.system.datasets import runner as ds_runner
 from chameleon.system.datasets import service as ds_service
-from chameleon.system.datasets.judges import list_judges
+from chameleon.aikit.tasks.eval.judges import list_judges
 from chameleon.system.datasets.schemas import (
     AiGenStreamRequest,
     BatchDeleteItemsRequest,

@@ -946,24 +946,14 @@ async def analyze_comparison(
 ) -> CompareAnalysisResult:
     """对 N 个运行的对比结果做 AI 总结分析（走 aikit，返回 markdown）。"""
     from chameleon.aikit import LLMRunner
+    from chameleon.aikit.tasks.eval.compare import COMPARE_SYSTEM_PROMPT
 
     result = await compare_runs(session, run_ids)
     ds = await _load_dataset(session, result.runs[0].dataset_id)
     digest = _build_compare_digest(ds.name, result)
-
-    system = (
-        "你是资深的模型评测分析师。下面给你若干模型在同一评测数据集上的逐题得分对比"
-        "（含考察点 note 与分歧题的实际输出）。请输出一份简洁、有洞察的 **Markdown 分析报告**，"
-        "包含：\n"
-        "1. **总体结论**：综合排名与差距。\n"
-        "2. **各模型强弱**：每个模型擅长 / 不擅长哪类能力，**引用具体题目的考察点和得分**为证。\n"
-        "3. **共性难点**：所有模型都失分的题型及可能原因。\n"
-        "4. **选型建议**：按场景给出推荐。\n"
-        "用中文，结论先行，多用要点，不要复述原始表格。"
-    )
     analysis = await LLMRunner.run_text(
         digest,
-        system=system,
+        system=COMPARE_SYSTEM_PROMPT,
         channel="internal",
         retries=1,
         fallback="（分析生成失败，请稍后重试）",

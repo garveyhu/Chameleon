@@ -22,49 +22,61 @@ _SPECS: list[TaskSpec] = [
         title="LLM 评分（llm_judge / llm_score / gsb）",
         domain="eval",
         channel="eval",
-        location="system.datasets.runner._run_llm_judge + judges.py（build/parse 纯函数）",
+        location="aikit.tasks.eval.judges（契约 + build/parse 纯函数）；"
+        "LLM 调用在 system.datasets.runner._run_llm_judge",
+        builtin_general=True,
     ),
     TaskSpec(
         key="eval.dsl_nl_rules",
         title="DSL 自然语言规则评分",
         domain="eval",
         channel="eval",
-        location="system.datasets.dsl.evaluator._score_nl_rules（complete_fn 注入式）",
+        location="system.datasets.dsl.evaluator（prompt 纯函数 _build_nl_prompt + "
+        "complete_fn 注入；强耦合 DslSpec/NlRule，留域内）",
     ),
     TaskSpec(
         key="eval.ai_generate",
         title="AI 扩样（种子 few-shot 流式生成候选）",
         domain="eval",
         channel="eval",
-        location="system.datasets.ai_generate.ai_generate_stream",
+        location="aikit.tasks.eval.generate.build_generate_prompt"
+        "（+ system.datasets.ai_generate.ai_generate_stream 取种子/流式编排）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="eval.refine_candidate",
         title="评测候选单条优化 / 再生成",
         domain="eval",
         channel="eval",
-        location="system.datasets.ai_generate.refine_candidate",
+        location="aikit.tasks.eval.generate.build_refine_prompt"
+        "（+ system.datasets.ai_generate.refine_candidate 编排）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="eval.optimize",
         title="运行级 Prompt 优化（低分样本→重写 Prompt）",
         domain="eval",
         channel="eval",
-        location="system.datasets.optimizer._llm_optimize",
+        location="aikit.tasks.eval.optimize"
+        "（+ system.datasets.optimizer 取低分样本编排）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="eval.compare_analysis",
         title="运行对比 AI 总结分析（多模型逐题对比→markdown 报告）",
         domain="eval",
         channel="internal",
-        location="system.datasets.service.analyze_comparison",
+        location="aikit.tasks.eval.compare"
+        "（+ system.datasets.service.analyze_comparison 取对比 digest 编排）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="eval.subject_invoke",
         title="评测被测模型直调（preview→answer）",
         domain="eval",
         channel="eval",
-        location="system.datasets.runner._invoke_for_item",
+        location="system.datasets.runner._invoke_for_item"
+        "（调被测模型/agent，无 prompt 模板，非泛 AI 任务，留域内）",
     ),
     # ── 工作流 / 会话域 ──────────────────────────────────────
     TaskSpec(
@@ -72,21 +84,25 @@ _SPECS: list[TaskSpec] = [
         title="意图分类节点",
         domain="graph",
         channel="internal",
-        location="engine.graph.nodes.classifier.ClassifierNode.execute",
+        location="aikit.tasks.graph.classifier.classify",
+        builtin_general=True,
     ),
     TaskSpec(
         key="graph.generate_spec",
         title="NL→GraphSpec 工作流自动编排",
         domain="graph",
         channel="internal",
-        location="system.graphs.generator.generate_graph_spec",
+        location="aikit.tasks.graph.graph_spec.generate_graph_spec"
+        "（图校验由 system.graphs.generator 注入）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="graph.suggest_followups",
         title="追问建议生成",
         domain="graph",
         channel="internal",
-        location="system.graphs.generator.suggest_followups",
+        location="aikit.tasks.graph.followups.suggest_followups",
+        builtin_general=True,
     ),
     # ── 知识库检索域 ────────────────────────────────────────
     TaskSpec(
@@ -94,16 +110,18 @@ _SPECS: list[TaskSpec] = [
         title="multi-query 检索改写",
         domain="retrieval",
         channel="internal",
-        location="engine.retrieval.expander.expand_queries"
-        "（pipeline.default_complete_fn 注入）",
+        location="aikit.tasks.retrieval.expander.expand_queries"
+        "（complete_fn 注入；pipeline 接 pgvector）",
+        builtin_general=True,
     ),
     TaskSpec(
         key="retrieval.hyde",
         title="HyDE 假设性答案",
         domain="retrieval",
         channel="internal",
-        location="engine.retrieval.expander.hyde_query"
-        "（pipeline.default_complete_fn 注入）",
+        location="aikit.tasks.retrieval.expander.hyde_query"
+        "（complete_fn 注入；pipeline 接 pgvector）",
+        builtin_general=True,
     ),
     # ── Playground 域 ──────────────────────────────────────
     TaskSpec(
@@ -111,7 +129,9 @@ _SPECS: list[TaskSpec] = [
         title="System Prompt 即时改写（H1）",
         domain="playground",
         channel="eval",
-        location="system.playground.service.rewrite_prompt",
+        location="aikit.tasks.playground.rewrite.rewrite_prompt"
+        "（评测 trace 归属由 playground service 注入）",
+        builtin_general=True,
     ),
     # ── 媒体生成域 ──────────────────────────────────────────
     TaskSpec(
