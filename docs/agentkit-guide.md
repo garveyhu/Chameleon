@@ -34,6 +34,7 @@ async def handle(ctx: AgentRun):
 | 知识库检索 | `docs = await ctx.kb.search(ctx.query, mode="hybrid", rerank=True)` | 向量+BM25 混合 / rerank / 查询扩展 / 自动引用 |
 | 工具循环（ReAct） | `async for d in ctx.run_with_tools(user=..., tools=[my_tool], tool_keys=["http"])` | 平台工具闸门 / 本地 @tool / 自动 tool_call·result 事件 |
 | 跨会话记忆 | `await ctx.memory.set(k, v)` / `await ctx.memory.get(k)` | KV 按 end_user 隔离 |
+| 检查点/恢复（durable） | `await ctx.checkpoint(state)` / `state = await ctx.restore(default={})` | 长任务进度快照，崩溃/中断后续跑（持久化复用 memory） |
 | 多模态生成 | `await ctx.media.generate(kind="image", prompt=..., model=...)` | ComfyUI/DashScope 路由 + MinIO 存储 + 计费 |
 | 子智能体（A2A） | `await ctx.call_agent("other-agent", input=...)` | 进程内 A2A + 深度/预算闸 |
 | 并行扇出（map-reduce） | `await ctx.gather([("agent-a", q1), ("agent-b", q2)])` | 并发跑多子智能体 + 预算按分支均分防超支 + 保序返回 |

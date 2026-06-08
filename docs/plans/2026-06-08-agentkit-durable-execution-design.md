@@ -68,7 +68,10 @@ state = await ctx.restore("progress", default={})
    单测：同一 run 重跑返记忆值不重调）。
 2. **Slice 2**：ctx.ask_human + AgentPaused + provider 标 paused + 落 pending（复用
    human_input_pending）。e2e：ask→paused→resolve→resume 续跑。
-3. **Slice 3**：ctx.checkpoint/restore（崩溃恢复 author 状态）。
+3. ✅ **Slice 3（已交付，170949e 后续）**：ctx.checkpoint/restore（崩溃恢复 author 状态）。
+   migration-free——复用既有 ctx.memory 持久化（AgentMemory 表）+ 保留键 __chm_checkpoint__，
+   跨所有 transport 可用。Slice 1/2（journal 重放 + ask_human）仍需新 agent_runs/journal 表
+   （待迁移窗口）。
 4. **Slice 4**：前端审批 UI（复用图 human-input 表单）+ 超时（复用 APScheduler 扫 timeout）+
    stream/run_with_tools 的 journal 记录。
 

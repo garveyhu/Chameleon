@@ -143,6 +143,24 @@ async def test_standalone_call_agent_local_registry():
 
 
 @pytest.mark.asyncio
+async def test_standalone_checkpoint_restore():
+    """durable Slice 3：ctx.checkpoint 存进度，下次调用 ctx.restore 取回（崩溃恢复底座）。"""
+    t = StandaloneTransport(model=_FakeModel())
+
+    @agent(key="sa-ckpt", name="c", models=[ModelSlot("chat", "对话")])
+    async def handle(ctx: AgentRun):
+        state = await ctx.restore(default={"step": 0})
+        state["step"] += 1
+        await ctx.checkpoint(state)
+        yield f"step={state['step']}"
+
+    # 同 transport（共享本地 memory）连续调用 → 状态从 checkpoint 续，不从头
+    assert await run_standalone(handle, "x", transport=t) == "step=1"
+    assert await run_standalone(handle, "x", transport=t) == "step=2"
+    assert await run_standalone(handle, "x", transport=t) == "step=3"
+
+
+@pytest.mark.asyncio
 async def test_standalone_react_tool_loop():
     @tool(name="add", description="加法")
     async def add(a: int, b: int) -> int:

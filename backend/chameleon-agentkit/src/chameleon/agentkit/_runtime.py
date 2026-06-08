@@ -218,6 +218,10 @@ class RuntimeTransport(ABC):
         ...
 
 
+#: ctx.checkpoint/restore 在 memory 里的保留键（前缀防与作者自定义 key 冲突）。
+_CHECKPOINT_KEY = "__chm_checkpoint__"
+
+
 class _RouteChoice(BaseModel):
     """ctx.route 的 LLM 路由决策结构化输出。"""
 
@@ -513,6 +517,21 @@ class AgentRun:
     def emit(self, event: StreamEvent) -> None:
         """透传一个自定义 StreamEvent。"""
         self._t.emit(event)
+
+    # —— durable：检查点 / 恢复（崩溃恢复 author 进度）——
+
+    async def checkpoint(self, state: dict[str, Any]) -> None:
+        """存一份 durable 执行状态快照——长任务/多步 agent 崩溃或中断后，下次同 end_user/会话
+        调用 `ctx.restore()` 取回，从断点续跑而非从头。
+
+        底层复用 ctx.memory 的持久化（按 end_user 隔离），故 `state` 须 JSON 可序列化。
+        这是 durable execution 的崩溃恢复底座；HITL 暂停/重放（ctx.ask_human）见路线图后续分片。
+        """
+        await self._t.memory_set(_CHECKPOINT_KEY, state)
+
+    async def restore(self, default: Any = None) -> Any:
+        """取回上次 `ctx.checkpoint()` 存的状态快照；无则返 `default`。"""
+        return await self._t.memory_get(_CHECKPOINT_KEY, default)
 
 
 class _MediaProxy:
