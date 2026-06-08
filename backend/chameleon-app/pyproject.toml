@@ -23,6 +23,7 @@ dependencies = [
     "uvicorn[standard]>=0.30",
     "pydantic>=2.7",
     "click>=8",
+    "alembic>=1.13",                  # cli.py `chameleon db upgrade` shell out alembic CLI 跑迁移
 ]
 
 [tool.uv.sources]
