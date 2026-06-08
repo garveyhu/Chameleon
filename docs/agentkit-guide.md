@@ -169,3 +169,19 @@ async def handle(ctx):
 - **会话**：history / end_user 身份 / 附件多模态自动注入 messages。
 
 一句话：**建文件夹、写 `handle(ctx)`、声明用什么——其余平台全包。**
+
+## 9. 鲁棒性与生产就绪（你可依赖的保证）
+
+这些是框架默认就有、且经测试验证（多数变异验证 + 真模型 e2e）的失败态兜底——作者无需自己处理：
+
+| 保证 | 默认行为 | 调法 | 验证 |
+|---|---|---|---|
+| **LLM 超时** | 每次模型调用 60s 客户端超时（防 hung 上游无限阻塞） | `CHAMELEON_LLM_TIMEOUT` 或构造 kwargs | `test_llm_robustness` |
+| **transient 重试** | 429/5xx/超时 自动指数退避重试 2 次（尊重 `Retry-After`） | `CHAMELEON_LLM_MAX_RETRIES` | `test_retry_on_429_actually_retries_behavior`（真退避行为，非仅设字段） |
+| **沙箱超时** | `sandboxed=True` 的 agent 死循环/卡住 → 墙钟超时杀进程 + 优雅 error 事件（非裸异常） | `_CHILD_TIMEOUT` | `test_sandbox_timeout`（真触发 kill） |
+| **成本闸** | 工具循环 / A2A 子调用 token 预算耗尽 → 截断收口，不超支 | `@agent` / 调用预算 | `test_tool_loop_budget_gate_truncates_real`（真触发截断） |
+| **并发隔离** | N 个 agent 同进程并发，各自 trace / observation / 预算互不串扰 | 自动（ContextVar 按 task copy-on-write） | `test_concurrent_trace_scopes_isolated` |
+| **结构化输出 / 路由** | `ctx.complete(schema=)` / `ctx.route` 经 function-calling 出合法 typed 结构；模型不遵循时 route 回退首候选并标进 trace | — | `scripts/e2e_real_agents.py`（真 Qwen 验选对非首位候选） |
+
+离线鲁棒性套件（无需 DB/真 LLM）由 `.github/workflows/agentkit-ci.yml` 自动阻断；真 LLM 端到端
+（八能力 + 结构化 + 路由）由 `scripts/e2e_real_agents.py` 起平台手跑。
