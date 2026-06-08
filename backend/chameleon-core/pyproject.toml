@@ -1,8 +1,16 @@
 [project]
 name = "chameleon-core"
 version = "1.0.0"
-description = "Chameleon 基础设施 + AI infra + 共享 ORM 模型"
+description = "Chameleon 纯协议 / 共享契约基座层（agentkit 等上层的精简依赖）"
 requires-python = ">=3.12"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
 # core 是纯协议 / 共享基座层（依分层重构 core ← data ← integrations ← engine）。只声明
 # src 实际 import 的依赖；asyncpg/alembic/cryptography/langchain-openai/redis/minio/docker/
 # jieba/... 等是拆包前遗留的陈旧声明（实际使用方 data/integrations 已各自声明），移除以让
