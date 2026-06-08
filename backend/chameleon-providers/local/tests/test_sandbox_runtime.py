@@ -237,6 +237,26 @@ async def test_broker_call_agent_allowlist():
 
 
 @pytest.mark.asyncio
+async def test_run_sandboxed_missing_dep_diagnostic(tmp_path):
+    """沙箱 agent 用了镜像未装的依赖 → 透出可辨识'依赖缺失'诊断（评审5 DX，子进程档验）。"""
+    (tmp_path / "dep_miss_mod.py").write_text(
+        "import nonexistent_pkg_zzz  # noqa\n"
+        "from chameleon.agentkit import agent, AgentRun, ModelSlot\n"
+        '@agent(key="dep-miss-t", name="t", models=[ModelSlot("chat", "c")])\n'
+        "async def handle(ctx: AgentRun):\n    yield 'x'\n",
+        encoding="utf-8",
+    )
+    errs = []
+    async for ev in run_sandboxed(
+        module="dep_miss_mod", attr="handle", query="hi", broker=_FakeBroker(),
+        env_extra={"PYTHONPATH": __import__("os").pathsep.join([str(tmp_path), *sys.path])},
+    ):
+        if ev.type == StreamEventType.error:
+            errs.append(ev.data.get("message", ""))
+    assert any("依赖缺失" in e and "nonexistent_pkg_zzz" in e for e in errs)
+
+
+@pytest.mark.asyncio
 async def test_run_sandboxed_streaming(tmp_path):
     (tmp_path / "sbx_stream_mod.py").write_text(_STREAM_AGENT, encoding="utf-8")
     deltas = []

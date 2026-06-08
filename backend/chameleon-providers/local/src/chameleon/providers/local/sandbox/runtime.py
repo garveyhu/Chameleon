@@ -351,11 +351,11 @@ async def run_sandboxed(
                 yield StreamEvent(type=StreamEventType(ev["type"]), data=ev.get("data") or {})
             elif t == "done":
                 if not frame.get("ok"):
-                    logger.warning("sandbox handle 失败 module={}: {}", module, frame.get("error"))
-                    yield StreamEvent(
-                        type=StreamEventType.error,
-                        data={"message": "智能体执行失败"},  # 脱敏
-                    )
+                    err = frame.get("error") or ""
+                    logger.warning("sandbox handle 失败 module={}: {}", module, err)
+                    # 缺依赖是已知安全诊断（模块名非敏感）→ 透出帮作者定位；其余脱敏
+                    msg = err if err.startswith("依赖缺失") else "智能体执行失败"
+                    yield StreamEvent(type=StreamEventType.error, data={"message": msg})
                 break
     finally:
         if proc.returncode is None:

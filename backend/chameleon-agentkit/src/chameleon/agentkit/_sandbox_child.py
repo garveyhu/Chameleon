@@ -86,6 +86,9 @@ async def main() -> None:
             if text:
                 _send({"t": "event", "event": {"type": "delta", "data": {"text": text}}})
         _send({"t": "done", "ok": True})
+    except ModuleNotFoundError as e:
+        # 缺依赖（沙箱镜像未装该第三方包）—— 给可辨识诊断（模块名非敏感），改善作者 DX
+        _send({"t": "done", "ok": False, "error": f"依赖缺失：{e.name}（沙箱镜像未装）"})
     except Exception as e:  # noqa: BLE001
         # 脱敏：只回异常类型，不回堆栈
         _send({"t": "done", "ok": False, "error": type(e).__name__})
