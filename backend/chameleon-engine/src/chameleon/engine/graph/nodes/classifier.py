@@ -42,9 +42,7 @@ class ClassifierNode(Node[Any, dict]):
             raise ValueError("每个 category 需含 key（可选 description）")
 
     async def execute(self, ctx: NodeContext, input: Any) -> dict:
-        from langchain_core.messages import HumanMessage, SystemMessage
-
-        from chameleon.integrations.llms.factory import resolve_llm
+        from chameleon.aikit import LLMRunner
 
         node_vars = (ctx.extra or {}).get("__vars__") or {}
         query = _pick_query(input, node_vars.get("sys") or {})
@@ -57,14 +55,14 @@ class ClassifierNode(Node[Any, dict]):
             f"把用户问题分到下列类别之一，只输出类别 key（{' / '.join(keys)}）：\n"
             f"{cat_lines}\n\n问题：{query}"
         )
-        client = await resolve_llm(self.spec.data.get("model_name"))
-        ai = await client.ainvoke(
-            [
-                SystemMessage(content="你是意图分类器，只输出一个类别 key，不要多余文字。"),
-                HumanMessage(content=prompt),
-            ]
-        )
-        raw = (ai.content if hasattr(ai, "content") else str(ai)).strip()
+        raw = (
+            await LLMRunner.run_text(
+                prompt,
+                model=self.spec.data.get("model_name"),
+                system="你是意图分类器，只输出一个类别 key，不要多余文字。",
+                retries=0,
+            )
+        ).strip()
         chosen = (
             next((k for k in keys if k == raw), None)
             or next((k for k in keys if k in raw), None)

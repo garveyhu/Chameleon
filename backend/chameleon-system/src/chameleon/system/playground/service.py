@@ -38,7 +38,6 @@ from chameleon.data.constants import Channel
 from chameleon.data.infra.object_store import stash_media_urls
 from chameleon.data.models import ChatSession, KnowledgeBase, LLMModel, Message
 from chameleon.data.utils.snowflake import next_session_id
-from chameleon.integrations.llms.factory import llm as get_llm
 from chameleon.integrations.llms.factory import resolve_llm
 from chameleon.integrations.observe.aspect import record_scope
 from chameleon.system.api_key.service import (
@@ -710,23 +709,18 @@ async def rewrite_prompt(
     Raises:
         BusinessError: LLM 返回空内容。
     """
+    from chameleon.aikit import LLMRunner
+
     prompt = _build_rewrite_prompt(current_prompt, answer, instruction)
 
-    request_id = uuid.uuid4().hex
-    token = set_trace_context(
-        TraceContext(
-            request_id=request_id,
-            channel=Channel.EVAL.value,
-            app_id=EVAL_APP_ID,
-            session_id=f"eval-rewrite-{request_id[:8]}",
-        )
+    raw = await LLMRunner.run_text(
+        prompt,
+        model=model_code,
+        channel=Channel.EVAL.value,
+        app_id=EVAL_APP_ID,
+        session_id=f"eval-rewrite-{uuid.uuid4().hex[:8]}",
+        retries=0,
     )
-    try:
-        client = get_llm(model_code)
-        ai = await client.ainvoke([HumanMessage(content=prompt)])
-        raw = ai.content if hasattr(ai, "content") else str(ai)
-    finally:
-        reset_trace_context(token)
 
     rewritten = str(raw).strip()
     if not rewritten:

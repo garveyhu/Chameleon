@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
@@ -18,6 +19,10 @@ from loguru import logger
 from chameleon.system.datasets.dsl.functions import DslError, get_function
 from chameleon.system.datasets.dsl.spec import DslSpec, NlRule
 from chameleon.system.datasets.judges import JudgeResult
+
+#: NL 规则评分用的 LLM 文本补全 callable（prompt → completion）；由 runner 注入，
+#: 内部经 aikit LLMRunner 执行（与 retrieval expander 的 CompleteFn 同款注入式纯算子）。
+CompleteFn = Callable[[str], Awaitable[str]]
 
 
 def _field_value(payload: Any, field: str) -> str:
@@ -87,22 +92,19 @@ def _clamp_1_5(v: Any) -> float | None:
 async def _score_nl_rules(
     nl_rules: list[NlRule],
     actual: Any,
-    llm: Any,
+    complete_fn: CompleteFn,
 ) -> list[tuple[NlRule, float, str | None]]:
     """批量交 LLM 评 NL 规则，返回 [(rule, 1-5 分, reason)]；解析不到的条目跳过。
 
-    llm 由 runner 注入（已在 channel='eval' TraceContext scope 内）。容错：LLM 无返回
-    或 JSON 不可解析时整批跳过（不污染聚合，只记日志）。
+    complete_fn 由 runner 注入（经 aikit LLMRunner，已在 channel='eval' scope 内）。
+    容错：LLM 无返回或 JSON 不可解析时整批跳过（不污染聚合，只记日志）。
     """
-    from langchain_core.messages import HumanMessage
-
     prompt = _build_nl_prompt(nl_rules, actual)
     try:
-        ai = await llm.ainvoke([HumanMessage(content=prompt)])
+        raw = await complete_fn(prompt)
     except Exception:  # noqa: BLE001
         logger.exception("dsl nl-rule llm 调用失败")
         return []
-    raw = ai.content if hasattr(ai, "content") else str(ai)
     data = _extract_json_array(str(raw))
     if not data:
         return []
@@ -134,7 +136,7 @@ async def evaluate(
     expected: Any,
     actual: Any,
     *,
-    llm: Any | None = None,
+    complete_fn: CompleteFn | None = None,
 ) -> JudgeResult:
     """按 DslSpec 评分，返回归一到 [0, 1] 的 JudgeResult。
 
@@ -142,7 +144,7 @@ async def evaluate(
         spec: parse() 产出的规约。
         expected: 金标准（dict 按 field 取值，否则整体当文本）。
         actual: 被测模型回答（同上）。
-        llm: runner 注入的 LLM 客户端（有 NL 规则时必需）；无则 NL 规则跳过。
+        complete_fn: runner 注入的 LLM 补全 callable（有 NL 规则时必需）；无则 NL 规则跳过。
 
     Returns:
         JudgeResult（scale='1-5'）；无任何有效规则评分时 score=None。
@@ -175,8 +177,8 @@ async def evaluate(
         weight_total += rule.weight
         reason_parts.append(f"{rule.field}/{rule.func}: {raw:.0f}")
 
-    if spec.nl_rules and llm is not None:
-        nl_results = await _score_nl_rules(spec.nl_rules, actual, llm)
+    if spec.nl_rules and complete_fn is not None:
+        nl_results = await _score_nl_rules(spec.nl_rules, actual, complete_fn)
         for rule, score, reason in nl_results:
             key = f"nl:{rule.description[:24]}"
             field_scores[key] = score
@@ -184,7 +186,7 @@ async def evaluate(
             weight_total += rule.weight
             tail = f"（{reason}）" if reason else ""
             reason_parts.append(f"NL「{rule.description[:16]}」: {score:.0f}{tail}")
-    elif spec.nl_rules and llm is None:
+    elif spec.nl_rules and complete_fn is None:
         reason_parts.append("NL 规则无 LLM 可用，已跳过")
 
     if weight_total <= 0:
