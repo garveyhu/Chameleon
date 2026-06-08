@@ -192,6 +192,11 @@ async def stream_test(
             except MediaConfigError as e:
                 yield event_error("ConfigError", str(e))
                 return
+            # 测试时上传了参考图 → 明确意图图生图，直接切 edit_workflow（不经 langgraph 路由）
+            if m.kind == "image" and input_images and target.edit_upstream:
+                from dataclasses import replace
+
+                target = replace(target, upstream=target.edit_upstream)
             is_video = m.kind == "video"
             test_prompt = prompt or ("" if is_video else DEFAULT_TEST_IMAGE_PROMPT)
             yield event_delta(f"使用「{target.upstream}」（{target.driver}）提交生成…\n")

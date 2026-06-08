@@ -113,6 +113,16 @@ _SPECS: list[TaskSpec] = [
         channel="eval",
         location="system.playground.service.rewrite_prompt",
     ),
+    # ── 媒体生成域 ──────────────────────────────────────────
+    TaskSpec(
+        key="media.intent_route",
+        title="生图意图路由（文生图 / 图生图判别，langgraph）",
+        domain="media",
+        channel="internal",
+        location="aikit.tasks.media_intent.route_media_intent"
+        "（langgraph 图：detect 规则 + llm_judge 节点）",
+        builtin_general=True,
+    ),
 ]
 
 for _spec in _SPECS:

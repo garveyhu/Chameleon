@@ -1,9 +1,10 @@
 [project]
 name = "chameleon-provider-comfyui"
 version = "0.1.0"
-description = "Chameleon comfyui provider —— 把本地 ComfyUI 文生图作为可对话 agent（会话内返回 Markdown 图片）"
+description = "Chameleon comfyui provider —— 把本地 ComfyUI 作为可对话生图 agent（文生图 + 图生图 + langgraph 意图路由）"
 requires-python = ">=3.12"
 dependencies = [
+    "chameleon-aikit",
     "chameleon-core",
     "chameleon-data",
     "chameleon-integrations",
@@ -12,6 +13,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+chameleon-aikit = { workspace = true }
 chameleon-core = { workspace = true }
 chameleon-data = { workspace = true }
 chameleon-integrations = { workspace = true }

@@ -1,104 +1,71 @@
-"""内置生图工作流注册表 + 参数填充。
+"""内置生图工作流注册表 + 参数填充（独立文件管理）。
 
-每个工作流 = 一张 ComfyUI API 格式模板 + 一份参数绑定（哪个参数填到哪个节点的哪个字段）。
+工作流以独立文件管理，不再硬编码：
+
+- 模板：``workflows/<媒体>/<id>.json`` —— 一张 ComfyUI **API 格式**工作流，
+  与用户在画布里「导出 API」得到的那份完全一致（CLI / 画布 / 系统三方同源）。
+- 注册：``workflows/catalog.json`` —— 每个工作流一条，含元信息（name/description/task）、
+  ``prompt`` 注入点、``params``（前端可调 spec + 每个参数落到哪个节点的哪个字段）。
+
 前端通过 ``list_workflows()`` 拿到可选工作流及其可调参数，用户在「模型」表单里选一个；
 运行时用 ``build_workflow()`` 把 prompt 与参数灌进模板得到可提交的工作流。
 
-新增工作流：在 ``_REGISTRY`` 里加一项即可，无需改动 client / service。
+新增工作流：把 ComfyUI 导出的 API JSON 丢进 ``workflows/<媒体>/`` + 在 ``catalog.json``
+加一条即可，无需改动本模块 / client / driver。
 """
 
 from __future__ import annotations
 
 import copy
+import json
+from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
-# ── Z-Image Turbo 文生图（已在 Apple Silicon / MPS 实测出图）────────────────
-
-_ZIMAGE_T2I_TEMPLATE: dict[str, Any] = {
-    "1": {
-        "class_type": "UNETLoader",
-        "inputs": {"unet_name": "z_image_turbo_bf16.safetensors", "weight_dtype": "default"},
-    },
-    "2": {
-        "class_type": "CLIPLoader",
-        "inputs": {"clip_name": "qwen_3_4b.safetensors", "type": "lumina2", "device": "default"},
-    },
-    "3": {"class_type": "VAELoader", "inputs": {"vae_name": "ae.safetensors"}},
-    "4": {"class_type": "ModelSamplingAuraFlow", "inputs": {"model": ["1", 0], "shift": 3.0}},
-    "5": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["2", 0], "text": ""}},
-    "6": {"class_type": "ConditioningZeroOut", "inputs": {"conditioning": ["5", 0]}},
-    "7": {
-        "class_type": "EmptySD3LatentImage",
-        "inputs": {"width": 1024, "height": 1024, "batch_size": 1},
-    },
-    "8": {
-        "class_type": "KSampler",
-        "inputs": {
-            "model": ["4", 0],
-            "seed": 0,
-            "steps": 8,
-            "cfg": 1.0,
-            "sampler_name": "res_multistep",
-            "scheduler": "simple",
-            "positive": ["5", 0],
-            "negative": ["6", 0],
-            "latent_image": ["7", 0],
-            "denoise": 1.0,
-        },
-    },
-    "9": {"class_type": "VAEDecode", "inputs": {"samples": ["8", 0], "vae": ["3", 0]}},
-    "10": {"class_type": "SaveImage", "inputs": {"images": ["9", 0], "filename_prefix": "chameleon"}},
-}
+_WORKFLOWS_DIR = Path(__file__).parent / "workflows"
+_CATALOG_PATH = _WORKFLOWS_DIR / "catalog.json"
 
 
-# 参数 spec：前端按此渲染可调字段；type 同时用于运行时类型归一
-_PARAM_SPEC: dict[str, list[dict[str, Any]]] = {
-    "zimage_t2i": [
-        {"key": "width", "label": "宽", "type": "int", "default": 1024},
-        {"key": "height", "label": "高", "type": "int", "default": 1024},
-        {"key": "steps", "label": "步数", "type": "int", "default": 8},
-        {"key": "cfg", "label": "CFG", "type": "float", "default": 1.0},
-        {"key": "seed", "label": "随机种子(0=随机)", "type": "int", "default": 0},
-    ],
-}
+@lru_cache(maxsize=1)
+def _catalog() -> dict[str, dict[str, Any]]:
+    """读取并缓存 ``catalog.json`` 的 ``workflows`` 段（id → 注册条目）。"""
+    data = json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
+    return data.get("workflows", {})
 
-# 参数绑定：参数 key → (节点 id, 节点 inputs 字段名)
-_BINDINGS: dict[str, dict[str, tuple[str, str]]] = {
-    "zimage_t2i": {
-        "prompt": ("5", "text"),
-        "width": ("7", "width"),
-        "height": ("7", "height"),
-        "seed": ("8", "seed"),
-        "steps": ("8", "steps"),
-        "cfg": ("8", "cfg"),
-    },
-}
 
-_REGISTRY: dict[str, dict[str, Any]] = {
-    "zimage_t2i": {
-        "id": "zimage_t2i",
-        "name": "Z-Image Turbo 文生图",
-        "description": "Tongyi Z-Image Turbo · 8 步快速文生图（需已下载 z_image_turbo_bf16）",
-        "template": _ZIMAGE_T2I_TEMPLATE,
-    },
-}
+@lru_cache(maxsize=None)
+def _template(workflow_id: str) -> dict[str, Any]:
+    """读取并缓存某工作流的 API 格式模板 JSON（按 catalog 的 ``file`` 解析）。"""
+    entry = _catalog().get(workflow_id)
+    if entry is None:
+        raise KeyError(f"未注册的工作流: {workflow_id}")
+    return json.loads((_WORKFLOWS_DIR / entry["file"]).read_text(encoding="utf-8"))
 
 
 def list_workflows() -> list[dict[str, Any]]:
-    """对外暴露的工作流清单（不含模板内部结构），供前端模型表单下拉。"""
+    """对外暴露的工作流清单（不含模板内部结构 / 落点绑定），供前端模型表单下拉。"""
     return [
         {
-            "id": wf["id"],
-            "name": wf["name"],
-            "description": wf["description"],
-            "params": _PARAM_SPEC.get(wf_id, []),
+            "id": wf_id,
+            "name": entry["name"],
+            "description": entry.get("description", ""),
+            "task": entry.get("task", "t2i"),
+            "params": [
+                {
+                    "key": p["key"],
+                    "label": p["label"],
+                    "type": p.get("type", "str"),
+                    "default": p.get("default"),
+                }
+                for p in entry.get("params", [])
+            ],
         }
-        for wf_id, wf in _REGISTRY.items()
+        for wf_id, entry in _catalog().items()
     ]
 
 
 def workflow_exists(workflow_id: str) -> bool:
-    return workflow_id in _REGISTRY
+    return workflow_id in _catalog()
 
 
 def _coerce(value: Any, ptype: str) -> Any:
@@ -110,38 +77,50 @@ def _coerce(value: Any, ptype: str) -> Any:
 
 
 def build_workflow(
-    workflow_id: str, *, prompt: str, params: dict[str, Any] | None = None
+    workflow_id: str,
+    *,
+    prompt: str,
+    params: dict[str, Any] | None = None,
+    image_filename: str | None = None,
 ) -> dict[str, Any]:
-    """把 prompt + 参数灌进模板，返回可提交的 API 格式工作流。
+    """把 prompt + 参数（+ 图生图的输入图）灌进模板，返回可提交的 API 格式工作流。
 
     Args:
-        workflow_id: 已注册的工作流 id（如 ``zimage_t2i``）
+        workflow_id: 已注册的工作流 id（如 ``zimage_t2i`` / ``qwen_image_edit``）
         prompt: 正向提示词
-        params: 覆盖默认值的参数（缺省用 spec 里的 default）
+        params: 覆盖默认值的参数（缺省用 catalog 里的 default）
+        image_filename: 图生图的输入图（已上传到 ComfyUI 的服务端文件名）；
+            仅当 catalog 声明了 ``image`` 注入点且传入非空时填入。
 
     Raises:
         KeyError: workflow_id 未注册
     """
-    if workflow_id not in _REGISTRY:
+    entry = _catalog().get(workflow_id)
+    if entry is None:
         raise KeyError(f"未注册的工作流: {workflow_id}")
 
-    wf = copy.deepcopy(_REGISTRY[workflow_id]["template"])
-    bindings = _BINDINGS[workflow_id]
-    spec_by_key = {p["key"]: p for p in _PARAM_SPEC.get(workflow_id, [])}
-    merged = {p["key"]: p["default"] for p in _PARAM_SPEC.get(workflow_id, [])}
+    wf = copy.deepcopy(_template(workflow_id))
+
+    # prompt 注入
+    prompt_bind = entry.get("prompt")
+    if prompt_bind:
+        wf[prompt_bind["node"]]["inputs"][prompt_bind["field"]] = prompt
+
+    # 图生图输入图注入（catalog 声明 image 注入点 + 调用方给了已上传文件名时）
+    image_bind = entry.get("image")
+    if image_bind and image_filename:
+        wf[image_bind["node"]]["inputs"][image_bind["field"]] = image_filename
+
+    # 其余参数：默认值 + 调用覆盖（非 None），按各参数自带的 node/field 落点写入
+    specs = entry.get("params", [])
+    merged = {p["key"]: p.get("default") for p in specs}
     if params:
         merged.update({k: v for k, v in params.items() if v is not None})
 
-    # prompt
-    node_id, field = bindings["prompt"]
-    wf[node_id]["inputs"][field] = prompt
-
-    # 其余参数
-    for key, value in merged.items():
-        if key not in bindings:
+    for p in specs:
+        value = merged.get(p["key"])
+        if value is None or "node" not in p or "field" not in p:
             continue
-        node_id, field = bindings[key]
-        ptype = spec_by_key.get(key, {}).get("type", "str")
-        wf[node_id]["inputs"][field] = _coerce(value, ptype)
+        wf[p["node"]]["inputs"][p["field"]] = _coerce(value, p.get("type", "str"))
 
     return wf

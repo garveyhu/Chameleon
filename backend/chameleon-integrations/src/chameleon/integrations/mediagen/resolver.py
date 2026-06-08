@@ -43,12 +43,19 @@ def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarge
     defaults = dict(model.defaults or {})
     driver = _infer_driver(model, provider)
 
+    edit_upstream: str | None = None
     if driver == DriverName.comfyui.value:
         upstream = defaults.get("workflow")
         if not upstream or not workflow_exists(str(upstream)):
             raise MediaConfigError(
                 f"模型未绑定有效工作流（defaults.workflow），当前: {upstream!r}"
             )
+        # 图生图工作流（可选）：意图判定为 i2i 时用它。配了就校验已注册
+        edit_wf = defaults.get("edit_workflow")
+        if edit_wf:
+            if not workflow_exists(str(edit_wf)):
+                raise MediaConfigError(f"模型 edit_workflow 无效（未注册）: {edit_wf!r}")
+            edit_upstream = str(edit_wf)
         api_key: str | None = None
     else:
         upstream = defaults.get("model") or model.upstream_name or model.code
@@ -56,7 +63,11 @@ def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarge
         if not api_key:
             raise MediaConfigError("远程供应商未配置 api_key")
 
-    params = {k: v for k, v in defaults.items() if k not in ("driver", "workflow", "model")}
+    params = {
+        k: v
+        for k, v in defaults.items()
+        if k not in ("driver", "workflow", "model", "edit_workflow")
+    }
     return MediaTarget(
         driver=driver,
         media_kind=model.kind,
@@ -66,6 +77,7 @@ def build_media_target(model: LLMModel, provider: Provider | None) -> MediaTarge
         upstream=str(upstream),
         params=params,
         extra=dict(provider.extra_config or {}),
+        edit_upstream=edit_upstream,
     )
 
 

@@ -64,6 +64,40 @@ class ComfyUIClient:
         resp.raise_for_status()
         return resp.content
 
+    async def upload_image(
+        self, data: bytes, filename: str, *, overwrite: bool = True
+    ) -> str:
+        """上传一张图到 ComfyUI 的 input 目录，返回 ``LoadImage`` 可引用的服务端文件名。
+
+        图生图工作流的输入图先经此上传，再把返回名填进工作流的 ``LoadImage.image``。
+
+        Args:
+            data: 图片字节
+            filename: 上传文件名（ComfyUI 以此存盘）
+            overwrite: 是否覆盖同名文件
+
+        Returns:
+            ``LoadImage.image`` 可直接引用的名字（有 subfolder 时为 ``{subfolder}/{name}``）
+
+        Raises:
+            ComfyUIError: HTTP 非 200
+        """
+        async with httpx.AsyncClient(timeout=self.timeout) as c:
+            resp = await c.post(
+                f"{self.host}/upload/image",
+                files={"image": (filename, data, "image/png")},
+                data={"overwrite": "true" if overwrite else "false"},
+            )
+        if resp.status_code != 200:
+            logger.error("comfyui upload rejected: {} {}", resp.status_code, resp.text)
+            raise ComfyUIError(
+                f"ComfyUI 拒绝上传 (HTTP {resp.status_code}): {resp.text}"
+            )
+        info = resp.json()
+        name = info["name"]
+        subfolder = info.get("subfolder") or ""
+        return f"{subfolder}/{name}" if subfolder else name
+
     async def ping(self) -> bool:
         """探活：能取到 system_stats 即认为在线。"""
         try:

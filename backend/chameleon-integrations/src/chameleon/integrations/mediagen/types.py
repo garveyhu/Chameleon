@@ -76,3 +76,6 @@ class MediaTarget:
     # 厂商专属配置位（来自 provider.extra_config）：region / org / 额外 header 等，
     # 让新厂商无需改 MediaTarget 结构即可携带自定义参数。
     extra: dict[str, Any] = field(default_factory=dict)
+    # comfyui 图生图工作流 id（来自 model.defaults.edit_workflow）；意图判定为图生图时
+    # 由 provider 用它替换 upstream（dataclasses.replace），driver 无感继续按 upstream 跑。
+    edit_upstream: str | None = None

@@ -7,7 +7,7 @@
  * 避免 useEffect 同步 props（react-hooks/set-state-in-effect）。外层 Sheet 保持挂载做开合动画。
  */
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Badge } from '@/core/components/ui/badge';
@@ -33,6 +33,7 @@ import {
 import { Switch } from '@/core/components/ui/switch';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { imagegenApi } from '@/system/models/services/imagegen';
 import { modelApi } from '@/system/models/services/model';
 import type { ModelCapabilities, ModelItem } from '@/system/models/types/model';
 
@@ -97,14 +98,42 @@ const ModelConfigForm = ({
   const [contextWindow, setContextWindow] = useState(
     c.context_window != null ? String(c.context_window) : '',
   );
+  // 图片模型(comfyui)：文生图工作流 + 图生图开关 / i2i 工作流
+  //（dashscope 图片走 defaults.model，不在此配工作流）
+  const isComfyImage = model.kind === 'image' && d.driver !== 'dashscope';
+  const [workflow, setWorkflow] = useState(typeof d.workflow === 'string' ? d.workflow : '');
+  const [i2iEnabled, setI2iEnabled] = useState(!!d.edit_workflow);
+  const [editWorkflow, setEditWorkflow] = useState(
+    typeof d.edit_workflow === 'string' ? d.edit_workflow : '',
+  );
+  const wfQ = useQuery({
+    queryKey: ['imagegen-workflows'],
+    queryFn: imagegenApi.listWorkflows,
+    staleTime: 60_000,
+    enabled: isComfyImage,
+  });
+  const t2iWorkflows = (wfQ.data ?? []).filter(w => w.task === 't2i');
+  const i2iWorkflows = (wfQ.data ?? []).filter(w => w.task === 'i2i');
 
   const saveMut = useMutation({
     mutationFn: () => {
       const isChat = model.kind === 'chat';
-      // chat 存运行参数；embedding 存 batch_size —— 各存各的，不互相污染 defaults
-      const defaults: Record<string, unknown> = isChat
-        ? { temperature, top_p: topP, ...(maxTokens > 0 ? { max_tokens: maxTokens } : {}) }
-        : { ...(batchSize ? { batch_size: Number(batchSize) } : {}) };
+      // chat 存运行参数；comfyui 图片存工作流；embedding 存 batch_size —— 各存各的
+      let defaults: Record<string, unknown>;
+      if (isChat) {
+        defaults = {
+          temperature,
+          top_p: topP,
+          ...(maxTokens > 0 ? { max_tokens: maxTokens } : {}),
+        };
+      } else if (isComfyImage) {
+        defaults = { ...d }; // 保留原 defaults 其它字段
+        if (workflow) defaults.workflow = workflow;
+        if (i2iEnabled && editWorkflow) defaults.edit_workflow = editWorkflow;
+        else delete defaults.edit_workflow;
+      } else {
+        defaults = { ...(batchSize ? { batch_size: Number(batchSize) } : {}) };
+      }
       const capabilities: ModelCapabilities = {
         vision,
         tool_call: toolCall,
@@ -233,6 +262,65 @@ const ModelConfigForm = ({
               <p className="text-[10.5px] leading-snug text-stone-500">
                 单次请求最多 embed 多少条；留空用默认 25（DashScope 上限）
               </p>
+            </div>
+          </>
+        ) : null}
+
+        {isComfyImage ? (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-medium text-stone-700">文生图工作流</label>
+              <Select value={workflow} onValueChange={setWorkflow}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择文生图工作流" />
+                </SelectTrigger>
+                <SelectContent>
+                  {t2iWorkflows.map(w => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10.5px] leading-snug text-stone-500">
+                用户直接描述出图时走的 ComfyUI 工作流
+              </p>
+            </div>
+
+            <div className="space-y-2.5 rounded-lg border border-stone-200 px-3 py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[12.5px] font-medium text-stone-800">图生图</div>
+                  <div className="text-[11px] text-stone-500">
+                    开启后可上传参考图，或在出图后续编辑上一张
+                  </div>
+                </div>
+                <Switch
+                  checked={i2iEnabled}
+                  onCheckedChange={on => {
+                    setI2iEnabled(on);
+                    if (on && !editWorkflow && i2iWorkflows[0])
+                      setEditWorkflow(i2iWorkflows[0].id);
+                  }}
+                />
+              </div>
+              {i2iEnabled ? (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-[12px] text-stone-700">图生图工作流</label>
+                  <Select value={editWorkflow} onValueChange={setEditWorkflow}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="选择图生图工作流" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {i2iWorkflows.map(w => (
+                        <SelectItem key={w.id} value={w.id}>
+                          {w.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
           </>
         ) : null}

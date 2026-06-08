@@ -12,6 +12,8 @@ export interface ImageWorkflow {
   id: string;
   name: string;
   description: string;
+  /** t2i 文生图 / i2i 图生图 —— 配置面板按此分组到对应工作流下拉 */
+  task: string;
   params: WorkflowParam[];
 }
 
@@ -39,6 +41,8 @@ export interface MediaParamSpec {
   media_kind: 'image' | 'video';
   fields: ParamField[];
   styles: StylePreset[];
+  /** 该模型是否支持图生图（配了 edit_workflow）—— 决定是否显示参考图上传 */
+  supports_i2i: boolean;
 }
 
 export const imagegenApi = {

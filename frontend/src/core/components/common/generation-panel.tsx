@@ -69,6 +69,9 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
       staleTime: 30_000,
     });
     const mediaKind = q.data?.media_kind;
+    const supportsI2i = !!q.data?.supports_i2i;
+    // 视频(首帧必填) 或 支持图生图的图片模型(参考图可选) → 显示上传图入口
+    const showImageInput = mediaKind === 'video' || (mediaKind === 'image' && supportsI2i);
     const fields = useMemo(() => q.data?.fields ?? [], [q.data]);
     const styles = useMemo(() => q.data?.styles ?? [], [q.data]);
 
@@ -123,9 +126,11 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
 
     return (
       <div className="space-y-3">
-        {mediaKind === 'video' ? (
+        {showImageInput ? (
           <div className="space-y-1.5">
-            <Label className="text-[12px] text-stone-600">首帧图（图生视频必填）</Label>
+            <Label className="text-[12px] text-stone-600">
+              {mediaKind === 'video' ? '首帧图（图生视频必填）' : '参考图（图生图，可选）'}
+            </Label>
             <input
               ref={fileRef}
               type="file"
@@ -137,7 +142,7 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
               <div className="relative inline-block">
                 <img
                   src={firstFrame}
-                  alt="首帧"
+                  alt={mediaKind === 'video' ? '首帧' : '参考图'}
                   className="h-24 w-auto rounded-md border border-stone-200 object-cover"
                 />
                 <button
@@ -161,7 +166,9 @@ export const GenerationPanel = forwardRef<GenerationPanelHandle, Props>(
                 ) : (
                   <ImagePlus className="h-5 w-5" />
                 )}
-                <span className="text-[11px]">{uploading ? '上传中…' : '上传首帧图'}</span>
+                <span className="text-[11px]">
+                  {uploading ? '上传中…' : mediaKind === 'video' ? '上传首帧图' : '上传参考图'}
+                </span>
               </button>
             )}
           </div>

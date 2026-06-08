@@ -39,6 +39,7 @@ class WorkflowItem(BaseModel):
     id: str
     name: str
     description: str
+    task: str = "t2i"  # t2i 文生图 / i2i 图生图（前端按此分组到工作流下拉）
     params: list[WorkflowParam]
 
 
@@ -46,6 +47,7 @@ class ParamSpecOut(BaseModel):
     media_kind: str
     fields: list[dict[str, Any]]
     styles: list[dict[str, Any]]
+    supports_i2i: bool = False  # 该模型是否支持图生图（配了 edit_workflow）
 
 
 router = APIRouter(prefix="/v1/admin/imagegen", tags=["admin:imagegen"])
@@ -77,5 +79,10 @@ async def get_param_spec(
     except MediaConfigError:
         # 半配置：仍给风格预设 + 空字段，面板可用
         styles = STYLE_PRESETS if model.kind in ("image", "video") else []
-        spec = {"media_kind": model.kind, "fields": [], "styles": styles}
+        spec = {
+            "media_kind": model.kind,
+            "fields": [],
+            "styles": styles,
+            "supports_i2i": False,
+        }
     return Result.ok(ParamSpecOut(**spec))

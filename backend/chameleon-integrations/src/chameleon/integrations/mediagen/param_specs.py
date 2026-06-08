@@ -17,4 +17,11 @@ def build_param_spec(target: MediaTarget) -> dict[str, Any]:
     """按运行目标产出 {media_kind, fields, styles}。"""
     fields = get_driver(target.driver).param_spec(target)
     styles = STYLE_PRESETS if target.media_kind in ("image", "video") else []
-    return {"media_kind": target.media_kind, "fields": fields, "styles": styles}
+    # 图生图能力：image 模型配了 edit_workflow（→ MediaTarget.edit_upstream）即支持
+    supports_i2i = target.media_kind == "image" and bool(target.edit_upstream)
+    return {
+        "media_kind": target.media_kind,
+        "fields": fields,
+        "styles": styles,
+        "supports_i2i": supports_i2i,
+    }

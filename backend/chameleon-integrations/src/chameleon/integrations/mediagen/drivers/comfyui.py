@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
+import uuid
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
+import httpx
 from loguru import logger
 
 from ..comfyui_client import ComfyUIClient
@@ -25,6 +29,21 @@ def _first_image(outputs: dict[str, Any]) -> dict[str, Any] | None:
         for img in out.get("images", []) or []:
             return img
     return None
+
+
+async def _fetch_image_bytes(src: str) -> bytes:
+    """把输入图引用取成字节，供上传 ComfyUI。
+
+    支持 http(s) URL（如 MinIO 签名链接）/ data URI（base64 内联）/ 本地文件路径。
+    """
+    if src.startswith("data:"):
+        return base64.b64decode(src.split(",", 1)[1])
+    if src.startswith(("http://", "https://")):
+        async with httpx.AsyncClient(timeout=60.0) as c:
+            resp = await c.get(src)
+            resp.raise_for_status()
+            return resp.content
+    return Path(src).read_bytes()
 
 
 @register_driver
@@ -52,7 +71,19 @@ class ComfyUIDriver:
     ) -> AsyncIterator[dict[str, Any]]:
         client = ComfyUIClient(target.host, timeout=_TIMEOUT)
         merged = {**target.params, **(params or {})}
-        workflow = build_workflow(target.upstream, prompt=prompt, params=merged)
+
+        # 图生图：把首张输入图上传到 ComfyUI，拿服务端文件名填进工作流的 LoadImage
+        image_filename: str | None = None
+        if input_images:
+            data = await _fetch_image_bytes(input_images[0])
+            image_filename = await client.upload_image(
+                data, f"chm_{uuid.uuid4().hex[:12]}.png"
+            )
+            logger.info("mediagen comfyui uploaded input | name={}", image_filename)
+
+        workflow = build_workflow(
+            target.upstream, prompt=prompt, params=merged, image_filename=image_filename
+        )
 
         prompt_id = await client.submit(workflow)
         logger.info("mediagen comfyui submitted | prompt_id={} workflow={}", prompt_id, target.upstream)

@@ -1,0 +1,32 @@
+{
+  "_comment": "ComfyUI 工作流注册表（单一真源）。每条 = 一张 API 格式模板(file，与 ComfyUI 画布「导出 API」那份一致) + prompt 注入点 + 参数绑定(params 每项含 node/field 落点 + 前端可调 spec)。新增工作流：把 ComfyUI 导出的 API JSON 丢进 image|video/ 子目录，并在此加一条，无需改动任何 Python。",
+  "workflows": {
+    "zimage_t2i": {
+      "name": "Z-Image Turbo 文生图",
+      "description": "Tongyi Z-Image Turbo · 8 步快速文生图（需已下载 z_image_turbo_bf16）",
+      "task": "t2i",
+      "file": "image/zimage_t2i.json",
+      "prompt": { "node": "5", "field": "text" },
+      "params": [
+        { "key": "width", "label": "宽", "type": "int", "default": 1024, "node": "7", "field": "width" },
+        { "key": "height", "label": "高", "type": "int", "default": 1024, "node": "7", "field": "height" },
+        { "key": "steps", "label": "步数", "type": "int", "default": 8, "node": "8", "field": "steps" },
+        { "key": "cfg", "label": "CFG", "type": "float", "default": 1.0, "node": "8", "field": "cfg" },
+        { "key": "seed", "label": "随机种子(0=随机)", "type": "int", "default": 0, "node": "8", "field": "seed" }
+      ]
+    },
+    "qwen_image_edit": {
+      "name": "Qwen-Image-Edit 图生图",
+      "description": "Qwen-Image-Edit-2511 + Lightning 4步 · 按指令编辑输入图（需上传参考图或上一张生成图）",
+      "task": "i2i",
+      "file": "image/qwen_image_edit.json",
+      "prompt": { "node": "9", "field": "prompt" },
+      "image": { "node": "7", "field": "image" },
+      "params": [
+        { "key": "steps", "label": "步数", "type": "int", "default": 4, "node": "12", "field": "steps" },
+        { "key": "cfg", "label": "CFG", "type": "float", "default": 1.0, "node": "12", "field": "cfg" },
+        { "key": "seed", "label": "随机种子(0=随机)", "type": "int", "default": 0, "node": "12", "field": "seed" }
+      ]
+    }
+  }
+}
