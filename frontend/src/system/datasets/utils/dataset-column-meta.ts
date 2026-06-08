@@ -54,6 +54,7 @@ export const COLUMN_WIDTH: Record<ColumnCategory, number> = {
 /** 固定尾列宽度。 */
 export const EXPECTED_COL_WIDTH = 220;
 export const META_COL_WIDTH = 200;
+export const NOTE_COL_WIDTH = 220;
 
 /** 下划线 / 连字符转空格 + 每词首字母大写（未知英文 key 的轻量美化，不丢信息）。 */
 const prettify = (key: string): string =>

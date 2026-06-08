@@ -55,32 +55,44 @@ export const JUDGE_META: Record<string, JudgeMeta> = {
 export const judgeConfigKind = (judge: string): JudgeConfigKind =>
   JUDGE_META[judge]?.config ?? 'none';
 
+/** 需调用大模型评分的 judge —— 这些才需选「裁判模型」。
+ *  与后端 LLM_JUDGES + dsl 的 NL 规则对齐（judge_config.judge_model 生效范围）。 */
+const LLM_JUDGES = new Set(['llm_judge', 'llm_score', 'gsb', 'dsl']);
+
+/** 该 judge 是否走大模型评分（决定是否暴露裁判模型选择器）。 */
+export const judgeUsesLlm = (judge: string): boolean => LLM_JUDGES.has(judge);
+
 /** judge 标签；未知 judge 退回原始 key。 */
 export const judgeLabel = (judge: string): string =>
   JUDGE_META[judge]?.label ?? judge;
 
 /** 把表单态组装成提交用的 judge_config。
- *  - criteria（llm_score）→ { criteria }（空则空对象）
- *  - dsl → { dsl }（空文本则空对象）
- *  - reference → {}
+ *  - criteria（llm_score）→ { criteria }
+ *  - dsl → { dsl }
+ *  - reference（gsb）→ {}
  *  - none → undefined（不传）
+ *  LLM 类 judge 额外带 { judge_model }（裁判模型，独立于被测模型）；为空则不带。
  */
 export const buildJudgeConfig = (
   judge: string,
   criteria: string,
   dslText = '',
+  judgeModel = '',
 ): Record<string, unknown> | undefined => {
   const kind = judgeConfigKind(judge);
+  const base: Record<string, unknown> = {};
   if (kind === 'criteria') {
     const trimmed = criteria.trim();
-    return trimmed ? { criteria: trimmed } : {};
-  }
-  if (kind === 'dsl') {
+    if (trimmed) base.criteria = trimmed;
+  } else if (kind === 'dsl') {
     const trimmed = dslText.trim();
-    return trimmed ? { dsl: trimmed } : {};
+    if (trimmed) base.dsl = trimmed;
   }
-  if (kind === 'reference') return {};
-  return undefined;
+  const jm = judgeModel.trim();
+  if (jm && judgeUsesLlm(judge)) base.judge_model = jm;
+  // none 类（exact_match/contains/llm_judge）且无 judge_model → 不传
+  if (kind === 'none' && Object.keys(base).length === 0) return undefined;
+  return base;
 };
 
 /** 从已存的 judge_config 回填 criteria 文本（编辑场景）。 */
@@ -97,4 +109,12 @@ export const readDslText = (
 ): string => {
   const d = judgeConfig?.dsl;
   return typeof d === 'string' ? d : '';
+};
+
+/** 从已存的 judge_config 回填裁判模型 code（编辑场景）。 */
+export const readJudgeModel = (
+  judgeConfig: Record<string, unknown> | null | undefined,
+): string => {
+  const m = judgeConfig?.judge_model;
+  return typeof m === 'string' ? m : '';
 };

@@ -2,7 +2,7 @@
  *  样本选中 / 优化由上层整页管理（侧栏滑出），本组件只出内容 + 回调。 */
 
 import { useQuery } from '@tanstack/react-query';
-import { GitCompare, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, GitCompare, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 
 import { DataTable, type DataTableColumn } from '@/core/components/table';
@@ -81,6 +81,8 @@ export const RunDetailPanel = ({
   onCompareParent,
 }: Props) => {
   const [bucket, setBucket] = useState<ScoreBucket | null>(null);
+  // 评估配置区默认折叠（多数时候看分数 / 样本，配置按需展开）
+  const [configOpen, setConfigOpen] = useState(false);
 
   const distQ = useQuery({
     queryKey: ['ds-run-dist', run.id],
@@ -94,6 +96,11 @@ export const RunDetailPanel = ({
   const runItems = runItemsQ.data ?? [];
   const metrics = distQ.data?.metrics ?? [];
   const mean = runMean(run);
+
+  // 本次配置：裁判模型 / 评分要点（judge_config）+ 系统提示词（prompt_override）
+  const jc = run.judge_config ?? {};
+  const judgeModel = typeof jc.judge_model === 'string' ? jc.judge_model : '';
+  const criteria = typeof jc.criteria === 'string' ? jc.criteria : '';
 
   const inBucket = (ri: DatasetRunItemRow): boolean => {
     if (!bucket || ri.score == null) return !bucket;
@@ -224,6 +231,70 @@ export const RunDetailPanel = ({
       </header>
 
       <div className="flex-1 space-y-6 overflow-auto px-5 py-4">
+        <section>
+          <button
+            type="button"
+            onClick={() => setConfigOpen(o => !o)}
+            className="flex items-center gap-1 text-[12.5px] font-medium text-stone-800 transition hover:text-stone-900"
+          >
+            {configOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-stone-400" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-stone-400" />
+            )}
+            评估配置
+          </button>
+          {configOpen && (
+          <div className="mt-2 space-y-2 rounded-md border border-stone-200/70 bg-stone-50/40 p-3 text-[11.5px]">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-stone-600">
+              {run.agent_key ? (
+                <span>
+                  被测智能体{' '}
+                  <span className="font-mono text-stone-800">
+                    {run.agent_key}
+                  </span>
+                </span>
+              ) : (
+                <span>
+                  被测模型{' '}
+                  <span className="font-mono text-stone-800">
+                    {run.model_override || '数据集默认'}
+                  </span>
+                </span>
+              )}
+              <span>
+                评分器{' '}
+                <span className="text-stone-800">{judgeLabel(run.judge)}</span>
+              </span>
+              {judgeModel && (
+                <span>
+                  裁判模型{' '}
+                  <span className="font-mono text-stone-800">{judgeModel}</span>
+                </span>
+              )}
+            </div>
+            {criteria && (
+              <div>
+                <div className="mb-0.5 text-[10px] text-stone-400">评分要点</div>
+                <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 font-mono text-[11px] leading-relaxed text-stone-700">
+                  {criteria}
+                </pre>
+              </div>
+            )}
+            {run.prompt_override ? (
+              <div>
+                <div className="mb-0.5 text-[10px] text-stone-400">
+                  系统提示词
+                </div>
+                <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 font-mono text-[11px] leading-relaxed text-stone-700">
+                  {run.prompt_override}
+                </pre>
+              </div>
+            ) : null}
+          </div>
+          )}
+        </section>
+
         <section>
           <h4 className="mb-3 text-[12.5px] font-medium text-stone-800">
             分数分布

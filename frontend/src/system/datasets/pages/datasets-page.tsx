@@ -6,7 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Database, Plus, Trash2 } from 'lucide-react';
+import { Database, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -32,8 +32,10 @@ import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
 import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { DatasetCategoriesField } from '@/system/datasets/components/dataset-categories-field';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type {
+  CategoryDef,
   CreateDatasetRequest,
   DatasetItem,
 } from '@/system/datasets/types/dataset';
@@ -42,6 +44,7 @@ export const DatasetsPage = () => {
   const nav = useNavigate();
   const qc = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<DatasetItem | null>(null);
   const [sortKey, setSortKey] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -167,18 +170,31 @@ export const DatasetsPage = () => {
       key: 'actions',
       header: '',
       align: 'right',
-      width: 56,
+      width: 84,
       render: r => (
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            handleDelete(r);
-          }}
-          className="rounded p-1 text-stone-400 hover:bg-rose-50 hover:text-rose-600"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-0.5">
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              setEditing(r);
+            }}
+            title="编辑（名称 / 系统提示词 / 能力维度）"
+            className="rounded p-1 text-stone-400 hover:bg-stone-100 hover:text-stone-700"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              handleDelete(r);
+            }}
+            className="rounded p-1 text-stone-400 hover:bg-rose-50 hover:text-rose-600"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ),
     },
   ];
@@ -252,12 +268,17 @@ export const DatasetsPage = () => {
         }}
       />
 
-      {createOpen && (
+      {(createOpen || editing) && (
         <CreateModal
-          onClose={() => setCreateOpen(false)}
-          onCreated={() => {
+          dataset={editing ?? undefined}
+          onClose={() => {
+            setCreateOpen(false);
+            setEditing(null);
+          }}
+          onSaved={() => {
             qc.invalidateQueries({ queryKey: ['datasets'] });
             setCreateOpen(false);
+            setEditing(null);
           }}
         />
       )}
@@ -266,29 +287,50 @@ export const DatasetsPage = () => {
 };
 
 interface CreateModalProps {
+  /** 传入 = 编辑模式（预填 + 走 update）；不传 = 新建 */
+  dataset?: DatasetItem;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
 }
 
-const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+const CreateModal = ({ dataset, onClose, onSaved }: CreateModalProps) => {
+  const isEdit = !!dataset;
+  const [name, setName] = useState(dataset?.name ?? '');
+  const [description, setDescription] = useState(dataset?.description ?? '');
+  const [systemPrompt, setSystemPrompt] = useState(dataset?.system_prompt ?? '');
+  const [categories, setCategories] = useState<CategoryDef[]>(
+    dataset?.categories ?? [],
+  );
 
-  const createMut = useMutation({
-    mutationFn: (p: CreateDatasetRequest) => datasetApi.create(p),
+  const saveMut = useMutation({
+    mutationFn: (p: CreateDatasetRequest) =>
+      isEdit ? datasetApi.update(dataset!.id, p) : datasetApi.create(p),
     onSuccess: () => {
-      toast.success('已创建');
-      onCreated();
+      toast.success(isEdit ? '已保存' : '已创建');
+      onSaved();
     },
   });
+
+  const submit = () => {
+    const cats = categories
+      .map(c => ({ ...c, label: c.label.trim() }))
+      .filter(c => c.label);
+    saveMut.mutate({
+      name: name.trim(),
+      description: description.trim() || undefined,
+      system_prompt: systemPrompt.trim() || undefined,
+      // 编辑时空数组也发（清空维度）；新建时无维度则不发
+      categories: cats.length ? cats : isEdit ? [] : undefined,
+    });
+  };
 
   return (
     <Modal open onOpenChange={open => !open && onClose()}>
       <ModalContent>
         <ModalHeader>
-          <ModalTitle>新建数据集</ModalTitle>
+          <ModalTitle>{isEdit ? '编辑数据集' : '新建数据集'}</ModalTitle>
         </ModalHeader>
-        <div className="space-y-3 px-4 py-3">
+        <div className="max-h-[72vh] space-y-3 overflow-auto px-4 py-3">
           <div>
             <label className="mb-1 block text-[11.5px] text-stone-600">
               名称
@@ -307,8 +349,32 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
             <Textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              rows={3}
+              rows={2}
               className="text-[12.5px]"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11.5px] text-stone-600">
+              系统提示词（可选）
+            </label>
+            <Textarea
+              value={systemPrompt}
+              onChange={e => setSystemPrompt(e.target.value)}
+              rows={4}
+              placeholder="数据集固有的 system 提示。如 text2sql：粘贴库表 schema（DDL）+「只输出 SQL」指令。评估运行会默认带上，可逐次覆盖。"
+              className="font-mono text-[12px]"
+            />
+            <p className="mt-1 text-[10.5px] leading-snug text-stone-400">
+              样本只存「问题」，模型靠这里的 schema 才知道表结构。留空则每次评估在弹窗里单独填。
+            </p>
+          </div>
+          <div className="border-t border-stone-100 pt-3">
+            <DatasetCategoriesField
+              value={categories}
+              onChange={setCategories}
+              name={name}
+              description={description}
+              systemPrompt={systemPrompt}
             />
           </div>
         </div>
@@ -318,15 +384,10 @@ const CreateModal = ({ onClose, onCreated }: CreateModalProps) => {
           </Button>
           <Button
             size="sm"
-            disabled={!name.trim() || createMut.isPending}
-            onClick={() =>
-              createMut.mutate({
-                name: name.trim(),
-                description: description.trim() || undefined,
-              })
-            }
+            disabled={!name.trim() || saveMut.isPending}
+            onClick={submit}
           >
-            创建
+            {saveMut.isPending ? '保存中…' : isEdit ? '保存' : '创建'}
           </Button>
         </ModalFooter>
       </ModalContent>

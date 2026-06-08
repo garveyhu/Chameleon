@@ -8,12 +8,38 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
+class CategoryDef(BaseModel):
+    """数据集能力维度定义（对比雷达的轴 + 样本归类的可选值）。"""
+
+    key: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=64)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class ClassifyItemsResult(BaseModel):
+    """AI 批量归类结果。"""
+
+    updated: int
+
+
+class SuggestCategoriesRequest(BaseModel):
+    """AI 建议能力维度入参（无状态，创建/编辑都用表单值）。"""
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    system_prompt: str | None = Field(default=None, max_length=20000)
+
+
 class DatasetItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     name: str
     description: str | None = None
+    # 数据集级默认系统提示词（如 text2sql 的 schema）；评估运行作被测模型 system 默认值
+    system_prompt: str | None = None
+    # 能力维度定义（样本归类 + 对比雷达轴）；空 = 未配置
+    categories: list[CategoryDef] | None = None
     item_count: int
     run_count: int = 0
     last_run_score: float | None = None
@@ -30,11 +56,15 @@ class DatasetDetail(DatasetItem):
 class CreateDatasetRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    system_prompt: str | None = Field(default=None, max_length=20000)
+    categories: list[CategoryDef] | None = None
 
 
 class UpdateDatasetRequest(BaseModel):
     name: str | None = Field(default=None, max_length=128)
     description: str | None = Field(default=None, max_length=2000)
+    system_prompt: str | None = Field(default=None, max_length=20000)
+    categories: list[CategoryDef] | None = None
 
 
 class DatasetItemItem(BaseModel):
@@ -50,6 +80,10 @@ class DatasetItemItem(BaseModel):
     # 模块 G：GSB 参照回答（区别 expected_output 金标准语义）
     reference_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+    # 样本备注：描述这条样本用于评测什么（自由文本，可空）
+    note: str | None = None
+    # 能力维度归类：指向数据集 categories 的某 key（单维度，可空 = 未分类）
+    category: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -113,23 +147,29 @@ class BatchDeleteItemsResult(BaseModel):
 
 
 class UpdateItemRequest(BaseModel):
-    """样本编辑：改 input_payload / expected_output / meta"""
+    """样本编辑：改 input_payload / expected_output / meta / note"""
 
     input_payload: dict[str, Any] | None = None
     expected_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+    # 备注；传 None 不动，传 "" 清空，传文本覆盖（service 区分 None vs 空串）
+    note: str | None = None
+    # 能力维度归类；同 note 的 None/空串语义
+    category: str | None = None
 
 
 class CreateItemRequest(BaseModel):
     """电子表格「+新增行」单条样本入参（H2）
 
     与 bulk-import 一致：默认 mask PII（手填可能含邮箱/手机号）。
-    input_payload 必填，expected_output / meta 可选。
+    input_payload 必填，expected_output / meta / note 可选。
     """
 
     input_payload: dict[str, Any]
     expected_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+    note: str | None = None
+    category: str | None = None
     # 同 sample / bulk-import：mask（默认）/ drop / keep
     pii_strategy: str = Field(default="mask", pattern="^(mask|drop|keep)$")
 
@@ -140,6 +180,8 @@ class BulkImportItem(BaseModel):
     input_payload: dict[str, Any]
     expected_output: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
+    note: str | None = None
+    category: str | None = None
 
 
 class BulkImportRequest(BaseModel):
@@ -168,6 +210,10 @@ class CandidatePayload(BaseModel):
 
     user_input: str
     answer: str | None = None
+    # AI 扩样产出的样本备注（说明该候选评测什么），导入时落到 item.note
+    note: str | None = None
+    # AI 自动归类的能力维度 key（来自数据集 categories），导入落 item.category
+    category: str | None = None
 
 
 class RefineCandidateRequest(BaseModel):
@@ -184,6 +230,8 @@ class RefinedCandidate(BaseModel):
 
     user_input: str
     answer: str | None = None
+    note: str | None = None
+    category: str | None = None
 
 
 class OptimizeResult(BaseModel):
@@ -263,6 +311,8 @@ class DatasetRunRow(BaseModel):
     name: str
     model_override: str | None = None
     judge: str
+    # 本次评分配置（criteria / judge_model 等）；详情据此展示裁判模型 + 评分要点
+    judge_config: dict[str, Any] | None = None
     status: str
     summary: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
@@ -303,12 +353,24 @@ class CompareItemCell(BaseModel):
     dataset_item_id: int
     input_preview: str | None = None  # 已脱敏的展示文案
     expected_output: dict[str, Any] | None = None
+    # 样本备注（考察点）；AI 分析上下文
+    note: str | None = None
+    # 能力维度归类 key（雷达据此分轴，取代前端关键词猜测）
+    category: str | None = None
     cells: dict[int, DatasetRunItemRow] = Field(default_factory=dict)
 
 
 class CompareRunsResult(BaseModel):
     runs: list[DatasetRunRow]
     rows: list[CompareItemCell]
+    # 数据集配置的能力维度（雷达的轴）；空 = 未配置 → 前端不显示雷达
+    categories: list[CategoryDef] | None = None
+
+
+class CompareAnalysisResult(BaseModel):
+    """运行对比的 AI 总结分析（markdown 文本）。"""
+
+    analysis: str
 
 
 # ── P21.2 评分分布 ────────────────────────────────────

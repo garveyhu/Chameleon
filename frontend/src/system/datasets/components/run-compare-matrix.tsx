@@ -1,15 +1,32 @@
-/** 运行对比矩阵 —— 借鉴 Langfuse：样本行 × 运行列，score 色块热力图，
- *  点单格看该样本在该运行下的 预期/实际 diff。 */
+/** 运行对比矩阵 —— 借鉴 Langfuse：样本行 × 运行列，score 色块热力图。
+ *  点任一行（问题或某格）→ 居中弹窗，并排看各运行在该样本上的 预期 / 实际 输出。 */
 
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import {
+  forwardRef,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 
-import { JsonCell } from '@/core/components/ui/json-cell';
+import {
+  Modal,
+  ModalBody,
+  ModalContent,
+  ModalHeader,
+  ModalTitle,
+} from '@/core/components/ui/modal';
 import { cn } from '@/core/lib/cn';
+import { exportImage } from '@/core/lib/dom-export';
 import { formatScore, scoreBg } from '@/core/lib/score';
+import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
+import { RunCompareStats } from '@/system/datasets/components/run-compare-stats';
 import { datasetApi } from '@/system/datasets/services/dataset';
 import type { DatasetRunRow } from '@/system/datasets/types/dataset';
+import { shortRunName } from '@/system/datasets/utils/run-name';
 
 const runMean = (r: DatasetRunRow): number | null => {
   const s = r.summary as Record<string, unknown> | null;
@@ -17,18 +34,140 @@ const runMean = (r: DatasetRunRow): number | null => {
   return typeof v === 'number' ? v : null;
 };
 
-interface Props {
-  runIds: EntityId[];
+// 优先从 {answer/sql/output/...} 取可读文本，否则美化 JSON —— 对比时全文直显。
+const PREFER_KEYS = ['answer', 'sql', 'output', 'text', 'content', 'query', 'value'];
+const asText = (v: unknown): string => {
+  if (v == null) return '—';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    for (const k of PREFER_KEYS) {
+      if (typeof o[k] === 'string') return o[k] as string;
+    }
+    return JSON.stringify(v, null, 2);
+  }
+  return String(v);
+};
+
+const OutputBlock = ({ value }: { value: unknown }) => (
+  <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-stone-50 p-2 font-mono text-[11.5px] leading-relaxed text-stone-700">
+    {asText(value)}
+  </pre>
+);
+
+export interface RunCompareHandle {
+  exportImage: () => Promise<void>;
+  exportExcel: () => Promise<void>;
 }
 
-export const RunCompareMatrix = ({ runIds }: Props) => {
+interface Props {
+  runIds: EntityId[];
+  /** 数据集名（导出图片报告头 + 图片/Excel 文件名带上） */
+  datasetName?: string;
+  /** 导出忙碌态回调（页面头按钮据此置 loading / 禁用） */
+  onExportingChange?: (busy: boolean) => void;
+}
+
+// 文件名安全化：去掉路径分隔符等
+const fileSafe = (s: string) => s.replace(/[\\/:*?"<>|]+/g, '_').trim();
+
+export const RunCompareMatrix = forwardRef<RunCompareHandle, Props>(
+  ({ runIds, datasetName, onExportingChange }, ref) => {
   const q = useQuery({
     queryKey: ['ds-compare', [...runIds].sort()],
     queryFn: () => datasetApi.compareRuns(runIds),
     enabled: runIds.length >= 2,
   });
-  const [sel, setSel] = useState<{ itemId: string; runId: string } | null>(
-    null,
+  // 选中的样本行 id（点击即开弹窗对比所有运行）；null = 关闭
+  const [selItem, setSelItem] = useState<string | null>(null);
+  // 对比统计区默认折叠（多数时候先看逐题热力图，统计按需展开）
+  const [statsOpen, setStatsOpen] = useState(false);
+  // 导出：截图态（展开统计 + 去裁剪 + 加报告头）
+  const [exporting, setExporting] = useState(false);
+  const captureRef = useRef<HTMLDivElement>(null);
+
+  const setExp = useCallback(
+    (b: boolean) => {
+      setExporting(b);
+      onExportingChange?.(b);
+    },
+    [onExportingChange],
+  );
+
+  // 导出报告图片：展开统计 + 进入截图态，等图表/分析渲染稳定后截整页 PNG（含得分表）
+  const doExportImage = useCallback(async () => {
+    if (!q.data) return;
+    setStatsOpen(true);
+    setExp(true);
+    // 双 rAF + 短延时，等 recharts 布局完成 + AI 分析展开
+    await new Promise(r =>
+      requestAnimationFrame(() => requestAnimationFrame(() => r(null))),
+    );
+    await new Promise(r => setTimeout(r, 600));
+    try {
+      if (captureRef.current) {
+        const day = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+        // 降像素比控制体积；不跳字体内联——否则回退系统字体（更宽）会让图例换行、
+        // 整体与网页字体不一致。字体嵌入开销小，节点数才是耗时大头。
+        const prefix = datasetName ? `${fileSafe(datasetName)}_` : '';
+        await exportImage(captureRef.current, `${prefix}运行对比_${day}.png`, {
+          pixelRatio: 1.5,
+        });
+      }
+    } catch {
+      toast.error('导出图片失败，请重试');
+    } finally {
+      setExp(false);
+    }
+  }, [q.data, setExp, datasetName]);
+
+  // 导出明细数据：逐题 × 各模型（得分 + 输出）为 xlsx
+  const doExportExcel = useCallback(async () => {
+    if (!q.data) return;
+    const { runs, rows } = q.data;
+    try {
+      const XLSX = await import('xlsx');
+      const header = [
+        '#',
+        '问题',
+        '考察点',
+        '预期',
+        ...runs.flatMap(r => [
+          `${shortRunName(r.name)}·得分`,
+          `${shortRunName(r.name)}·输出`,
+        ]),
+      ];
+      const aoa: (string | number)[][] = [
+        header,
+        ...rows.map((row, i) => {
+          const base = [
+            i + 1,
+            row.input_preview ?? '',
+            row.note ?? '',
+            asText(row.expected_output),
+          ];
+          const cells = runs.flatMap(r => {
+            const c = row.cells[String(r.id)];
+            return [c?.score ?? '', c ? asText(c.actual_output) : ''];
+          });
+          return [...base, ...cells];
+        }),
+      ];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '运行对比');
+      const day = new Date().toLocaleDateString('zh-CN').replace(/\//g, '-');
+      const prefix = datasetName ? `${fileSafe(datasetName)}_` : '';
+      XLSX.writeFile(wb, `${prefix}运行对比明细_${day}.xlsx`);
+    } catch {
+      toast.error('导出数据失败，请重试');
+    }
+  }, [q.data, datasetName]);
+
+  useImperativeHandle(
+    ref,
+    () => ({ exportImage: doExportImage, exportExcel: doExportExcel }),
+    [doExportImage, doExportExcel],
   );
 
   if (q.isLoading) {
@@ -41,82 +180,96 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
   const data = q.data;
   if (!data) return null;
   const { runs, rows } = data;
+  const categories = data.categories;
 
-  // win/tie/loss：以第一个运行为基准，其余逐样本比较分数（GSB 雏形）
-  const baseId = runs.length ? String(runs[0].id) : '';
-  const compare = runs.slice(1).map(run => {
-    const rid = String(run.id);
-    let win = 0;
-    let tie = 0;
-    let loss = 0;
-    for (const row of rows) {
-      const a = row.cells[rid]?.score;
-      const b = row.cells[baseId]?.score;
-      if (typeof a !== 'number' || typeof b !== 'number') continue;
-      if (a > b) win += 1;
-      else if (a < b) loss += 1;
-      else tie += 1;
-    }
-    return { run, win, tie, loss };
-  });
-
-  const selRow = sel
-    ? rows.find(r => String(r.dataset_item_id) === sel.itemId)
+  const selRow = selItem
+    ? rows.find(r => String(r.dataset_item_id) === selItem)
     : null;
-  const selCell = selRow && sel ? selRow.cells[sel.runId] : undefined;
-  const selRun = sel ? runs.find(r => String(r.id) === sel.runId) : null;
+
+  const today = new Date().toLocaleDateString('zh-CN');
 
   return (
     <div className="space-y-3">
-      {compare.length > 0 && (
-        <div className="rounded-lg border border-stone-200 bg-stone-50/40 p-3">
-          <div className="mb-2 text-[11.5px] text-stone-500">
-            对比基准{' '}
-            <span className="font-medium text-stone-700">{runs[0].name}</span>
-            ，其余运行逐样本胜负
-          </div>
-          <div className="space-y-1.5">
-            {compare.map(({ run, win, tie, loss }) => {
-              const total = win + tie + loss || 1;
-              return (
-                <div
-                  key={String(run.id)}
-                  className="flex items-center gap-2.5 text-[11.5px]"
-                >
-                  <span
-                    className="min-w-[110px] max-w-[150px] truncate text-stone-700"
-                    title={run.name}
-                  >
-                    {run.name}
+      {/* 截图区：报告头（仅导出）+ 对比统计 + 得分表。透明容器，仅作导出取景边界，
+          让对比统计与表格在视觉上是两个独立的块（导出时 exportImage 自动铺白底）。 */}
+      <div ref={captureRef} className="space-y-3">
+        {exporting && (
+          <div className="border-b border-stone-200 pb-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[14px] font-semibold text-stone-800">
+                运行对比报告
+                {datasetName && (
+                  <span className="ml-1.5 text-[12px] font-normal text-stone-500">
+                    · {datasetName}
                   </span>
-                  <span className="tnum text-emerald-600">胜 {win}</span>
-                  <span className="tnum text-stone-400">平 {tie}</span>
-                  <span className="tnum text-rose-600">负 {loss}</span>
-                  <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-stone-100">
-                    <div
-                      className="bg-emerald-400"
-                      style={{ width: `${(win / total) * 100}%` }}
-                    />
-                    <div
-                      className="bg-stone-300"
-                      style={{ width: `${(tie / total) * 100}%` }}
-                    />
-                    <div
-                      className="bg-rose-400"
-                      style={{ width: `${(loss / total) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                )}
+              </span>
+              <span className="shrink-0 text-[10.5px] text-stone-400">
+                {today}
+              </span>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-2 gap-y-1.5">
+              {runs.map(run => {
+                const m = runMean(run);
+                return (
+                  <span
+                    key={String(run.id)}
+                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-stone-100 px-2 py-0.5 text-[11px] text-stone-600"
+                  >
+                    {shortRunName(run.name)}
+                    <span className="tnum font-semibold text-stone-800">
+                      {m != null ? formatScore(m) : '—'}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
-      <div className="overflow-auto rounded-lg border border-stone-200">
+        )}
+
+        <section>
+          <button
+            type="button"
+            onClick={() => setStatsOpen(o => !o)}
+            className="flex items-center gap-1 text-[12.5px] font-medium text-stone-800 transition hover:text-stone-900"
+          >
+            {statsOpen ? (
+              <ChevronDown className="h-3.5 w-3.5 text-stone-400" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5 text-stone-400" />
+            )}
+            对比统计
+            <span className="ml-1.5 text-[10.5px] font-normal text-stone-400">
+              能力雷达 · 分数分布 · 逐题得分 · AI 分析
+            </span>
+          </button>
+          {(statsOpen || exporting) && (
+            <div className="mt-2 rounded-lg border border-stone-200 bg-white p-3">
+              <RunCompareStats
+                runs={runs}
+                rows={rows}
+                runIds={runIds}
+                categories={categories}
+                exporting={exporting}
+              />
+            </div>
+          )}
+        </section>
+        <div
+          className={cn(
+            'rounded-lg border border-stone-200',
+            exporting ? '' : 'overflow-auto',
+          )}
+        >
         <table className="w-full border-collapse text-[11.5px]">
           <thead>
             <tr className="bg-stone-50">
-              <th className="sticky left-0 z-10 min-w-[220px] border-b border-r border-stone-200 bg-stone-50 px-3 py-2 text-left font-medium text-stone-500">
+              <th
+                className={cn(
+                  'min-w-[220px] border-b border-r border-stone-200 bg-stone-50 px-3 py-2 text-left font-medium text-stone-500',
+                  !exporting && 'sticky left-0 z-10',
+                )}
+              >
                 样本 · 预期
               </th>
               {runs.map(run => {
@@ -127,7 +280,7 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
                     className="min-w-[116px] border-b border-stone-200 px-3 py-2 text-left font-medium text-stone-600"
                   >
                     <div className="truncate" title={run.name}>
-                      {run.name}
+                      {shortRunName(run.name)}
                     </div>
                     <div className="mt-0.5 text-[10px] text-stone-400">
                       均值 {m != null ? formatScore(m) : '—'}
@@ -141,8 +294,17 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
             {rows.map(row => {
               const itemId = String(row.dataset_item_id);
               return (
-                <tr key={itemId} className="hover:bg-stone-50/40">
-                  <td className="sticky left-0 z-10 max-w-[260px] border-b border-r border-stone-200 bg-white px-3 py-2 align-top">
+                <tr
+                  key={itemId}
+                  onClick={() => setSelItem(itemId)}
+                  className="cursor-pointer hover:bg-stone-50/60"
+                >
+                  <td
+                    className={cn(
+                      'max-w-[260px] border-b border-r border-stone-200 bg-white px-3 py-2 align-top',
+                      !exporting && 'sticky left-0 z-10',
+                    )}
+                  >
                     <div
                       className="truncate text-stone-700"
                       title={row.input_preview ?? ''}
@@ -160,23 +322,16 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
                   {runs.map(run => {
                     const runId = String(run.id);
                     const cell = row.cells[runId];
-                    const active =
-                      sel?.itemId === itemId && sel?.runId === runId;
                     return (
                       <td
                         key={runId}
                         className="border-b border-stone-100 px-1.5 py-1.5 align-top"
                       >
                         {cell ? (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setSel(active ? null : { itemId, runId })
-                            }
+                          <div
                             className={cn(
-                              'tnum w-full rounded px-2 py-1 text-left transition',
+                              'tnum w-full rounded px-2 py-1 text-left',
                               scoreBg(cell.score),
-                              active && 'ring-2 ring-stone-400',
                             )}
                           >
                             {cell.score != null
@@ -184,7 +339,7 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
                               : cell.error
                                 ? '错误'
                                 : '—'}
-                          </button>
+                          </div>
                         ) : (
                           <span className="pl-2 text-stone-300">—</span>
                         )}
@@ -206,43 +361,81 @@ export const RunCompareMatrix = ({ runIds }: Props) => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
-      {sel && selCell && (
-        <div className="rounded-lg border border-stone-200 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[12px] font-medium text-stone-700">
-              样本 …{sel.itemId.slice(-6)} · {selRun?.name}
-            </span>
-            <span
-              className={cn(
-                'rounded px-1.5 py-0.5 text-[11px]',
-                scoreBg(selCell.score),
-              )}
-            >
-              {selCell.score != null ? formatScore(selCell.score) : '无分'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded bg-stone-50 p-2">
-              <div className="mb-0.5 text-[10px] text-stone-400">预期</div>
-              <JsonCell
-                value={selRow?.expected_output}
-                className="text-[11px]"
-              />
-            </div>
-            <div className="rounded bg-stone-50 p-2">
-              <div className="mb-0.5 text-[10px] text-stone-400">实际</div>
-              <JsonCell value={selCell.actual_output} className="text-[11px]" />
-            </div>
-          </div>
-          {selCell.error != null && (
-            <div className="mt-1 text-[10.5px] text-rose-600">
-              错误：{JSON.stringify(selCell.error).slice(0, 160)}
-            </div>
+      <Modal open={!!selRow} onOpenChange={o => !o && setSelItem(null)}>
+        <ModalContent size="xl">
+          <ModalHeader>
+            <ModalTitle>样本输出对比</ModalTitle>
+          </ModalHeader>
+          {selRow && (
+            <ModalBody className="space-y-3">
+              <div>
+                <div className="mb-1 text-[10px] font-medium text-stone-400">
+                  问题
+                </div>
+                <div className="text-[12.5px] text-stone-800">
+                  {selRow.input_preview ?? '（无预览）'}
+                </div>
+              </div>
+              <div className="rounded-md border border-emerald-200/70 bg-emerald-50/40 p-2.5">
+                <div className="mb-1 text-[10px] font-medium text-emerald-700">
+                  预期（标准答案）
+                </div>
+                <OutputBlock value={selRow.expected_output} />
+              </div>
+              <div
+                className="grid gap-3"
+                style={{
+                  gridTemplateColumns: `repeat(${runs.length}, minmax(0, 1fr))`,
+                }}
+              >
+                {runs.map(run => {
+                  const cell = selRow.cells[String(run.id)];
+                  return (
+                    <div
+                      key={String(run.id)}
+                      className="flex flex-col rounded-md border border-stone-200 bg-white p-2.5"
+                    >
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span
+                          className="truncate text-[11.5px] font-medium text-stone-700"
+                          title={run.name}
+                        >
+                          {shortRunName(run.name)}
+                        </span>
+                        <span
+                          className={cn(
+                            'shrink-0 rounded px-1.5 py-0.5 text-[11px] tnum',
+                            scoreBg(cell?.score ?? null),
+                          )}
+                        >
+                          {cell?.score != null
+                            ? formatScore(cell.score)
+                            : '无分'}
+                        </span>
+                      </div>
+                      <div className="mb-0.5 text-[10px] text-stone-400">
+                        实际输出
+                      </div>
+                      <OutputBlock value={cell?.actual_output} />
+                      {cell?.error != null && (
+                        <div className="mt-1.5 text-[10.5px] text-rose-600">
+                          错误：{JSON.stringify(cell.error).slice(0, 200)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </ModalBody>
           )}
-        </div>
-      )}
+        </ModalContent>
+      </Modal>
     </div>
   );
-};
+  },
+);
+
+RunCompareMatrix.displayName = 'RunCompareMatrix';

@@ -8,7 +8,7 @@ import type {
 } from '@/system/datasets/types/dataset';
 import { judgeLabel } from '@/system/datasets/utils/judge-meta';
 
-const TEMPLATE_HEADERS = ['输入', '理想回答', '元数据(JSON)'] as const;
+const TEMPLATE_HEADERS = ['输入', '理想回答', '元数据(JSON)', '备注'] as const;
 
 const loadXLSX = () => import('xlsx');
 
@@ -53,10 +53,10 @@ export const downloadSampleTemplate = async (): Promise<void> => {
   const XLSX = await loadXLSX();
   const ws = XLSX.utils.aoa_to_sheet([
     [...TEMPLATE_HEADERS],
-    ['什么是 RAG？', '检索增强生成', '{"难度":"easy"}'],
-    ['什么是向量数据库？', '存储和检索高维向量的数据库', ''],
+    ['什么是 RAG？', '检索增强生成', '{"难度":"easy"}', '考察基础概念'],
+    ['什么是向量数据库？', '存储和检索高维向量的数据库', '', ''],
   ]);
-  ws['!cols'] = [{ wch: 32 }, { wch: 40 }, { wch: 24 }];
+  ws['!cols'] = [{ wch: 32 }, { wch: 40 }, { wch: 24 }, { wch: 28 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '样本');
   XLSX.writeFile(wb, '评测样本模板.xlsx');
@@ -89,12 +89,14 @@ export const parseSpreadsheet = async (
     const input = pick(row, ['输入', 'input', 'input_payload', 'question', 'q']);
     const expected = pick(row, ['理想回答', 'expected', 'expected_output', 'answer']);
     const meta = pick(row, ['元数据(JSON)', '元数据(JSON,可选)', '元数据', 'meta']);
+    const note = pick(row, ['备注', 'note', 'remark']);
     const ip = parseCell(input, 'user_input');
     if (!ip) continue; // 跳过空行
     items.push({
       input_payload: ip,
       expected_output: parseCell(expected, 'answer'),
       meta: parseCell(meta, 'value'),
+      note: note || null,
     });
   }
   return items;
@@ -113,10 +115,11 @@ export const exportItems = async (
       cellOf(it.input_payload, ['user_input', 'query', 'question', 'input', 'text']),
       cellOf(it.expected_output, ['answer', 'output', 'text']),
       it.meta ? JSON.stringify(it.meta) : '',
+      it.note ?? '',
     ]);
   }
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{ wch: 32 }, { wch: 40 }, { wch: 24 }];
+  ws['!cols'] = [{ wch: 32 }, { wch: 40 }, { wch: 24 }, { wch: 28 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '样本');
   const safe = datasetName.replace(/[\\/:*?"<>|]/g, '_') || '评测样本';

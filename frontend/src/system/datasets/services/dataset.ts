@@ -7,6 +7,8 @@ import type {
   BatchDeleteItemsResult,
   BulkImportRequest,
   BulkImportResult,
+  CategoryDef,
+  ClassifyItemsResult,
   CompareRunsResult,
   CreateDatasetRequest,
   CreateDatasetRunRequest,
@@ -46,6 +48,20 @@ export const datasetApi = {
   update: (id: EntityId, req: Partial<CreateDatasetRequest>) =>
     post<DatasetItem>(`${BASE}/${id}/update`, req),
   delete: (id: EntityId) => post<void>(`${BASE}/${id}/delete`),
+  /** AI 根据数据集用途建议一组能力维度（无状态，创建/编辑都用表单值）。 */
+  suggestCategories: (req: {
+    name: string;
+    description?: string;
+    system_prompt?: string;
+  }) =>
+    post<CategoryDef[]>(`${BASE}/categories/suggest`, req, { timeout: 120_000 }),
+  /** AI 批量给未归类样本归类（LLM，放宽超时）。 */
+  classifyItems: (id: EntityId) =>
+    post<ClassifyItemsResult>(
+      `${BASE}/${id}/categories/classify`,
+      {},
+      { timeout: 120_000 },
+    ),
   listItems: (id: EntityId, params?: { page?: number; page_size?: number }) =>
     get<PageResult<DatasetItemRow>>(`${BASE}/${id}/items`, { params }),
   sampleFromLogs: (id: EntityId, req: SampleFromLogsRequest) =>
@@ -69,11 +85,14 @@ export const datasetApi = {
   /** 单条候选 AI 优化 / 重新生成（非流式，原地替换该卡片）。 */
   refineCandidate: (id: EntityId, req: RefineCandidateRequest) =>
     post<RefinedCandidate>(`${BASE}/${id}/ai-generate/refine`, req),
-  /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告 */
-  optimizeRun: (runId: EntityId) => post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}),
-  /** H3：用优化后 Prompt 重跑整个 dataset，落新子 run（版本链） */
+  /** H3：智能优化 —— run 低分样本 → LLM 重写 Prompt + 报告（LLM 调用，放宽到 2min） */
+  optimizeRun: (runId: EntityId) =>
+    post<OptimizeResult>(`${BASE}/runs/${runId}/optimize`, {}, { timeout: 120_000 }),
+  /** H3：用优化后 Prompt 重跑整个 dataset，落新子 run（同步评测，放宽到 10min） */
   applyOptimized: (runId: EntityId) =>
-    post<DatasetRunDetail>(`${BASE}/runs/${runId}/apply-optimized`, {}),
+    post<DatasetRunDetail>(`${BASE}/runs/${runId}/apply-optimized`, {}, {
+      timeout: 600_000,
+    }),
   /** 人工标注：改某 item 的 expected_output / meta */
   updateItem: (itemId: EntityId, req: UpdateItemRequest) =>
     post<DatasetItemRow>(`${BASE}/items/${itemId}/update`, req),
@@ -89,9 +108,9 @@ export const datasetApi = {
   // ── runs（实验运行）—— 接出已就绪的端点 ──
   /** 可用评分器列表（judge key 数组）。 */
   listJudges: () => get<string[]>(`${BASE}/judges`),
-  /** 手动发起运行（同步端点，跑完才返回，可能数十秒）。 */
+  /** 手动发起运行（同步端点，跑完才返回，可能数分钟）。放宽超时到 10min（默认 30s 不够）。 */
   run: (id: EntityId, req: CreateDatasetRunRequest) =>
-    post<DatasetRunDetail>(`${BASE}/${id}/run`, req),
+    post<DatasetRunDetail>(`${BASE}/${id}/run`, req, { timeout: 600_000 }),
   listRuns: (datasetId: EntityId) => get<DatasetRunRow[]>(`${BASE}/${datasetId}/runs`),
   /** 运行列表分页 + 名称/状态过滤（运行 tab 表格用；趋势图仍走全量 listRuns）。 */
   listRunsPaged: (

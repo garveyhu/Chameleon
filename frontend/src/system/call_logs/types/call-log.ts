@@ -110,6 +110,9 @@ export interface TraceTreeNode {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   total_tokens: number | null;
+  /** generation 节点用的模型 code（如 qwen-plus）；非模型调用为空 */
+  model_code?: string | null;
+  channel?: CallChannel | null;
   /** 含子节点递归累加的 USD 成本（Agent C C2 聚合 API；未接入时缺省） */
   cost_usd?: number | null;
   created_at: string;

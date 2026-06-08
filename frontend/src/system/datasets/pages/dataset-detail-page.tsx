@@ -2,7 +2,12 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   ArrowLeft,
   Download,
@@ -11,6 +16,7 @@ import {
   Pencil,
   Play,
   Sparkles,
+  Tags,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -27,11 +33,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/core/components/ui/select';
+import { NeonLoader } from '@/core/components/ui/neon-loader';
 import { SegmentedControl } from '@/core/components/ui/segmented-control';
 import { confirm } from '@/core/lib/confirm';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
 import { formatScore, scoreColor } from '@/core/lib/score';
+import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { AiGenerateStudio } from '@/system/datasets/components/ai-generate-studio';
 import { judgeLabel } from '@/system/datasets/utils/judge-meta';
@@ -44,7 +52,11 @@ import { RunStatsOverview } from '@/system/datasets/components/run-stats-overvie
 import { SampleFromLogsModal } from '@/system/datasets/components/sample-from-logs-modal';
 import { useDatasetItemMutations } from '@/system/datasets/hooks/useDatasetItemMutations';
 import { datasetApi } from '@/system/datasets/services/dataset';
-import type { DatasetItemRow, DatasetRunRow } from '@/system/datasets/types/dataset';
+import type {
+  CategoryDef,
+  DatasetItemRow,
+  DatasetRunRow,
+} from '@/system/datasets/types/dataset';
 import { exportItems, exportRuns } from '@/system/datasets/utils/dataset-xlsx';
 
 type Tab = 'items' | 'runs';
@@ -165,8 +177,28 @@ export const DatasetDetailPage = () => {
     qc.invalidateQueries({ queryKey: ['datasets', dsId, 'items'] });
   };
 
+  // AI 批量归类：把未归类样本按数据集能力维度归类（对比雷达据此分轴）
+  const classifyMut = useMutation({
+    mutationFn: () => datasetApi.classifyItems(dsId),
+    onSuccess: r => {
+      toast.success(
+        r.updated > 0 ? `已归类 ${r.updated} 条样本` : '没有需要归类的样本',
+      );
+      qc.invalidateQueries({ queryKey: ['datasets', dsId, 'items'] });
+    },
+    onError: (e: unknown) =>
+      toast.error((e as { message?: string })?.message || 'AI 归类失败'),
+  });
+
   const items = useMemo(() => itemsQ.data?.items ?? [], [itemsQ.data]);
   const itemsTotal = itemsQ.data?.total ?? 0;
+  // 类目 key → 维度定义（样本列/编辑显示标签）
+  const catMap = useMemo(() => {
+    const m = new Map<string, CategoryDef>();
+    for (const c of dsQ.data?.categories ?? []) m.set(c.key, c);
+    return m;
+  }, [dsQ.data?.categories]);
+  const categories = dsQ.data?.categories ?? [];
   const pageIds = useMemo(() => items.map(it => it.id), [items]);
   const selectedSet = useMemo(() => new Set(selItemIds), [selItemIds]);
   const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedSet.has(id));
@@ -256,6 +288,48 @@ export const DatasetDetailPage = () => {
       key: 'expected',
       header: '预期输出',
       render: it => <JsonCell value={it.expected_output} />,
+    },
+    {
+      key: 'note',
+      header: '备注',
+      width: 180,
+      render: it =>
+        it.note ? (
+          <span
+            className="block truncate text-[12px] text-stone-600"
+            title={it.note}
+          >
+            {it.note}
+          </span>
+        ) : (
+          <span className="text-stone-300">—</span>
+        ),
+    },
+    {
+      key: 'category',
+      header: '类目',
+      width: 110,
+      render: it => {
+        const c = it.category ? catMap.get(it.category) : null;
+        if (c) {
+          return (
+            <span
+              className="inline-block max-w-full truncate rounded-md bg-violet-50 px-2 py-0.5 text-[11px] text-violet-700"
+              title={c.description ?? c.label}
+            >
+              {c.label}
+            </span>
+          );
+        }
+        if (it.category) {
+          return (
+            <span className="text-[11px] text-stone-400" title="未知维度">
+              {it.category}
+            </span>
+          );
+        }
+        return <span className="text-stone-300">—</span>;
+      },
     },
     {
       key: 'sampled',
@@ -423,6 +497,22 @@ export const DatasetDetailPage = () => {
                 <Button size="sm" variant="secondary" onClick={() => setAiGenOpen(true)}>
                   <Sparkles className="mr-1 h-3.5 w-3.5" /> AI 扩样
                 </Button>
+                {(dsQ.data?.categories?.length ?? 0) > 0 && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={classifyMut.isPending || items.length === 0}
+                    title="让 AI 把未归类样本按数据集能力维度归类（对比雷达据此分轴）"
+                    onClick={() => classifyMut.mutate()}
+                  >
+                    {classifyMut.isPending ? (
+                      <NeonLoader size="xs" className="mr-1" />
+                    ) : (
+                      <Tags className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    AI 归类
+                  </Button>
+                )}
                 <Button size="sm" variant="secondary" onClick={() => setSampleOpen(true)}>
                   <Download className="mr-1 h-3.5 w-3.5" /> 从日志采样
                 </Button>
@@ -604,6 +694,7 @@ export const DatasetDetailPage = () => {
       {editItem && (
         <DatasetItemEditorDrawer
           item={editItem}
+          categories={categories}
           onClose={() => setEditItem(null)}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ['datasets', dsId, 'items'] });
@@ -635,6 +726,7 @@ export const DatasetDetailPage = () => {
       {aiGenOpen && (
         <AiGenerateStudio
           datasetId={dsId}
+          categories={categories}
           onClose={() => setAiGenOpen(false)}
           onDone={refreshAll}
         />
@@ -642,6 +734,7 @@ export const DatasetDetailPage = () => {
       {evalOpen && (
         <NewEvaluationWizard
           presetDatasetId={dsId}
+          defaultSystemPrompt={dsQ.data?.system_prompt}
           judges={judgesQ.data}
           onClose={() => setEvalOpen(false)}
           onRunStarted={(_dsId, run) =>

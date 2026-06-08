@@ -38,6 +38,11 @@ class Dataset(Base, TimestampMixin):
     id: Mapped[int] = snowflake_pk()
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 数据集级默认系统提示词（如 text2sql 的库表 schema）；运行评估作被测模型 system 默认值
+    system_prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 能力维度定义：[{key, label, description}]，样本归类 + 对比雷达的轴据此而来
+    # （取代前端硬编码关键词猜测）。空/None = 未配置 → 不显示能力雷达。
+    categories: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # 冗余：item_count 由采样 / 添加时增 / 删除时减，避免每次 count(*)
     item_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -61,8 +66,13 @@ class DatasetItem(Base, TimestampMixin):
     expected_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 模块 G：GSB 参照回答（区别 expected_output 金标准语义；gsb judge 用作对比基准）
     reference_output: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # 额外元数据（标签 / 难度 / 备注）
+    # 额外元数据（采样/导入塞 source/pii 等结构化字段）
     meta: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # 样本备注：描述这条样本用于评测什么（面向人的自由文本，列表一等公民显示/编辑）
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 能力维度归类：指向所属数据集 categories 里某个 key（结构化，对比雷达据此分轴）。
+    # AI 扩样自动归 / 手动选 / AI 批量回填；None = 未分类。
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class DatasetRun(Base):
@@ -95,6 +105,8 @@ class DatasetRun(Base):
     judge: Mapped[str] = mapped_column(
         String(32), nullable=False, default="exact_match"
     )
+    # 本次评分配置：criteria / judge_model（裁判模型）/ dsl 文本等；持久化供详情回溯
+    judge_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     # 内部状态：pending / running / success / failed / cancelled
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
     # 聚合摘要：{"total":N, "ok":N, "fail":N, "mean_score":0.x}

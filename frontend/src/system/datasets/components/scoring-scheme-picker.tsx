@@ -30,11 +30,14 @@ import type {
   ScoringScheme,
   ScoringSchemeMode,
 } from '@/system/datasets/types/scoring-scheme';
+import { ModelPicker } from '@/core/components/common/model-picker';
 import {
   buildJudgeConfig,
   JUDGE_META,
+  judgeUsesLlm,
   readCriteria,
   readDslText,
+  readJudgeModel,
 } from '@/system/datasets/utils/judge-meta';
 
 interface ScoringSchemePickerProps {
@@ -54,6 +57,10 @@ export const ScoringSchemePicker = ({
     readCriteria(value.judgeConfig),
   );
   const [dslText, setDslText] = useState(() => readDslText(value.judgeConfig));
+  // 裁判模型 code（独立于被测模型）；LLM 类 judge 才用到
+  const [judgeModel, setJudgeModel] = useState(() =>
+    readJudgeModel(value.judgeConfig),
+  );
 
   const templatesQ = useQuery({
     queryKey: ['scoring-scheme:templates'],
@@ -78,7 +85,7 @@ export const ScoringSchemePicker = ({
       onChange({
         mode: 'judge',
         judge: currentJudge,
-        judgeConfig: buildJudgeConfig(currentJudge, criteria, dslText),
+        judgeConfig: buildJudgeConfig(currentJudge, criteria, dslText, judgeModel),
       });
     }
   };
@@ -90,7 +97,7 @@ export const ScoringSchemePicker = ({
     onChange({
       mode: 'judge',
       judge,
-      judgeConfig: buildJudgeConfig(judge, criteria, dslText),
+      judgeConfig: buildJudgeConfig(judge, criteria, dslText, judgeModel),
     });
 
   const onCriteriaChange = (next: string) => {
@@ -98,7 +105,7 @@ export const ScoringSchemePicker = ({
     onChange({
       mode: 'judge',
       judge: currentJudge,
-      judgeConfig: buildJudgeConfig(currentJudge, next, dslText),
+      judgeConfig: buildJudgeConfig(currentJudge, next, dslText, judgeModel),
     });
   };
   const onDslChange = (next: string) => {
@@ -106,7 +113,15 @@ export const ScoringSchemePicker = ({
     onChange({
       mode: 'judge',
       judge: currentJudge,
-      judgeConfig: buildJudgeConfig(currentJudge, criteria, next),
+      judgeConfig: buildJudgeConfig(currentJudge, criteria, next, judgeModel),
+    });
+  };
+  const onJudgeModelChange = (next: string) => {
+    setJudgeModel(next);
+    onChange({
+      mode: 'judge',
+      judge: currentJudge,
+      judgeConfig: buildJudgeConfig(currentJudge, criteria, dslText, next),
     });
   };
 
@@ -159,6 +174,21 @@ export const ScoringSchemePicker = ({
             dslText={dslText}
             onDslTextChange={onDslChange}
           />
+          {judgeUsesLlm(currentJudge) && (
+            <div className="space-y-1.5">
+              <Label>裁判模型</Label>
+              <ModelPicker
+                value={judgeModel}
+                onChange={onJudgeModelChange}
+                placeholder="不指定 · 跟随被测模型"
+                width={260}
+              />
+              <p className="text-[10.5px] leading-snug text-stone-400">
+                打分用的大模型，独立于被测模型。测通用模型（如 qwen-plus）的 SQL
+                能力时务必换一个更强的裁判，避免模型自评失真；不指定则沿用被测模型。
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>

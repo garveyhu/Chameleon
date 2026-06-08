@@ -210,7 +210,12 @@ const NodeDetail = ({ tree, focusId }: NodeDetailProps) => {
           >
             {found.observation_type}
           </span>
-          <span className="font-mono text-[11px] text-stone-700">
+          {found.model_code && (
+            <span className="rounded bg-violet-50 px-1.5 py-0.5 font-mono text-[10.5px] text-violet-700">
+              {found.model_code}
+            </span>
+          )}
+          <span className="font-mono text-[11px] text-stone-500">
             {found.agent_key}
           </span>
           <span className="ml-auto font-mono text-[10.5px] text-stone-500">

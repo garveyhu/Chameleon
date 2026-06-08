@@ -79,6 +79,9 @@ class TraceTreeNode(BaseModel):
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     total_tokens: int | None = None
+    # 本节点的模型 code 与渠道（generation 节点据此标出用了哪个模型 / 何种流量）
+    model_code: str | None = None
+    channel: str | None = None
     # 本节点自身 cost（不含子）
     cost_usd: float | None = None
     created_at: datetime
