@@ -11,6 +11,8 @@ dependencies = [
 # 本地自测 CLI（agentkit chat/run）额外依赖；站内运行时不需要
 [project.optional-dependencies]
 dev = ["httpx>=0.27"]
+# 作者写离线单测（chameleon.agentkit.testing 的 FakeTransport / make_run / collect）
+test = ["pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 agentkit = "chameleon.agentkit._cli:main"
