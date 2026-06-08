@@ -1,0 +1,52 @@
+name: agentkit-ci
+
+# agentkit SDK 的离线 CI 门：代码风格 + 架构契约 + 鲁棒性测试，全部无需 DB / 真 LLM / 起平台，
+# 可在标准 GitHub runner 跑。范围限定 agentkit 公共 SDK 及其精简依赖链（core / providers-local /
+# integrations）——用户并行 eval/system 域的 pre-existing 问题不纳入本门，保证本门稳定可阻断。
+#
+# 注：真 LLM 端到端验证（backend/scripts/e2e_real_agents.py，覆盖对话/工具/A2A/RAG/MCP/结构化/
+# 路由的真模型实跑）需起平台 + 注册真模型 + dev token，是独立的手跑/带服务 CI 门，不在此 workflow。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-and-offline-tests:
+    name: lint + 架构契约 + 离线鲁棒性测试
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv + Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync workspace deps
+        run: uv sync
+
+      # 代码风格（含 isort）—— agentkit SDK + 精简依赖链
+      - name: Ruff lint
+        run: uv run ruff check chameleon-agentkit chameleon-core chameleon-providers/local chameleon-integrations
+
+      # 架构契约：core 纯抽象 / 分层基座单向 / agentkit 公共 SDK 精简（禁依赖 data/重 ORM）
+      - name: Architecture contracts (import-linter)
+        run: uv run lint-imports
+
+      # 离线鲁棒性套件：FakeTransport/respx 真客户端、沙箱子进程超时 kill、工具循环预算闸截断、
+      # 并发 ContextVar trace 隔离、LLM 超时+真退避行为——无需 DB/真 LLM。
+      - name: Offline robustness tests
+        run: >
+          uv run pytest
+          chameleon-agentkit/tests
+          chameleon-providers/local/tests/test_agentkit_tools.py
+          chameleon-providers/local/tests/test_sandbox_timeout.py
+          chameleon-providers/local/tests/test_concurrency_isolation.py
+          chameleon-integrations/tests/test_llm_robustness.py
+          -q

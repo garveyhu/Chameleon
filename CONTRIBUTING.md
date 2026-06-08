@@ -71,6 +71,9 @@ ctx 能力面见 `backend/chameleon-agentkit/README.md`。本地自测三态（�
 - Commit message 走 **Angular 规范**：`<type>(<scope>): <subject>`（type 用英文，
   subject 可中文）。type ∈ feat/fix/docs/style/refactor/perf/test/build/ci/chore/revert。
 - 提交前：`ruff`（后端）+ `tsc` + `eslint`（前端）+ 相关单测 + `lint-imports` 必须过。
+- CI（`.github/workflows/agentkit-ci.yml`）自动跑：ruff + import-linter 三契约 + 离线鲁棒性
+  套件（agentkit/沙箱/并发/重试，无需 DB/真 LLM）。真 LLM e2e（`scripts/e2e_real_agents.py`）
+  需起平台 + 真模型 + token，是独立手跑/带服务门，不在该 workflow。
 - 改了 UI 必须起浏览器肉眼核实再提交。
 - agentkit 公共面（`chameleon.agentkit.__all__`）**只增不改**，破坏性变更走 major 版本。
 
