@@ -1,13 +1,15 @@
 """真 LLM 端到端验证 —— 经 /v1/dev/call_agent 用真模型实跑核心 agent，断言结果。
 
-把"真模型出真结果"从一次性手验固化为可重跑/CI 化的验证门。需：① 起着的平台（默认
-http://localhost:7009）② 平台已注册可跑的模型（如线上 qwen-plus）③ CHAMELEON_DEV_TOKEN。
+把"真模型出真结果"从一次性手验固化为**可重跑脚本**（退出码可作 CI 门，但当前仓库无
+.github/workflows，仍是按需手跑——接入 CI 需在 runner 起平台 + 配真模型 + token）。需：
+① 起着的平台（默认 http://localhost:7009）② 平台已注册可跑模型（如线上 qwen-plus）③ token。
 
     cd backend
     CHAMELEON_DEV_TOKEN=<token> .venv/bin/python scripts/e2e_real_agents.py
     # token 未设时自动从 config/.env 读
 
-覆盖五大 agent 模式：对话 / 工具 ReAct / A2A 编排 / RAG 检索 / 多模型槽。任一失败退出码非 0。
+覆盖：对话 / 工具 ReAct / A2A 编排 / RAG 检索 / 多模型槽 / MCP client / 结构化输出 / 路由决策。
+任一失败退出码非 0。
 """
 
 from __future__ import annotations
