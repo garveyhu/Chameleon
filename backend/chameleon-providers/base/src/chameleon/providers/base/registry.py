@@ -11,10 +11,13 @@ admin 改 agent enabled / 加新外部 agent 后，调 reload_agent_registry() �
 
 from __future__ import annotations
 
+import glob
 import importlib
 import importlib.metadata
 import inspect
+import os
 import pkgutil
+import sys
 from typing import Any
 
 from loguru import logger
@@ -137,10 +140,44 @@ def _index_target(
                 logger.warning("agent_router.register failed for {}: {}", meta.id, e)
 
 
+def _augment_agents_namespace_path() -> None:
+    """开发态：把 workspace 内 chameleon-agents/*/src 注入 chameleon.agents 命名空间搜索路径。
+
+    使「源码放进 chameleon-agents/ 目录」即被 namespace 扫描发现，**无需把每个 agent 包
+    手动加进 chameleon-app 的 dependencies**（去掉作者分发最大摩擦点）。仅
+    `CHAMELEON_AGENTS_ROOT`（run.sh dev 模式设）指向的开发态根生效；生产走标准 pip 安装
+    （namespace __path__ 自然包含）。与「代码即真相」DB 对账闭环：源码进目录→发现→建行。
+    """
+    root = os.environ.get("CHAMELEON_AGENTS_ROOT")
+    if not root or not os.path.isdir(root):
+        return
+    # 收集 <root>/*/src 与 <root>/examples/*/src 里含 chameleon/agents 的源根
+    srcs = [
+        s
+        for s in (
+            glob.glob(os.path.join(root, "*", "src"))
+            + glob.glob(os.path.join(root, "examples", "*", "src"))
+        )
+        if os.path.isdir(os.path.join(s, "chameleon", "agents"))
+    ]
+    for src in srcs:  # 先让 chameleon.agents 可从 workspace src 解析（零安装 agent 也能起）
+        if src not in sys.path:
+            sys.path.insert(0, src)
+    try:
+        import chameleon.agents as pkg
+    except ImportError:
+        return
+    for src in srcs:
+        ns = os.path.join(src, "chameleon", "agents")
+        if ns not in pkg.__path__:
+            pkg.__path__.append(ns)
+
+
 def _scan_namespace_agents(
     base_index: dict[str, type], agentkit_index: dict[str, Any]
 ) -> None:
     """扫 chameleon.agents.* 命名空间子包（站内 / 安装到该命名空间的包）。"""
+    _augment_agents_namespace_path()
     try:
         import chameleon.agents as pkg
     except ImportError:

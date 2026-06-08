@@ -15,16 +15,9 @@ dependencies = [
     # 业务路由两个独立包
     "chameleon-api",
     "chameleon-system",
-    # 内置 agent 通过 namespace 自动发现；这里仅显式依赖业务级 agent
+    # 业务级 agent 显式依赖（随 app 安装）；chameleon-agents/ 下的 agent（含 examples）
+    # 开发态由 CHAMELEON_AGENTS_ROOT 命名空间自动发现，无需在此声明依赖（T3-1）。
     "chameleon-agent-qwen-chat",
-    # 示例 agent 也安装到 workspace（namespace 扫到 + 启动对账自动注册）
-    "chameleon-agent-example-echo",
-    "chameleon-agent-example-rag-qa",
-    "chameleon-agent-example-triage",
-    "chameleon-agent-example-tool-use",
-    "chameleon-agent-example-orchestrator",
-    "chameleon-agent-example-classic",
-    "chameleon-agent-example-imagegen",
     "fastapi>=0.115",
     "python-multipart>=0.0.9",        # /v1/admin/settings/import-json 用 File / Form
     "uvicorn[standard]>=0.30",
@@ -44,13 +37,6 @@ chameleon-provider-comfyui = { workspace = true }
 chameleon-api = { workspace = true }
 chameleon-system = { workspace = true }
 chameleon-agent-qwen-chat = { workspace = true }
-chameleon-agent-example-echo = { workspace = true }
-chameleon-agent-example-rag-qa = { workspace = true }
-chameleon-agent-example-triage = { workspace = true }
-chameleon-agent-example-tool-use = { workspace = true }
-chameleon-agent-example-orchestrator = { workspace = true }
-chameleon-agent-example-classic = { workspace = true }
-chameleon-agent-example-imagegen = { workspace = true }
 
 [project.scripts]
 chameleon = "chameleon.app.cli:main"

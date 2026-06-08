@@ -48,6 +48,8 @@ case "$MODE" in
     echo "[run] serve  ${HOST}:${PORT}  workers=${WORKERS}  (no reload)"
     ;;
   dev)
+    # 开发态：让 chameleon-agents/ 下的 agent 源码被自动发现，无需手动加进 app 依赖
+    export CHAMELEON_AGENTS_ROOT="${ROOT}/chameleon-agents"
     if [ "${NO_RELOAD:-0}" != "1" ]; then
       # 只监听各包 src（*.py）+ config（*.json），避开 .venv / logs / *_cache 的噪声。
       # 包 src 分三层深度：flat（chameleon-core/src）、一层嵌套（providers/local/src、
