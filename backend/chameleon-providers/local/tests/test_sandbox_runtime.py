@@ -85,6 +85,19 @@ async def test_run_sandboxed_parent_loop_and_broker(tmp_path):
     assert not any(e.type == StreamEventType.error for e in events)
 
 
+def test_resolve_agent_mount_scopes_to_package():
+    """评审5 #31：只挂 agent 自己的包（防 prod site-packages over-mount 跨租户源码泄漏）。"""
+    from chameleon.providers.local.sandbox.runtime import _resolve_agent_mount
+
+    # 真实命名空间包 agent
+    mount = _resolve_agent_mount("chameleon.agents.example_classic.agent")
+    assert mount is not None
+    host, container = mount
+    assert host.endswith("chameleon/agents/example_classic")  # 只挂该包，非 src 根/site-packages
+    assert container == "/agent_src/chameleon/agents/example_classic"
+    assert "site-packages" not in container
+
+
 def test_build_docker_command_isolation_flags():
     """Phase 3 docker 命令烘焙全部隔离 flags（真不可信隔离的安全核心，含评审5 加固）。"""
     from chameleon.providers.local.sandbox import build_docker_command

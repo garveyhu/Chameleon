@@ -199,7 +199,8 @@ async def _stream_chat(broker: Any, proc: Any, frame: dict[str, Any]) -> None:
 
 
 def build_docker_command(
-    image: str, agent_src: str, *, mem_mb: int = 512, cpus: str = "1.0", name: str | None = None
+    image: str, host_dir: str, container_path: str = "/agent_src", *,
+    mem_mb: int = 512, cpus: str = "1.0", name: str | None = None,
 ) -> list[str]:
     """构造 Phase 3 docker 隔离执行命令（烘焙全部隔离 flags）。
 
@@ -222,7 +223,7 @@ def build_docker_command(
         "--memory", f"{mem_mb}m", "--memory-swap", f"{mem_mb}m",
         "--pids-limit", "256",
         "--cpus", cpus,
-        "-v", f"{agent_src}:/agent_src:ro",
+        "-v", f"{host_dir}:{container_path}:ro",   # 只挂 agent 自己的包（防跨租户源码泄漏）
         "-e", "PYTHONPATH=/agent_src",
         "-e", "CHAMELEON_SANDBOX=1",
         image,
@@ -231,24 +232,37 @@ def build_docker_command(
     return cmd
 
 
-def _agent_src_root(module: str) -> str | None:
-    """安全定位 agent 包源码根（find_spec，不 import → 不在主进程执行不可信代码）。"""
+def _resolve_agent_mount(module: str) -> tuple[str, str] | None:
+    """安全定位 agent **自己的包**目录 + 容器内挂载点（find_spec，不 import 不可信代码）。
+
+    返回 (host_dir, container_path)：只挂该 agent 包，重建命名空间路径到 /agent_src/<dotted>，
+    PYTHONPATH=/agent_src 仍可 import。**避免生产 pip site-packages 布局下挂整个 site-packages
+    → 跨租户源码泄漏**（评审5 #31）。dev workspace 布局亦正确（只挂该 member 的包）。
+
+    chameleon.agents.X.agent → 挂父包 chameleon.agents.X 的目录 → /agent_src/chameleon/agents/X。
+    顶层单文件模块（dev/测试）→ 回退挂文件所在目录 → /agent_src。
+    """
     import importlib.util
     from pathlib import Path
 
+    pkg = module.rsplit(".", 1)[0] if "." in module else module
     try:
-        spec = importlib.util.find_spec(module)
+        spec = importlib.util.find_spec(pkg)
     except Exception:  # noqa: BLE001
         return None
-    origin = getattr(spec, "origin", None) if spec else None
-    if not origin:
+    locs = getattr(spec, "submodule_search_locations", None) if spec else None
+    if locs:  # pkg 是包：只挂该包目录，重建 dotted 路径
+        host = Path(next(iter(locs))).resolve()
+        return str(host), "/agent_src/" + pkg.replace(".", "/")
+    # 回退：顶层单文件模块 → 挂其所在目录
+    try:
+        mspec = importlib.util.find_spec(module)
+    except Exception:  # noqa: BLE001
         return None
-    # module 形如 chameleon.agents.X.agent → 上溯到含顶层包 chameleon/ 的 src 根
-    parts = module.split(".")
-    p = Path(origin).resolve()
-    for _ in parts:  # 退到 src 根（origin 文件 → 去掉各级包目录）
-        p = p.parent
-    return str(p)
+    morigin = getattr(mspec, "origin", None) if mspec else None
+    if morigin:
+        return str(Path(morigin).resolve().parent), "/agent_src"
+    return None
 
 
 async def run_sandboxed(
@@ -272,13 +286,14 @@ async def run_sandboxed(
         import uuid
 
         image = os.environ.get("CHAMELEON_SANDBOX_IMAGE", "").strip()
-        agent_src = _agent_src_root(module)
-        if not image or not agent_src:
+        mount = _resolve_agent_mount(module)
+        if not image or not mount:
             raise RuntimeError(
-                "CHAMELEON_SANDBOX_RUNTIME=docker 需 CHAMELEON_SANDBOX_IMAGE + 可定位 agent 源码"
+                "CHAMELEON_SANDBOX_RUNTIME=docker 需 CHAMELEON_SANDBOX_IMAGE + 可定位 agent 包"
             )
+        host_dir, container_path = mount
         container_name = f"chm-sbx-{uuid.uuid4().hex[:16]}"
-        cmd = build_docker_command(image, agent_src, name=container_name)
+        cmd = build_docker_command(image, host_dir, container_path, name=container_name)
         spawn_env = None  # docker 不传 host env（凭据全留主进程）
         logger.info("agentkit sandbox（docker 真隔离）image={} name={}", image, container_name)
     else:
