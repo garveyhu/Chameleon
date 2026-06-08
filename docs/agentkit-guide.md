@@ -177,9 +177,9 @@ async def handle(ctx):
 
 | 保证 | 默认行为 | 调法 | 验证 |
 |---|---|---|---|
-| **LLM 超时** | 每次模型调用 60s 客户端超时（防 hung 上游无限阻塞） | `CHAMELEON_LLM_TIMEOUT` 或构造 kwargs | `test_llm_robustness` |
+| **LLM 超时** | 每次模型调用 60s 客户端超时（防 hung 上游无限阻塞） | `CHAMELEON_LLM_TIMEOUT` 或构造 kwargs | `test_default_timeout_and_retries_set` |
 | **transient 重试** | 429/5xx/超时 自动指数退避重试 2 次（尊重 `Retry-After`） | `CHAMELEON_LLM_MAX_RETRIES` | `test_retry_on_429_actually_retries_behavior`（真退避行为，非仅设字段） |
-| **沙箱超时** | `sandboxed=True` 的 agent 死循环/卡住 → 墙钟超时杀进程 + 优雅 error 事件（非裸异常） | `_CHILD_TIMEOUT` | `test_sandbox_timeout`（真触发 kill） |
+| **沙箱超时** | `sandboxed=True` 的 agent 死循环/卡住 → 墙钟超时杀进程 + 优雅 error 事件（非裸异常） | `_CHILD_TIMEOUT` | `test_sandbox_wallclock_timeout_emits_graceful_error`（真触发 kill） |
 | **成本闸** | 工具循环 / A2A 子调用 token 预算耗尽 → 截断收口，不超支 | `@agent` / 调用预算 | `test_tool_loop_budget_gate_truncates_real`（真触发截断） |
 | **并发隔离** | N 个 agent 同进程并发，各自 trace / observation / 预算互不串扰 | 自动（ContextVar 按 task copy-on-write） | `test_concurrent_trace_scopes_isolated` |
 | **结构化输出 / 路由** | `ctx.complete(schema=)` / `ctx.route` 经 function-calling 出合法 typed 结构；模型不遵循时 route 回退首候选并标进 trace | — | `scripts/e2e_real_agents.py`（真 Qwen 验选对非首位候选） |
