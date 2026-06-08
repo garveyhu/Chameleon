@@ -170,9 +170,9 @@ async def test_class_style_handle_gets_ctx():
     assert "hi bob" in texts
 
 
-def test_sandboxed_flag_and_policy():
-    """@agent(sandboxed=True) → manifest.sandboxed；策略决策点不抛（接口预留）。"""
-    from chameleon.providers.local.agentkit_runner import _resolve_sandbox_policy
+def test_sandboxed_flag_and_policy(monkeypatch):
+    """@agent(sandboxed=True) → manifest.sandboxed；dev 默认不走沙箱（进程内便利）。"""
+    from chameleon.providers.local.agentkit_runner import _should_sandbox
 
     @agent(key="_t_sandboxed", name="S", models=[], sandboxed=True)
     async def _h(run):  # noqa: ANN001
@@ -180,7 +180,9 @@ def test_sandboxed_flag_and_policy():
 
     man = _h.__agent_manifest__
     assert man.sandboxed is True
-    _resolve_sandbox_policy("_t_sandboxed", man)  # 不抛即可（开发态进程内）
+    monkeypatch.delenv("CHAMELEON_SANDBOX_FORCE", raising=False)
+    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    assert _should_sandbox(man) is False  # dev 进程内
 
 
 @pytest.mark.asyncio
@@ -293,27 +295,32 @@ async def test_ctx_wrap_passthrough():
     assert run.wrap(sentinel) is sentinel
 
 
-def test_sandbox_policy_fail_closed(monkeypatch):
-    """生产 + sandboxed + 无真隔离 + 无豁免 → 拒绝裸跑（T4-2 Phase 1 fail-closed）。"""
-    from chameleon.providers.local.agentkit_runner import _resolve_sandbox_policy
+def test_should_sandbox_routing(monkeypatch):
+    """沙箱路由决策（T4-2 Slice 4）：生产+sandboxed→走真沙箱；dev 默认进程内；force/豁免覆盖。"""
+    from chameleon.providers.local.agentkit_runner import _should_sandbox
 
     class _M:
         sandboxed = True
 
-    # 非沙箱：生产也不拦
-    monkeypatch.setenv("CHAMELEON_ENV", "production")
-    _resolve_sandbox_policy("a", type("N", (), {"sandboxed": False})())
-    # 非生产：进程内跑，不拦
-    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    monkeypatch.delenv("CHAMELEON_SANDBOX_FORCE", raising=False)
     monkeypatch.delenv("CHAMELEON_SANDBOX_ALLOW_INPROCESS", raising=False)
-    _resolve_sandbox_policy("a", _M())
-    # 生产 + sandboxed + 无豁免 → raise
+
+    # 非沙箱：永不走沙箱
     monkeypatch.setenv("CHAMELEON_ENV", "production")
-    with pytest.raises(RuntimeError, match="fail-closed"):
-        _resolve_sandbox_policy("a", _M())
-    # 生产 + 显式豁免 → 放行
+    assert _should_sandbox(type("N", (), {"sandboxed": False})()) is False
+    # 非生产：默认进程内（便利）
+    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    assert _should_sandbox(_M()) is False
+    # 生产 + sandboxed + 无豁免 → 走真沙箱
+    monkeypatch.setenv("CHAMELEON_ENV", "production")
+    assert _should_sandbox(_M()) is True
+    # 生产 + 显式信任豁免 → 进程内
     monkeypatch.setenv("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "1")
-    _resolve_sandbox_policy("a", _M())
+    assert _should_sandbox(_M()) is False
+    # FORCE：dev 也强制走沙箱（本地验隔离）
+    monkeypatch.setenv("CHAMELEON_ENV", "dev")
+    monkeypatch.setenv("CHAMELEON_SANDBOX_FORCE", "1")
+    assert _should_sandbox(_M()) is True
 
 
 def test_track_usage_accumulates():

@@ -624,45 +624,27 @@ def is_agentkit_agent(ctx: InvokeContext) -> bool:
     return bool(ctx.agent_def.config.get("__agentkit_module__"))
 
 
-def _resolve_sandbox_policy(agent_key: str, manifest: Any) -> None:
-    """沙箱执行决策点 —— Phase 1 fail-closed（T4-2 子方案）。
+def _should_sandbox(manifest: Any) -> bool:
+    """`@agent(sandboxed=True)` 是否走真隔离子进程执行（T4-2 Phase 2）。
 
-    `@agent(sandboxed=True)` 表达「该 agent 需隔离执行」（多租户 / 不可信代码）。真隔离
-    runtime（handle 进沙箱 + ctx 经受控 RPC 回主进程）见 T4-2 子方案 Phase 2-4，尚未接。
-    在此之前：
-    - 非生产：进程内跑（开发便利），info 一行。
-    - 生产 + sandboxed：**fail-closed**——默认 raise 拒绝进程内裸跑（不可信代码裸跑 =
-      读 .env/DB/内网 = RCE，绝不静默假装隔离）。部署方确信源码可信时显式设
-      CHAMELEON_SANDBOX_ALLOW_INPROCESS=1 豁免。
-
-    Raises:
-        RuntimeError: 生产 + sandboxed + 无真隔离 + 无显式豁免。
+    - 非沙箱声明 → False。
+    - CHAMELEON_SANDBOX_FORCE=1 → True（dev 也强制走沙箱，便于本地验证隔离）。
+    - 非生产 → False（开发态进程内跑，便利；dev 默认不隔离）。
+    - 生产 + sandboxed → True 走真沙箱（SubprocessSandboxRuntime）；除非显式
+      CHAMELEON_SANDBOX_ALLOW_INPROCESS=1 表示「源码可信，进程内跑」才 False。
     """
     if not getattr(manifest, "sandboxed", False):
-        return
+        return False
     import os
 
+    if os.environ.get("CHAMELEON_SANDBOX_FORCE", "").strip().lower() in ("1", "true", "yes"):
+        return True
     from chameleon.core.sandbox import is_production
 
     if not is_production():
-        logger.info(
-            "agentkit agent {} sandboxed=True（开发态进程内运行；真隔离见 T4-2 子方案）",
-            agent_key,
-        )
-        return
+        return False
     allow = os.environ.get("CHAMELEON_SANDBOX_ALLOW_INPROCESS", "").strip().lower()
-    if allow in ("1", "true", "yes"):
-        logger.warning(
-            "agentkit agent {} sandboxed=True 按显式豁免进程内运行"
-            "（CHAMELEON_SANDBOX_ALLOW_INPROCESS）——确认源码可信",
-            agent_key,
-        )
-        return
-    raise RuntimeError(
-        f"agent {agent_key} 声明 sandboxed=True，但生产环境未接真隔离 runtime；"
-        "fail-closed 拒绝进程内裸跑（防不可信代码 RCE）。接 SandboxTransport（T4-2 子方案）"
-        "或显式 CHAMELEON_SANDBOX_ALLOW_INPROCESS=1（确认源码可信）后重试。"
-    )
+    return allow not in ("1", "true", "yes")
 
 
 async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
@@ -672,8 +654,6 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
     target = getattr(mod, cfg["__agentkit_attr__"])
     manifest = target.__agent_manifest__
     slots = {s.name: s for s in manifest.models}
-
-    _resolve_sandbox_policy(ctx.agent_def.key, manifest)
 
     # 平台工具启用集：manifest 声明的可用集 ∩ web tool_bindings（None=全启用）
     declared_tools = list(manifest.tools or [])
@@ -720,6 +700,23 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             config={**opt_defaults, **(cfg.get("opts") or {})},
             attachments=ctx.attachments,
         )
+
+        # 沙箱路由：@agent(sandboxed=True) 在生产/force 下走隔离子进程执行（handle 在子
+        # 进程，ctx 资源经 broker=transport 受控解析；凭据/DB 只在主进程）。
+        if _should_sandbox(manifest):
+            from chameleon.providers.local.sandbox import run_sandboxed
+
+            logger.info("agentkit agent {} 走沙箱隔离执行", ctx.agent_def.key)
+            async for ev in run_sandboxed(
+                module=cfg["__agentkit_module__"],
+                attr=cfg["__agentkit_attr__"],
+                query=_extract_query(ctx),
+                broker=transport,
+                session_id=ctx.session_id,
+                config={**opt_defaults, **(cfg.get("opts") or {})},
+            ):
+                yield ev
+            return
 
         if manifest.is_class and not hasattr(target, "handle"):
             # 旧式兼容：classmethod astream(ctx)（裸 InvokeContext，不享 ctx/usage 上报）
