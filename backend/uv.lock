@@ -497,7 +497,6 @@ name = "chameleon-core"
 version = "1.0.0"
 source = { editable = "chameleon-core" }
 dependencies = [
-    { name = "fastapi" },
     { name = "loguru" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -505,15 +504,21 @@ dependencies = [
     { name = "pyyaml" },
 ]
 
+[package.optional-dependencies]
+api = [
+    { name = "fastapi" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.115" },
+    { name = "fastapi", marker = "extra == 'api'", specifier = ">=0.115" },
     { name = "loguru", specifier = ">=0.7" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pydantic-settings", specifier = ">=2.4" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6" },
 ]
+provides-extras = ["api"]
 
 [[package]]
 name = "chameleon-data"

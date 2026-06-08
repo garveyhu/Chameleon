@@ -13,8 +13,14 @@ dependencies = [
     "loguru>=0.7",
     "python-dotenv>=1.0",
     "pyyaml>=6",
-    "fastapi>=0.115",             # core/api 响应封装 + 异常 handler 协议（实际 import 却漏声明）
 ]
+
+# fastapi 仅 core/api/response.py+sse.py（Web 响应封装/SSE）需要——非纯协议核心。移为可选
+# extra：Web 层（api/app/system）各自声明 fastapi，导入 core.api.response/sse 时可用；而
+# agentkit 公共 SDK / data / integrations / engine 都不 import 这两个模块，故 `pip install
+# chameleon-agentkit`（→core，不带 [api]）不再被动拖入 fastapi/starlette，保持精简（评审9 🟠）。
+[project.optional-dependencies]
+api = ["fastapi>=0.115"]
 
 [build-system]
 requires = ["hatchling"]
