@@ -45,6 +45,9 @@ class ObservationScope:
         self.prompt_tokens: int | None = None
         self.completion_tokens: int | None = None
         self.total_tokens: int | None = None
+        # 显式 cost 覆盖（媒体生成等按张/按秒计费、无 token，直接给金额，sink 不再按
+        # token 价重算）。
+        self.cost_usd: Any = None
 
 
 @asynccontextmanager
@@ -127,6 +130,7 @@ async def _persist(
                 prompt_tokens=scope.prompt_tokens,
                 completion_tokens=scope.completion_tokens,
                 total_tokens=scope.total_tokens,
+                cost_usd=scope.cost_usd,
                 parent_id=effective_parent,
                 observation_type=observation_type,
                 channel=(tc.channel if tc else "internal"),

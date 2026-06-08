@@ -16,6 +16,7 @@ from chameleon.system.pricing.service import (
     seed_media_pricing,
     set_media_pricing,
     set_token_pricing,
+    wire_media_cost_bridge,
 )
 from chameleon.system.pricing.units import PricingUnit, VideoTier
 
@@ -30,6 +31,7 @@ __all__ = [
     "set_media_pricing",
     "seed_default_pricing",
     "seed_media_pricing",
+    "wire_media_cost_bridge",
     "PricingUnit",
     "VideoTier",
 ]

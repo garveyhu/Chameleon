@@ -350,3 +350,39 @@ async def seed_default_pricing(session: AsyncSession) -> int:
         await session.commit()
         logger.info("model_pricing seeded | count={}", added)
     return added
+
+
+def wire_media_cost_bridge() -> None:
+    """app 启动注入媒体计费 fn 到 providers-base 的 IoC 桥。
+
+    让 agentkit ctx.media（providers-local，不依赖 system）把生成成本写进 generation
+    观测，rollup 计入根行。按 kind 选 unit：image→per-image，video→per-second(分辨率档)。
+    """
+    from chameleon.providers.base.media_cost_bridge import set_media_cost_fn
+
+    async def _fn(model_code: str, kind: str, params: dict) -> float | None:
+        from chameleon.data.infra.db import AsyncSessionLocal
+
+        p = params or {}
+        async with AsyncSessionLocal() as session:
+            if kind == "video":
+                seconds = p.get("duration") or p.get("seconds") or 5
+                tier = str(p.get("resolution") or "720P")
+                cost = await calc_media_cost(
+                    session,
+                    model_code=model_code,
+                    unit=PricingUnit.VIDEO_SECOND,
+                    tier=tier,
+                    quantity=float(seconds),
+                )
+            else:
+                count = p.get("n") or p.get("count") or 1
+                cost = await calc_media_cost(
+                    session,
+                    model_code=model_code,
+                    unit=PricingUnit.IMAGE,
+                    quantity=float(count),
+                )
+        return float(cost) if cost is not None else None
+
+    set_media_cost_fn(_fn)

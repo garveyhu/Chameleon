@@ -139,6 +139,8 @@ class InProcessTransport(RuntimeTransport):
         from chameleon.data.models import LLMModel
         from chameleon.integrations.mediagen.resolver import resolve_media_target
         from chameleon.integrations.mediagen.service import stream_generate
+        from chameleon.integrations.observe.aspect import record_scope
+        from chameleon.providers.base.media_cost_bridge import get_media_cost_fn
 
         # 解析生成模型 code：model 点名优先，否则走 slot 绑定链
         code = model or (self._resolve_code(slot) if slot else None)
@@ -159,11 +161,14 @@ class InProcessTransport(RuntimeTransport):
             )
 
         done: dict[str, Any] | None = None
-        async with observe(
+        # record_scope 落一条 generation 计费行（cost rollup 计入根行）；媒体按张/秒计费，
+        # 经 media_cost_bridge 算金额直接写 scope.cost_usd（无 token，不走 token 价）。
+        async with record_scope(
             observation_type="generation",
             name=f"media.{kind}",
-            request_id=_scoped_observation_id(f"media.{kind}"),
-        ):
+            request_payload={"kind": kind, "prompt": prompt[:500]},
+            model_code=code,
+        ) as scope:
             async for ev in stream_generate(
                 target, prompt=prompt, params=params or {}, input_images=input_images or []
             ):
@@ -181,8 +186,16 @@ class InProcessTransport(RuntimeTransport):
                     )
                 elif etype == "done":
                     done = ev
-        if not done:
-            raise RuntimeError("媒体生成未返回 done 事件")
+            if not done:
+                raise RuntimeError("媒体生成未返回 done 事件")
+            scope.response_payload = {"url": done.get("url"), "media_kind": done.get("media_kind")}
+            # 计费归集（失败不阻断生成）
+            cost_fn = get_media_cost_fn()
+            if cost_fn:
+                try:
+                    scope.cost_usd = await cost_fn(code, kind, params or {})
+                except Exception:  # noqa: BLE001
+                    logger.warning("media 计费失败 model={} kind={}", code, kind)
         result = MediaResult(
             url=done.get("url", ""),
             object_key=done.get("key", ""),
