@@ -660,6 +660,9 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         scope_ref=cvars.get("end_user_id") or ctx.session_id,
         mcp_tools=mcp_tools,
     )
+    # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
+    # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。
+    opt_defaults = {o.key: o.default for o in (manifest.config or []) if o.default is not None}
     run = AgentRun(
         transport=transport,
         agent_key=ctx.agent_def.key,
@@ -667,7 +670,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         messages=ctx.input if isinstance(ctx.input, list) else [],
         history=ctx.history,
         session_id=ctx.session_id,
-        config=cfg.get("opts") or {},
+        config={**opt_defaults, **(cfg.get("opts") or {})},
         attachments=ctx.attachments,
     )
 

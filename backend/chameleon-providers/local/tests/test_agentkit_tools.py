@@ -267,6 +267,32 @@ async def test_run_tool_loop_dispatches_mcp_tool():
     assert called == {"path": "/a"}  # MCP 工具经本地路径被调用
 
 
+def test_class_agent_auto_synthesizes_metadata():
+    """类式 @agent 未手写 get_metadata → 从 manifest 自动合成 + 可实例化（T3-5）。"""
+
+    @agent(key="_t_synth", name="合成体", description="d", tags=["x"], models=[])
+    class _C(BaseAgent):
+        async def handle(self, run: AgentRun):  # noqa: ANN001
+            yield "ok"
+
+    inst = _C()  # 不应报「抽象类不可实例化」
+    assert inst is not None
+    md = _C.get_metadata()
+    assert md.id == "_t_synth" and md.name == "合成体" and md.tags == ["x"]
+
+
+@pytest.mark.asyncio
+async def test_ctx_wrap_passthrough():
+    """ctx.wrap(model) 逃生口：原样返回作者自带模型（T3-5）。"""
+    t = InProcessTransport(agent_key="x", bindings={}, slots={})
+    run = AgentRun(
+        transport=t, agent_key="x", query="q",
+        messages=[], history=[], session_id=None, config={},
+    )
+    sentinel = object()
+    assert run.wrap(sentinel) is sentinel
+
+
 @pytest.mark.asyncio
 async def test_run_tool_loop_no_tool_calls_returns_text():
     t = InProcessTransport(agent_key="x", bindings={}, slots={}, tool_keys=[])

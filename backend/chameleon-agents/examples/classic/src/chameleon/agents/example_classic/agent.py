@@ -10,7 +10,7 @@ run.memory / run.call_agent。适合需要持有实例状态、拆多方法的�
 
 from __future__ import annotations
 
-from chameleon.agentkit import AgentMetadata, AgentRun, BaseAgent, ModelSlot, agent
+from chameleon.agentkit import AgentRun, BaseAgent, ModelSlot, agent
 
 
 @agent(
@@ -22,14 +22,7 @@ from chameleon.agentkit import AgentMetadata, AgentRun, BaseAgent, ModelSlot, ag
     sandboxed=True,
 )
 class ClassicAgent(BaseAgent):
-    @classmethod
-    def get_metadata(cls) -> AgentMetadata:
-        return AgentMetadata(
-            id="example-classic",
-            name="经典类式",
-            description="BaseAgent 类式样板（handle 共享 ctx）",
-            tags=["example", "class"],
-        )
+    # 无需手写 get_metadata —— @agent 从声明自动合成（单一真相源，T3-5）。
 
     async def handle(self, run: AgentRun):
         async for delta in run.stream(

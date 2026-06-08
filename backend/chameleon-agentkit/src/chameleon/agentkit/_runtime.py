@@ -228,6 +228,16 @@ class AgentRun:
         """低层：返回配置好的 LangChain chat model，可任意 LCEL 组合。"""
         return self._t.chat_model(slot=None if model else slot, model=model)
 
+    def wrap(self, model: Any) -> Any:
+        """逃生口（档 C，少用）：直接用作者自带的 LangChain chat model。
+
+        平台模型库确实没有该模型时的定制出口——绕过平台路由 / 凭证 / 计费（这些都不
+        经过平台）。返回对象与 `ctx.llm()` 同形（可 ainvoke/astream），可直接用或喂给
+        LCEL。默认走 `ctx.llm(slot/model=)`（已配置资源池 + 自动 trace/计费），仅极端
+        定制才用 wrap。
+        """
+        return model
+
     async def complete(
         self,
         *,

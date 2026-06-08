@@ -70,6 +70,25 @@ def agent(
         )
         _DECLARED[key] = manifest
         target.__agent_manifest__ = manifest  # type: ignore[attr-defined]
+        # 类式 @agent：未自定义 get_metadata 则从 manifest 自动合成（单一真相源，
+        # 消除 @agent 与 get_metadata 重复声明 + 漂移）。作者要差异化仍可显式 override。
+        if isinstance(target, type) and "get_metadata" not in target.__dict__:
+            from chameleon.core.base import AgentMetadata
+
+            def _gen(cls: type, _m: AgentManifest = manifest) -> AgentMetadata:
+                return AgentMetadata(
+                    id=_m.key,
+                    name=_m.name,
+                    description=_m.description or "",
+                    tags=list(_m.tags),
+                )
+
+            target.get_metadata = classmethod(_gen)  # type: ignore[attr-defined]
+            # 合成的是 BaseAgent 的抽象方法 → 同步从 __abstractmethods__ 移除，否则
+            # 实例化仍报「抽象类不可实例化」。
+            abs = getattr(target, "__abstractmethods__", frozenset())
+            if "get_metadata" in abs:
+                target.__abstractmethods__ = frozenset(abs - {"get_metadata"})  # type: ignore[attr-defined]
         return target
 
     return deco
