@@ -1,8 +1,19 @@
 [project]
 name = "chameleon-agentkit"
 version = "0.1.0"
-description = "Chameleon 本地智能体作者 SDK —— @agent / AgentRun / ModelSlot / Opt"
+description = "代码优先的智能体作者 SDK —— @agent + ctx，脱平台 pip install 即用"
+readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["agent", "llm", "agentkit", "orchestration", "ai-agents", "mcp", "langchain", "rag"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
 dependencies = [
     # 只依赖精简 core（运行时协议类型已迁 chameleon.core.runtime_types）；不再依赖
     # providers-base（避免经 providers-base→data 拉入 sqlalchemy/asyncpg 等重依赖链），
