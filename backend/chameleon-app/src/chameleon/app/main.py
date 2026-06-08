@@ -44,6 +44,7 @@ from chameleon.integrations.rerank.factory import reload_rerank_cache
 from chameleon.providers.base import AGENTS, PROVIDERS, init_registry
 from chameleon.system.admin import admin_router
 from chameleon.system.agents import agents_admin_router
+from chameleon.system.ai_tasks import ai_tasks_router
 from chameleon.system.api_key import api_keys_router
 from chameleon.system.app_templates import app_templates_router
 from chameleon.system.audit_logs import audit_logs_router
@@ -134,6 +135,17 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.exception("pricing seed failed (continuing)")
 
+    # ai_tasks：导入 ai_handlers 触发 task_type handler 注册 + 清扫上次残留 running 任务
+    import chameleon.system.datasets.ai_handlers  # noqa: F401
+    from chameleon.system.ai_tasks.service import recover_stale_tasks
+
+    try:
+        n_recovered = await recover_stale_tasks()
+        if n_recovered:
+            logger.info("ai_tasks: 清扫 {} 个残留 running 任务", n_recovered)
+    except Exception:
+        logger.exception("ai_tasks recover failed (continuing)")
+
     yield
 
     await eval_scheduler.shutdown()
@@ -210,6 +222,7 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(graphs_router)
     app.include_router(tools_router)
     app.include_router(datasets_router)
+    app.include_router(ai_tasks_router)
     app.include_router(eval_jobs_router)
     app.include_router(eval_templates_router)
     app.include_router(plugins_router)
