@@ -118,6 +118,15 @@ export interface AgentCapabilities {
   durable: boolean;
 }
 
+/** durable agent 暂停中、待人工输入的 run（运营可见性） */
+export interface AgentPendingRun {
+  scope_ref: string; // durable scope（会话 session / end_user）
+  prompt: string;
+  call_index: number | null;
+  run_id: string | null;
+  updated_at: string;
+}
+
 export interface ConfigOptionItem {
   key: string;
   label: string;

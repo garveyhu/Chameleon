@@ -8,6 +8,7 @@ import type {
   AgentModelSlots,
   AgentOption,
   AgentOverview,
+  AgentPendingRun,
   AgentPrefillConfig,
   AgentTools,
   CreateAgentRequest,
@@ -70,6 +71,10 @@ export const agentApi = {
   /** @agent 声明的高级能力（MCP/A2A/沙箱/durable），只读展示 */
   capabilities: (id: EntityId) =>
     get<AgentCapabilities>(`/v1/admin/agents/${id}/capabilities`),
+
+  /** durable agent 暂停中、待人工输入的 run 列表（运营可见性） */
+  pendingRuns: (id: EntityId) =>
+    get<AgentPendingRun[]>(`/v1/admin/agents/${id}/pending-runs`),
 
   /** 应用级密钥：列未吊销 */
   listApiKeys: (id: EntityId) => get<AgentApiKey[]>(`/v1/admin/agents/${id}/api-keys`),

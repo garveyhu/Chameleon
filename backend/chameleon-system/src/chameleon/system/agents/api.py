@@ -30,7 +30,14 @@ from chameleon.core.api.exceptions import (
 )
 from chameleon.core.api.response import PageResult, Result
 from chameleon.data.infra.db import get_session
-from chameleon.data.models import Agent, ApiKey, CallLog, EmbedConfig, Graph
+from chameleon.data.models import (
+    Agent,
+    AgentMemory,
+    ApiKey,
+    CallLog,
+    EmbedConfig,
+    Graph,
+)
 from chameleon.providers.base import AGENTS, reload_agent_registry
 from chameleon.system.agents import agent_kb_service, prefill_service
 from chameleon.system.agents.prefill_service import AgentPrefillConfig
@@ -841,6 +848,59 @@ async def get_agent_capabilities(
 ) -> Result[AgentCapabilities]:
     agent = await _get_or_404(session, agent_id)
     return Result.ok(_build_capabilities(agent))
+
+
+# ── durable HITL 运营可见性：哪些会话的 run 正暂停等人工输入（运营侧掌握积压）──
+#
+# durable agent ctx.ask_human 暂停时，pending 落 AgentMemory（mkey=__chm_pending__，scope_ref=会话）。
+# 此端点汇总该 agent 所有暂停中的 run + prompt，让运营无需进 playground/embed 即知 HITL 积压。
+# 只读可见——回填续跑发生在终端用户所在场景（playground/embed），admin 代答语义不当故不在此提供。
+
+
+class AgentPendingRun(BaseModel):
+    scope_ref: str  # durable scope（= 会话 session_id / end_user_id）
+    prompt: str
+    call_index: int | None = None
+    run_id: str | None = None
+    updated_at: datetime
+
+
+@router.get("/{agent_id}/pending-runs", response_model=Result[list[AgentPendingRun]])
+async def get_agent_pending_runs(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[list[AgentPendingRun]]:
+    agent = await _get_or_404(session, agent_id)
+    rows = (
+        (
+            await session.execute(
+                select(AgentMemory)
+                .where(
+                    AgentMemory.agent_key == agent.agent_key,
+                    AgentMemory.mkey == "__chm_pending__",
+                )
+                .order_by(AgentMemory.updated_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    out: list[AgentPendingRun] = []
+    for r in rows:
+        pending = (r.value or {}).get("v") if isinstance(r.value, dict) else None
+        if not isinstance(pending, dict) or not pending.get("prompt"):
+            continue  # 已解决/无效 pending 跳过
+        out.append(
+            AgentPendingRun(
+                scope_ref=r.scope_ref,
+                prompt=str(pending.get("prompt", "")),
+                call_index=pending.get("call_index"),
+                run_id=pending.get("run_id"),
+                updated_at=r.updated_at,
+            )
+        )
+    return Result.ok(out)
 
 
 # ── 应用级 API 密钥（scope_type='app'，scope_ref = agent_key） ──

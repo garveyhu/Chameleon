@@ -2,7 +2,7 @@
  * allow-list、docker 沙箱隔离、可恢复执行(durable/HITL)。这些能力在代码里定，运营侧只看不改。
  */
 import { useQuery } from '@tanstack/react-query';
-import { History, Network, Server, ShieldCheck, ShieldOff } from 'lucide-react';
+import { History, Hourglass, Network, Server, ShieldCheck, ShieldOff } from 'lucide-react';
 
 import { DetailSection } from '@/system/agents/components/detail-section';
 
@@ -21,6 +21,14 @@ export const CapabilitiesTab = ({ agentId }: Props) => {
     queryFn: () => agentApi.capabilities(agentId),
   });
   const cap = capQ.data;
+  // durable agent 才查暂停中的 run（运营可见性）；30s 刷新一次
+  const pendingQ = useQuery({
+    queryKey: ['agent-pending-runs', agentId],
+    queryFn: () => agentApi.pendingRuns(agentId),
+    enabled: !!cap?.durable,
+    refetchInterval: 30_000,
+  });
+  const pendingRuns = pendingQ.data ?? [];
 
   if (capQ.isLoading) {
     return <div className="p-6 text-sm text-stone-400">加载能力…</div>;
@@ -65,6 +73,34 @@ export const CapabilitiesTab = ({ agentId }: Props) => {
           )}
         </div>
       </DetailSection>
+
+      {/* durable HITL 运营可见性：暂停中、待人工输入的 run（回填续跑在 playground/嵌入式终端完成） */}
+      {cap.durable && (
+        <DetailSection
+          icon={Hourglass}
+          title="待人工处理"
+          desc="暂停中、等待人工回填续跑的 run（在 playground / 嵌入式终端回填）"
+          action={
+            <span className="text-[11px] text-stone-400">{pendingRuns.length} 个</span>
+          }
+        >
+          {pendingRuns.length === 0 ? (
+            <div className="px-5 py-4 text-sm text-stone-400">暂无待人工处理的暂停 run</div>
+          ) : (
+            <ul className="divide-y divide-stone-100">
+              {pendingRuns.map(r => (
+                <li key={r.run_id ?? r.scope_ref} className="px-5 py-3">
+                  <div className="mb-1 text-[13px] text-stone-800">{r.prompt}</div>
+                  <div className="flex flex-wrap gap-x-3 text-[11px] text-stone-400">
+                    <span>会话 {r.scope_ref}</span>
+                    <span>{new Date(r.updated_at).toLocaleString()}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DetailSection>
+      )}
 
       {/* 外部 MCP server */}
       <DetailSection
