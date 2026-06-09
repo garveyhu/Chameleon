@@ -78,6 +78,26 @@ export const ParamPanel = ({ params, onChange, className }: Props) => {
         toast.success(`已切换为调用应用「${cfg.name}」生成`);
         return;
       }
+      // 本地代码型应用（@agent / BaseAgent）→ 逻辑在代码里（工具/记忆/HITL/durable），直接运行其
+      // 真实 provider，而非借模型跑通用对话（否则 ctx.run_with_tools / memory / ask_human 根本不执行）。
+      // 模型/KB 仅带出供信息展示，运行以代码为准。
+      if (cfg.source === 'local') {
+        const next: PlaygroundParams = {
+          ...params,
+          bound_agent_key: agentKey,
+          invoke_agent_key: agentKey,
+          media_kind: null,
+          media_model_id: null,
+        };
+        if (cfg.model_code) {
+          const m = models.find(x => x.code === cfg.model_code);
+          if (m) next.model_id = String(m.id);
+        }
+        next.kb_ids = (cfg.kb_ids ?? []).map(String);
+        onChange(next);
+        toast.success(`已切换为运行真实应用「${cfg.name}」（工具 / 记忆 / 审批按代码执行）`);
+        return;
+      }
       const next: PlaygroundParams = {
         ...params,
         bound_agent_key: agentKey,
