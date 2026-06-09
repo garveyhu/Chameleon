@@ -78,22 +78,6 @@ async def test_durable_fingerprint_catches_same_method_reorder():
 
 
 @pytest.mark.asyncio
-async def test_durable_guards_unjournaled_calls():
-    """评审 #3/#4：durable 下**尚未** journal 的调用仍硬拦（防重放重执行）。
-
-    已 journal 放开的（complete 文本/结构化、kb.search、media.generate 见 test_durable_easy_slice；
-    call_agent/gather/route/stream 见 test_durable_mid_slice）。仅剩 run_with_tools（难片：循环内
-    按 call_index 逐步 journal）尚未接。
-    """
-    t = FakeTransport(replies=["x"], call_agent_reply="sub")
-    # async generator 类：守卫在生成器体首行，须迭代才触发
-    r = _run(t, durable=True, run_id="run-1")
-    with pytest.raises(RuntimeError, match="durable run 暂不支持"):
-        async for _ in r.run_with_tools(user="q", tools=[]):
-            pass
-
-
-@pytest.mark.asyncio
 async def test_durable_per_run_isolation():
     """不同 run_id 的 journal 互不串（ctx.memory 跨会话，run_id 隔离是正确性前提）。"""
     t = FakeTransport(replies=["run-A答案", "run-B答案"])

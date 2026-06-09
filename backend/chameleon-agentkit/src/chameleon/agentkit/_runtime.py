@@ -458,17 +458,6 @@ class AgentRun:
             lambda: _retry_transient(_call, retries=self._retries),
         )
 
-    def _durable_guard(self, name: str) -> None:
-        """durable 已 memoize：complete(文本/结构化) + ask_human + kb.search + media.generate +
-        call_agent + gather + route + stream。仅剩 run_with_tools（ReAct 循环内多 LLM+工具步，需
-        循环内按 call_index 逐步 journal，难片）尚未接——重放会真重执行（重复扣费/副作用）硬拦。"""
-        if self._journal_enabled:
-            raise RuntimeError(
-                f"durable run 暂不支持 ctx.{name}（重放会重复执行/计费）；当前 durable 已支持 "
-                "complete / ask_human / kb.search / media.generate / call_agent / gather / "
-                "route / stream。控制流也须确定性（禁依赖 random/时间分支）。"
-            )
-
     async def _memoize(
         self,
         method: str,
@@ -587,7 +576,6 @@ class AgentRun:
           yield），自动 trace + usage 累加。`max_steps` 防无限循环；`max_tokens`
           为本轮循环 token 上限（与 agent 总预算共同构成成本闸）。
         """
-        self._durable_guard("run_with_tools")
         user_text = user if user is not None else self.query
         local: list[ToolSpec] = []
         for t in tools or []:
@@ -597,16 +585,54 @@ class AgentRun:
             if spec is not None:
                 local.append(spec)
         msgs = self._build_messages(system, user_text, context)
-        async for delta in self._t.run_tool_loop(
-            messages=msgs,
-            slot=None if model else slot,
-            model=model,
-            platform_keys=list(tool_keys or []),
-            local_tools=local,
-            max_steps=max_steps,
-            max_tokens=max_tokens,
-        ):
+
+        def _loop() -> AsyncIterator[str]:
+            return self._t.run_tool_loop(
+                messages=msgs,
+                slot=None if model else slot,
+                model=model,
+                platform_keys=list(tool_keys or []),
+                local_tools=local,
+                max_steps=max_steps,
+                max_tokens=max_tokens,
+            )
+
+        if not self._journal_enabled:
+            async for delta in _loop():
+                yield delta
+            return
+
+        # durable 覆盖（难片·粗粒度）：整个工具循环输出当一个 journal 单元（同 stream 内联）。
+        # 重放一次性吐累积文本、**整轮不重跑**——不重调 LLM、不重执行工具（含平台工具副作用）。
+        # 正确性边界：journal 在循环**完整结束**后写。HITL 暂停在 handle 里 run_with_tools 之后的
+        # 主流程时，循环已完成并 journal，resume 命中记录零重执行（主流程正确）。局限：循环**中途
+        # 崩溃**恢复会重跑整轮（LangGraph 同款短板）；循环内按 call_index 逐步 journal 的细粒度
+        # 增强留作后续（见路线图 T1-2 难片 fine-grained）。
+        idx = self._call_index
+        self._call_index += 1
+        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
+        tool_names = sorted([s.name for s in local]) + sorted(tool_keys or [])
+        fp = _fingerprint(user_text, system, slot, model, str(tool_names), max_steps)
+        cached = await self._t.memory_get(key, None)
+        if cached is not None:
+            if cached.get("method") != "run_with_tools" or cached.get("fp") != fp:
+                raise RuntimeError(
+                    f"durable 重放 call_index={idx} 与记录不符"
+                    f"（记录 {cached.get('method')!r}/{cached.get('fp')!r} ≠ 当前 "
+                    f"'run_with_tools'/{fp!r}）：handle 控制流非确定性（依赖了 random/时间/未 journal 的状态）"
+                )
+            out = cached.get("output") or ""
+            if out:
+                yield out  # 重放：一次性吐累积文本
+            return
+        parts: list[str] = []
+        async for delta in _loop():
+            parts.append(delta)
             yield delta
+        # 循环正常结束才 journal（中途失败不记 → 重放重跑整轮）
+        await self._t.memory_set(
+            key, {"method": "run_with_tools", "fp": fp, "output": "".join(parts)}
+        )
 
     def _build_messages(
         self, system: str | None, user: str, context: Any

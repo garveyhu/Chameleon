@@ -180,3 +180,86 @@ async def test_run_agentkit_complete_replay_no_remodel_on_resume(monkeypatch):
     out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
     assert out == "你好/同意"
     assert calls["n"] == 1, f"complete 重放应零再调模型，实际累计 {calls['n']} 次"
+
+
+_RWT_MOD = "chameleon._test_durable_runner.rwt"
+_rwt_exec = {"n": 0}
+
+
+def _register_rwt_agent() -> None:
+    if _RWT_MOD in sys.modules:
+        return
+    from chameleon.agentkit import tool
+
+    @tool(name="_rwt_weather", description="查天气")
+    async def _weather() -> dict:
+        _rwt_exec["n"] += 1
+        return {"temp": 20}
+
+    @agent(key="_t_hitl_rwt", name="工具后审批", models=[ModelSlot("chat", "c")], durable=True)
+    async def handle(ctx: AgentRun):
+        async for d in ctx.run_with_tools(user="查天气", tools=[_weather]):  # call_index 0
+            yield d
+        decision = await ctx.ask_human("批准吗？")  # call_index 1（暂停点）
+        yield f"/{decision}"
+
+    mod = types.ModuleType(_RWT_MOD)
+    mod.handle = handle  # type: ignore[attr-defined]
+    handle.__module__ = _RWT_MOD
+    sys.modules[_RWT_MOD] = mod
+
+
+@pytest.mark.asyncio
+async def test_run_agentkit_run_with_tools_replay_no_reexec_on_resume(monkeypatch):
+    """T1-2 难片验收：durable agent 用 run_with_tools 跑通暂停-恢复，重放零重复计费/副作用。
+    handle 先 run_with_tools（工具循环）再 ask_human；resume 时 run_with_tools@0 走 journal
+    一次性吐、LLM 零再调、工具零再执行（粗粒度整轮 journal）。"""
+    _mock_memory(monkeypatch)
+    _rwt_exec["n"] = 0
+    chat_state = {"n": 0}
+
+    class _ToolThenFinal:
+        def bind_tools(self, schemas):  # noqa: ANN001
+            return self
+
+        async def ainvoke(self, convo, **kw):  # noqa: ANN001
+            chat_state["n"] += 1
+            first = chat_state["n"] == 1
+
+            class _M:
+                tool_calls = (
+                    [{"name": "_rwt_weather", "args": {}, "id": "c1"}] if first else []
+                )
+                content = "" if first else "最终答案"
+                usage_metadata = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+
+            return _M()
+
+    monkeypatch.setattr(
+        InProcessTransport, "chat_model", lambda self, *, slot=None, model=None: _ToolThenFinal()
+    )
+    _register_rwt_agent()
+    adef = AgentDef(
+        key="_t_hitl_rwt", provider="local",
+        config={"__agentkit_module__": _RWT_MOD, "__agentkit_attr__": "handle"},
+    )
+
+    def _ctx(cvars: dict | None = None) -> InvokeContext:
+        return InvokeContext(
+            agent_def=adef, input="hi", history=[], app_id="app1",
+            session_id="s1", request_id="req-rwt", stream=True, context_vars=cvars or {},
+        )
+
+    # run 1：run_with_tools 跑两轮 LLM + 执行工具一次 + journaled，ask_human 暂停
+    ev1 = [e async for e in run_agentkit(_ctx())]
+    assert any(
+        e.type == StreamEventType.step and e.data.get("name") == "human_input_pending" for e in ev1
+    )
+    assert chat_state["n"] == 2 and _rwt_exec["n"] == 1
+
+    # run 2：resume → run_with_tools@0 走 journal（LLM/工具零再调）+ ask@1 返答案 → 续跑完成
+    ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 1}))]
+    out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
+    assert out == "最终答案/同意"
+    assert chat_state["n"] == 2, f"run_with_tools 重放应零再调 LLM，实际 {chat_state['n']}"
+    assert _rwt_exec["n"] == 1, f"run_with_tools 重放应零再执行工具，实际 {_rwt_exec['n']}"
