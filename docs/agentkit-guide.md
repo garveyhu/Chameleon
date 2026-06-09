@@ -50,6 +50,11 @@ async def handle(ctx: AgentRun):
 
 模型多槽：`@agent(models=[ModelSlot("chat"), ModelSlot("fast")])` → `ctx.complete(slot="fast")`。
 
+生成媒体的渲染：`ctx.media.generate` 返 `MediaResult`（`.url` 已落对象存储），在 handle 里
+`yield f"![]({r.url})"` 即可在 **playground / 嵌入式 widget 内联渲染**（两端 markdown 均支持图片；
+URL 为视频扩展名 `.mp4/.webm/.mov` 时自动转 `<video>` 播放器）。只 `yield r.url` 裸串会被当链接、
+不内联出图——要图就用 `![](...)` 语法。
+
 ## 3. 声明（`@agent` 参数）
 
 ```python
