@@ -294,8 +294,13 @@ def _mount_routers(app: FastAPI) -> None:
     app.include_router(tasks_router)
     # agentkit 本地开发 dev 端点（仅 CHAMELEON_DEV_TOKEN 设了才放行，否则全 404）
     app.include_router(dev_router)
-    # 入站开放 A2A：/a2a/{key} 暴露 agent 为标准 Agent2Agent（dev-token 闸；生产 api_key scope 见 Slice D）
-    app.include_router(a2a_router)
+    # 入站开放 A2A：/a2a/{key} 暴露 agent 为标准 Agent2Agent。条件挂载（同 /mcp，评审19 #2）——
+    # 仅 CHAMELEON_DEV_TOKEN 设了才挂，生产无 token 时端点根本不存在（减攻击面）。生产对外开放
+    # A2A 须接 api_key scope 鉴权（Slice D，待真实跨系统 A2A 需求再做，避免投机过早开放）。
+    from chameleon.core.config.env_settings import env_settings as _env
+
+    if _env.CHAMELEON_DEV_TOKEN:
+        app.include_router(a2a_router)
 
 
 def _log_registry_summary() -> None:
