@@ -198,9 +198,11 @@ def _register_rwt_agent() -> None:
 
     @agent(key="_t_hitl_rwt", name="工具后审批", models=[ModelSlot("chat", "c")], durable=True)
     async def handle(ctx: AgentRun):
-        async for d in ctx.run_with_tools(user="查天气", tools=[_weather]):  # call_index 0
+        # fine-grained：run_with_tools 逐步 journal 消耗多个 call_index——本例 1 轮工具 =
+        # LLM step0(0) + 工具批(1) + LLM step1 收口(2)，故 ask_human 在 call_index 3。
+        async for d in ctx.run_with_tools(user="查天气", tools=[_weather]):
             yield d
-        decision = await ctx.ask_human("批准吗？")  # call_index 1（暂停点）
+        decision = await ctx.ask_human("批准吗？")  # call_index 3（暂停点）
         yield f"/{decision}"
 
     mod = types.ModuleType(_RWT_MOD)
@@ -257,8 +259,8 @@ async def test_run_agentkit_run_with_tools_replay_no_reexec_on_resume(monkeypatc
     )
     assert chat_state["n"] == 2 and _rwt_exec["n"] == 1
 
-    # run 2：resume → run_with_tools@0 走 journal（LLM/工具零再调）+ ask@1 返答案 → 续跑完成
-    ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 1}))]
+    # run 2：resume → run_with_tools 各步走 journal（LLM/工具零再调）+ ask@3 返答案 → 续跑完成
+    ev2 = [e async for e in run_agentkit(_ctx({"_resume_answer": "同意", "_resume_call_index": 3}))]
     out = "".join(e.data.get("text", "") for e in ev2 if e.type == StreamEventType.delta)
     assert out == "最终答案/同意"
     assert chat_state["n"] == 2, f"run_with_tools 重放应零再调 LLM，实际 {chat_state['n']}"

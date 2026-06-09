@@ -206,6 +206,7 @@ class SandboxClientTransport(RuntimeTransport):
 
     async def run_tool_loop(  # noqa: ANN201
         self, *, messages, slot, model, platform_keys, local_tools, max_steps, max_tokens=None,
+        journal=None,  # durable 逐步 journal（沙箱子进程不支持，签名一致即可）
     ):  # noqa: ANN001
         """ReAct 循环跑在子进程：每轮 chat_tools rpc（模型带工具）→ 本地 @tool 子进程执行 /
         平台工具经 run_tool rpc → 回填续跑。模型/平台工具凭据仍只在主进程 broker。"""

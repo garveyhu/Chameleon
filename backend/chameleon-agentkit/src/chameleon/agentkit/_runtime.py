@@ -212,8 +212,12 @@ class RuntimeTransport(ABC):
         local_tools: list[ToolSpec],
         max_steps: int,
         max_tokens: int | None = None,
+        journal: Any = None,
     ) -> AsyncIterator[str]:
         """跑 ReAct / function-calling 循环，yield 最终答案文本增量。
+
+        `journal`（durable）：可选的逐步 memoize 句柄（AgentRun._memoize）。给定时循环内每步
+        LLM 调用 + 每批工具执行各按 call_index journal，重放/崩溃恢复时已完成步不重执行。None=直跑。
 
         绑平台工具（platform_keys ∪ 该 agent 绑定集）+ 本地工具（local_tools），
         多轮：模型出 tool_calls → 执行（平台走 registry / 本地走 handler）→ 回填 →
@@ -625,53 +629,22 @@ class AgentRun:
                 local.append(spec)
         msgs = self._build_messages(system, user_text, context)
 
-        def _loop() -> AsyncIterator[str]:
-            return self._t.run_tool_loop(
-                messages=msgs,
-                slot=None if model else slot,
-                model=model,
-                platform_keys=list(tool_keys or []),
-                local_tools=local,
-                max_steps=max_steps,
-                max_tokens=max_tokens,
-            )
-
-        if not self._journal_enabled:
-            async for delta in _loop():
-                yield delta
-            return
-
-        # durable 覆盖（难片·粗粒度）：整个工具循环输出当一个 journal 单元（同 stream 内联）。
-        # 重放一次性吐累积文本、**整轮不重跑**——不重调 LLM、不重执行工具（含平台工具副作用）。
-        # 正确性边界：journal 在循环**完整结束**后写。HITL 暂停在 handle 里 run_with_tools 之后的
-        # 主流程时，循环已完成并 journal，resume 命中记录零重执行（主流程正确）。局限：循环**中途
-        # 崩溃**恢复会重跑整轮（LangGraph 同款短板）；循环内按 call_index 逐步 journal 的细粒度
-        # 增强留作后续（见路线图 T1-2 难片 fine-grained）。
-        idx = self._call_index
-        self._call_index += 1
-        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
-        tool_names = sorted([s.name for s in local]) + sorted(tool_keys or [])
-        fp = _fingerprint(user_text, system, slot, model, str(tool_names), max_steps)
-        cached = await self._t.memory_get(key, None)
-        if cached is not None:
-            if cached.get("method") != "run_with_tools" or cached.get("fp") != fp:
-                raise RuntimeError(
-                    f"durable 重放 call_index={idx} 与记录不符"
-                    f"（记录 {cached.get('method')!r}/{cached.get('fp')!r} ≠ 当前 "
-                    f"'run_with_tools'/{fp!r}）：handle 控制流非确定性（依赖了 random/时间/未 journal 的状态）"
-                )
-            out = cached.get("output") or ""
-            if out:
-                yield out  # 重放：一次性吐累积文本
-            return
-        parts: list[str] = []
-        async for delta in _loop():
-            parts.append(delta)
+        # durable 覆盖（难片·fine-grained）：把 journal 句柄（_memoize，advance 共享 call_index）传进
+        # 工具循环，循环内**每步 LLM 调用 + 每批工具执行各按 call_index 逐步 journal**。重放/中途崩溃
+        # 恢复时已完成的步骤不重执行（不重调 LLM、不重执行工具/副作用），未完成的从断点续跑——比
+        # LangGraph「只在节点间存、节点内循环丢」更细。非 durable 时 journal=None，循环直接执行。
+        journal = self._memoize if self._journal_enabled else None
+        async for delta in self._t.run_tool_loop(
+            messages=msgs,
+            slot=None if model else slot,
+            model=model,
+            platform_keys=list(tool_keys or []),
+            local_tools=local,
+            max_steps=max_steps,
+            max_tokens=max_tokens,
+            journal=journal,
+        ):
             yield delta
-        # 循环正常结束才 journal（中途失败不记 → 重放重跑整轮）
-        await self._t.memory_set(
-            key, {"method": "run_with_tools", "fp": fp, "output": "".join(parts)}
-        )
 
     def _build_messages(
         self, system: str | None, user: str, context: Any

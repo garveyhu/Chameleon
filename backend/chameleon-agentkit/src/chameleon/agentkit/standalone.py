@@ -142,6 +142,7 @@ class StandaloneTransport(RuntimeTransport):
         local_tools: list[ToolSpec],
         max_steps: int,
         max_tokens: int | None = None,
+        journal: Any = None,  # durable 逐步 journal（standalone 不支持，签名一致即可）
     ) -> AsyncIterator[str]:
         # 真 ReAct：bind 本地 @tool → 模型出 tool_calls → 本地执行 → 回填续跑。standalone 无
         # 平台工具（platform_keys 忽略，仅本地工具）。ToolMessage 惰性 import（作者既传 langchain

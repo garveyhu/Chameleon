@@ -25,6 +25,7 @@ from chameleon.agentkit import AgentPaused, AgentRun, RuntimeTransport
 from chameleon.agentkit._runtime import (
     _PENDING_KEY,
     _content_to_text,
+    _fingerprint,
     _retry_transient,
 )
 from chameleon.agentkit._spec import (
@@ -374,6 +375,7 @@ class InProcessTransport(RuntimeTransport):
         local_tools: list[ToolSpec],
         max_steps: int,
         max_tokens: int | None = None,
+        journal: Any = None,
     ) -> AsyncIterator[str]:
         from langchain_core.messages import ToolMessage
 
@@ -404,80 +406,102 @@ class InProcessTransport(RuntimeTransport):
         usage: dict[str, int] | None = None
         truncate_reason = f"工具循环达上限 {max_steps} 轮"
 
+        # —— durable fine-grained：每步 LLM 调用 + 每批工具执行各按 call_index 逐步 journal ——
+        # journal=None（非 durable）时 producer 直跑、不记录。LLM 步存 {content,tool_calls,usage}
+        # （首跑带 _raw 真 AIMessage 供 convo，encode 剥离不入库）；工具批存结果列表。重放/崩溃恢复
+        # 时已 journal 的步返记录、不重执行（不重调 LLM、不重执行工具/副作用），未完成的从断点续跑。
+        async def _llm_step(label: str) -> dict[str, Any]:
+            async def _producer() -> dict[str, Any]:
+                resp = await _retry_transient(
+                    lambda: client.ainvoke(convo), retries=self._retries
+                )
+                ru = extract_usage(resp)
+                self.track_usage(ru)  # producer 仅首跑运行 → run 总账不重复计（重放不重 track）
+                return {
+                    "content": _content_to_text(resp),
+                    "tool_calls": extract_tool_calls(resp),
+                    "usage": ru,
+                    "_raw": resp,
+                }
+
+            if journal is None:
+                return await _producer()
+            return await journal(
+                f"tools.llm.{label}",
+                _fingerprint("tools.llm", label),
+                _producer,
+                encode=lambda d: {k: v for k, v in d.items() if k != "_raw"},
+            )
+
+        async def _tool_step(label: str, calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+            async def _producer() -> list[dict[str, Any]]:
+                out: list[dict[str, Any]] = []
+                plat_calls = [c for c in calls if c["name"] not in local_by_name]
+                loc_calls = [c for c in calls if c["name"] in local_by_name]
+                if plat_calls:
+                    tmsgs, records = await run_tool_calls(
+                        plat_calls, caller="agentkit", related_id=related,
+                        extra={"agent_key": self._agent_key},
+                    )
+                    for m, r in zip(tmsgs, records, strict=False):
+                        out.append({
+                            "name": r["name"], "id": r["id"],
+                            "content": getattr(m, "content", "")
+                            or json.dumps(r["result"], ensure_ascii=False, default=str),
+                        })
+                        self.emit(StreamEvent(
+                            type=StreamEventType.tool_result,
+                            data={"name": r["name"], "id": r["id"], "result": r["result"]},
+                        ))
+                for c in loc_calls:
+                    spec = local_by_name[c["name"]]
+                    result = await self._exec_local(spec, c["args"])
+                    out.append({
+                        "name": c["name"], "id": c["id"] or c["name"],
+                        "content": json.dumps(result, ensure_ascii=False, default=str),
+                    })
+                    self.emit(StreamEvent(
+                        type=StreamEventType.tool_result,
+                        data={"name": c["name"], "id": c["id"], "result": result},
+                    ))
+                return out
+
+            if journal is None:
+                return await _producer()
+            return await journal(
+                f"tools.exec.{label}", _fingerprint("tools.exec", label), _producer
+            )
+
         async with observe(
             observation_type="span",
             name="agent.tools",
             request_id=_scoped_observation_id("agent.tools"),
         ):
             for _step in range(max_steps):
-                # 每步 LLM 调用瞬时错误退避重试（与 ctx.complete 同语义；非瞬时直接抛）。
-                resp = await _retry_transient(
-                    lambda: client.ainvoke(convo), retries=self._retries
-                )
-                round_usage = extract_usage(resp)
-                if not (round_usage or {}).get("total_tokens"):
-                    # 模型未透出 usage → 成本闸本轮静默不咬（流式/部分模型已知现象），记 debug
-                    logger.debug(
-                        "tool-loop 本轮无 usage，成本闸未计费 agent={}", self._agent_key
-                    )
-                usage = merge_usage(usage, round_usage)
-                self._charge((round_usage or {}).get("total_tokens", 0))  # 计入成本闸
-                self.track_usage(round_usage)  # 计入本次运行 usage（供 A2A 上报）
-                calls = extract_tool_calls(resp)
+                step_data = await _llm_step(str(_step))
+                first_run = "_raw" in step_data  # producer 真跑过（非 journal 重放命中）
+                # _charge 首跑+重放都执行 → 预算确定性演进（重放截断点与首跑一致）；track_usage 仅
+                # 首跑（在 producer 内）避免重放重复计 run 总账。
+                self._charge((step_data["usage"] or {}).get("total_tokens", 0))
+                usage = merge_usage(usage, step_data["usage"])
+                calls = step_data["tool_calls"]
                 if not calls:
-                    text = _content_to_text(resp)
-                    if text:
-                        yield text
+                    if step_data["content"]:
+                        yield step_data["content"]
                     return
-
-                convo.append(resp)  # AIMessage（带 tool_calls）
-                for c in calls:
-                    self.emit(
-                        StreamEvent(
+                if first_run:
+                    convo.append(step_data["_raw"])  # 真 AIMessage（重放 convo 不用 → 跳过）
+                    for c in calls:
+                        self.emit(StreamEvent(
                             type=StreamEventType.tool_call,
                             data={"name": c["name"], "args": c["args"], "id": c["id"]},
-                        )
+                        ))
+                batch = await _tool_step(str(_step), calls)
+                # 从 batch 重建 tool_msgs 入 convo（首跑供下一步真 LLM；重放 convo 不用，无害）
+                for item in batch:
+                    convo.append(
+                        ToolMessage(content=item["content"], tool_call_id=item["id"])
                     )
-
-                plat_calls = [c for c in calls if c["name"] not in local_by_name]
-                loc_calls = [c for c in calls if c["name"] in local_by_name]
-                tool_msgs: list[Any] = []
-
-                if plat_calls:
-                    msgs, records = await run_tool_calls(
-                        plat_calls,
-                        caller="agentkit",
-                        related_id=related,
-                        extra={"agent_key": self._agent_key},
-                    )
-                    tool_msgs.extend(msgs)
-                    for r in records:
-                        self.emit(
-                            StreamEvent(
-                                type=StreamEventType.tool_result,
-                                data={"name": r["name"], "id": r["id"], "result": r["result"]},
-                            )
-                        )
-
-                for c in loc_calls:
-                    spec = local_by_name[c["name"]]
-                    result = await self._exec_local(spec, c["args"])
-                    tool_msgs.append(
-                        ToolMessage(
-                            content=json.dumps(result, ensure_ascii=False, default=str),
-                            tool_call_id=c["id"] or c["name"],
-                        )
-                    )
-                    self.emit(
-                        StreamEvent(
-                            type=StreamEventType.tool_result,
-                            data={"name": c["name"], "id": c["id"], "result": result},
-                        )
-                    )
-
-                convo.extend(tool_msgs)
-
-                # 成本闸：agent token 预算耗尽 / 本轮循环累计超 max_tokens → 截断收口
                 loop_total = (usage or {}).get("total_tokens", 0)
                 if self._budget <= 0:
                     truncate_reason = "agent token 预算耗尽"
@@ -486,24 +510,16 @@ class InProcessTransport(RuntimeTransport):
                     truncate_reason = f"工具循环 token 超上限 {max_tokens}"
                     break
 
-            # 截断收口：标记 + 最后一次无强制工具的收口回答
-            self.emit(
-                StreamEvent(
-                    type=StreamEventType.step,
-                    data={
-                        "name": "tool-loop",
-                        "status": "success",
-                        "output": {"note": f"{truncate_reason}，强制收口"},
-                    },
-                )
-            )
-            final = await client.ainvoke(convo)
-            final_usage = extract_usage(final)  # 收口这次也计账（评审2：否则截断后超支一次）
-            self._charge((final_usage or {}).get("total_tokens", 0))
-            self.track_usage(final_usage)
-            text = _content_to_text(final)
-            if text:
-                yield text
+            # 截断收口：标记 + 最后一次无强制工具的收口回答（也逐步 journal）
+            self.emit(StreamEvent(
+                type=StreamEventType.step,
+                data={"name": "tool-loop", "status": "success",
+                      "output": {"note": f"{truncate_reason}，强制收口"}},
+            ))
+            final_data = await _llm_step("final")
+            self._charge((final_data["usage"] or {}).get("total_tokens", 0))
+            if final_data["content"]:
+                yield final_data["content"]
 
     async def _exec_local(self, spec: ToolSpec, args: dict[str, Any]) -> dict[str, Any]:
         """执行作者本地 @tool，落 TOOL 观测，异常收敛成 ok=False。"""

@@ -137,6 +137,7 @@ class FakeTransport(RuntimeTransport):
         local_tools: list[ToolSpec],
         max_steps: int,
         max_tokens: int | None = None,
+        journal: Any = None,  # durable 逐步 journal（FakeTransport 不支持，签名一致即可）
     ) -> AsyncIterator[str]:
         # 简化但确定：依次执行编程好的 tool_calls（命中本地工具），最后 yield reply。
         # 注意：与站内 InProcess 不同，这里**不 emit** tool_call/tool_result/step 事件——

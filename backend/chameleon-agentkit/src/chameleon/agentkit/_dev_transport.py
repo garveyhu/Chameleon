@@ -210,6 +210,7 @@ class HttpDevTransport(RuntimeTransport):
         local_tools: list[ToolSpec],
         max_steps: int,
         max_tokens: int | None = None,  # dev 不强制预算，仅签名一致
+        journal: Any = None,  # durable 逐步 journal（dev 不支持，签名一致即可）
     ) -> AsyncIterator[str]:
         plat = list(dict.fromkeys([*self._tool_keys, *(platform_keys or [])]))
         # dev 本地直连 @agent(mcp_servers=) 的 MCP server，把工具并入本地工具集（与站内

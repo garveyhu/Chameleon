@@ -36,24 +36,76 @@ def _durable_run(run_id: str) -> AgentRun:
     )
 
 
+_crash_exec = {"n": 0}
+
+
+@tool(name="_t_crash_tool", description="counts executions")
+async def _crash_tool() -> dict:
+    _crash_exec["n"] += 1
+    return {"ok": True}
+
+
+class _CrashThenFinalChat:
+    """跨两次 run 共享调用计数：①出 tool_calls ②循环中途崩溃(raise) ③(恢复)出最终文本。"""
+
+    def __init__(self, state: dict) -> None:
+        self.state = state
+
+    def bind_tools(self, schemas):  # noqa: ANN001
+        return self
+
+    async def ainvoke(self, convo, **kw):  # noqa: ANN001
+        self.state["n"] += 1
+        n = self.state["n"]
+        if n == 1:  # step0：出 tool_calls
+            class _M:
+                tool_calls = [{"name": "_t_crash_tool", "args": {}, "id": "c1"}]
+                content = ""
+                usage_metadata = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+
+            return _M()
+        if n == 2:  # step1 LLM：工具已执行+journal 后，这里崩溃（非瞬时 → 不重试，传播）
+            raise RuntimeError("模拟循环中途崩溃")
+
+        class _F:  # 恢复后 step1 重跑：出最终文本
+            tool_calls: list = []
+            content = "恢复后的最终答案"
+            usage_metadata = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+
+        return _F()
+
+
 @pytest.mark.asyncio
-async def test_run_with_tools_loop_not_reinvoked_on_replay(monkeypatch) -> None:
-    """粗粒度契约：重放整个工具循环不被重新驱动（run_tool_loop 跨两次 run 只调一次）。"""
+async def test_mid_loop_crash_recovery_no_retool(monkeypatch) -> None:
+    """fine-grained 核心价值：循环**中途崩溃**后恢复，已完成的工具步不重执行（LangGraph 短板的反例）。
+
+    run1：LLM step0(journal) → 工具执行(journal) → LLM step1 崩溃（工具批已 journal）。
+    run2(同 run_id 恢复)：step0/工具批 journal-hit（工具零再执行）→ step1 重跑出最终答案续完。
+    """
     await _clean()
-    loop_calls = {"n": 0}
+    _crash_exec["n"] = 0
+    chat_state = {"n": 0}
+    chat = _CrashThenFinalChat(chat_state)
+    monkeypatch.setattr(
+        InProcessTransport, "chat_model",
+        lambda self, *, slot=None, model=None: chat,
+    )
+    rid = "rid-crash-1"
 
-    async def fake_loop(self, **kw):  # noqa: ANN001, ANN202
-        loop_calls["n"] += 1
-        yield "工具答案"
+    # run1：崩溃在 step1 LLM（工具已执行 1 次 + journal）
+    with pytest.raises(RuntimeError, match="崩溃"):
+        async for _ in _durable_run(rid).run_with_tools(user="查天气", tools=[_crash_tool]):
+            pass
+    assert _crash_exec["n"] == 1, "run1 工具执行一次"
+    assert chat_state["n"] == 2, "run1 跑了 step0 + step1(崩溃)"
 
-    monkeypatch.setattr(InProcessTransport, "run_tool_loop", fake_loop)
-
-    rid = "rid-rwt-1"
-    out1 = "".join([d async for d in _durable_run(rid).run_with_tools(user="查天气")])
-    assert loop_calls["n"] == 1 and out1 == "工具答案"
-    out2 = "".join([d async for d in _durable_run(rid).run_with_tools(user="查天气")])
-    assert loop_calls["n"] == 1, "重放不应重跑工具循环"
-    assert out2 == "工具答案"
+    # run2：恢复 → step0/工具批 journal-hit（工具零再执行）→ step1 重跑续完
+    out = "".join(
+        [d async for d in _durable_run(rid).run_with_tools(user="查天气", tools=[_crash_tool])]
+    )
+    assert out == "恢复后的最终答案"
+    assert _crash_exec["n"] == 1, "恢复不应重执行已完成的工具（fine-grained 关键）"
+    assert chat_state["n"] == 3, "恢复只重跑崩溃的 step1，step0/工具批走 journal"
     await _clean()
 
 
