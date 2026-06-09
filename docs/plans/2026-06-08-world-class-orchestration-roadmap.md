@@ -307,3 +307,31 @@ marketplace 从 plugin 扩到 agent（`type='agent'` bundle + `agentkit publish`
 A2A/RAG/多模型/MCP/沙箱/多模态生成）全经真后端端到端验证、文本 6 项固化进可重跑门。框架从"全面
 验证的强候选（7.0）"推进到 **"全能力真实运行验证通过（~7.8/10）"**——剩余距顶级的差距是**外部
 真实采用规模**（社区 star/PR/生产案例），属时间 + 运营，非技术。
+
+## 12. open A2A 旗舰 + 校准续建（截至评审21：技术面 8.3）
+
+§11 之后又系统补完一批**非投机 / 非 gated / 非用户域**的真路线图项（用户持续触发 loop 续建；
+评审"分数被采用锁死"与指令"继续建"不矛盾——建能力面提升技术、采用分数等 license）：
+
+- ✅ **T1-3 开放 A2A（智能体互操作旗舰，~9 周期 + 评审19/20 两轮安全审）**：对齐 Google Agent2Agent。
+  出站 `ctx.call_agent("https://…")` 调远程 A2A（客户端 `integrations/a2a`）+ 入站 `/a2a/{key}` 暴露
+  自家 agent（AgentCard spec 合规：绝对 url + protocolVersion 0.2.0 + preferredTransport，外部标准
+  A2A 客户端可消费）+ 跨系统 HITL（A2A `input-required` == `ctx.ask_human`，暂停-恢复 live e2e 真 Qwen）。
+  安全（变异+curl 验）：沙箱禁 egress、跨系统 depth 上限、入站 fail-closed + 条件挂载、resume 一次性
+  防决策翻转、远程预算/输出不可信。这直接堵住第 8 节"致命风险 #1 私有协议锁定"里**最战略的一面**
+  （A2A 从私有进程内升级到标准互操作）。
+- ✅ **T3-6 API 冻结门禁**（CI 机器强制 `__all__` + ctx 面 + 必备参数，frozen-SDK 契约不再靠人工）。
+- ✅ **T3-4 `agentkit dev` 热重载**（watch 源文件改动即重跑，作者开发闭环）。
+- ✅ **T5-5 SDK cookbook**（`docs/agentkit-cookbook.md` 10 任务导向食谱，每则挂真实已测 example）。
+- ✅ **e2e 可重跑门 8→11**（`scripts/e2e_real_agents.py`，加 a2a-inbound + a2a-hitl 跨系统，11/11 真 Qwen）。
+
+**评审21 全局复核（~21 轮评审）裁决：技术面 8.3，零回退（97+53 单测 + 3 import-linter 契约 +
+11/11 真 Qwen e2e 全绿），话术诚实性罕见高（无"声称世界级实则单薄"的虚 face）**。P0≈80% / P1≈35%
+真完成。复核提的 3 个"自主待办"经核实大多不成立（T1-2 OTel 出站已完成于 `integrations/otel_export/`、
+沙箱回归门大部已覆盖、durable 扩 tools 是评审自标幂等风险的投机 epic）——**反向再次确认技术面自主
+天花板**。
+
+**剩余距"世界顶级"的杠杆**：① **外部采用**（最高 ROI，被"跳过 license"决定锁死——要开源采用须先落
+LICENSE）② 需真实生产/跨系统信号才该做的项（A2A api_key scope 生产鉴权、配额硬闸 T4-4、durable 全
+ctx、版本化/规模化）——无信号前做属投机。**技术面已到自主可做的合理终点；下一步主导项是 license 决定
+与外部采用，非继续写代码。**
