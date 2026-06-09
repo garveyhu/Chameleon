@@ -22,7 +22,11 @@ from typing import Any
 from loguru import logger
 
 from chameleon.agentkit import AgentPaused, AgentRun, RuntimeTransport
-from chameleon.agentkit._runtime import _PENDING_KEY, _content_to_text
+from chameleon.agentkit._runtime import (
+    _PENDING_KEY,
+    _content_to_text,
+    _retry_transient,
+)
 from chameleon.agentkit._spec import (
     Doc,
     MediaResult,
@@ -112,8 +116,11 @@ class InProcessTransport(RuntimeTransport):
         mcp_tools: list[ToolSpec] | None = None,
         call_agents: list[str] | None = None,
         sandboxed: bool = False,
+        retries: int = 0,
     ) -> None:
         self._agent_key = agent_key
+        #: ctx LLM 调用瞬时错误退避重试次数（run_tool_loop 每步 ainvoke 复用）。
+        self._retries = max(0, int(retries))
         #: 该 agent 是否声明沙箱（不可信）执行——禁其出站远程 A2A egress（评审19 #1）：沙箱
         #: --network none 被 broker（主进程有网）绕过，自声明 call_agents 白名单对不可信代码无效。
         self._sandboxed = sandboxed
@@ -402,7 +409,10 @@ class InProcessTransport(RuntimeTransport):
             request_id=_scoped_observation_id("agent.tools"),
         ):
             for _step in range(max_steps):
-                resp = await client.ainvoke(convo)
+                # 每步 LLM 调用瞬时错误退避重试（与 ctx.complete 同语义；非瞬时直接抛）。
+                resp = await _retry_transient(
+                    lambda: client.ainvoke(convo), retries=self._retries
+                )
                 round_usage = extract_usage(resp)
                 if not (round_usage or {}).get("total_tokens"):
                     # 模型未透出 usage → 成本闸本轮静默不咬（流式/部分模型已知现象），记 debug
@@ -948,6 +958,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             mcp_tools=mcp_tools,
             call_agents=list(manifest.call_agents or []),
             sandboxed=manifest.sandboxed,  # 沙箱 agent 禁出站远程 A2A（评审19 #1）
+            retries=getattr(manifest, "retries", 0),  # ctx 弹性：瞬时错误退避重试
         )
         # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
         # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。
@@ -967,6 +978,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             # 隔离。resume 时须以同 request_id 重新 invoke（重放至 ask 点续跑）。
             durable=manifest.durable,
             run_id=ctx.request_id,
+            retries=getattr(manifest, "retries", 0),  # ctx 弹性：ctx.complete 瞬时退避重试
         )
 
         # durable resume：resume 端点以同 request_id 重新 invoke 并经 context_vars 带回人工答案，

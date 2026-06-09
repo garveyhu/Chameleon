@@ -26,6 +26,56 @@ if TYPE_CHECKING:
 _log = logging.getLogger(__name__)
 
 
+#: 瞬时错误的 HTTP 状态码（退避重试）；其余（4xx 校验类）不重试。
+_TRANSIENT_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+#: 瞬时错误的异常类名片段（小写匹配；rate limit / timeout / 5xx / 连接 / 过载）。
+_TRANSIENT_NAME_HINTS = (
+    "ratelimit", "timeout", "serviceunavailable", "apiconnection",
+    "internalserver", "overloaded", "connectionerror", "temporarilyunavailable",
+    "apitimeout", "503", "502", "429",
+)
+#: 指数退避基（秒）：第 n 次重试等 base * 2**n。测试可 monkeypatch 为 0 跳过真 sleep。
+_RETRY_BASE_DELAY = 0.5
+
+
+def _is_transient_error(exc: BaseException) -> bool:
+    """该异常是否瞬时（可退避重试）：rate limit / timeout / 5xx / 连接错误 → True；
+    其余（4xx / 结构化解析 / 校验 / 逻辑错误）→ False（直接抛，不空转重试）。"""
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    for attr in ("status_code", "http_status", "code", "status"):
+        v = getattr(exc, attr, None)
+        if isinstance(v, int) and v in _TRANSIENT_STATUS:
+            return True
+    name = type(exc).__name__.lower()
+    return any(h in name for h in _TRANSIENT_NAME_HINTS)
+
+
+async def _retry_transient(producer: Any, *, retries: int) -> Any:
+    """对 producer()（返 awaitable）的**瞬时**错误退避重试。
+
+    非瞬时错误立刻抛；瞬时错误重试至 retries 次仍失败抛最后一次。retries<=0 等于不重试。
+    durable 下由调用方把本函数包进 memoize 的 producer 内——重试成功后才记 journal（重放不重试）。
+    """
+    import asyncio
+
+    attempt = 0
+    while True:
+        try:
+            return await producer()
+        except Exception as exc:  # noqa: BLE001 —— 统一重试边界
+            if attempt >= retries or not _is_transient_error(exc):
+                raise
+            delay = _RETRY_BASE_DELAY * (2**attempt)
+            _log.warning(
+                "ctx LLM 瞬时错误，%.2fs 后重试 (%d/%d): %s",
+                delay, attempt + 1, retries, exc,
+            )
+            if delay > 0:
+                await asyncio.sleep(delay)
+            attempt += 1
+
+
 class KbHandle(Protocol):
     """`ctx.kb` —— 知识库检索门面。"""
 
@@ -310,8 +360,11 @@ class AgentRun:
         attachments: list[dict[str, Any]] | None = None,
         durable: bool = False,
         run_id: str | None = None,
+        retries: int = 0,
     ) -> None:
         self._t = transport
+        #: ctx LLM 调用瞬时错误自动退避重试次数（@agent(retries=) → manifest → 此处）。
+        self._retries = max(0, int(retries))
         self.agent_key = agent_key
         self.query = query
         self.messages = messages
@@ -373,8 +426,13 @@ class AgentRun:
             structured = self._t.structured_model(
                 slot=None if model else slot, model=model, schema=schema
             )
-            async with self._t.span("llm.complete", type="span"):
-                resp = await structured.ainvoke(msgs, **kw)
+
+            async def _scall() -> Any:
+                async with self._t.span("llm.complete", type="span"):
+                    return await structured.ainvoke(msgs, **kw)
+
+            # 瞬时退避重试（结构化解析失败非瞬时 → 不重试，直接抛）。
+            resp = await _retry_transient(_scall, retries=self._retries)
             self._t.track_usage(_usage_of(resp))
             return resp
 
@@ -385,10 +443,13 @@ class AgentRun:
             self._t.track_usage(_usage_of(resp))
             return _content_to_text(resp)
 
+        # 瞬时退避重试包在 memoize 的 producer 内：durable 下重试成功才记 journal（重放不重试）。
         # 指纹纳入全部影响输出的入参（评审16 🟠：仅 system+user 漏 slot/model/context → 换 model
         # 重放会静默返旧答案）。这样换 model/context 即指纹不符、重放报错而非静默错乱。
         return await self._memoize(
-            "complete", _fingerprint(system, user, slot, model, context), _call
+            "complete",
+            _fingerprint(system, user, slot, model, context),
+            lambda: _retry_transient(_call, retries=self._retries),
         )
 
     def _durable_guard(self, name: str) -> None:

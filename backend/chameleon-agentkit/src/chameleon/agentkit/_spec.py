@@ -167,6 +167,9 @@ class AgentManifest:
     #: 对话压成稠密观察落保留键 __chm_observations__，下轮自动注入 system——长对话上下文不爆窗口。
     #: 默认关（避免给所有 agent 偷偷加后台 LLM 成本，opt-in）。
     observe_memory: bool = False
+    #: ctx LLM 调用的瞬时错误（rate limit / timeout / 5xx / 连接）自动退避重试次数。默认 2
+    #: （Temporal 式每调用自动重试是 2026 标配）；非瞬时错误（4xx / 解析 / 校验）直接抛不重试。
+    retries: int = 2
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False
