@@ -1,13 +1,14 @@
 # chameleon-agentkit
 
-Chameleon 编码智能体作者 SDK。**只写业务逻辑**——模型、知识库、工具、追踪、记忆、子智能体、多模态都从一个绑定了「本 agent 配置 + 本次请求」的运行时 `ctx` 隐式拿到。同一份 `handle` 代码，换 transport 即换运行环境：本机脱平台跑 → 连 dev 服务自测 → 提交进 `chameleon-agents/` 站内运行，零改动。
+Chameleon 平台**内置的**编码智能体作者 SDK（面向本仓库 / 平台内的 agent 开发，非对外发布的 PyPI 公开包）。**只写业务逻辑**——模型、知识库、工具、追踪、记忆、子智能体、多模态都从一个绑定了「本 agent 配置 + 本次请求」的运行时 `ctx` 隐式拿到。同一份 `handle` 代码，换 transport 即换运行环境：本机脱平台跑 → 连 dev 服务自测 → 提交进 `chameleon-agents/` 站内运行，零改动。
 
-## 30 秒 quickstart（脱平台）
+## 30 秒 quickstart（脱平台本地自测）
 
-> ⚠️ 尚未发布到 PyPI。当前请从仓库 workspace 本地装：`cd backend && uv sync`（或
-> `pip install -e chameleon-agentkit`）。下方 `pip install chameleon-agentkit` 是发布后的目标用法。
+> 内部 SDK，从 workspace 安装：`cd backend && uv sync`（workspace 已含），或可编辑装
+> `pip install -e backend/chameleon-agentkit`。下方 `standalone` 模式用于作者在本机脱平台快速自测
+> agent 逻辑（提交进 `chameleon-agents/` 后由平台进程内运行）。
 
-只装 SDK + 自带模型 key，不连任何站点：
+装 SDK + 自带模型 key，不连任何站点即可本地自测：
 
 ```python
 import asyncio
@@ -25,7 +26,7 @@ print(asyncio.run(run_standalone(handle, "用一句话介绍你自己", transpor
 ```
 
 ```bash
-pip install chameleon-agentkit langchain-openai
+pip install -e backend/chameleon-agentkit langchain-openai  # 内部 SDK：从 workspace 可编辑装
 python hello.py
 ```
 
@@ -76,7 +77,7 @@ async def handle(ctx: AgentRun):
 服务端 `.env` 设 `CHAMELEON_DEV_TOKEN=<token>` 开启 dev 端点，然后：
 
 ```bash
-pip install "chameleon-agentkit[dev]"
+pip install -e "backend/chameleon-agentkit[dev]"   # 内部 SDK：workspace 可编辑装（带 dev 额外依赖）
 export CHAMELEON_DEV_URL=http://localhost:7009
 export CHAMELEON_DEV_TOKEN=<同上 token>
 
@@ -92,7 +93,7 @@ agentkit dev  my_agent -i "..."  # watch 源文件，改动即热重载重跑（
 
 把 agent 包源码提交进 `backend/chameleon-agents/<name>/`（声明 entry-point `chameleon.agents`）。服务端启动发现 + 对账自动建 DB 行 → 注册运行。**同一份代码**站内走 `InProcessTransport` 进程内跑，无需任何改动。
 
-## ctx 能力面（冻结公共 API）
+## ctx 能力面（冻结的内部 API 契约）
 
 | 能力 | 方法 |
 |---|---|
@@ -114,4 +115,4 @@ agentkit dev  my_agent -i "..."  # watch 源文件，改动即热重载重跑（
 
 每种资源都能在**代码里完全指定**（`ctx.llm(model="qwen-plus")`、`ctx.kb.search(kbs=[...])`、`@tool` 本地工具），web 仅是降低简单 agent 门槛的便捷托管层、非必经。复杂 agent 完全不依赖前端。
 
-冻结纪律：`chameleon.agentkit.__init__` 是公共 API，只增不改；破坏性变更走 major 版本。
+冻结纪律：`chameleon.agentkit.__init__` 是**平台内部稳定 API 契约**（站内所有 agent 依赖它），只增不改；破坏性变更须协调所有内部 agent + 显式更新冻结基线（`test_public_api_frozen.py` CI 门拦）。

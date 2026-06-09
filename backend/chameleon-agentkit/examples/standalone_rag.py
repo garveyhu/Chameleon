@@ -1,4 +1,4 @@
-"""脱平台 RAG 示例 —— `pip install chameleon-agentkit langchain-openai` 后直接 `python` 跑。
+"""脱平台 RAG 示例 —— 装好内部 SDK + langchain-openai 后直接 `python` 跑（本机自测）。
 
 演示用 agentkit 在**任意环境、不连 Chameleon 平台**写一个"对我的文档问答"的 RAG 智能体：
 检索本地知识库 → 把命中文档作为上下文喂给模型 → 流式作答。同一份 `handle` 代码提交到平台

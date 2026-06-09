@@ -1,4 +1,4 @@
-"""脱平台多智能体编排示例 —— `pip install chameleon-agentkit langchain-openai` 后直接跑。
+"""脱平台多智能体编排示例 —— 装好内部 SDK + langchain-openai 后直接跑（本机自测）。
 
 演示 agentkit 的差异化卖点：**多智能体编排就是普通 Python 代码 + ctx 原语**，不需画图、不需
 学 DSL。这里一个"辩论主持"agent 用 `ctx.gather` 并行扇出到正/反两个专家子 agent，再综合两方

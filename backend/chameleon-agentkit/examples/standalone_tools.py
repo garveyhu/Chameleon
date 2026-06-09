@@ -1,4 +1,4 @@
-"""脱平台工具调用（ReAct）示例 —— `pip install chameleon-agentkit langchain-openai` 后直接跑。
+"""脱平台工具调用（ReAct）示例 —— 装好内部 SDK + langchain-openai 后直接跑（本机自测）。
 
 演示带工具的智能体：声明本地 `@tool`，`ctx.run_with_tools` 自动跑 ReAct 循环（模型出 tool_calls
 → 框架执行你的工具 → 回填续跑 → 出最终答案）。本地工具随代码走，无需任何平台配置；提交平台后

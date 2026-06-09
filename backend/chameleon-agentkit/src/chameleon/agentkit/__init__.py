@@ -17,8 +17,9 @@
 降低简单 agent 门槛的便捷层、非必经——复杂 agent 可在代码里 `ctx.llm(model=...)`
 / `ctx.kb.search(kbs=[...])` 直接点名，完全不依赖前端（见设计文档 §3.1）。
 
-本模块即冻结的公共 API；内部实现（routing / kb / observe / registry）一律私有、
-可随意重构。破坏性变更走 major 版本。
+本模块即冻结的**内部稳定 API 契约**（平台内所有 agent 依赖它）；内部实现（routing / kb /
+observe / registry）一律私有、可随意重构。破坏性变更须协调所有内部 agent（这是平台内部 SDK，
+非对外公开发布的包）。
 """
 
 from chameleon.agentkit._decorator import agent, declared_agents, tool

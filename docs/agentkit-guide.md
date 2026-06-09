@@ -4,7 +4,8 @@ Chameleon 的 `agentkit` 让你**只写业务逻辑**：声明一个 `@agent`、
 平台隐式接管模型、知识库、工具、子智能体、记忆、多模态、追踪、计费、MCP 互操作、嵌入式
 分发。同一份代码两种跑法——本地 `agentkit chat` 离线自测、提交后站内进程内运行，行为一致。
 
-> 公共面 `chameleon.agentkit` 是冻结契约（只增不改）。`chameleon.agentkit.testing` 同。
+> `chameleon.agentkit` 是平台**内部稳定 API 契约**（站内所有 agent 依赖），冻结只增不改；
+> `chameleon.agentkit.testing` 同。这是内部 SDK——面向本平台的 agent 开发，非对外发布的公开包。
 >
 > 本册是**概念/API 参考**；想直接照着「我要建某类 agent」的任务找最短可跑食谱，见
 > [agentkit-cookbook.md](./agentkit-cookbook.md)（RAG/工具/编排/分诊/HITL/MCP/多模态/跨系统 A2A/结构化）。
@@ -79,10 +80,10 @@ agentkit dev  my_pkg.agent -i "北京天气"          # watch 源文件，改动
 dev 态 ctx 的模型/KB/工具/结构化/记忆/子智能体/MCP 工具都经 `/v1/dev/*` 用站内已配置资源跑，
 作者无需本地凭据。每轮答完打印本地 **trace 树**（各段耗时+嵌套）。
 
-### 完全脱平台跑（`pip install` 即用，不连任何站点）
+### 完全脱平台跑（standalone 本地自测，不连任何站点）
 
-`StandaloneTransport` 让你**只装 SDK + 自带模型 key** 就能在任意环境跑 @agent——无需 Chameleon
-平台/dev 服务。同一份 `handle` 代码，换 transport 即换运行环境：
+`StandaloneTransport` 让你**装上内部 SDK + 自带模型 key** 就能在本机脱平台跑 @agent——无需 Chameleon
+平台/dev 服务，适合作者提交进站前的快速本地验证。同一份 `handle` 代码，换 transport 即换运行环境：
 
 ```python
 from chameleon.agentkit.standalone import StandaloneTransport, run_standalone

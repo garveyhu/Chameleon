@@ -1,4 +1,5 @@
-"""agentkit 脱平台独立运行 —— `pip install chameleon-agentkit` 即可在任意环境跑 @agent。
+"""agentkit 脱平台独立运行 —— 装上内部 SDK（workspace 可编辑装）即可在本机脱平台跑 @agent，
+便于作者提交进站前的本地自测。
 
 `StandaloneTransport` 是 `RuntimeTransport` 的「无平台」实现：模型走作者自带的 LangChain chat
 model（自己的 key），记忆走本地 dict，知识库走传入的本地 Doc 列表，工具循环是真 ReAct，子
