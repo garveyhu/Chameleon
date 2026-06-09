@@ -18,11 +18,11 @@ from loguru import logger
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from chameleon.aikit.tasks.eval.judges import JUDGES
 from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.core.api.response import PageParams, PageResult
 from chameleon.data.models import Dataset, EvalJob, EvalJobRun, EvalTemplate
 from chameleon.system.datasets import runner as ds_runner
-from chameleon.aikit.tasks.eval.judges import JUDGES
 from chameleon.system.eval_jobs.alert import maybe_send_alert
 from chameleon.system.eval_jobs.schemas import (
     CreateEvalJobRequest,

@@ -21,11 +21,11 @@ from sqlalchemy import select
 from chameleon.api.knowledge import chunker, parsers, storage
 from chameleon.api.task import service as task_service
 from chameleon.core.config import inventory
-from chameleon.integrations.embedding import ImageEmbedder, get_embedding_client
 from chameleon.core.vector import ChunkPayload
 from chameleon.data.infra.db import AsyncSessionLocal
 from chameleon.data.models import Chunk, Document, KnowledgeBase
 from chameleon.data.utils.tokenizer import approx_tokens
+from chameleon.integrations.embedding import ImageEmbedder, get_embedding_client
 from chameleon.integrations.vector import get_store
 
 # 模块级 semaphore，按 kb_ingest_concurrency() lazy init

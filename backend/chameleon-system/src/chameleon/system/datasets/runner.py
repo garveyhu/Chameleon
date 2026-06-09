@@ -44,7 +44,7 @@ from chameleon.system.api_key.service import (
     aggregate_generation_rollup,
     record_call,
 )
-from chameleon.aikit.tasks.eval.judges import (
+from chameleon.system.datasets.judges import (
     JUDGES,
     LLM_JUDGES,
     JudgeResult,
@@ -454,7 +454,7 @@ async def _run_llm_judge(
     - gsb：按 reference 判 G/S/B；reference 缺失返 score=None（无参照不可评）。
     """
     from chameleon.aikit import LLMRunner
-    from chameleon.aikit.tasks.eval.judges import _flatten_str
+    from chameleon.system.datasets.judges import _flatten_str
 
     cfg = config or {}
     criteria = cfg.get("criteria")
