@@ -20,6 +20,7 @@ S5 切面收口的核心：
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from typing import Any
@@ -99,13 +100,33 @@ def _usage_from_response(response: Any) -> tuple[int | None, int | None, int | N
     return prompt, completion, total
 
 
+def _tool_calls_text(msg: Any) -> str:
+    """结构化输出 / 工具调用的回退表示：with_structured_output(function_calling) 与 ReAct 中间步
+    的结果落在 message.tool_calls（content 为空），取 name(args_json)，否则 trace 输出会是空的。"""
+    tcs = getattr(msg, "tool_calls", None)
+    if not tcs:
+        return ""
+    parts: list[str] = []
+    for tc in tcs:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", None)
+        try:
+            args_s = json.dumps(args, ensure_ascii=False)
+        except (TypeError, ValueError):
+            args_s = str(args)
+        parts.append(f"{name}({args_s})" if name else args_s)
+    return "\n".join(parts)
+
+
 def _output_text(response: Any) -> str:
-    """从 LLMResult 取 assistant 输出（首个 generation 的 message.content）"""
+    """从 LLMResult 取 assistant 输出：优先 message.content；content 空时回退 tool_calls
+    （结构化输出 ctx.route / ctx.complete(schema=) 与 ReAct 工具步的结果都在 tool_calls，
+    content 为空——不回退则 trace 输出列全空）。"""
     try:
         gen = response.generations[0][0]
         msg = getattr(gen, "message", None)
         if msg is not None:
-            return _content_of(msg)
+            return _content_of(msg) or _tool_calls_text(msg)
         return getattr(gen, "text", "") or ""
     except (AttributeError, IndexError):
         return ""

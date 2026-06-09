@@ -190,26 +190,36 @@ async def dev_call_agent(
     parts: list[str] = []
     done_answer = ""  # 非流式 agent（如非流式 graph）答案只在 done 事件，不在 delta（评审17 回退）
     pending: dict[str, Any] | None = None
+    # dev 调用本无 TraceContext → 内部 LLM 调用全兜底落 channel='internal'/agent='internal'/无会话，
+    # 污染 Trace 观测且无法识别。开 trace scope 把它们归到真 agent + channel='dev'（可按渠道过滤掉
+    # 本地自测流量）。
+    from chameleon.core.observe.context import TraceContext, open_trace_scope
+
     try:
-        async for ev in provider.stream(ctx):
-            if ev.type == StreamEventType.delta:
-                parts.append(ev.data.get("text", ""))
-            elif ev.type == StreamEventType.done:
-                # 镜像 _StreamAggregator：done 带非空 answer 时覆盖 delta 累积（非流式答案节点的图
-                # 作 A2A 子智能体时答案只在此，否则 delta-only 扫描会静默丢答案）。
-                done_answer = (ev.data or {}).get("answer") or done_answer
-            elif (
-                ev.type == StreamEventType.step
-                and ev.data.get("name") == "human_input_pending"
-            ):
-                pending = {
-                    "call_index": ev.data.get("call_index"),
-                    "prompt": ev.data.get("prompt"),
-                    "run_id": ev.data.get("run_id"),
-                }
-            elif ev.type == StreamEventType.error:
-                return {"answer": "", "error": ev.data.get("message", "子智能体执行失败"),
-                        "run_id": rid}
+        async with open_trace_scope(
+            TraceContext(
+                channel="dev", agent_key=target, session_id=rid, request_id=rid, app_id="dev"
+            )
+        ):
+            async for ev in provider.stream(ctx):
+                if ev.type == StreamEventType.delta:
+                    parts.append(ev.data.get("text", ""))
+                elif ev.type == StreamEventType.done:
+                    # 镜像 _StreamAggregator：done 带非空 answer 时覆盖 delta 累积（非流式答案节点的
+                    # 图作 A2A 子智能体时答案只在此，否则 delta-only 扫描会静默丢答案）。
+                    done_answer = (ev.data or {}).get("answer") or done_answer
+                elif (
+                    ev.type == StreamEventType.step
+                    and ev.data.get("name") == "human_input_pending"
+                ):
+                    pending = {
+                        "call_index": ev.data.get("call_index"),
+                        "prompt": ev.data.get("prompt"),
+                        "run_id": ev.data.get("run_id"),
+                    }
+                elif ev.type == StreamEventType.error:
+                    return {"answer": "", "error": ev.data.get("message", "子智能体执行失败"),
+                            "run_id": rid}
     except Exception:
         from loguru import logger
 
