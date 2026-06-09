@@ -793,6 +793,56 @@ async def update_agent_config(
     return Result.ok(_build_config_schema(agent))
 
 
+# ── 高级能力（@agent 声明的 MCP / A2A / 沙箱 / durable）—— 运营侧只读可见 ──
+#
+# 代码声明 agent 的这些能力在代码里定，不在 UI 编辑；此端点把 manifest 透出供详情页展示，
+# 让运营能看见「这个应用调了哪些远程/MCP、是否沙箱隔离、是否可恢复」。非 local 应用返空能力。
+
+
+class McpServerInfo(BaseModel):
+    name: str
+    transport: str = "stdio"  # stdio / http / sse
+    url: str | None = None
+
+
+class AgentCapabilities(BaseModel):
+    is_local: bool  # 是否代码声明 agent（非 local 时下列均为默认/空）
+    mcp_servers: list[McpServerInfo] = Field(default_factory=list)  # 消费的外部 MCP
+    call_agents: list[str] = Field(default_factory=list)  # A2A allow-list（key 或远程 URL）
+    sandboxed: bool = False  # docker 不可信隔离
+    trust_tier: str = "internal"  # internal / untrusted
+    durable: bool = False  # 可恢复执行 / 人在环 HITL
+
+
+def _build_capabilities(agent: Agent) -> AgentCapabilities:
+    from chameleon.agentkit import declared_agents
+
+    manifest = declared_agents().get(agent.agent_key) if agent.source == "local" else None
+    if manifest is None:
+        return AgentCapabilities(is_local=agent.source == "local")
+    return AgentCapabilities(
+        is_local=True,
+        mcp_servers=[
+            McpServerInfo(name=s.name, transport=s.transport, url=s.url)
+            for s in (manifest.mcp_servers or [])
+        ],
+        call_agents=list(manifest.call_agents or []),
+        sandboxed=manifest.sandboxed,
+        trust_tier=manifest.trust_tier,
+        durable=manifest.durable,
+    )
+
+
+@router.get("/{agent_id}/capabilities", response_model=Result[AgentCapabilities])
+async def get_agent_capabilities(
+    agent_id: int,
+    session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_permission("agents:read")),
+) -> Result[AgentCapabilities]:
+    agent = await _get_or_404(session, agent_id)
+    return Result.ok(_build_capabilities(agent))
+
+
 # ── 应用级 API 密钥（scope_type='app'，scope_ref = agent_key） ──
 #
 # 与编辑器里的「智能体密钥」同一作用域模型（graphs 域按 graph_id 入口），
