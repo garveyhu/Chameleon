@@ -1,7 +1,24 @@
-# T1-1 memory 升级 · 细化子方案（待评审）
+# T1-1 memory 升级 · 细化子方案（✅ 已全部交付）
 
 > 父计划 [[docs/plans/2026-06-09-agentkit-capability-enhancements.md]] T1-1。
-> 本文是动手前的细化设计，**过目后再实现**。三子片 M1/M2/M3 各自可独立验证 + 独立 commit。
+> 三子片 M1/M2/M3 各自独立 commit，全部真 test-DB 验证通过。
+
+## 交付状态（2026-06-09）
+
+| 片 | commit | 状态 |
+|---|---|---|
+| M1 语义召回（ctx.memory.search + agent_memory_vector + full hybrid 桥） | `748f57b` | ✅ 真库往返/scope 隔离/更新删除/保留键排除 3 passed |
+| M2 working memory（@agent(working_memory=) 自动注入 system） | `7fe5892` | ✅ 跨会话持久/隐藏/自动注入 2 passed |
+| M3 observational 压缩（@agent(observe_memory=) + aikit Observer/Reflector） | `4a33cc4` | ✅ 纯任务/触发门控/非破坏落库/注入 4 passed |
+
+合计全记忆+受影响套件 101 passed；lint-imports 3 契约 KEPT；ruff 全绿。
+
+**待真模型验证（非阻塞）**：M1 真库测试用确定性 hash embedding（非语义），BM25 词项 + scope
+隔离 + 向量精确召回已验；"语义近邻"（非字面命中）需 7009 真 embedding 跑一次确认。dev DB 需先
+`alembic upgrade head`（新增空表 agent_memory_vector，additive 不动数据）。
+
+**与子方案的一处设计微调**：observational 整合观察走「自动注入 system」交付（同 working memory），
+不进语义召回集（保留键排除）——长对话上下文稳定靠每轮注入，无需检索，更简单且低风险。
 
 ## 0. 现状实地核查（已读码确认）
 
