@@ -223,6 +223,39 @@ def _cmd_dev(target: str, text: str, interval: float = 0.5) -> int:
         return 0
 
 
+def _cmd_test(target: str, query: str) -> int:
+    """零配置 smoke：用 FakeTransport（确定性、不连平台/不打真 LLM）把 agent 跑一遍，断言
+    「能跑通 + 有产出」，并摘要资源调用次数。作者写正式单测见 chameleon.agentkit.testing
+    （FakeTransport + make_run + collect），用 pytest 跑。"""
+    from chameleon.agentkit.testing import FakeTransport, collect, make_run
+
+    man = _load_manifest(target)
+    fake = FakeTransport(replies=["（agentkit test 占位回复）"])
+    opt_defaults = {o.key: o.default for o in (man.config or []) if o.default is not None}
+    run = make_run(man.handler, query=query, transport=fake, config=opt_defaults)
+    handler = man.handler
+    if man.is_class and not hasattr(handler, "handle"):
+        print(f"✗ {man.key}: 旧式 astream 类不支持 smoke（请用 handle(self, run) 范式或 pytest 自测）")
+        return 1
+    try:
+        result = handler().handle(run) if man.is_class else handler(run)
+        out = asyncio.run(collect(result))
+    except Exception as e:  # noqa: BLE001 —— smoke 的全部价值就是抓住"基本查询就崩"
+        print(f"✗ smoke {man.key} 失败：{type(e).__name__}: {e}")
+        return 1
+    ok = bool(out and out.strip())
+    mark = f"{_CYAN}✓{_RESET}" if ok else "✗"
+    print(
+        f"{mark} smoke {man.key}: {'跑通' if ok else '跑通但无产出'}"
+        f"{f'，产出 {len(out)} 字' if ok else ''}"
+    )
+    print(
+        f"  {_DIM}查询 “{query}” · 资源调用 {len(fake.invocations)} 次 · "
+        f"FakeTransport（无真 LLM/平台）{_RESET}"
+    )
+    return 0 if ok else 1
+
+
 def _cmd_new(name: str, dest: str) -> int:
     from chameleon.agentkit._scaffold import write_scaffold
 
@@ -241,11 +274,13 @@ def _cmd_new(name: str, dest: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agentkit", description="agentkit 本地开发自测")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    for name in ("lint", "run", "chat", "dev"):
+    for name in ("lint", "run", "chat", "dev", "test"):
         p = sub.add_parser(name)
         p.add_argument("target", help="作者模块，如 my_pkg.agent 或 my_pkg.agent:handle")
         if name in ("run", "dev"):
             p.add_argument("-i", "--input", required=True, help="单次输入（dev 下每次热重载重跑它）")
+        if name == "test":
+            p.add_argument("-i", "--input", default="你好", help="smoke 查询（默认“你好”）")
     pn = sub.add_parser("new", help="脚手架：生成一个新 @agent 包骨架")
     pn.add_argument("name", help="agent 名（kebab-case，如 weather-bot）")
     pn.add_argument("-d", "--dir", default=".", help="生成目录（默认当前目录）")
@@ -258,6 +293,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_chat(ns.target)
     if ns.cmd == "dev":
         return _cmd_dev(ns.target, ns.input)
+    if ns.cmd == "test":
+        return _cmd_test(ns.target, ns.input)
     if ns.cmd == "new":
         return _cmd_new(ns.name, ns.dir)
     return 1
