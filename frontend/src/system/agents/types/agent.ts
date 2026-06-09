@@ -108,7 +108,14 @@ export interface McpServerInfo {
   url: string | null;
 }
 
-/** @agent 声明的高级能力（只读）：代码声明 agent 的 MCP / A2A / 沙箱 / durable */
+/** @agent 声明的安全轨道（只读） */
+export interface GuardrailInfo {
+  name: string; // no_injection / pii_redact / max_len / output_json_schema / 自定义
+  stage: string; // input / output
+  action: string; // block / redact / retry / warn
+}
+
+/** @agent 声明的高级能力（只读）：MCP / A2A / 沙箱 / durable / 记忆 / 弹性 / 安全轨道 */
 export interface AgentCapabilities {
   is_local: boolean;
   mcp_servers: McpServerInfo[];
@@ -116,6 +123,10 @@ export interface AgentCapabilities {
   sandboxed: boolean;
   trust_tier: string; // internal / untrusted
   durable: boolean;
+  working_memory: boolean; // 结构化记忆槽自动注入
+  observe_memory: boolean; // observational 压缩
+  retries: number; // ctx 瞬时错误退避重试次数
+  guardrails: GuardrailInfo[]; // 安全轨道
 }
 
 /** durable agent 暂停中、待人工输入的 run（运营可见性） */

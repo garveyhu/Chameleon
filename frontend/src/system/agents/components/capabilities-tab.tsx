@@ -1,11 +1,24 @@
 /** 应用「能力」tab —— 只读展示 @agent 在代码里声明的高级能力：消费的外部 MCP、A2A 子智能体
- * allow-list、docker 沙箱隔离、可恢复执行(durable/HITL)。这些能力在代码里定，运营侧只看不改。
+ * allow-list、docker 沙箱隔离、可恢复执行(durable/HITL)、记忆(working/observational)、弹性重试、
+ * 安全轨道(guardrails)。这些能力在代码里定，运营侧只看不改。
  */
 import { useQuery } from '@tanstack/react-query';
-import { History, Hourglass, Network, Server, ShieldCheck, ShieldOff } from 'lucide-react';
+import {
+  Brain,
+  History,
+  Hourglass,
+  Network,
+  RotateCw,
+  Server,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  Telescope,
+} from 'lucide-react';
 
 import { DetailSection } from '@/system/agents/components/detail-section';
 
+import type { GuardrailInfo } from '@/system/agents/types/agent';
 import type { EntityId } from '@/core/types/api';
 import { agentApi } from '@/system/agents/services/agent';
 
@@ -14,6 +27,26 @@ interface Props {
 }
 
 const isUrl = (t: string) => t.startsWith('http://') || t.startsWith('https://');
+
+const GUARD_LABEL: Record<string, string> = {
+  no_injection: '注入拦截',
+  pii_redact: 'PII 脱敏',
+  max_len: '长度限制',
+  output_json_schema: '输出 schema 校验',
+};
+const GUARD_ACTION: Record<string, string> = {
+  block: '拦截',
+  redact: '脱敏',
+  retry: '重试',
+  warn: '仅告警',
+};
+const guardLabel = (g: GuardrailInfo) => GUARD_LABEL[g.name] ?? g.name;
+const guardActionTone = (action: string) =>
+  action === 'block'
+    ? 'bg-red-50 text-red-600'
+    : action === 'warn'
+      ? 'bg-amber-50 text-amber-600'
+      : 'bg-sky-50 text-sky-600';
 
 export const CapabilitiesTab = ({ agentId }: Props) => {
   const capQ = useQuery({
@@ -47,7 +80,14 @@ export const CapabilitiesTab = ({ agentId }: Props) => {
   }
 
   const hasAny =
-    cap.mcp_servers.length > 0 || cap.call_agents.length > 0 || cap.sandboxed || cap.durable;
+    cap.mcp_servers.length > 0 ||
+    cap.call_agents.length > 0 ||
+    cap.sandboxed ||
+    cap.durable ||
+    cap.working_memory ||
+    cap.observe_memory ||
+    cap.retries > 0 ||
+    cap.guardrails.length > 0;
 
   return (
     <div className="space-y-4">
@@ -69,6 +109,24 @@ export const CapabilitiesTab = ({ agentId }: Props) => {
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[12.5px] font-medium text-emerald-700">
               <History className="h-3.5 w-3.5" />
               可恢复执行 · 人在环(HITL)
+            </span>
+          )}
+          {cap.working_memory && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[12.5px] font-medium text-violet-700">
+              <Brain className="h-3.5 w-3.5" />
+              结构化记忆 · 自动注入
+            </span>
+          )}
+          {cap.observe_memory && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[12.5px] font-medium text-violet-700">
+              <Telescope className="h-3.5 w-3.5" />
+              对话压缩记忆
+            </span>
+          )}
+          {cap.retries > 0 && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-[12.5px] font-medium text-sky-700">
+              <RotateCw className="h-3.5 w-3.5" />
+              弹性重试 ×{cap.retries}
             </span>
           )}
         </div>
@@ -157,11 +215,44 @@ export const CapabilitiesTab = ({ agentId }: Props) => {
         )}
       </DetailSection>
 
+      {/* 安全轨道 guardrails */}
+      {cap.guardrails.length > 0 && (
+        <DetailSection
+          icon={ShieldAlert}
+          title="安全轨道 (guardrails)"
+          desc="输入/输出安全校验：注入拦截 / PII 脱敏 / 长度 / 输出 schema"
+          action={<span className="text-[11px] text-stone-400">{cap.guardrails.length} 条</span>}
+        >
+          <ul className="divide-y divide-stone-100">
+            {cap.guardrails.map(g => (
+              <li
+                key={`${g.name}-${g.stage}`}
+                className="flex items-center justify-between gap-3 px-5 py-3"
+              >
+                <div className="min-w-0">
+                  <span className="text-[13px] font-medium text-stone-800">{guardLabel(g)}</span>
+                  <span className="ml-2 text-[11px] text-stone-400">
+                    {g.stage === 'output' ? '输出轨' : '输入轨'}
+                  </span>
+                </div>
+                <span
+                  className={`shrink-0 rounded-md px-2 py-0.5 text-[11px] font-medium ${guardActionTone(g.action)}`}
+                >
+                  {GUARD_ACTION[g.action] ?? g.action}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </DetailSection>
+      )}
+
       {!hasAny && (
         <div className="px-1 text-[12px] text-stone-400">
-          此应用未声明高级能力（MCP / A2A / 沙箱 / durable）。在代码里通过 <code>@agent(...)</code>{' '}
-          的 <code>mcp_servers</code> / <code>call_agents</code> / <code>sandboxed</code> /{' '}
-          <code>durable</code> 参数声明后，这里会展示。
+          此应用未声明高级能力（MCP / A2A / 沙箱 / durable / 记忆 / 弹性 / 安全轨道）。在代码里通过{' '}
+          <code>@agent(...)</code> 的 <code>mcp_servers</code> / <code>call_agents</code> /{' '}
+          <code>sandboxed</code> / <code>durable</code> / <code>working_memory</code> /{' '}
+          <code>observe_memory</code> / <code>retries</code> / <code>guardrails</code>{' '}
+          参数声明后，这里会展示。
         </div>
       )}
     </div>

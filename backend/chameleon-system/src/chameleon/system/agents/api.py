@@ -812,6 +812,12 @@ class McpServerInfo(BaseModel):
     url: str | None = None
 
 
+class GuardrailInfo(BaseModel):
+    name: str  # 轨道名（no_injection / pii_redact / max_len / output_json_schema / 自定义）
+    stage: str = "input"  # input / output
+    action: str = "block"  # block / redact / retry / warn
+
+
 class AgentCapabilities(BaseModel):
     is_local: bool  # 是否代码声明 agent（非 local 时下列均为默认/空）
     mcp_servers: list[McpServerInfo] = Field(default_factory=list)  # 消费的外部 MCP
@@ -819,6 +825,11 @@ class AgentCapabilities(BaseModel):
     sandboxed: bool = False  # docker 不可信隔离
     trust_tier: str = "internal"  # internal / untrusted
     durable: bool = False  # 可恢复执行 / 人在环 HITL
+    # 能力增强（2026-06）：记忆 / 弹性 / 安全轨道——同为代码声明、运营侧只读可见
+    working_memory: bool = False  # @agent(working_memory=Schema) 结构化槽自动注入
+    observe_memory: bool = False  # @agent(observe_memory=True) observational 压缩
+    retries: int = 0  # @agent(retries=N) ctx 瞬时错误退避重试
+    guardrails: list[GuardrailInfo] = Field(default_factory=list)  # 安全轨道
 
 
 def _build_capabilities(agent: Agent) -> AgentCapabilities:
@@ -837,6 +848,17 @@ def _build_capabilities(agent: Agent) -> AgentCapabilities:
         sandboxed=manifest.sandboxed,
         trust_tier=manifest.trust_tier,
         durable=manifest.durable,
+        working_memory=getattr(manifest, "working_memory", None) is not None,
+        observe_memory=bool(getattr(manifest, "observe_memory", False)),
+        retries=int(getattr(manifest, "retries", 0) or 0),
+        guardrails=[
+            GuardrailInfo(
+                name=getattr(g, "name", "guardrail"),
+                stage=getattr(g, "stage", "input"),
+                action=getattr(g, "action", "block"),
+            )
+            for g in (getattr(manifest, "guardrails", None) or [])
+        ],
     )
 
 
