@@ -19,6 +19,9 @@ from chameleon.api.dev.api import require_dev_token
 
 router = APIRouter(prefix="/a2a", tags=["a2a"])
 
+#: A2A 跨系统深度上限（评审19 #3）——入站读 message.metadata.a2a_depth，超限拒，防 A2A 环递归。
+_A2A_MAX_DEPTH = 5
+
 
 def _parts_text(parts: list[dict[str, Any]] | None) -> str:
     return "".join(p.get("text", "") for p in (parts or []) if p.get("kind") == "text")
@@ -52,10 +55,22 @@ async def message_send(
     if body.get("method") != "message/send":
         return {"jsonrpc": "2.0", "id": rpc_id,
                 "error": {"code": -32601, "message": f"unsupported method: {body.get('method')}"}}
-    msg = (body.get("params") or {}).get("message") or {}
+    params = body.get("params")
+    msg = params.get("message") if isinstance(params, dict) else None
+    if not isinstance(msg, dict):  # 畸形 params/message → Invalid params（评审19 #5：非 500）
+        return {"jsonrpc": "2.0", "id": rpc_id,
+                "error": {"code": -32602, "message": "invalid params: message 缺失或非对象"}}
     text = _parts_text(msg.get("parts"))
-    # 复用 dev_call_agent：stream 聚合 + durable HITL（pending）
-    out = await service.dev_call_agent(target=key, input=text)
+    if not text.strip():  # 空消息短路拒，别真跑模型烧 token（评审19 #5 滥用面）
+        return {"jsonrpc": "2.0", "id": rpc_id,
+                "error": {"code": -32602, "message": "invalid params: 消息文本为空"}}
+    # 跨系统深度续计：读 message.metadata.a2a_depth（出站客户端透传），超限拒（评审19 #3）
+    depth = int((msg.get("metadata") or {}).get("a2a_depth") or 0)
+    if depth > _A2A_MAX_DEPTH:
+        return {"jsonrpc": "2.0", "id": rpc_id,
+                "error": {"code": -32000, "message": f"A2A 深度超限（>{_A2A_MAX_DEPTH}）：防跨系统环"}}
+    # 复用 dev_call_agent：stream 聚合 + durable HITL（pending）；透传深度不重置
+    out = await service.dev_call_agent(target=key, input=text, a2a_depth=depth)
     if out.get("error"):
         return {"jsonrpc": "2.0", "id": rpc_id,
                 "error": {"code": -32000, "message": out["error"]}}

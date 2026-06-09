@@ -47,6 +47,9 @@ from chameleon.providers.base.types import (
     StreamEventType,
 )
 
+#: A2A 深度上限（含跨系统）——防 A2A 环无限递归（评审19 #3）。与进程内 engine a2a 的上限一致。
+_A2A_MAX_DEPTH = 5
+
 
 def _scoped_observation_id(name: str) -> str | None:
     """把 agentkit span 锚到当前 trace 根，沿用图引擎 `{root}.{seg}` 命名约定。
@@ -87,8 +90,12 @@ class InProcessTransport(RuntimeTransport):
         scope_ref: str | None = None,
         mcp_tools: list[ToolSpec] | None = None,
         call_agents: list[str] | None = None,
+        sandboxed: bool = False,
     ) -> None:
         self._agent_key = agent_key
+        #: 该 agent 是否声明沙箱（不可信）执行——禁其出站远程 A2A egress（评审19 #1）：沙箱
+        #: --network none 被 broker（主进程有网）绕过，自声明 call_agents 白名单对不可信代码无效。
+        self._sandboxed = sandboxed
         self._bindings = bindings or {}
         self._slots = slots or {}
         #: 该 agent 启用的平台工具 key（manifest.tools ∩ web tool_bindings）
@@ -613,12 +620,23 @@ class InProcessTransport(RuntimeTransport):
         return out.get("answer") or ""
 
     async def _call_remote_a2a(self, url: str, input: str) -> str:
-        """出站调远程 A2A agent（开放 A2A）。红线：URL 须声明在 call_agents（防任意 egress）；
-        远程上报 token 不可信→按答案长度本地估算扣预算（远程实际计费在远端）；远程输出当 untrusted。"""
+        """出站调远程 A2A agent（开放 A2A）。红线：① 沙箱(不可信)agent 禁远程 egress（评审19 #1：
+        broker 在主进程有网，会绕过 child --network none）；② URL 须声明在 call_agents（防任意
+        egress）；③ 跨系统深度上限防 A2A 环无限递归（评审19 #3）；④ 远程 token 不可信→本地估算
+        扣预算；⑤ 远程输出 untrusted。"""
+        if self._sandboxed:
+            raise RuntimeError(
+                "沙箱(不可信)agent 禁止出站远程 A2A——broker 在主进程有网会绕过 --network none "
+                "隔离。需远程协作的 agent 不应声明 sandboxed=True。"
+            )
         if url not in self._call_agents:
             raise RuntimeError(
                 f"远程 A2A 目标未声明：{url} 不在 @agent(call_agents=[...]) 白名单内"
                 f"（声明你调用的远程端点，防任意网络出站）"
+            )
+        if self._a2a_depth + 1 > _A2A_MAX_DEPTH:
+            raise RuntimeError(
+                f"A2A 深度超限（>{_A2A_MAX_DEPTH}）：防跨系统 A2A 环无限递归（评审19 #3）"
             )
         from chameleon.integrations.a2a import A2AClient
 
@@ -631,9 +649,12 @@ class InProcessTransport(RuntimeTransport):
                       "output": {"target": url, "remote": True}},
             )
         )
-        answer = await A2AClient(url).call(input, trace_id=trace_id)
-        # 成本闸：远程 token 不可信，按答案长度本地粗估扣本 agent 预算（≈chars/4）
-        est = max(1, len(answer) // 4)
+        # depth+1 经 metadata 透传——远程若是本系统的 /a2a 入站，会读它续计深度（不重置成 0）
+        answer = await A2AClient(url).call(
+            input, trace_id=trace_id, depth=self._a2a_depth + 1
+        )
+        # 成本闸：远程 token 不可信，按答案长度本地粗估扣本 agent 预算（≈chars/4，截上限防超长撑爆）
+        est = min(max(1, len(answer) // 4), 100_000)
         self._charge(est)
         self.track_usage({"total_tokens": est})
         return answer
@@ -821,6 +842,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             scope_ref=scope_ref,
             mcp_tools=mcp_tools,
             call_agents=list(manifest.call_agents or []),
+            sandboxed=manifest.sandboxed,  # 沙箱 agent 禁出站远程 A2A（评审19 #1）
         )
         # ctx.config = @agent(config=[Opt(default=)]) 的代码默认值 ← web 存值覆盖（双源：
         # 声明一次 default，运行时自动生效；作者不再写 ctx.config.get(k) or default 双写）。

@@ -134,6 +134,7 @@ async def dev_call_agent(
     run_id: str | None = None,
     resume_call_index: int | None = None,
     resume_answer: Any = None,
+    a2a_depth: int = 0,
 ) -> dict[str, Any]:
     """dev 子智能体调用 + durable HITL 续跑（ctx.call_agent / resume 的 dev 实现）。
 
@@ -157,7 +158,9 @@ async def dev_call_agent(
         return {"answer": "", "error": f"provider 未注册: {adef.provider}"}
 
     rid = run_id or uuid.uuid4().hex
-    cvars: dict[str, Any] = {"_a2a_budget": 200_000, "_a2a_depth": 0}
+    # _a2a_depth 从入参续计（入站 A2A 经 metadata 传来的跨系统深度），不硬重置 0——防 A2A 环
+    # 无限递归（评审19 #3）。
+    cvars: dict[str, Any] = {"_a2a_budget": 200_000, "_a2a_depth": int(a2a_depth)}
     if resume_answer is not None and resume_call_index is not None:
         cvars["_resume_answer"] = resume_answer
         cvars["_resume_call_index"] = resume_call_index

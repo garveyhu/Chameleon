@@ -39,6 +39,28 @@ async def test_call_agent_remote_undeclared_denied():
 
 
 @pytest.mark.asyncio
+async def test_sandboxed_agent_remote_a2a_denied():
+    """评审19 #1：沙箱(不可信)agent 禁出站远程 A2A（broker 在主进程有网会绕过 --network none）。"""
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="r1",
+        call_agents=[_URL], sandboxed=True,
+    )
+    with pytest.raises(RuntimeError, match="沙箱"):
+        await t.call_agent(_URL, input="q")
+
+
+@pytest.mark.asyncio
+async def test_remote_a2a_depth_cap():
+    """评审19 #3：A2A 深度超限拒，防跨系统环无限递归。"""
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="r1",
+        call_agents=[_URL], a2a_depth=5,  # +1 > _A2A_MAX_DEPTH(5)
+    )
+    with pytest.raises(RuntimeError, match="深度超限"):
+        await t.call_agent(_URL, input="q")
+
+
+@pytest.mark.asyncio
 async def test_call_agent_inprocess_key_unaffected(monkeypatch):
     """进程内 key（非 URL）仍走 a2a_bridge，不受 URL 路由影响。"""
     import chameleon.providers.base.a2a_bridge as bridge

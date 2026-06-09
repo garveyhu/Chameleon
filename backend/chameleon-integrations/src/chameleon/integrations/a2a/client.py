@@ -59,8 +59,17 @@ class A2AClient:
             if owned:
                 await client.aclose()
 
-    async def call(self, text: str, *, trace_id: str | None = None) -> str:
-        """JSON-RPC message/send 发一条用户消息，返回远程 agent 的文本答案（同步等终态）。"""
+    async def call(self, text: str, *, trace_id: str | None = None, depth: int = 0) -> str:
+        """JSON-RPC message/send 发一条用户消息，返回远程 agent 的文本答案（同步等终态）。
+
+        `depth`：A2A 调用深度，经 message.metadata 透传——远程若是本系统 /a2a 入站，会读它续计
+        深度而非重置成 0，防跨系统 A2A 环无限递归（评审19 #3）。
+        """
+        metadata: dict[str, Any] = {}
+        if trace_id:
+            metadata["trace_id"] = trace_id
+        if depth:
+            metadata["a2a_depth"] = depth
         rpc = {
             "jsonrpc": "2.0",
             "id": uuid.uuid4().hex,
@@ -70,7 +79,7 @@ class A2AClient:
                     "role": "user",
                     "parts": [{"kind": "text", "text": text}],
                     "messageId": uuid.uuid4().hex,
-                    **({"metadata": {"trace_id": trace_id}} if trace_id else {}),
+                    **({"metadata": metadata} if metadata else {}),
                 }
             },
         }
@@ -79,6 +88,8 @@ class A2AClient:
             r = await client.post(self._base, json=rpc)
             r.raise_for_status()
             body = r.json()
+        except (httpx.HTTPError, ValueError) as e:  # 网络/4xx/5xx/非 JSON → 统一 A2AError（评审19 #5）
+            raise A2AError(f"远程 A2A 调用失败：{type(e).__name__}: {e}") from e
         finally:
             if owned:
                 await client.aclose()

@@ -71,3 +71,55 @@ def test_unsupported_method_jsonrpc_error(client):
     r = client.post("/a2a/qwen-chat", json={"jsonrpc": "2.0", "id": "3", "method": "tasks/cancel"})
     err = r.json()["error"]
     assert err["code"] == -32601 and "unsupported" in err["message"]
+
+
+def test_malformed_params_returns_invalid_params_not_500(client):
+    """评审19 #5：params 非 dict / message 缺失 → -32602 Invalid params（非不透明 500）。"""
+    for params in ("不是对象", None, {"message": "也不是对象"}):
+        r = client.post("/a2a/qwen-chat",
+                        json={"jsonrpc": "2.0", "id": "x", "method": "message/send", "params": params})
+        assert r.status_code == 200 and r.json()["error"]["code"] == -32602
+
+
+def test_empty_message_rejected_no_model_burn(client, monkeypatch):
+    """评审19 #5：空消息文本短路拒，不真跑模型烧 token。"""
+    called = {"n": 0}
+
+    async def _fake(*, target, input, **kw):
+        called["n"] += 1
+        return {"answer": "x", "run_id": "r"}
+
+    monkeypatch.setattr(a2a_api.service, "dev_call_agent", _fake)
+    r = client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "x", "method": "message/send",
+        "params": {"message": {"parts": [{"kind": "text", "text": "   "}]}},
+    })
+    assert r.json()["error"]["code"] == -32602
+    assert called["n"] == 0  # 没调到 agent / 模型
+
+
+def test_inbound_depth_cap(client):
+    """评审19 #3：入站读 message.metadata.a2a_depth 超限拒，防跨系统 A2A 环。"""
+    r = client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "x", "method": "message/send",
+        "params": {"message": {"parts": [{"kind": "text", "text": "q"}],
+                               "metadata": {"a2a_depth": 6}}},
+    })
+    assert "深度超限" in r.json()["error"]["message"]
+
+
+def test_inbound_propagates_depth(client, monkeypatch):
+    """入站把 metadata.a2a_depth 透传给 dev_call_agent（不重置 0），续计跨系统深度。"""
+    seen = {}
+
+    async def _fake(*, target, input, a2a_depth=0, **kw):
+        seen["depth"] = a2a_depth
+        return {"answer": "ok", "run_id": "r"}
+
+    monkeypatch.setattr(a2a_api.service, "dev_call_agent", _fake)
+    client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "x", "method": "message/send",
+        "params": {"message": {"parts": [{"kind": "text", "text": "q"}],
+                               "metadata": {"a2a_depth": 3}}},
+    })
+    assert seen["depth"] == 3
