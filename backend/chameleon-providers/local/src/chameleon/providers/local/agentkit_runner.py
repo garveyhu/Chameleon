@@ -619,11 +619,12 @@ class InProcessTransport(RuntimeTransport):
         self.track_usage({"total_tokens": child_tokens})
         return out.get("answer") or ""
 
-    async def _call_remote_a2a(self, url: str, input: str) -> str:
-        """出站调远程 A2A agent（开放 A2A）。红线：① 沙箱(不可信)agent 禁远程 egress（评审19 #1：
-        broker 在主进程有网，会绕过 child --network none）；② URL 须声明在 call_agents（防任意
-        egress）；③ 跨系统深度上限防 A2A 环无限递归（评审19 #3）；④ 远程 token 不可信→本地估算
-        扣预算；⑤ 远程输出 untrusted。"""
+    async def _remote_a2a_call(self, url: str, input: str) -> tuple[str, int]:
+        """远程 A2A 调用 + 全部红线，返 (answer, est_tokens)，**不计费**——计费时机由调用方定
+        （call_agent 立即扣，gather 统一扣，避免双扣）。红线：① 沙箱(不可信)agent 禁远程 egress
+        （评审19 #1：broker 在主进程有网会绕过 child --network none）；② URL 须声明在 call_agents
+        （防任意 egress）；③ 跨系统深度上限防 A2A 环无限递归（评审19 #3）；④ 远程 token 不可信→
+        按答案长度本地粗估；⑤ 远程输出 untrusted。"""
         if self._sandboxed:
             raise RuntimeError(
                 "沙箱(不可信)agent 禁止出站远程 A2A——broker 在主进程有网会绕过 --network none "
@@ -653,8 +654,12 @@ class InProcessTransport(RuntimeTransport):
         answer = await A2AClient(url).call(
             input, trace_id=trace_id, depth=self._a2a_depth + 1
         )
-        # 成本闸：远程 token 不可信，按答案长度本地粗估扣本 agent 预算（≈chars/4，截上限防超长撑爆）
-        est = min(max(1, len(answer) // 4), 100_000)
+        # 远程 token 不可信，按答案长度本地粗估（≈chars/4，截上限防超长撑爆）
+        return answer, min(max(1, len(answer) // 4), 100_000)
+
+    async def _call_remote_a2a(self, url: str, input: str) -> str:
+        """ctx.call_agent 的远程分支：调用 + 立即扣预算/计 usage（成本闸对远程也生效）。"""
+        answer, est = await self._remote_a2a_call(url, input)
         self._charge(est)
         self.track_usage({"total_tokens": est})
         return answer
@@ -676,7 +681,9 @@ class InProcessTransport(RuntimeTransport):
         if n == 0:
             return []
         caller = get_a2a_caller()
-        if caller is None:
+        # 仅当存在进程内目标时才需 in-process caller；纯远程 A2A（全 URL）扇出不依赖它
+        has_inprocess = any(not t.startswith(("http://", "https://")) for t, _ in calls)
+        if caller is None and has_inprocess:
             raise RuntimeError("A2A caller 未注入（app 启动应调 wire_a2a_bridge）")
         tc = current_trace_context()
         trace_id = self._request_id or (tc.request_id if tc else None) or self._session_id
@@ -695,6 +702,12 @@ class InProcessTransport(RuntimeTransport):
         )
 
         async def _one(target: str, inp: str) -> dict[str, Any]:
+            # 远程 A2A 分支：target 是 URL → 走 A2AClient（与 call_agent 一致，含全部红线），
+            # 返 dict 供 gather 统一计费（不在此扣，避免与下方 total 双扣）。
+            if target.startswith(("http://", "https://")):
+                rcoro = self._remote_a2a_call(target, inp)
+                answer, est = await (asyncio.wait_for(rcoro, timeout) if timeout else rcoro)
+                return {"answer": answer, "tokens": est}
             coro = caller(
                 source=self._agent_key,
                 target=target,

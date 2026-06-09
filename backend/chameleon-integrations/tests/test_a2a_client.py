@@ -60,6 +60,15 @@ async def test_call_raises_on_jsonrpc_error():
 
 
 @pytest.mark.asyncio
+async def test_call_timeout_wrapped_as_a2a_error():
+    """评审34 错误路径：远程超时/网络错 → 统一 A2AError（不泄漏裸 httpx 异常给 agent）。"""
+    with respx.mock:
+        respx.post(_BASE).mock(side_effect=httpx.TimeoutException("timed out"))
+        with pytest.raises(A2AError, match="远程 A2A 调用失败"):
+            await A2AClient(_BASE).call("hi")
+
+
+@pytest.mark.asyncio
 async def test_call_raises_on_task_failed_and_input_required():
     for state, match in (("failed", "task failed"), ("input-required", "input-required")):
         with respx.mock:

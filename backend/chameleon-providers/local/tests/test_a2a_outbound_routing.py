@@ -61,6 +61,33 @@ async def test_remote_a2a_depth_cap():
 
 
 @pytest.mark.asyncio
+async def test_gather_routes_url_to_remote_a2a():
+    """评审34 一致性 bug：gather 的 URL 分支也须走远程 A2A（与 call_agent 一致）——此前 gather 只用
+    进程内 caller，把 URL 当 agent key 解析→失败。并发扇出远程 + 统一扣预算。"""
+    t = InProcessTransport(
+        agent_key="x", bindings={}, slots={}, request_id="r1",
+        budget=100_000, call_agents=[_URL],
+    )
+    with respx.mock:
+        respx.post(_URL).mock(return_value=httpx.Response(200, json={
+            "jsonrpc": "2.0", "id": "x",
+            "result": {"kind": "message", "parts": [{"kind": "text", "text": "远程并发答"}]},
+        }))
+        outs = await t.gather([(_URL, "q1"), (_URL, "q2")])
+    assert outs == ["远程并发答", "远程并发答"]  # 保序 + 两支都真调远程
+    assert t._budget < 100_000  # 远程分支也统一扣了预算（成本闸对 gather 远程分支生效）
+
+
+@pytest.mark.asyncio
+async def test_gather_url_respects_sandbox_deny():
+    """gather 的 URL 分支同样受沙箱 egress 红线约束（复用 _remote_a2a_call 的全部红线）。"""
+    t = InProcessTransport(agent_key="x", bindings={}, slots={}, request_id="r1",
+                           call_agents=[_URL], sandboxed=True)
+    with pytest.raises(RuntimeError, match="沙箱"):
+        await t.gather([(_URL, "q")])
+
+
+@pytest.mark.asyncio
 async def test_call_agent_inprocess_key_unaffected(monkeypatch):
     """进程内 key（非 URL）仍走 a2a_bridge，不受 URL 路由影响。"""
     import chameleon.providers.base.a2a_bridge as bridge
