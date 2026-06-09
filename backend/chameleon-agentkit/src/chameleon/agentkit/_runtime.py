@@ -459,14 +459,14 @@ class AgentRun:
         )
 
     def _durable_guard(self, name: str) -> None:
-        """durable 已 memoize：ctx.complete(文本/结构化) + ask_human + ctx.kb.search + ctx.media.generate。
-        尚未接 journal 的（流式 / 工具循环 / 子 agent 扇出）重放时会**真重执行**（重复扣费/副作用）——
-        硬拦防静默踩坑（评审 #3/#4）。后续 slice 把它们接入 journal 后再放开此守卫。"""
+        """durable 已 memoize：complete(文本/结构化) + ask_human + kb.search + media.generate +
+        call_agent + gather + route + stream。仅剩 run_with_tools（ReAct 循环内多 LLM+工具步，需
+        循环内按 call_index 逐步 journal，难片）尚未接——重放会真重执行（重复扣费/副作用）硬拦。"""
         if self._journal_enabled:
             raise RuntimeError(
                 f"durable run 暂不支持 ctx.{name}（重放会重复执行/计费）；当前 durable 已支持 "
-                "ctx.complete / ask_human / kb.search / media.generate。控制流也须确定性"
-                "（禁依赖 random/时间分支）。"
+                "complete / ask_human / kb.search / media.generate / call_agent / gather / "
+                "route / stream。控制流也须确定性（禁依赖 random/时间分支）。"
             )
 
     async def _memoize(
@@ -520,15 +520,48 @@ class AgentRun:
         **kw: Any,
     ) -> AsyncIterator[str]:
         """高层糖：流式出文本（逐增量 yield），自动 span + usage。"""
-        self._durable_guard("stream")
-        chat = self._t.chat_model(slot=None if model else slot, model=model)
         msgs = self._build_messages(system, user, context)
+        if not self._journal_enabled:
+            chat = self._t.chat_model(slot=None if model else slot, model=model)
+            async with self._t.span("llm.stream", type="span"):
+                async for chunk in chat.astream(msgs, **kw):
+                    self._t.track_usage(_usage_of(chunk))  # usage 通常在末 chunk
+                    text = _content_to_text(chunk)
+                    if text:
+                        yield text
+            return
+
+        # durable 覆盖（中片）：流式无法走 _memoize（它返值、stream 是生成器）→ 内联 journal。
+        # 首跑边流边累积、流末 journal 累积文本；重放一次性吐记录文本、不重调模型。
+        idx = self._call_index
+        self._call_index += 1
+        key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{idx}__"
+        fp = _fingerprint(system, user, slot, model, context)
+        cached = await self._t.memory_get(key, None)
+        if cached is not None:
+            if cached.get("method") != "stream" or cached.get("fp") != fp:
+                raise RuntimeError(
+                    f"durable 重放 call_index={idx} 与记录不符"
+                    f"（记录 {cached.get('method')!r}/{cached.get('fp')!r} ≠ 当前 'stream'/"
+                    f"{fp!r}）：handle 控制流非确定性（依赖了 random/时间/未 journal 的状态）"
+                )
+            out = cached.get("output") or ""
+            if out:
+                yield out  # 重放：一次性吐累积文本
+            return
+        chat = self._t.chat_model(slot=None if model else slot, model=model)
+        parts: list[str] = []
         async with self._t.span("llm.stream", type="span"):
             async for chunk in chat.astream(msgs, **kw):
-                self._t.track_usage(_usage_of(chunk))  # usage 通常在末 chunk
+                self._t.track_usage(_usage_of(chunk))
                 text = _content_to_text(chunk)
                 if text:
+                    parts.append(text)
                     yield text
+        # 流正常结束才 journal（中途失败不记 → 重放重流，partial 不入库）
+        await self._t.memory_set(
+            key, {"method": "stream", "fp": fp, "output": "".join(parts)}
+        )
 
     # —— 工具调用（ReAct 循环糖）——
 
@@ -610,8 +643,15 @@ class AgentRun:
         source / trace_id / depth+1 / 预算自动从本次运行上下文透传；嵌套深度、
         token 预算、trace 串联等红线由底层 engine a2a 统一守。
         """
-        self._durable_guard("call_agent")
-        return await self._t.call_agent(target, input=input)
+
+        async def _call() -> str:
+            return await self._t.call_agent(target, input=input)
+
+        # durable 覆盖（中片）：journal 子 agent 最终答案，重放返记录不重跑子 run（子 run 的
+        # 计费/副作用/事件均不重复）。
+        if self._journal_enabled:
+            return await self._memoize("call_agent", _fingerprint(target, input), _call)
+        return await _call()
 
     async def gather(
         self, calls: list[tuple[str, str]], *, timeout: float | None = None
@@ -625,8 +665,14 @@ class AgentRun:
         例：`a, b = await ctx.gather([("agent-a", q1), ("agent-b", q2)])`
         `timeout`（秒）：每分支超时上限，防某子智能体 hang 拖垮整个扇出；None=不限。
         """
-        self._durable_guard("gather")
-        return await self._t.gather(calls, timeout=timeout)
+
+        async def _call() -> list[str]:
+            return await self._t.gather(calls, timeout=timeout)
+
+        # durable 覆盖（中片）：journal 各分支最终答案列表，重放返记录不重跑扇出。
+        if self._journal_enabled:
+            return await self._memoize("gather", _fingerprint(calls), _call)
+        return await _call()
 
     async def handoff(self, target: str, *, instruction: str | None = None) -> str:
         """把当前对话**移交**给目标子智能体接手作答（控制权转移）。
@@ -662,8 +708,11 @@ class AgentRun:
         上，路由决策自动进 trace。单候选直接委托，零候选报错。
 
         例：`ans = await ctx.route(ctx.query, [("sql-bot","查数据库"),("doc-bot","查文档")])`
+
+        durable 覆盖（中片）：route 纯由 ctx.complete（结构化）+ ctx.call_agent 拼成，两者均已
+        journal——故 durable 下 route 透明工作（路由 LLM 决策 + 子 run 都不重放重执行/重计费）。
+        唯一副作用：route 的"路由到 X"step 事件在重放时会重复 emit（非计费的 trace 标记，可接受）。
         """
-        self._durable_guard("route")
         if not agents:
             raise ValueError("ctx.route 至少需要一个候选 agent")
         keys = [k for k, _ in agents]
