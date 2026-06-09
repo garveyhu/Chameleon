@@ -102,6 +102,22 @@ export interface AgentTools {
   tools: AgentToolItem[];
 }
 
+export interface McpServerInfo {
+  name: string;
+  transport: string; // stdio / http / sse
+  url: string | null;
+}
+
+/** @agent 声明的高级能力（只读）：代码声明 agent 的 MCP / A2A / 沙箱 / durable */
+export interface AgentCapabilities {
+  is_local: boolean;
+  mcp_servers: McpServerInfo[];
+  call_agents: string[]; // A2A allow-list（agent key 或远程 URL）
+  sandboxed: boolean;
+  trust_tier: string; // internal / untrusted
+  durable: boolean;
+}
+
 export interface ConfigOptionItem {
   key: string;
   label: string;

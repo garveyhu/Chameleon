@@ -2,6 +2,7 @@ import { get, post } from '@/core/lib/request';
 import type { EntityId, PageResult } from '@/core/types/api';
 import type {
   AgentApiKey,
+  AgentCapabilities,
   AgentConfigSchema,
   AgentItem,
   AgentModelSlots,
@@ -65,6 +66,10 @@ export const agentApi = {
   configSchema: (id: EntityId) => get<AgentConfigSchema>(`/v1/admin/agents/${id}/config-schema`),
   updateConfig: (id: EntityId, values: Record<string, unknown>) =>
     post<AgentConfigSchema>(`/v1/admin/agents/${id}/config/update`, { values }),
+
+  /** @agent 声明的高级能力（MCP/A2A/沙箱/durable），只读展示 */
+  capabilities: (id: EntityId) =>
+    get<AgentCapabilities>(`/v1/admin/agents/${id}/capabilities`),
 
   /** 应用级密钥：列未吊销 */
   listApiKeys: (id: EntityId) => get<AgentApiKey[]>(`/v1/admin/agents/${id}/api-keys`),
