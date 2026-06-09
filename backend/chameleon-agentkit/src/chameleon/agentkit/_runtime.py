@@ -19,6 +19,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 from pydantic import BaseModel
 
 from chameleon.agentkit._spec import Doc, MediaResult, MemoryHit, ToolSpec
+from chameleon.agentkit.guardrails import (
+    output_retry_budget,
+    run_input_guards,
+    run_output_guards,
+)
 
 if TYPE_CHECKING:
     from chameleon.core.runtime_types import Message, StreamEvent
@@ -361,10 +366,13 @@ class AgentRun:
         durable: bool = False,
         run_id: str | None = None,
         retries: int = 0,
+        guardrails: list[Any] | None = None,
     ) -> None:
         self._t = transport
         #: ctx LLM 调用瞬时错误自动退避重试次数（@agent(retries=) → manifest → 此处）。
         self._retries = max(0, int(retries))
+        #: 安全轨道（@agent(guardrails=) → manifest → 此处）：input 轨跑入口、output 轨跑出口。
+        self._guardrails: list[Any] = list(guardrails or [])
         self.agent_key = agent_key
         self.query = query
         self.messages = messages
@@ -420,6 +428,10 @@ class AgentRun:
         给了 `schema`（一个 pydantic BaseModel 子类）则走结构化输出：返回校验后的
         模型**实例**（而非 str）。底层用 langchain `with_structured_output`。
         """
+        # guardrails input 轨：跑在 user 文本上（block→抛 / redact→改写 / warn→记日志）。
+        # 改写后的 user 进指纹——redact 确定性故重放指纹一致。
+        if self._guardrails:
+            user = await run_input_guards(self._guardrails, user)
         msgs = self._build_messages(system, user, context)
         if schema is not None:
             structured = self._t.structured_model(
@@ -434,6 +446,7 @@ class AgentRun:
 
             # durable 覆盖（易片）：结构化输出 journal model_dump、重放 model_validate 还原实例。
             # 瞬时退避重试（结构化解析失败非瞬时 → 不重试，直接抛）；重试成功才记 journal。
+            # 注：结构化输出已由 schema 校验，不再叠 output 轨。
             return await self._memoize(
                 "complete_schema",
                 _fingerprint(system, user, slot, model, context, schema.__name__),
@@ -442,12 +455,32 @@ class AgentRun:
                 decode=lambda d: schema.model_validate(d),
             )
 
+        out_budget = output_retry_budget(self._guardrails) if self._guardrails else 0
+
         async def _call() -> str:
-            chat = self._t.chat_model(slot=None if model else slot, model=model)
-            async with self._t.span("llm.complete", type="span"):
-                resp = await chat.ainvoke(msgs, **kw)
-            self._t.track_usage(_usage_of(resp))
-            return _content_to_text(resp)
+            # output 轨 retry：回答不合规则重跑 LLM（至 out_budget 次），仍不过 block。
+            for attempt in range(out_budget + 1):
+                async def _llm() -> str:
+                    chat = self._t.chat_model(slot=None if model else slot, model=model)
+                    async with self._t.span("llm.complete", type="span"):
+                        resp = await chat.ainvoke(msgs, **kw)
+                    self._t.track_usage(_usage_of(resp))
+                    return _content_to_text(resp)
+
+                text = await _retry_transient(_llm, retries=self._retries)
+                if not self._guardrails:
+                    return text
+                verdict = await run_output_guards(self._guardrails, text)
+                if verdict.action == "retry":
+                    if attempt < out_budget:
+                        continue
+                    from chameleon.agentkit.guardrails import GuardrailViolation
+
+                    raise GuardrailViolation(
+                        "output_guard", f"output 轨重试耗尽仍未通过：{verdict.reason}"
+                    )
+                return verdict.text  # 放行 / 脱敏后文本（block 已在 run_output_guards 内抛）
+            return text  # 理论不可达（out_budget>=0 故循环至少跑一次）
 
         # 瞬时退避重试包在 memoize 的 producer 内：durable 下重试成功才记 journal（重放不重试）。
         # 指纹纳入全部影响输出的入参（评审16 🟠：仅 system+user 漏 slot/model/context → 换 model
@@ -455,7 +488,7 @@ class AgentRun:
         return await self._memoize(
             "complete",
             _fingerprint(system, user, slot, model, context),
-            lambda: _retry_transient(_call, retries=self._retries),
+            _call,
         )
 
     async def _memoize(
@@ -509,6 +542,9 @@ class AgentRun:
         **kw: Any,
     ) -> AsyncIterator[str]:
         """高层糖：流式出文本（逐增量 yield），自动 span + usage。"""
+        # guardrails input 轨（流式出口 output 轨难干净改写半截输出，故仅入口 input 轨）。
+        if self._guardrails:
+            user = await run_input_guards(self._guardrails, user)
         msgs = self._build_messages(system, user, context)
         if not self._journal_enabled:
             chat = self._t.chat_model(slot=None if model else slot, model=model)
@@ -577,6 +613,9 @@ class AgentRun:
           为本轮循环 token 上限（与 agent 总预算共同构成成本闸）。
         """
         user_text = user if user is not None else self.query
+        # guardrails input 轨（工具循环出口 output 轨涉及多步，本期仅入口 input 轨）。
+        if self._guardrails:
+            user_text = await run_input_guards(self._guardrails, user_text)
         local: list[ToolSpec] = []
         for t in tools or []:
             spec = getattr(t, "__tool_spec__", None)

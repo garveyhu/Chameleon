@@ -170,6 +170,9 @@ class AgentManifest:
     #: ctx LLM 调用的瞬时错误（rate limit / timeout / 5xx / 连接）自动退避重试次数。默认 2
     #: （Temporal 式每调用自动重试是 2026 标配）；非瞬时错误（4xx / 解析 / 校验）直接抛不重试。
     retries: int = 2
+    #: 安全轨道（guardrails）：声明一组 Guardrail，运行时在 ctx LLM 调用入口跑 input 轨、出口
+    #: 跑 output 轨（注入/PII/长度/输出 schema）。命中按各轨 action 处置（block/redact/retry/warn）。
+    guardrails: list[Any] = field(default_factory=list)
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False

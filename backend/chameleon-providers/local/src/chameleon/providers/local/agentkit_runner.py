@@ -34,6 +34,7 @@ from chameleon.agentkit._spec import (
     ModelSlot,
     ToolSpec,
 )
+from chameleon.agentkit.guardrails import GuardrailViolation
 from chameleon.core.observe.context import (
     ObservationType,
     current_observation_id,
@@ -979,6 +980,7 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
             durable=manifest.durable,
             run_id=ctx.request_id,
             retries=getattr(manifest, "retries", 0),  # ctx 弹性：ctx.complete 瞬时退避重试
+            guardrails=getattr(manifest, "guardrails", None),  # 安全轨道
         )
 
         # durable resume：resume 端点以同 request_id 重新 invoke 并经 context_vars 带回人工答案，
@@ -1030,6 +1032,17 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         try:
             async for ev in _consume(result, transport):
                 yield ev
+        except GuardrailViolation as gv:
+            # 安全轨道拦截（注入/PII/长度/输出 schema）：不算崩溃，发清晰 error 事件 + 先 drain
+            # 已缓冲事件（trace 不丢），本次流优雅结束。
+            logger.info("agentkit agent {} 被 guardrail 拦截：{}", ctx.agent_def.key, gv)
+            for ev in transport.drain():
+                yield ev
+            yield StreamEvent(
+                type=StreamEventType.error,
+                data={"message": str(gv), "guardrail": gv.guard, "reason": gv.reason},
+            )
+            return
         except AgentPaused as paused:
             # durable HITL：ctx.ask_human 无答案 → run 暂停等人工输入。不算失败：发 step 暂停信号
             # （pending 已落 AgentMemory），本次流优雅结束。resume 端点回填答案后以同 request_id

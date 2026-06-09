@@ -41,6 +41,15 @@ from chameleon.agentkit._spec import (
     Opt,
     ToolSpec,
 )
+from chameleon.agentkit.guardrails import (
+    Guardrail,
+    GuardrailViolation,
+    GuardResult,
+    MaxLen,
+    NoInjection,
+    OutputJsonSchema,
+    PiiRedact,
+)
 
 # 高级用法（有状态 / 多节点）+ 流事件类型：从既有包 re-export，
 # 让作者只依赖 agentkit 一处。
@@ -54,7 +63,14 @@ __all__ = [
     "AgentRun",
     "BaseAgent",
     "Doc",
+    "Guardrail",
+    "GuardrailViolation",
+    "GuardResult",
     "KbHandle",
+    "MaxLen",
+    "NoInjection",
+    "OutputJsonSchema",
+    "PiiRedact",
     "McpServerConfig",
     "MediaHandle",
     "MediaResult",

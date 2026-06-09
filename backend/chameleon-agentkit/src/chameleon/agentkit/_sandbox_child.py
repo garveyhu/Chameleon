@@ -77,6 +77,7 @@ async def main() -> None:
             session_id=init.get("session_id"),
             config=init.get("config") or {},
             retries=getattr(manifest, "retries", 0),  # ctx 弹性：ctx.complete 瞬时退避重试
+            guardrails=getattr(manifest, "guardrails", None),  # 安全轨道
         )
         # 记忆自动注入（M2 working / M3 observational）：经 broker 取槽（broker 持 scope_ref）渲染进
         # system。与 run_agentkit 共用 _inject_memory_context（防两端漂移）。

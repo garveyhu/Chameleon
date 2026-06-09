@@ -46,6 +46,7 @@ def agent(
     working_memory: type | None = None,
     observe_memory: bool = False,
     retries: int = 2,
+    guardrails: list[Any] | None = None,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -77,6 +78,7 @@ def agent(
             working_memory=working_memory,
             observe_memory=observe_memory,
             retries=retries,
+            guardrails=list(guardrails or []),
             handler=target,
             is_class=isinstance(target, type),
         )
