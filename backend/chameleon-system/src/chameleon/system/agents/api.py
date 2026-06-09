@@ -886,11 +886,39 @@ async def get_agent_pending_runs(
         .scalars()
         .all()
     )
-    out: list[AgentPendingRun] = []
+    candidates: list[tuple[AgentMemory, dict]] = []
     for r in rows:
         pending = (r.value or {}).get("v") if isinstance(r.value, dict) else None
-        if not isinstance(pending, dict) or not pending.get("prompt"):
-            continue  # 已解决/无效 pending 跳过
+        if isinstance(pending, dict) and pending.get("prompt"):
+            candidates.append((r, pending))
+
+    # 双保险（评审22 C2 健壮性）：journal 已有该 ask 点答案 = 已解决——即便 pending 未被清（旧数据
+    # 或清除遗漏），也据 journal 过滤掉，保运营列表始终准确。journal 键含 run_id（per-run 唯一），
+    # 故仅按 mkey 匹配即可消歧。
+    def _jkey(p: dict) -> str | None:
+        rid, ci = p.get("run_id"), p.get("call_index")
+        return f"__chm_journal__{rid}__{ci}__" if rid is not None and ci is not None else None
+
+    jkeys = {k for _, p in candidates if (k := _jkey(p))}
+    resolved: set[str] = set()
+    if jkeys:
+        resolved = set(
+            (
+                await session.execute(
+                    select(AgentMemory.mkey).where(
+                        AgentMemory.agent_key == agent.agent_key,
+                        AgentMemory.mkey.in_(jkeys),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    out: list[AgentPendingRun] = []
+    for r, pending in candidates:
+        if (k := _jkey(pending)) and k in resolved:
+            continue  # journal 有答案 = 已解决，不显示为待办
         out.append(
             AgentPendingRun(
                 scope_ref=r.scope_ref,

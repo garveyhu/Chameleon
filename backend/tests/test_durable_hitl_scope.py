@@ -63,6 +63,16 @@ async def test_pending_scoped_by_scope_ref_not_run_id(monkeypatch):
         InProcessTransport, "chat_model", lambda self, *, slot=None, model=None: _FakeChat()
     )
     _register_agent()
+    # 测试卫生：清本 agent 上轮残留 journal/pending——固定 run_id 跨 run 会命中旧 journal → 重放不
+    # 暂停。真实调用 request_id 唯一不会撞，此清理仅为本测可重复跑。
+    from sqlalchemy import delete
+
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import AgentMemory
+
+    async with AsyncSessionLocal() as _s:
+        await _s.execute(delete(AgentMemory).where(AgentMemory.agent_key == "_t_scope_hitl"))
+        await _s.commit()
     adef = AgentDef(
         key="_t_scope_hitl", provider="local",
         config={"__agentkit_module__": _MOD, "__agentkit_attr__": "handle"},
