@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from chameleon.api.dev import service
 from chameleon.api.dev.api import require_dev_token
@@ -21,6 +21,8 @@ router = APIRouter(prefix="/a2a", tags=["a2a"])
 
 #: A2A 跨系统深度上限（评审19 #3）——入站读 message.metadata.a2a_depth，超限拒，防 A2A 环递归。
 _A2A_MAX_DEPTH = 5
+#: 对齐的 Google A2A 协议版本（AgentCard.protocolVersion，外部标准客户端据此判兼容）。
+_A2A_PROTOCOL_VERSION = "0.2.0"
 
 
 def _parts_text(parts: list[dict[str, Any]] | None) -> str:
@@ -28,18 +30,26 @@ def _parts_text(parts: list[dict[str, Any]] | None) -> str:
 
 
 @router.get("/{key}/.well-known/agent.json")
-async def agent_card(key: str, _: None = Depends(require_dev_token)) -> dict[str, Any]:
+async def agent_card(
+    key: str, request: Request, _: None = Depends(require_dev_token)
+) -> dict[str, Any]:
     from chameleon.providers.base import AGENTS
 
     adef = AGENTS.get(key)
     if adef is None:
         raise HTTPException(status_code=404, detail=f"agent 不存在: {key}")
     desc = adef.description or f"Chameleon agent {key}"
+    # 绝对 url（评审20 #8）：外部标准 A2A 客户端按 card.url 直接 POST，相对路径找不到 host。
+    # 从请求派生（含 scheme/host，经反代时取转发头由 ASGI 处理）。
+    base = str(request.base_url).rstrip("/")
     return {
         "name": key,
         "description": desc,
-        "url": f"/a2a/{key}",
+        "url": f"{base}/a2a/{key}",
         "version": adef.version or "0.1.0",
+        # protocolVersion/preferredTransport：A2A 0.2.x 必填，外部客户端据此判兼容/选传输
+        "protocolVersion": _A2A_PROTOCOL_VERSION,
+        "preferredTransport": "JSONRPC",
         "capabilities": {"streaming": False, "pushNotifications": False},
         "defaultInputModes": ["text"],
         "defaultOutputModes": ["text"],

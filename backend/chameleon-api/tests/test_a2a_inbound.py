@@ -29,7 +29,10 @@ def test_agent_card(client):
     assert r.status_code == 200
     card = r.json()
     assert card["name"] == "qwen-chat" and card["description"] == "测试 agent"
-    assert card["version"] == "1.2" and card["url"] == "/a2a/qwen-chat"
+    assert card["version"] == "1.2"
+    # 评审20 #8：url 绝对（外部 A2A 客户端可直接 POST）+ A2A spec 必填字段
+    assert card["url"].startswith("http") and card["url"].endswith("/a2a/qwen-chat")
+    assert card["protocolVersion"] == "0.2.0" and card["preferredTransport"] == "JSONRPC"
     assert card["defaultInputModes"] == ["text"] and card["skills"][0]["id"] == "qwen-chat"
 
 
