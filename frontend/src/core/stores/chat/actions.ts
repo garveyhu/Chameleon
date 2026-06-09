@@ -189,6 +189,9 @@ export const createChatActions: StateCreator<
       fillTemplate(params.system_prompt ?? '', params.var_values ?? {});
     const controller = new AbortController();
     aborters.set(columnId, controller);
+    // durable HITL：本轮是否收到过 pending（暂停）。后端 pending 后仍会 emit end，end 不可把
+    // paused 冲成 done，否则回填框秒消失（评审22 C1）。
+    let sawPending = false;
     try {
       await streamInvoke(
         {
@@ -241,6 +244,7 @@ export const createChatActions: StateCreator<
             }
             if (chunk.pending) {
               // durable agent 暂停等人工输入 → 标 paused + 存 pending，UI 渲染回填框
+              sawPending = true;
               patch(columnId, targetId, {
                 status: 'paused',
                 pending: {
@@ -250,7 +254,9 @@ export const createChatActions: StateCreator<
                 },
               });
             }
-            if (chunk.end) {
+            if (chunk.end && !sawPending) {
+              // 暂停态不被 end 冲成 done（否则回填框秒消失，评审22 C1）；resume 续跑时新一轮
+              // runInvoke 的 end 才置 done。
               patch(columnId, targetId, {
                 status: 'done',
                 usage: chunk.usage ?? null,

@@ -88,3 +88,18 @@ async def test_pending_scoped_by_scope_ref_not_run_id(monkeypatch):
 
     # ③ 按 run_id 解析找不到——正是当年 playground bug 的形态（run_id ≠ scope_ref）
     assert await resolve_resume("_t_scope_hitl", run_id) is None
+
+    # ④ resume 跑完（回填答案，不再暂停）→ pending 必须被清（评审22 C2：否则运营「待人工处理」
+    # 列表残留已解决项）。同 scope + journal run_id 重放，complete@0 走 journal、ask@1 取答案。
+    resume_ctx = InvokeContext(
+        agent_def=adef, input="删除生产库", history=[], app_id="app",
+        session_id=scope, request_id=run_id, stream=True,
+        context_vars={"_resume_answer": "拒绝", "_resume_call_index": 1},
+    )
+    deltas = [
+        e.data.get("text", "")
+        async for e in run_agentkit(resume_ctx)
+        if e.type.value == "delta"
+    ]
+    assert "拒绝" in "".join(deltas), "resume 应续跑完成并产出含人工答案的结果"
+    assert await resolve_resume("_t_scope_hitl", scope) is None, "resume 完成后 pending 应被清"

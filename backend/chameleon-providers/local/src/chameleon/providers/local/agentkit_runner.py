@@ -22,7 +22,7 @@ from typing import Any
 from loguru import logger
 
 from chameleon.agentkit import AgentPaused, AgentRun, RuntimeTransport
-from chameleon.agentkit._runtime import _content_to_text
+from chameleon.agentkit._runtime import _PENDING_KEY, _content_to_text
 from chameleon.agentkit._spec import Doc, MediaResult, ModelSlot, ToolSpec
 from chameleon.core.observe.context import (
     ObservationType,
@@ -939,6 +939,11 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
                       "run_id": paused.run_id},
             )
             return
+        # durable resume 跑完（未再暂停）→ 清 pending：否则该 pending 永久残留，运营「待人工处理」
+        # 列表会把已解决的 run 当待办（评审22 C2）。不在 resume 起点清是为保幂等重试；再暂停则
+        # ask_human 会重写新 pending。非 resume 的 fresh run 无 pending，跳过避免无谓写。
+        if manifest.durable and "_resume_answer" in cvars:
+            await transport.memory_set(_PENDING_KEY, None)
         # 流末上报累计 usage → InvokeResult.usage 非空 → A2A budget_consumed 真实
         u = transport.usage_total()
         if u.get("total_tokens"):
