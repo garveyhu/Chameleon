@@ -79,28 +79,29 @@ async def test_durable_fingerprint_catches_same_method_reorder():
 
 @pytest.mark.asyncio
 async def test_durable_guards_unjournaled_calls():
-    """评审 #3/#4 + 评审16 🔴：durable 下未 journal 的有副作用/计费调用全硬拦（防重放重执行），
-    含 kb.search / media.generate（评审16 指出此前漏拦——media 重放真重扣费）。"""
+    """评审 #3/#4：durable 下**尚未** journal 的有副作用/计费调用仍硬拦（防重放重执行）。
+
+    已 journal 放开的（complete 文本/结构化、kb.search、media.generate）见
+    tests/test_durable_easy_slice.py 的往返测试；此处只剩流式 / 子 agent 扇出类（后续 slice）。
+    """
     t = FakeTransport(replies=["x"], call_agent_reply="sub")
-    r = _run(t, durable=True, run_id="run-1")
-    # coroutine 类：直接 await 触发守卫
-    for coro in (
-        r.call_agent("sub", input="q"),
-        r.complete(user="q", schema=int),  # 结构化输出路径
-        r.gather([("a", "q")]),
-        r.route("q", [("a", "x"), ("b", "y")]),
-        r.kb.search("q"),              # 评审16 🔴 此前漏拦
-        r.media.generate(kind="image", prompt="cat"),  # 评审16 🔴 重放真重出图/重扣费
+    # coroutine 类：直接 await 触发守卫（lazy 构造，避免未 await 的协程告警）
+    for make in (
+        lambda r: r.call_agent("sub", input="q"),
+        lambda r: r.gather([("a", "q")]),
+        lambda r: r.route("q", [("a", "x"), ("b", "y")]),
     ):
+        r = _run(t, durable=True, run_id="run-1")
         with pytest.raises(RuntimeError, match="durable run 暂不支持"):
-            await coro
+            await make(r)
     # async generator 类：守卫在生成器体首行，须迭代才触发
-    for agen in (
-        r.stream(user="q"),
-        r.run_with_tools(user="q", tools=[]),
+    for make in (
+        lambda r: r.stream(user="q"),
+        lambda r: r.run_with_tools(user="q", tools=[]),
     ):
+        r = _run(t, durable=True, run_id="run-1")
         with pytest.raises(RuntimeError, match="durable run 暂不支持"):
-            async for _ in agen:
+            async for _ in make(r):
                 pass
 
 

@@ -422,19 +422,25 @@ class AgentRun:
         """
         msgs = self._build_messages(system, user, context)
         if schema is not None:
-            self._durable_guard("complete(schema=)")  # 结构化输出重放需序列化 pydantic，归后续 slice
             structured = self._t.structured_model(
                 slot=None if model else slot, model=model, schema=schema
             )
 
             async def _scall() -> Any:
                 async with self._t.span("llm.complete", type="span"):
-                    return await structured.ainvoke(msgs, **kw)
+                    resp = await structured.ainvoke(msgs, **kw)
+                self._t.track_usage(_usage_of(resp))  # 在 producer 内：重放不重复计 usage
+                return resp
 
-            # 瞬时退避重试（结构化解析失败非瞬时 → 不重试，直接抛）。
-            resp = await _retry_transient(_scall, retries=self._retries)
-            self._t.track_usage(_usage_of(resp))
-            return resp
+            # durable 覆盖（易片）：结构化输出 journal model_dump、重放 model_validate 还原实例。
+            # 瞬时退避重试（结构化解析失败非瞬时 → 不重试，直接抛）；重试成功才记 journal。
+            return await self._memoize(
+                "complete_schema",
+                _fingerprint(system, user, slot, model, context, schema.__name__),
+                lambda: _retry_transient(_scall, retries=self._retries),
+                encode=lambda m: m.model_dump(mode="json"),
+                decode=lambda d: schema.model_validate(d),
+            )
 
         async def _call() -> str:
             chat = self._t.chat_model(slot=None if model else slot, model=model)
@@ -453,22 +459,35 @@ class AgentRun:
         )
 
     def _durable_guard(self, name: str) -> None:
-        """durable 当前仅 memoize ctx.complete 文本 + ctx.ask_human。其余有副作用/计费的 ctx 调用
-        （工具循环/子 agent/结构化/流式/媒体）重放时会**真重执行**（重复扣费/重复副作用）——硬拦
-        防静默踩坑（评审 #3/#4）。后续 slice 把它们接入 journal 后再放开此守卫。"""
+        """durable 已 memoize：ctx.complete(文本/结构化) + ask_human + ctx.kb.search + ctx.media.generate。
+        尚未接 journal 的（流式 / 工具循环 / 子 agent 扇出）重放时会**真重执行**（重复扣费/副作用）——
+        硬拦防静默踩坑（评审 #3/#4）。后续 slice 把它们接入 journal 后再放开此守卫。"""
         if self._journal_enabled:
             raise RuntimeError(
-                f"durable run 暂不支持 ctx.{name}（重放会重复执行/计费）；当前 durable 仅 "
-                "ctx.complete(文本) + ctx.ask_human 可用。控制流也须确定性（禁依赖 random/时间分支）。"
+                f"durable run 暂不支持 ctx.{name}（重放会重复执行/计费）；当前 durable 已支持 "
+                "ctx.complete / ask_human / kb.search / media.generate。控制流也须确定性"
+                "（禁依赖 random/时间分支）。"
             )
 
-    async def _memoize(self, method: str, fingerprint: str, producer: Any) -> Any:
-        """durable Slice1 memoization：首跑调 producer 并把输出记进 journal（AgentMemory，免迁移）；
-        同一 run 重放（resume/崩溃恢复）按 call_index 返记录值、不重调模型——不重复计费/副作用。
+    async def _memoize(
+        self,
+        method: str,
+        fingerprint: str,
+        producer: Any,
+        *,
+        encode: Any = None,
+        decode: Any = None,
+    ) -> Any:
+        """durable memoization：首跑调 producer 并把输出记进 journal（AgentMemory，免迁移）；
+        同一 run 重放（resume/崩溃恢复）按 call_index 返记录值、不重调——不重复计费/副作用。
 
         关：直接执行不记录。重放时 method+fingerprint（调用入参指纹）不匹配 → 报错而非静默错乱
         ——fingerprint 挡同-method 错位（两次 complete 因控制流非确定性换序，仅比 method 挡不住，
-        评审 #1）。仅 JSON 可序列化输出可记（当前 ctx.complete 文本路径）。
+        评审 #1）。
+
+        encode/decode：journal 只存 JSON 可序列化值。非纯文本输出（Doc 列表 / MediaResult /
+        结构化 pydantic）首跑 `encode(output)` 成可序列化形态入库、重放 `decode(stored)` 还原成
+        活对象返作者。首跑返 producer 的活对象（不经 decode），重放才走 decode。
         """
         if not self._journal_enabled:
             return await producer()
@@ -483,9 +502,11 @@ class AgentRun:
                     f"（记录 {cached.get('method')!r}/{cached.get('fp')!r} ≠ 当前 {method!r}/"
                     f"{fingerprint!r}）：handle 控制流非确定性（依赖了 random/时间/未 journal 的状态）"
                 )
-            return cached["output"]
+            out = cached["output"]
+            return decode(out) if decode is not None else out
         output = await producer()
-        await self._t.memory_set(key, {"method": method, "fp": fingerprint, "output": output})
+        stored = encode(output) if encode is not None else output
+        await self._t.memory_set(key, {"method": method, "fp": fingerprint, "output": stored})
         return output
 
     async def stream(
@@ -684,7 +705,7 @@ class AgentRun:
 
     @property
     def kb(self) -> KbHandle:
-        return _KbProxy(self._t, guard=self._durable_guard)
+        return _KbProxy(self._t, run=self)
 
     # —— 记忆（跨会话 kv）——
 
@@ -698,7 +719,7 @@ class AgentRun:
 
     @property
     def media(self) -> MediaHandle:
-        return _MediaProxy(self._t, guard=self._durable_guard)
+        return _MediaProxy(self._t, run=self)
 
     # —— 追踪（直接转发 transport，Phase 0 即可用其抽象契约）——
 
@@ -807,9 +828,9 @@ class AgentRun:
 class _MediaProxy:
     """`ctx.media` 的实现：转发给 transport（结构上满足 MediaHandle）。"""
 
-    def __init__(self, transport: RuntimeTransport, guard: Any = None) -> None:
+    def __init__(self, transport: RuntimeTransport, run: AgentRun | None = None) -> None:
         self._t = transport
-        self._guard = guard
+        self._run = run
 
     async def generate(
         self,
@@ -821,16 +842,21 @@ class _MediaProxy:
         params: dict[str, Any] | None = None,
         input_images: list[str] | None = None,
     ) -> MediaResult:
-        if self._guard:  # durable 下硬拦：媒体生成未 journal，重放会真重出图/重扣费（评审16 🔴）
-            self._guard("media.generate")
-        return await self._t.media_generate(
-            kind=kind,
-            prompt=prompt,
-            slot=slot,
-            model=model,
-            params=params,
-            input_images=input_images,
-        )
+        async def _call() -> MediaResult:
+            return await self._t.media_generate(
+                kind=kind, prompt=prompt, slot=slot, model=model,
+                params=params, input_images=input_images,
+            )
+
+        # durable 覆盖（易片）：journal 产物 URL（artifact 已在对象存储），重放返记录不重出图/重扣费。
+        run = self._run
+        if run is not None and run._journal_enabled:
+            fp = _fingerprint(kind, prompt, slot, model, params, input_images)
+            return await run._memoize(
+                "media.generate", fp, _call,
+                encode=_encode_media, decode=_decode_media,
+            )
+        return await _call()
 
 
 class _MemoryProxy:
@@ -877,9 +903,9 @@ class _MemoryProxy:
 class _KbProxy:
     """`ctx.kb` 的实现：把 search 转发给 transport（结构上满足 KbHandle）。"""
 
-    def __init__(self, transport: RuntimeTransport, guard: Any = None) -> None:
+    def __init__(self, transport: RuntimeTransport, run: AgentRun | None = None) -> None:
         self._t = transport
-        self._guard = guard
+        self._run = run
 
     async def search(
         self,
@@ -893,18 +919,20 @@ class _KbProxy:
         expand: int = 0,
         hyde: bool = False,
     ) -> list[Doc]:
-        if self._guard:  # durable 下硬拦：检索未 journal，重放重跑 + 重复 citation/embedding 计费
-            self._guard("kb.search")
-        return await self._t.kb_search(
-            query,
-            kbs=kbs,
-            top_k=top_k,
-            min_score=min_score,
-            mode=mode,
-            rerank=rerank,
-            expand=expand,
-            hyde=hyde,
-        )
+        async def _call() -> list[Doc]:
+            return await self._t.kb_search(
+                query, kbs=kbs, top_k=top_k, min_score=min_score,
+                mode=mode, rerank=rerank, expand=expand, hyde=hyde,
+            )
+
+        # durable 覆盖（易片）：journal 命中文档列表，重放返记录不重跑检索 / 不重复 citation·embedding 计费。
+        run = self._run
+        if run is not None and run._journal_enabled:
+            fp = _fingerprint(query, kbs, top_k, min_score, mode, rerank, expand, hyde)
+            return await run._memoize(
+                "kb.search", fp, _call, encode=_encode_docs, decode=_decode_docs
+            )
+        return await _call()
 
 
 def _fingerprint(*parts: Any) -> str:
@@ -914,6 +942,46 @@ def _fingerprint(*parts: Any) -> str:
 
     raw = "\x00".join("" if p is None else str(p) for p in parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _encode_docs(docs: list[Doc]) -> list[dict[str, Any]]:
+    """ctx.kb.search 命中文档列表 → JSON 可序列化（durable journal）。"""
+    return [
+        {"text": d.text, "score": d.score, "source": d.source, "metadata": d.metadata}
+        for d in docs
+    ]
+
+
+def _decode_docs(rows: list[dict[str, Any]]) -> list[Doc]:
+    """journal 记录 → 还原 Doc 列表（durable 重放）。"""
+    return [
+        Doc(
+            text=r.get("text", ""),
+            score=r.get("score", 0.0),
+            source=r.get("source"),
+            metadata=r.get("metadata") or {},
+        )
+        for r in (rows or [])
+    ]
+
+
+def _encode_media(m: MediaResult) -> dict[str, Any]:
+    """ctx.media.generate 产物 → JSON 可序列化（durable journal；artifact 已在对象存储）。"""
+    return {
+        "url": m.url, "object_key": m.object_key, "media_kind": m.media_kind,
+        "mime_type": m.mime_type, "filename": m.filename,
+    }
+
+
+def _decode_media(d: dict[str, Any]) -> MediaResult:
+    """journal 记录 → 还原 MediaResult（durable 重放）。"""
+    return MediaResult(
+        url=d.get("url", ""),
+        object_key=d.get("object_key", ""),
+        media_kind=d.get("media_kind", ""),
+        mime_type=d.get("mime_type"),
+        filename=d.get("filename"),
+    )
 
 
 def _degenerate_memory_search(
