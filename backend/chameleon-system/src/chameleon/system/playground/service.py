@@ -329,6 +329,8 @@ async def invoke_stream(
     gen_params: dict | None = None,
     input_images: list[str] | None = None,
     persist_config: bool = True,
+    resume_run_id: str | None = None,
+    resume_answer: object = None,
 ) -> AsyncIterator[dict]:
     """完整 playground 调用编排：绑 key 溯源 → 建/续会话 → KB context → 流式调用。
 
@@ -440,6 +442,8 @@ async def invoke_stream(
                 app_id=PLAYGROUND_APP_ID,
                 gen_params=gen_params,
                 input_images=input_images,
+                resume_run_id=resume_run_id,
+                resume_answer=resume_answer,
             ):
                 if chunk.get("delta"):
                     answer_parts.append(chunk["delta"])
@@ -567,6 +571,8 @@ async def _stream_agent(
     app_id: str,
     gen_params: dict | None = None,
     input_images: list[str] | None = None,
+    resume_run_id: str | None = None,
+    resume_answer: object = None,
 ) -> AsyncIterator[dict]:
     """调用某应用的 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk。
 
@@ -599,14 +605,31 @@ async def _stream_agent(
         if isinstance(last_content, str)
         else [Message(role="user", content=last_content)]
     )
+    # durable HITL 续跑：resume_run_id 作 durable scope（session_id/request_id），服务端权威读
+    # call_index + 原始 query 注入 context_vars（评审17 #3）。无 pending → 报错。
+    cvars: dict = {}
+    eff_session, eff_request = session_id, request_id
+    if resume_answer is not None and resume_run_id:
+        from chameleon.engine.agent.durable import resolve_resume
+
+        spec = await resolve_resume(invoke_agent_key, resume_run_id)
+        if spec is None:
+            yield {"error": {"type": "ResumeError", "message": "无暂停可恢复：该 run 无待人工输入"}}
+            yield {"end": True}
+            return
+        cvars = {"_resume_call_index": spec.call_index, "_resume_answer": resume_answer}
+        eff_session = eff_request = resume_run_id
+        if spec.query is not None:
+            input_val = spec.query  # 原始 query 重放（journal 重放 complete 不重调）
     ctx = InvokeContext(
         agent_def=agent,
         input=input_val,
         history=history,
-        session_id=session_id,
+        session_id=eff_session,
         app_id=app_id,
-        request_id=request_id,
+        request_id=eff_request,
         stream=True,
+        context_vars=cvars,
         options={"gen_params": gen_params or {}, "input_images": input_images or []},
     )
     try:
@@ -617,6 +640,15 @@ async def _stream_agent(
                     yield {"delta": text}
             elif ev.type == StreamEventType.citation:
                 yield {"citation": ev.data}
+            elif ev.type == StreamEventType.step and ev.data.get("name") == "human_input_pending":
+                # durable agent 暂停等人工输入 → 透出 pending，前端渲染回填框并以 run_id 续跑
+                yield {
+                    "pending": {
+                        "prompt": ev.data.get("prompt", ""),
+                        "call_index": ev.data.get("call_index"),
+                        "run_id": ev.data.get("run_id"),
+                    }
+                }
             elif ev.type == StreamEventType.error:
                 yield {"error": {"type": "ProviderError", "message": ev.data.get("message", "应用执行失败")}}
                 yield {"end": True}
