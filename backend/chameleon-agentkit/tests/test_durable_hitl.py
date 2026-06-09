@@ -69,3 +69,18 @@ async def test_ask_human_requires_durable():
     t = FakeTransport(replies=["x"])
     with pytest.raises(RuntimeError, match="需 durable"):
         await _drive(_run(t), _approval_handle)  # durable 默认关
+
+
+@pytest.mark.asyncio
+async def test_resume_one_time_no_decision_flip():
+    """评审20 🔴：ask 点一旦恢复，不可用不同答案再恢复（防翻转已审批决策 + 重放审批后副作用）；
+    同答案重复恢复幂等放行（允许重试）。"""
+    t = FakeTransport(replies=["你好"])
+    # 先跑到暂停（落 pending @call_index 1）
+    with pytest.raises(AgentPaused):
+        await _drive(_run(t, durable=True, run_id="r1"), _approval_handle)
+    ctx = _run(t, durable=True, run_id="r1")
+    await ctx._seed_resume(1, "同意")              # 首次恢复
+    await ctx._seed_resume(1, "同意")              # 同答案幂等：不报错
+    with pytest.raises(RuntimeError, match="不可翻转"):
+        await ctx._seed_resume(1, "拒绝")          # 不同答案：拒（防决策翻转）

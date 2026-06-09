@@ -665,6 +665,8 @@ class AgentRun:
         校验 pending（评审17）：① 该 run 必须真处暂停态（pending 存在且 call_index 匹配）——否则
         错/缺 run_id 会静默开新 journal + 真重调模型（假 resume）；② 不覆盖非 ask_human 的 journal
         记录——否则错位的 resume_call_index 会损坏 complete 记录、不可逆 brick 该 run。
+        一次性恢复（评审20 🔴）：ask 点一旦用某答案恢复过，不可用**不同**答案再恢复——否则会翻转
+        已审批决策并重跑审批后的真实副作用（删库/转账等）。同答案重复恢复幂等放行（允许重试）。
         """
         if not self._journal_enabled:
             return
@@ -676,11 +678,18 @@ class AgentRun:
             )
         key = f"{_JOURNAL_PREFIX}{self._journal_run_id}__{call_index}__"
         existing = await self._t.memory_get(key, None)
-        if existing is not None and existing.get("method") != "ask_human":
-            raise RuntimeError(
-                f"resume_call_index={call_index} 错位：journal 记录为 {existing.get('method')!r} 非 "
-                f"ask_human，拒绝覆盖（防损坏 journal / brick run）"
-            )
+        if existing is not None:
+            if existing.get("method") != "ask_human":
+                raise RuntimeError(
+                    f"resume_call_index={call_index} 错位：journal 记录为 {existing.get('method')!r} "
+                    f"非 ask_human，拒绝覆盖（防损坏 journal / brick run）"
+                )
+            if existing.get("output") != answer:
+                raise RuntimeError(
+                    f"ask 点 call_index={call_index} 已用不同答案恢复过，不可翻转决策"
+                    f"（防审批后副作用重放/决策翻转攻击，评审20 🔴）"
+                )
+            return  # 同答案幂等：已恢复过相同答案，无需重写（允许失败重试）
         await self._t.memory_set(key, {"method": "ask_human", "output": answer})
 
 
