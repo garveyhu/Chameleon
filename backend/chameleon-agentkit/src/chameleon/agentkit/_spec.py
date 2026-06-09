@@ -163,6 +163,10 @@ class AgentManifest:
     #: 当前值渲染进 system（"关于用户的已知信息"），作者用 ctx.memory.update_working(...) 增量改。
     #: 落 AgentMemory 保留键 __chm_working__（按 scope_ref 跨会话持久）。None=不启用。
     working_memory: type | None = None
+    #: observational memory：开启后，长对话在 run 结束异步触发 Observer→Reflector 压缩，把旧
+    #: 对话压成稠密观察落保留键 __chm_observations__，下轮自动注入 system——长对话上下文不爆窗口。
+    #: 默认关（避免给所有 agent 偷偷加后台 LLM 成本，opt-in）。
+    observe_memory: bool = False
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False

@@ -980,16 +980,12 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
                 yield StreamEvent(type=StreamEventType.error, data={"message": str(e)})
                 return
 
-        # working memory 自动注入（M2）：声明了 @agent(working_memory=Schema) → run 前载入
-        # 槽当前值（按 scope_ref 跨会话），渲染成 system 块挂到 run，_build_messages 每轮并入。
-        # 无 scope（无身份）则跳过——working memory 同 kv 需持久化 scope 才有意义。
-        if manifest.working_memory is not None and scope_ref:
-            from chameleon.agentkit._runtime import _WORKING_KEY, _render_working_memory
+        # 记忆自动注入（M2 working / M3 observational）：声明对应能力且有 scope（身份）时，run 前
+        # 载入槽 + 渲染成 system 块挂到 run，_build_messages 每轮并入。无 scope 跳过（需持久化 scope）。
+        if scope_ref:
+            from chameleon.agentkit._runtime import _inject_memory_context
 
-            slot = await transport.memory_get(_WORKING_KEY, {})
-            run._working_memory_text = _render_working_memory(
-                manifest.working_memory, slot if isinstance(slot, dict) else {}
-            )
+            await _inject_memory_context(transport, manifest, run)
 
         # 沙箱路由：@agent(sandboxed=True) 在生产/force 下走隔离子进程执行（handle 在子
         # 进程，ctx 资源经 broker=transport 受控解析；凭据/DB 只在主进程）。
@@ -1051,12 +1047,81 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
         u = transport.usage_total()
         if u.get("total_tokens"):
             yield StreamEvent(type=StreamEventType.metadata, data={"usage": u})
+        # observational memory（M3）：长对话 run 成功结束后异步触发 Observer→Reflector 压缩，
+        # 把旧对话压成稠密观察落 __chm_observations__（下轮自动注入）。fire-and-forget 不阻塞本次流。
+        if manifest.observe_memory and scope_ref:
+            _maybe_trigger_compression(ctx.agent_def.key, scope_ref, ctx.history)
     finally:
         if mcp_stack is not None:
             from contextlib import suppress
 
             with suppress(Exception):
                 await mcp_stack.aclose()
+
+
+#: observational memory 后台压缩任务的强引用集（防 asyncio "task was destroyed but pending"）。
+_COMPRESS_BG_TASKS: set[Any] = set()
+
+
+def _compress_threshold_chars() -> int:
+    """触发 observational 压缩的对话字符阈值（settings 可调，默认 4000）。"""
+    from chameleon.core.config.json_settings import chameleon_settings
+
+    return int(chameleon_settings.get("agentkit.memory.compress_threshold_chars") or 4000)
+
+
+def _extract_conversation_text(history: list[Any]) -> str:
+    """把 history 拼成 "role: text" 多行文本（observational 压缩的输入）。"""
+    parts: list[str] = []
+    for m in history or []:
+        role = getattr(m, "role", "user")
+        text = m.text() if hasattr(m, "text") else str(m)
+        if text:
+            parts.append(f"{role}: {text}")
+    return "\n".join(parts)
+
+
+def _maybe_trigger_compression(
+    agent_key: str, scope_ref: str, history: list[Any]
+) -> None:
+    """长对话才异步触发压缩（短对话无压缩价值，省后台 LLM 成本）。fire-and-forget。"""
+    conversation = _extract_conversation_text(history)
+    if len(conversation) < _compress_threshold_chars():
+        return
+    import asyncio
+
+    task = asyncio.create_task(
+        _compress_memory_bg(agent_key, scope_ref, conversation)
+    )
+    _COMPRESS_BG_TASKS.add(task)
+    task.add_done_callback(_COMPRESS_BG_TASKS.discard)
+
+
+async def _compress_memory_bg(
+    agent_key: str, scope_ref: str, conversation: str
+) -> None:
+    """后台跑 Observer→Reflector 压缩并落 __chm_observations__（非破坏：合并不删原始）。
+
+    best-effort：任何失败只 warning（绝不影响已结束的主调用）。复用 aikit 任务（AI 内核），
+    落库走 InProcessTransport.memory_set（保留键 → 不进语义索引，靠注入交付）。
+    """
+    from chameleon.agentkit._runtime import _OBSERVATIONS_KEY
+    from chameleon.aikit.tasks.memory import compress_observations
+
+    try:
+        t = InProcessTransport(
+            agent_key=agent_key, bindings={}, slots={}, scope_ref=scope_ref
+        )
+        existing = await t.memory_get(_OBSERVATIONS_KEY, "")
+        existing = existing if isinstance(existing, str) else ""
+        updated = await compress_observations(existing, conversation)
+        if updated and updated != existing:
+            await t.memory_set(_OBSERVATIONS_KEY, updated)
+            logger.info(
+                "observational memory 压缩完成 agent={} scope={}", agent_key, scope_ref
+            )
+    except Exception:  # noqa: BLE001 —— 后台 best-effort，不向上抛
+        logger.warning("observational memory 压缩失败 agent={}", agent_key)
 
 
 async def _load_mcp_tools(agent_key: str, manifest: Any) -> tuple[list[ToolSpec], Any]:

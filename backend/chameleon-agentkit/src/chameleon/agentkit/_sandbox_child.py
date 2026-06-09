@@ -77,14 +77,11 @@ async def main() -> None:
             session_id=init.get("session_id"),
             config=init.get("config") or {},
         )
-        # working memory 自动注入（M2）：经 broker 取槽（broker 持 scope_ref）+ 渲染进 system。
-        if manifest.working_memory is not None:
-            from chameleon.agentkit._runtime import _WORKING_KEY, _render_working_memory
+        # 记忆自动注入（M2 working / M3 observational）：经 broker 取槽（broker 持 scope_ref）渲染进
+        # system。与 run_agentkit 共用 _inject_memory_context（防两端漂移）。
+        from chameleon.agentkit._runtime import _inject_memory_context
 
-            slot = await transport.memory_get(_WORKING_KEY, {})
-            run._working_memory_text = _render_working_memory(
-                manifest.working_memory, slot if isinstance(slot, dict) else {}
-            )
+        await _inject_memory_context(transport, manifest, run)
         result = target().handle(run) if manifest.is_class else target(run)
         if inspect.isasyncgen(result):
             async for chunk in result:

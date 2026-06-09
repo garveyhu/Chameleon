@@ -11,6 +11,7 @@ Phase 0：仅定义公共签名 + 抽象，**不接实现**。
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, Protocol
@@ -21,6 +22,8 @@ from chameleon.agentkit._spec import Doc, MediaResult, MemoryHit, ToolSpec
 
 if TYPE_CHECKING:
     from chameleon.core.runtime_types import Message, StreamEvent
+
+_log = logging.getLogger(__name__)
 
 
 class KbHandle(Protocol):
@@ -260,6 +263,8 @@ _JOURNAL_PREFIX = "__chm_journal__"
 _PENDING_KEY = "__chm_pending__"
 #: working memory 结构化槽的保留键（@agent(working_memory=) 声明时运行时自动注入 system）。
 _WORKING_KEY = "__chm_working__"
+#: observational memory 整合观察的保留键（@agent(observe_memory=True) 时异步压缩落此 + 注入）。
+_OBSERVATIONS_KEY = "__chm_observations__"
 
 
 class AgentPaused(Exception):  # noqa: N818 —— 控制流信号非错误，沿用 LangGraph interrupt 命名直觉
@@ -326,6 +331,9 @@ class AgentRun:
         #: working memory 自动注入文本（@agent(working_memory=) 声明时由 runner 在 run 前
         #: 载入并渲染好挂这里）；_build_messages 每轮把它并进 system。空=未启用/无已知信息。
         self._working_memory_text: str = ""
+        #: observational memory 注入文本（@agent(observe_memory=True) 时由 runner 载入整合观察
+        #: 并渲染好挂这里）；_build_messages 每轮并进 system，长对话上下文不爆窗口。
+        self._observations_text: str = ""
 
     # —— 模型（slot=走绑定链；model=点名已配置 code，二选一）——
 
@@ -493,8 +501,11 @@ class AgentRun:
         不依赖 langchain：LangChain chat model 的 ainvoke/astream 接受 (role, content) 元组。
         """
         msgs: list[tuple[str, str]] = []
-        # working memory 自动注入：作者 system 在前（定角色），已知用户信息块在后（给上下文）。
-        sys_parts = [p for p in (system, self._working_memory_text) if p]
+        # 记忆自动注入：作者 system 在前（定角色），working memory（已知用户信息）+ observational
+        # memory（历史对话要点）在后（给上下文）。两者均由 runner 在 run 前载入并渲染。
+        sys_parts = [
+            p for p in (system, self._working_memory_text, self._observations_text) if p
+        ]
         if sys_parts:
             msgs.append(("system", "\n\n".join(sys_parts)))
         for m in self.history:
@@ -897,6 +908,35 @@ def _render_working_memory(schema: Any, data: dict[str, Any]) -> str:
         + "\n".join(lines)
         + "\n（如获知新的用户偏好/事实，调用 ctx.memory.update_working(...) 记住）"
     )
+
+
+def _render_observations(text: str) -> str:
+    """把 observational memory 整合观察渲染成 system 注入块。空→空串。"""
+    text = (text or "").strip()
+    return f"[历史对话要点]\n{text}" if text else ""
+
+
+async def _inject_memory_context(transport: Any, manifest: Any, run: AgentRun) -> None:
+    """run 前载入 working / observational memory 并渲染进 run 的 system 注入文本。
+
+    由 runner（providers-local）/ 沙箱 child 在 handle 前调用；两端共用同一渲染逻辑（防漂移）。
+    无 scope（无身份）由调用方判断跳过——memory 需持久化 scope 才有意义。best-effort：单项
+    载入失败不拖垮 run（记 warning）。
+    """
+    if getattr(manifest, "working_memory", None) is not None:
+        try:
+            slot = await transport.memory_get(_WORKING_KEY, {})
+            run._working_memory_text = _render_working_memory(
+                manifest.working_memory, slot if isinstance(slot, dict) else {}
+            )
+        except Exception:  # noqa: BLE001
+            _log.warning("working memory 注入载入失败 agent=%s", run.agent_key)
+    if getattr(manifest, "observe_memory", False):
+        try:
+            obs = await transport.memory_get(_OBSERVATIONS_KEY, "")
+            run._observations_text = _render_observations(obs if isinstance(obs, str) else "")
+        except Exception:  # noqa: BLE001
+            _log.warning("observational memory 注入载入失败 agent=%s", run.agent_key)
 
 
 def _usage_of(resp: Any) -> dict[str, int] | None:
