@@ -134,6 +134,7 @@ const MessageBubble = ({
   const translate = useChatStore(s => s.translate);
   const continueGen = useChatStore(s => s.continueGen);
   const setPinned = useChatStore(s => s.setPinned);
+  const resumeHuman = useChatStore(s => s.resumeHuman);
 
   const handlers: MessageActionHandlers = {
     onEdit: isUser ? () => setEditing(true) : undefined,
@@ -241,11 +242,21 @@ const MessageBubble = ({
             ) : (
               <TypingDots />
             )
+          ) : msg.status === 'paused' ? (
+            <span className="text-amber-600">⏸ 等待人工输入…</span>
           ) : (
             <span className="text-stone-400">（空回复）</span>
           )}
           {msg.error && <div className="mt-1 text-[12px] text-rose-600">{msg.error}</div>}
         </div>
+
+        {/* durable HITL：agent ctx.ask_human 暂停 → 回填答案续跑该 run */}
+        {!isUser && msg.status === 'paused' && msg.pending && (
+          <HumanInputPending
+            prompt={msg.pending.prompt}
+            onSubmit={answer => void resumeHuman(columnId, msg.id, answer)}
+          />
+        )}
 
         {/* footer：用量常显，trace + 动作 hover 浮现 */}
         <div
@@ -356,5 +367,43 @@ const AttachmentPreview = ({
     >
       📎 {attachment.object_id.split('/').pop()}
     </a>
+  );
+};
+
+/** durable HITL 回填框：展示 ctx.ask_human 的 prompt，运营填答案 → 续跑暂停的 run。 */
+const HumanInputPending = ({
+  prompt,
+  onSubmit,
+}: {
+  prompt: string;
+  onSubmit: (answer: string) => void;
+}) => {
+  const [val, setVal] = useState('');
+  const submit = () => {
+    const a = val.trim();
+    if (a) onSubmit(a);
+  };
+  return (
+    <div className="mt-1.5 w-full max-w-[420px] rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-amber-700">
+        ⏸ 等待人工输入
+      </div>
+      <div className="mb-2 whitespace-pre-wrap break-words text-[13px] text-stone-700">{prompt}</div>
+      <Textarea
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        placeholder="填写答案后提交，续跑该智能体…"
+        rows={2}
+        className="mb-2 text-[13px]"
+        onKeyDown={e => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit();
+        }}
+      />
+      <div className="flex justify-end">
+        <Button size="sm" disabled={!val.trim()} onClick={submit}>
+          提交并续跑
+        </Button>
+      </div>
+    </div>
   );
 };

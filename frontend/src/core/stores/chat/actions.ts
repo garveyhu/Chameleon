@@ -58,6 +58,8 @@ export interface ChatActions {
     text: string,
     attachments: UploadResult[],
   ) => Promise<void>;
+  /** durable HITL：回填人工答案，续跑暂停的 run（durable agent ctx.ask_human）*/
+  resumeHuman: (columnId: string, msgId: string, answer: string) => Promise<void>;
   stop: (columnId: string) => void;
   clearMessages: (columnId: string) => void;
   /** 载入一条历史会话到列（设消息流 + 续接 sessionId + 可选恢复配置） */
@@ -176,6 +178,7 @@ export const createChatActions: StateCreator<
     reqMessages: ReturnType<typeof toReqMessages>,
     targetId: string,
     overrides?: { system_prompt?: string },
+    resume?: { runId: string; answer: string },
   ) => {
     const params = paramsOf(columnId);
     if (!params) return;
@@ -204,6 +207,9 @@ export const createChatActions: StateCreator<
           kb_ids: params.kb_ids.length ? params.kb_ids : undefined,
           // transient override（如翻译临时 system_prompt）不写入会话配置快照
           persist_config: !overrides?.system_prompt,
+          // durable HITL 续跑：回填答案到暂停的 run（后端用 pending 原始 query 重放）
+          resume_run_id: resume?.runId,
+          resume_answer: resume?.answer,
         },
         {
           signal: controller.signal,
@@ -232,6 +238,17 @@ export const createChatActions: StateCreator<
                   ),
                 'chat/appendDelta',
               );
+            }
+            if (chunk.pending) {
+              // durable agent 暂停等人工输入 → 标 paused + 存 pending，UI 渲染回填框
+              patch(columnId, targetId, {
+                status: 'paused',
+                pending: {
+                  prompt: chunk.pending.prompt,
+                  runId: chunk.pending.run_id ?? '',
+                  callIndex: chunk.pending.call_index ?? null,
+                },
+              });
             }
             if (chunk.end) {
               patch(columnId, targetId, {
@@ -373,6 +390,17 @@ export const createChatActions: StateCreator<
       const history = [...(get().messages[columnId] ?? []), userMsg];
       setMsgs(columnId, prev => [...prev, userMsg, aiMsg], 'chat/send');
       await runInvoke(columnId, toReqMessages(history), aiMsg.id);
+    },
+
+    /** durable HITL：回填人工答案，续跑暂停的 run（复用同 assistant 消息接续输出） */
+    resumeHuman: async (columnId, msgId, answer) => {
+      const msg = (get().messages[columnId] ?? []).find(m => m.id === msgId);
+      const runId = msg?.pending?.runId;
+      if (!runId) return;
+      // 回 streaming + 清 pending；续跑结果（complete 重放 + ask 后产出）接入同消息
+      patch(columnId, msgId, { status: 'streaming', pending: null, content: '', error: null });
+      const answerMsg: PlaygroundMessage = { id: newMsgId(), role: 'user', content: answer };
+      await runInvoke(columnId, toReqMessages([answerMsg]), msgId, undefined, { runId, answer });
     },
 
     stop: columnId => aborters.get(columnId)?.abort(),

@@ -116,6 +116,8 @@ export interface FlatSSEEvent {
   usage?: UsagePayload | null;
   end?: true;
   error?: ErrorPayload;
+  /** durable HITL：agent ctx.ask_human 暂停 → 待人工回填续跑该 run */
+  pending?: { prompt: string; call_index: number | null; run_id: string | null };
   /** end 业务扩展字段（latency_ms / answer / sample 等） */
   [k: string]: unknown;
 }

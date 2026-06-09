@@ -25,8 +25,10 @@ export interface PlaygroundMessage {
   content: string;
   /** P19.4 PR #42：上传的多模态附件；user 消息发送时转 ContentBlock 列表 */
   attachments?: MessageAttachment[];
-  /** UI 标记：流式中 / 完成 / 失败 */
-  status?: 'streaming' | 'done' | 'failed';
+  /** UI 标记：流式中 / 完成 / 失败 / 暂停等人工输入（durable HITL） */
+  status?: 'streaming' | 'done' | 'failed' | 'paused';
+  /** durable HITL：agent ctx.ask_human 暂停，待运营回填答案续跑该 run */
+  pending?: { prompt: string; runId: string; callIndex: number | null } | null;
   /** assistant 完成后填的 usage */
   usage?: PlaygroundUsage | null;
   error?: string | null;
@@ -92,6 +94,9 @@ export interface InvokeRequest {
   kb_ids?: EntityId[];
   /** 是否持久化本轮配置到会话快照；transient override（翻译等）传 false */
   persist_config?: boolean;
+  /** durable HITL 续跑：上一轮 pending 的 run_id + 人工答案，回填续跑该暂停的 run */
+  resume_run_id?: string | null;
+  resume_answer?: string | null;
 }
 
 export type InvokeChunk = import('@/core/lib/sse-events').FlatSSEEvent;
