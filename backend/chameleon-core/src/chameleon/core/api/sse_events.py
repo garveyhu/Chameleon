@@ -66,6 +66,7 @@ class SSEEventKind(StrEnum):
     USAGE = "usage"
     END = "end"
     ERROR = "error"
+    PENDING = "pending"  # durable HITL：agent ctx.ask_human 暂停 → 待人工回填续跑
     # P19.4 PR #40：多模态预留 —— provider 流式生成图 / 音频时按 chunk emit
     IMAGE_CHUNK = "image_chunk"
     AUDIO_CHUNK = "audio_chunk"
@@ -180,6 +181,17 @@ def event_meta(**fields: Any) -> dict[str, Any]:
 def event_delta(text: str) -> dict[str, Any]:
     """文本片段"""
     return {SSEEventKind.DELTA.value: text}
+
+
+def event_pending(prompt: str, *, call_index: int | None, run_id: str | None) -> dict[str, Any]:
+    """durable HITL：agent 暂停等人工输入 —— 前端据此渲染回填框，回填后带 run_id 续跑。"""
+    return {
+        SSEEventKind.PENDING.value: {
+            "prompt": prompt,
+            "call_index": call_index,
+            "run_id": run_id,
+        }
+    }
 
 
 def event_citation(payload: CitationPayload | dict[str, Any]) -> dict[str, Any]:

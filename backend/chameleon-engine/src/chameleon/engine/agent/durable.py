@@ -16,14 +16,22 @@ _PENDING_KEY = "__chm_pending__"
 
 @dataclass(frozen=True)
 class ResumeSpec:
-    """续跑所需：服务端从 pending 权威读出的 call_index + 首跑原始 query。"""
+    """续跑所需：服务端从 pending 权威读出的 call_index + 首跑原始 query + journal run_id。
+
+    pending 落在 AgentMemory，**按 durable scope_ref 寻址**（= end_user_id 或 session_id，见
+    agentkit_runner）——非按 run_id。journal 键含 run_id，故 resume 须用首跑的 run_id 作 request_id
+    才能命中重放；run_id 即存于 pending（首跑 request_id），由此返出。dev 路径 scope==run_id==rid
+    三位一体故两者等价，但 playground/embed 的 scope(会话)≠run_id(per-call uuid)，必须分清。
+    """
 
     call_index: int
     query: str | None
+    run_id: str | None
 
 
-async def resolve_resume(agent_key: str, run_id: str) -> ResumeSpec | None:
-    """读某 run 的 pending，返回 ResumeSpec；无 pending（未暂停 / run_id 错）返 None。"""
+async def resolve_resume(agent_key: str, scope_ref: str) -> ResumeSpec | None:
+    """按 durable scope_ref（session_id / end_user_id）读 pending，返回 ResumeSpec；无 pending
+    （未暂停 / scope 错）返 None。"""
     from sqlalchemy import select
 
     from chameleon.data.infra.db import AsyncSessionLocal
@@ -34,7 +42,7 @@ async def resolve_resume(agent_key: str, run_id: str) -> ResumeSpec | None:
             await s.execute(
                 select(AgentMemory).where(
                     AgentMemory.agent_key == agent_key,
-                    AgentMemory.scope_ref == run_id,
+                    AgentMemory.scope_ref == scope_ref,
                     AgentMemory.mkey == _PENDING_KEY,
                 )
             )
@@ -45,4 +53,4 @@ async def resolve_resume(agent_key: str, run_id: str) -> ResumeSpec | None:
     ci = pending.get("call_index")
     if ci is None:
         return None
-    return ResumeSpec(call_index=int(ci), query=pending.get("query"))
+    return ResumeSpec(call_index=int(ci), query=pending.get("query"), run_id=pending.get("run_id"))

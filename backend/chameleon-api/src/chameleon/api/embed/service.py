@@ -193,6 +193,7 @@ def _make_context(
     request_id: str | None,
     stream: bool,
     session_id: str,
+    context_vars: dict | None = None,
 ) -> InvokeContext:
     agent_def = AGENTS[agent_key]
     return InvokeContext(
@@ -202,6 +203,7 @@ def _make_context(
         app_id=app_key,
         stream=stream,
         request_id=request_id,
+        context_vars=context_vars or {},
     )
 
 

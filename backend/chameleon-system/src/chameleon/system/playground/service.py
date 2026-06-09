@@ -605,27 +605,28 @@ async def _stream_agent(
         if isinstance(last_content, str)
         else [Message(role="user", content=last_content)]
     )
-    # durable HITL 续跑：resume_run_id 作 durable scope（session_id/request_id），服务端权威读
-    # call_index + 原始 query 注入 context_vars（评审17 #3）。无 pending → 报错。
+    # durable HITL 续跑：pending 按 durable scope_ref（=会话 session_id）寻址，journal 按首跑 run_id
+    # 寻址——两者不同，故服务端按 session_id 读 pending（含 call_index/原始 query/run_id），再用
+    # spec.run_id 作 request_id 命中 journal 重放（session_id 即 scope，不变）。评审17 #3：服务端权威读。
     cvars: dict = {}
     eff_session, eff_request = session_id, request_id
-    if resume_answer is not None and resume_run_id:
+    if resume_answer is not None:
         from chameleon.engine.agent.durable import resolve_resume
 
-        spec = await resolve_resume(invoke_agent_key, resume_run_id)
-        if spec is None:
-            yield {"error": {"type": "ResumeError", "message": "无暂停可恢复：该 run 无待人工输入"}}
+        spec = await resolve_resume(invoke_agent_key, session_id)
+        if spec is None or not spec.run_id:
+            yield {"error": {"type": "ResumeError", "message": "无暂停可恢复：该会话无待人工输入"}}
             yield {"end": True}
             return
         cvars = {"_resume_call_index": spec.call_index, "_resume_answer": resume_answer}
-        eff_session = eff_request = resume_run_id
+        eff_request = spec.run_id  # journal 键含首跑 run_id，必须复用才命中重放
         if spec.query is not None:
             input_val = spec.query  # 原始 query 重放（journal 重放 complete 不重调）
     ctx = InvokeContext(
         agent_def=agent,
         input=input_val,
         history=history,
-        session_id=eff_session,
+        session_id=eff_session,  # = durable scope_ref，首跑与 resume 一致才命中 pending/journal
         app_id=app_id,
         request_id=eff_request,
         stream=True,

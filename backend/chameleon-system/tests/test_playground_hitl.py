@@ -52,12 +52,13 @@ async def test_stream_agent_resume_injects_context_and_query(monkeypatch):
         seen["cvars"] = dict(ctx.context_vars or {})
         seen["input"] = ctx.input
         seen["session_id"] = ctx.session_id
+        seen["request_id"] = ctx.request_id
         yield StreamEvent(type=StreamEventType.delta, data={"text": "续跑完成"})
 
     _wire_fake_provider(monkeypatch, _stream)
     monkeypatch.setattr(
         "chameleon.engine.agent.durable.resolve_resume",
-        lambda key, rid: _fake_spec(),
+        lambda key, scope: _fake_spec(),
     )
 
     chunks = [
@@ -73,10 +74,11 @@ async def test_stream_agent_resume_injects_context_and_query(monkeypatch):
     assert seen["cvars"]["_resume_call_index"] == 1
     assert seen["cvars"]["_resume_answer"] == "拒绝"
     assert seen["input"] == "删除生产库"  # 原始 query 重放，非人工答案
-    assert seen["session_id"] == "run-1"  # resume_run_id 作 durable scope
+    assert seen["session_id"] == "s1"  # 会话 session 即 durable scope，首跑/resume 一致，不变
+    assert seen["request_id"] == "run-1"  # = spec.run_id，命中 journal 重放
 
 
 async def _fake_spec():
     from chameleon.engine.agent.durable import ResumeSpec
 
-    return ResumeSpec(call_index=1, query="删除生产库")
+    return ResumeSpec(call_index=1, query="删除生产库", run_id="run-1")
