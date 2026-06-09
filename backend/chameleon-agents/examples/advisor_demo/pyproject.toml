@@ -1,0 +1,20 @@
+[project]
+name = "chameleon-agent-example-advisor-demo"
+version = "0.1.0"
+description = "示例：全能顾问助手 —— 用上框架升级全部新能力（记忆/检索/工具/审批/弹性/安全）"
+requires-python = ">=3.12"
+dependencies = ["chameleon-agentkit"]
+
+[tool.uv.sources]
+chameleon-agentkit = { workspace = true }
+
+# 推荐的注册方式：声明 entry-point，命名空间内外都能被发现
+[project.entry-points."chameleon.agents"]
+advisor-demo = "chameleon.agents.advisor_demo"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chameleon"]
