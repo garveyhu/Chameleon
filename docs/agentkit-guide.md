@@ -211,6 +211,25 @@ async def handle(ctx: AgentRun):
 - **恢复**：以**同一 `run_id`（= 首跑 request_id）**重新 invoke 并回填答案 → journal 重放至 ask 点
   取答案续跑。`ctx.complete` 等已记录的调用在重放时直接返记录值，不重新花钱。
 
+### 在前端的体现（无需作者额外写代码，平台已接管）
+
+同一份 `@agent(durable=True)` 代码，HITL 暂停-恢复在各使用场景自动可用：
+
+- **Playground（测试）**：测试时 agent 暂停 → 消息气泡下出现「⏸ 等待人工输入」回填框，填答案
+  提交即续跑（结果接入同一条消息）。`pending` 事件经 SSE 透出，前端按 `paused` 态渲染。
+- **嵌入式 widget（终端用户）**：终端用户在网站 widget 里遇到暂停 → 同样渲染回填框，回填后续跑。
+  端到端走 embed invoke 的 `resume_answer`。
+- **运营（应用详情「能力」tab）**：durable agent 的详情页列「待人工处理」——哪些会话的 run 正
+  暂停等输入、prompt、时间（30s 刷新）。回填续跑在终端所在场景（playground/嵌入式）完成。
+- **寻址契约（实现注意）**：pending 按 **durable scope_ref**（= end_user_id 或 session_id）落库、
+  journal 按 **run_id** 寻址——二者通常不同（dev 路径 session==run_id 三位一体除外）。resume 须
+  用 scope 读 pending、用 pending 里的 run_id 命中 journal 重放（见 `engine/agent/durable.py`
+  `resolve_resume`）。回填一次性：同答案幂等、不同答案拒（防决策翻转重放）。
+
+> 公开 `/v1` API：durable agent 经流式 `/v1` 调用暂停时会透出 `human_input_pending` 事件（调用方
+> 可感知），但**经 `/v1` 的程序化 resume 尚未提供**（待真实生产需求）；需可恢复的 durable agent
+> 目前经 playground / 嵌入式 / dev 端点回填。
+
 ### 当前边界（务必知道，越界即报错而非静默坑你）
 
 - **durable 仅 memoize `ctx.complete`（文本）+ `ctx.ask_human`**。其余有副作用/计费的 ctx 外部
