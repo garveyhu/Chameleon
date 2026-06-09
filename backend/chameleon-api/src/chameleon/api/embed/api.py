@@ -77,6 +77,10 @@ class InvokeRequest(BaseModel):
         None,
         description="本次调用附带的文件（图片走多模态；其他类型 Phase B 起走临时 RAG）",
     )
+    resume_answer: str | None = Field(
+        None,
+        description="durable HITL 续跑：回填人工答案到该会话暂停的 run（input 此时可为占位）",
+    )
 
 
 class InvokeResponse(BaseModel):
@@ -742,6 +746,7 @@ async def invoke_stream(
             request_id=request.headers.get("X-Request-Id"),
             show_citations=show_citations,
             client_session_id=req.session_id,
+            resume_answer=req.resume_answer,
         ),
         log_label=f"embed:{embed_key}",
     )

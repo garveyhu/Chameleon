@@ -33,6 +33,7 @@ from chameleon.core.api.sse_events import (
     event_end,
     event_error,
     event_meta,
+    event_pending,
 )
 from chameleon.core.observe import TraceContext, reset_trace_context, set_trace_context
 from chameleon.data.infra.object_store import refresh_object_urls
@@ -663,6 +664,7 @@ async def stream_invoke(
     request_id: str | None,
     show_citations: bool = True,
     client_session_id: str | None = None,
+    resume_answer: str | None = None,
 ) -> AsyncIterator[dict]:
     """SSE 调用 + 末尾写 call_log。
 
@@ -729,15 +731,33 @@ async def stream_invoke(
             attachments=list(attachments),
         )
 
+    # durable HITL 续跑：pending 按 durable scope_ref(=会话 sid) 寻址、journal 按首跑 run_id——
+    # 服务端按 sid 读 pending（含 call_index/原始 query/run_id），request_id=spec.run_id 命中重放
+    # （sid 即 scope 不变）。与 playground 同契约，避免 run_id≠scope 的寻址错（见 engine/agent/durable）。
+    _resume_cvars: dict = {}
+    _resume_rid = rid
+    _resume_input: str | None = None
+    if resume_answer is not None:
+        from chameleon.engine.agent.durable import resolve_resume
+
+        spec = await resolve_resume(agent.agent_key, sid)
+        if spec is None or not spec.run_id:
+            yield event_error("ResumeError", "无暂停可恢复：该会话无待人工输入")
+            return
+        _resume_cvars = {"_resume_call_index": spec.call_index, "_resume_answer": resume_answer}
+        _resume_rid = spec.run_id
+        _resume_input = spec.query
+
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
-        user_input=user_input,
-        request_id=rid,
+        user_input=_resume_input if _resume_input is not None else user_input,
+        request_id=_resume_rid,
         stream=True,
-        session_id=sid,
+        session_id=sid,  # = durable scope_ref，首跑与 resume 一致才命中 pending/journal
+        context_vars=_resume_cvars,
     )
-    if blocks_s:
+    if blocks_s and _resume_input is None:
         ctx.input = [ProviderMessage(role="user", content=blocks_s)]
 
     rag_hits_s = await session_file_svc.search_session_files(
@@ -812,6 +832,16 @@ async def stream_invoke(
                     yield event_delta(text)
             elif ev.type == StreamEventType.citation and show_citations:
                 yield event_citation(ev.data)
+            elif (
+                ev.type == StreamEventType.step
+                and ev.data.get("name") == "human_input_pending"
+            ):
+                # durable agent 暂停等人工输入 → widget 渲染回填框，回填后带 resume_answer 续跑
+                yield event_pending(
+                    ev.data.get("prompt", ""),
+                    call_index=ev.data.get("call_index"),
+                    run_id=ev.data.get("run_id"),
+                )
             elif ev.type == StreamEventType.error:
                 err = {
                     "type": ev.data.get("type", "ProviderError"),
