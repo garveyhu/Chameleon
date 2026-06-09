@@ -145,3 +145,76 @@ async def test_run_tool_loop_retries_transient_per_step(monkeypatch) -> None:
     )
     assert "RECOVERED" in out
     assert chat.calls == 3  # 2 瞬时失败 + 1 成功（无 tool_calls → 出最终文本）
+
+
+class _FlakyStreamChat:
+    """astream 前 fail_times 次（建连前）抛瞬时错误，之后正常逐块吐。"""
+
+    def __init__(self, fail_times: int, exc: Exception, chunks: list[str]) -> None:
+        self.fail_times = fail_times
+        self.exc = exc
+        self.chunks = chunks
+        self.attempts = 0
+
+    def bind_tools(self, schemas):  # noqa: ANN001
+        return self
+
+    async def astream(self, messages, **kw):  # noqa: ANN001
+        self.attempts += 1
+        if self.attempts <= self.fail_times:
+            raise self.exc  # 首块前失败 → 可重试
+
+        class _Chunk:
+            def __init__(self, c: str) -> None:
+                self.content = c
+                self.usage_metadata = {"total_tokens": 1}
+
+        for c in self.chunks:
+            yield _Chunk(c)
+
+
+@pytest.mark.asyncio
+async def test_stream_retries_establishment_then_succeeds(monkeypatch) -> None:
+    monkeypatch.setattr(rt, "_RETRY_BASE_DELAY", 0)
+    chat = _FlakyStreamChat(fail_times=2, exc=_RateLimit("429"), chunks=["你好", "世界"])
+    run = AgentRun(
+        transport=_FlakyTransport(chat), agent_key="x", query="q", messages=[],
+        history=[], session_id=None, config={}, retries=3,
+    )
+    out = "".join([c async for c in run.stream(user="hi")])
+    assert out == "你好世界"
+    assert chat.attempts == 3  # 2 建连瞬时失败 + 1 成功
+
+
+@pytest.mark.asyncio
+async def test_stream_does_not_retry_after_first_chunk(monkeypatch) -> None:
+    """已吐 chunk 后失败无法干净重试（半截输出）→ 传播，不重试。"""
+    monkeypatch.setattr(rt, "_RETRY_BASE_DELAY", 0)
+
+    class _MidFailChat:
+        def __init__(self) -> None:
+            self.attempts = 0
+
+        def bind_tools(self, schemas):  # noqa: ANN001
+            return self
+
+        async def astream(self, messages, **kw):  # noqa: ANN001
+            self.attempts += 1
+
+            class _Chunk:
+                content = "片段"
+                usage_metadata = {"total_tokens": 1}
+
+            yield _Chunk()
+            raise _RateLimit("mid-stream 429")
+
+    chat = _MidFailChat()
+    run = AgentRun(
+        transport=_FlakyTransport(chat), agent_key="x", query="q", messages=[],
+        history=[], session_id=None, config={}, retries=3,
+    )
+    got: list[str] = []
+    with pytest.raises(_RateLimit):
+        async for c in run.stream(user="hi"):
+            got.append(c)
+    assert got == ["片段"] and chat.attempts == 1  # 半截不重试

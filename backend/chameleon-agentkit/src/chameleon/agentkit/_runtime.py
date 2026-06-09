@@ -81,6 +81,40 @@ async def _retry_transient(producer: Any, *, retries: int) -> Any:
             attempt += 1
 
 
+async def _stream_with_retry(make_astream: Any, *, retries: int) -> AsyncIterator[Any]:
+    """流式瞬时退避重试——**仅覆盖建连/首块前**：首块拿到前的瞬时错误（rate limit/timeout/5xx/
+    连接）重建流重试；一旦吐过 chunk 再失败无法干净重试（半截输出）→ 直接传播。非瞬时立即抛。
+
+    `make_astream`：无参 callable，每次调用返一个新的 astream 异步可迭代（重试用新流）。
+    """
+    import asyncio
+
+    attempt = 0
+    while True:
+        it = make_astream().__aiter__()
+        try:
+            first = await it.__anext__()
+        except StopAsyncIteration:
+            return  # 空流
+        except Exception as exc:  # noqa: BLE001 —— 建连阶段统一重试边界
+            if attempt >= retries or not _is_transient_error(exc):
+                raise
+            delay = _RETRY_BASE_DELAY * (2**attempt)
+            _log.warning(
+                "ctx.stream 建连瞬时错误，%.2fs 后重试 (%d/%d): %s",
+                delay, attempt + 1, retries, exc,
+            )
+            if delay > 0:
+                await asyncio.sleep(delay)
+            attempt += 1
+            continue
+        # 首块成功 → 吐首块 + 续流（此后失败传播，不重试半截输出）
+        yield first
+        async for chunk in it:
+            yield chunk
+        return
+
+
 class KbHandle(Protocol):
     """`ctx.kb` —— 知识库检索门面。"""
 
@@ -550,10 +584,15 @@ class AgentRun:
         if self._guardrails:
             user = await run_input_guards(self._guardrails, user)
         msgs = self._build_messages(system, user, context)
-        if not self._journal_enabled:
+
+        def _astream() -> AsyncIterator[Any]:
             chat = self._t.chat_model(slot=None if model else slot, model=model)
+            return chat.astream(msgs, **kw)
+
+        if not self._journal_enabled:
             async with self._t.span("llm.stream", type="span"):
-                async for chunk in chat.astream(msgs, **kw):
+                # 瞬时退避重试仅覆盖建连/首块前（半截输出无法干净重试）。
+                async for chunk in _stream_with_retry(_astream, retries=self._retries):
                     self._t.track_usage(_usage_of(chunk))  # usage 通常在末 chunk
                     text = _content_to_text(chunk)
                     if text:
@@ -578,10 +617,10 @@ class AgentRun:
             if out:
                 yield out  # 重放：一次性吐累积文本
             return
-        chat = self._t.chat_model(slot=None if model else slot, model=model)
         parts: list[str] = []
         async with self._t.span("llm.stream", type="span"):
-            async for chunk in chat.astream(msgs, **kw):
+            # durable 首跑：建连瞬时重试（仅首块前）；流末才 journal，重放一次性吐。
+            async for chunk in _stream_with_retry(_astream, retries=self._retries):
                 self._t.track_usage(_usage_of(chunk))
                 text = _content_to_text(chunk)
                 if text:
