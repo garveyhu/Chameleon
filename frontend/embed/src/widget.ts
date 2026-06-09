@@ -1126,6 +1126,11 @@ export class ChameleonWidget {
       inner.appendChild(bubble);
     }
 
+    // durable HITL：agent 暂停等人工输入 → 渲染回填框
+    if (msg.role === 'assistant' && msg.humanInput && !msg.streaming) {
+      inner.appendChild(this.buildHumanInput(msg));
+    }
+
     if (msg.role === 'user' && !msg.streaming) {
       // user 消息也加 Actions（copy / delete）
       inner.appendChild(this.buildMessageActions(msg));
@@ -1427,10 +1432,64 @@ export class ChameleonWidget {
     });
   }
 
+  /** durable HITL 回填框：展示 ask_human 的 prompt + 输入 + 提交，提交后续跑该会话暂停的 run。 */
+  private buildHumanInput(msg: WidgetMessage): HTMLDivElement {
+    const box = document.createElement('div');
+    box.className = 'human-input';
+    box.style.cssText =
+      'margin-top:6px;padding:8px 10px;border:1px solid #f0c674;border-radius:10px;background:#fffbeb;';
+    const prompt = document.createElement('div');
+    prompt.style.cssText = 'font-size:13px;color:#7c5e10;margin-bottom:6px;white-space:pre-wrap;';
+    prompt.textContent = `⏸ ${msg.humanInput!.prompt}`;
+    box.appendChild(prompt);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:6px;';
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.placeholder = '输入答案后提交…';
+    inp.style.cssText =
+      'flex:1;min-width:0;padding:5px 8px;border:1px solid #ddd;border-radius:8px;font-size:13px;';
+    const btn = document.createElement('button');
+    btn.textContent = '提交';
+    btn.style.cssText =
+      'padding:5px 12px;border:none;border-radius:8px;background:#2b6cb0;color:#fff;font-size:13px;cursor:pointer;';
+    const submit = (): void => {
+      const v = inp.value.trim();
+      if (v) void this.resumeHuman(msg, v);
+    };
+    btn.addEventListener('click', submit);
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') submit();
+    });
+    row.appendChild(inp);
+    row.appendChild(btn);
+    box.appendChild(row);
+    return box;
+  }
+
+  /** 回填人工答案，续跑该会话暂停的 durable run（结果接入同一 assistant 消息）。 */
+  private async resumeHuman(msg: WidgetMessage, answer: string): Promise<void> {
+    if (this.isSending) return;
+    this.isSending = true;
+    this.updateMessage(msg.id, { humanInput: null, streaming: true, content: '' });
+    try {
+      await this.runStream(msg.id, answer, undefined, answer);
+    } catch (e) {
+      this.updateMessage(msg.id, {
+        content: (e as Error)?.message || '续跑失败',
+        streaming: false,
+        error: true,
+      });
+    } finally {
+      this.isSending = false;
+    }
+  }
+
   private async runStream(
     pendingId: string,
     input: string,
     attachments?: WidgetAttachment[],
+    resumeAnswer?: string,
   ): Promise<void> {
     const ctrl = new AbortController();
     this.currentAbort = ctrl;
@@ -1471,6 +1530,15 @@ export class ChameleonWidget {
                 typeof chunk.citation.snippet === 'string' ? chunk.citation.snippet : undefined,
             });
           }
+          if (chunk.pending) {
+            // durable agent 暂停等人工输入 → 渲染回填框（回填后带 resume_answer 续跑该 run）
+            this.updateMessage(pendingId, {
+              content: buf,
+              humanInput: { prompt: chunk.pending.prompt, runId: chunk.pending.run_id ?? '' },
+              pending: false,
+              streaming: false,
+            });
+          }
           if (chunk.end) {
             this.updateMessage(pendingId, {
               content: chunk.answer || buf,
@@ -1483,6 +1551,7 @@ export class ChameleonWidget {
         },
         ctrl.signal,
         attachments,
+        resumeAnswer,
       );
     } finally {
       this.currentAbort = null;

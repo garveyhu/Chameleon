@@ -255,12 +255,14 @@ export class EmbedApi {
     onChunk: (chunk: StreamChunk) => void,
     signal?: AbortSignal,
     attachments?: WidgetAttachment[],
+    resumeAnswer?: string,
   ): Promise<void> {
     const body: Record<string, unknown> = { session_token: sessionToken, input };
     if (sessionId) body.session_id = sessionId;
     if (attachments && attachments.length) {
       body.attachments = attachments.map(toWireAttachment);
     }
+    if (resumeAnswer != null) body.resume_answer = resumeAnswer;
     const resp = await fetch(`${this.apiBase}/v1/embed/${this.embedKey}/invoke/stream`, {
       method: 'POST',
       headers: {

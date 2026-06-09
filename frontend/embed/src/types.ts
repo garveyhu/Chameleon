@@ -151,6 +151,8 @@ export interface StreamChunk {
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } | null;
   answer?: string;
   error?: { type: string; message: string };
+  /** durable HITL：agent ctx.ask_human 暂停 → 待人工回填续跑 */
+  pending?: { prompt: string; call_index: number | null; run_id: string | null };
 }
 
 /** widget 持有的附件元信息（已上传到 MinIO，拿到 object_url 后挂在消息上） */
@@ -196,6 +198,8 @@ export interface WidgetMessage {
   error?: boolean;
   /** 招呼语 / 系统提示等占位消息：不渲 actions（复制 / 重生成 / 反馈 / 删除） */
   isGreeting?: boolean;
+  /** durable HITL：agent 暂停等人工输入，渲染回填框（区别于媒体等待态的 pending:boolean） */
+  humanInput?: { prompt: string; runId: string } | null;
 }
 
 export interface WidgetOptions {

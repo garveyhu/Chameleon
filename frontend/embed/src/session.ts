@@ -116,10 +116,13 @@ export class SessionManager {
     onChunk: (c: StreamChunk) => void,
     signal?: AbortSignal,
     attachments?: WidgetAttachment[],
+    resumeAnswer?: string,
   ): Promise<void> {
     const token = await this.getToken();
     try {
-      await this.api.invokeStream(token, input, sessionId, onChunk, signal, attachments);
+      await this.api.invokeStream(
+        token, input, sessionId, onChunk, signal, attachments, resumeAnswer,
+      );
     } catch (e) {
       if (isTokenInvalidError(e)) {
         const newToken = await this.refresh();
@@ -130,6 +133,7 @@ export class SessionManager {
           onChunk,
           signal,
           attachments,
+          resumeAnswer,
         );
         return;
       }
