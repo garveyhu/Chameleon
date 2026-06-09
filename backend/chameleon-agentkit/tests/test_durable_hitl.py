@@ -40,7 +40,9 @@ async def test_ask_human_pauses_and_persists_pending():
     paused = ei.value
     assert paused.call_index == 1 and paused.prompt == "批准这步操作吗？"
     pending = await t.memory_get("__chm_pending__")
-    assert pending == {"call_index": 1, "prompt": "批准这步操作吗？", "run_id": "r1"}
+    # pending 含 call_index/prompt/run_id + 原始 query（resume 用它重放，见 Slice C）
+    assert pending["call_index"] == 1 and pending["prompt"] == "批准这步操作吗？"
+    assert pending["run_id"] == "r1" and pending["query"] == "q"
 
 
 @pytest.mark.asyncio

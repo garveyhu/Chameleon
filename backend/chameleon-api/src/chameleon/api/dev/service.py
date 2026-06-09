@@ -127,6 +127,29 @@ async def dev_structured(
     return dict(resp)
 
 
+async def _read_pending(agent_key: str, run_id: str) -> dict[str, Any] | None:
+    """服务端读 durable pending（评审17 #3 / Slice C）——resume 时 call_index + 原始 query 由
+    服务端从 AgentMemory 的 __chm_pending__（scope=run_id）权威读取，客户端只提交答案。"""
+    from sqlalchemy import select
+
+    from chameleon.data.infra.db import AsyncSessionLocal
+    from chameleon.data.models import AgentMemory
+
+    async with AsyncSessionLocal() as s:
+        row = (
+            await s.execute(
+                select(AgentMemory).where(
+                    AgentMemory.agent_key == agent_key,
+                    AgentMemory.scope_ref == run_id,
+                    AgentMemory.mkey == "__chm_pending__",
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None or not isinstance(row.value, dict):
+        return None
+    return row.value.get("v") or None
+
+
 async def dev_call_agent(
     *,
     target: str,
@@ -161,9 +184,18 @@ async def dev_call_agent(
     # _a2a_depth 从入参续计（入站 A2A 经 metadata 传来的跨系统深度），不硬重置 0——防 A2A 环
     # 无限递归（评审19 #3）。
     cvars: dict[str, Any] = {"_a2a_budget": 200_000, "_a2a_depth": int(a2a_depth)}
-    if resume_answer is not None and resume_call_index is not None:
+    if resume_answer is not None:
+        # resume：从 pending 权威读 call_index + 原始 query（评审17 #3 / Slice C）。
+        pending = await _read_pending(target, run_id) if run_id else None
+        ci = resume_call_index if resume_call_index is not None else (pending or {}).get("call_index")
+        if ci is None:
+            return {"answer": "", "error": f"无暂停可恢复：run_id={rid} 无 pending", "run_id": rid}
         cvars["_resume_answer"] = resume_answer
-        cvars["_resume_call_index"] = resume_call_index
+        cvars["_resume_call_index"] = int(ci)
+        # 用首跑原始 query 重放（pending 存的），否则 ctx.query 变→complete 指纹不符被守卫拒。
+        # 人工答案经 journal 回填给 ask_human，不当新 query。
+        if pending and pending.get("query") is not None:
+            input = pending["query"]
     ctx = InvokeContext(
         agent_def=adef,
         input=input,

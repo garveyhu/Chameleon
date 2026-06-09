@@ -69,8 +69,16 @@ async def message_send(
     if depth > _A2A_MAX_DEPTH:
         return {"jsonrpc": "2.0", "id": rpc_id,
                 "error": {"code": -32000, "message": f"A2A 深度超限（>{_A2A_MAX_DEPTH}）：防跨系统环"}}
-    # 复用 dev_call_agent：stream 聚合 + durable HITL（pending）；透传深度不重置
-    out = await service.dev_call_agent(target=key, input=text, a2a_depth=depth)
+    # HITL 续跑（Slice C）：message 带 taskId（= 暂停 task 的 run_id）→ 回填答案续跑该 task；
+    # call_index 由 dev_call_agent 服务端从 pending 权威读（A2A 客户端只提交答案）。否则起新 run。
+    task_id = msg.get("taskId") or (params.get("taskId") if isinstance(params, dict) else None)
+    if task_id:
+        out = await service.dev_call_agent(
+            target=key, input=text, run_id=task_id, resume_answer=text, a2a_depth=depth
+        )
+    else:
+        # 复用 dev_call_agent：stream 聚合 + durable HITL（pending）；透传深度不重置
+        out = await service.dev_call_agent(target=key, input=text, a2a_depth=depth)
     if out.get("error"):
         return {"jsonrpc": "2.0", "id": rpc_id,
                 "error": {"code": -32000, "message": out["error"]}}

@@ -59,8 +59,16 @@ class A2AClient:
             if owned:
                 await client.aclose()
 
-    async def call(self, text: str, *, trace_id: str | None = None, depth: int = 0) -> str:
-        """JSON-RPC message/send 发一条用户消息，返回远程 agent 的文本答案（同步等终态）。
+    async def send(
+        self,
+        text: str,
+        *,
+        trace_id: str | None = None,
+        depth: int = 0,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
+        """JSON-RPC message/send，返回**原始** result（Task 或 Message）——调用方自行处理
+        input-required 等状态。`task_id` 非空 = 续跑该 task（HITL：回填人工答案到暂停的 task）。
 
         `depth`：A2A 调用深度，经 message.metadata 透传——远程若是本系统 /a2a 入站，会读它续计
         深度而非重置成 0，防跨系统 A2A 环无限递归（评审19 #3）。
@@ -70,19 +78,17 @@ class A2AClient:
             metadata["trace_id"] = trace_id
         if depth:
             metadata["a2a_depth"] = depth
-        rpc = {
-            "jsonrpc": "2.0",
-            "id": uuid.uuid4().hex,
-            "method": "message/send",
-            "params": {
-                "message": {
-                    "role": "user",
-                    "parts": [{"kind": "text", "text": text}],
-                    "messageId": uuid.uuid4().hex,
-                    **({"metadata": metadata} if metadata else {}),
-                }
-            },
+        message: dict[str, Any] = {
+            "role": "user",
+            "parts": [{"kind": "text", "text": text}],
+            "messageId": uuid.uuid4().hex,
         }
+        if metadata:
+            message["metadata"] = metadata
+        if task_id:
+            message["taskId"] = task_id  # 续跑暂停的 task（HITL resume）
+        rpc = {"jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": "message/send",
+               "params": {"message": message}}
         client, owned = await self._client()
         try:
             r = await client.post(self._base, json=rpc)
@@ -95,8 +101,11 @@ class A2AClient:
                 await client.aclose()
         if "error" in body:
             raise A2AError(f"远程 A2A JSON-RPC error: {body['error']}")
-        result = body.get("result") or {}
-        return _extract_answer(result)
+        return body.get("result") or {}
+
+    async def call(self, text: str, *, trace_id: str | None = None, depth: int = 0) -> str:
+        """便利：发消息并抽终态文本答案（input-required/failed → A2AError）。HITL 续跑用 send()。"""
+        return _extract_answer(await self.send(text, trace_id=trace_id, depth=depth))
 
 
 def _extract_answer(result: dict[str, Any]) -> str:

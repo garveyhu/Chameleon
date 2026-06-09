@@ -648,10 +648,13 @@ class AgentRun:
                     f"（记录 {cached.get('method')!r} ≠ 'ask_human'）：handle 控制流非确定性"
                 )
             return cached["output"]  # 答案已回填 → 重放续跑
-        # 无答案：落 pending（前端/运营据此渲染输入），抛 AgentPaused 暂停本次 run
+        # 无答案：落 pending（前端/运营据此渲染输入），抛 AgentPaused 暂停本次 run。
+        # 存原始 query：resume 须用它重新 invoke 重放（否则 ctx.query 变→complete 指纹不符被
+        # 确定性守卫拒；resume 的人工答案另经 journal 回填，不当新 query）。
         await self._t.memory_set(
             _PENDING_KEY,
-            {"call_index": idx, "prompt": prompt, "run_id": self._journal_run_id},
+            {"call_index": idx, "prompt": prompt, "run_id": self._journal_run_id,
+             "query": self.query},
         )
         raise AgentPaused(prompt=prompt, call_index=idx, run_id=self._journal_run_id, schema=schema)
 

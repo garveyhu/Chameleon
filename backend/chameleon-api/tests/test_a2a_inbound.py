@@ -108,6 +108,26 @@ def test_inbound_depth_cap(client):
     assert "深度超限" in r.json()["error"]["message"]
 
 
+def test_inbound_hitl_resume_via_task_id(client, monkeypatch):
+    """Slice C：message 带 taskId（暂停 task 的 run_id）→ 路由到 dev_call_agent resume
+    （run_id=taskId + resume_answer=文本，call_index 服务端读）→ 续跑完成。"""
+    seen = {}
+
+    async def _fake(*, target, input, run_id=None, resume_answer=None, **kw):
+        seen.update(run_id=run_id, resume_answer=resume_answer)
+        return {"answer": f"续跑:{resume_answer}", "run_id": run_id}
+
+    monkeypatch.setattr(a2a_api.service, "dev_call_agent", _fake)
+    r = client.post("/a2a/qwen-chat", json={
+        "jsonrpc": "2.0", "id": "x", "method": "message/send",
+        "params": {"message": {"taskId": "task-1", "parts": [{"kind": "text", "text": "同意"}]}},
+    })
+    assert seen["run_id"] == "task-1" and seen["resume_answer"] == "同意"
+    result = r.json()["result"]
+    assert result["status"]["state"] == "completed"
+    assert result["artifacts"][0]["parts"][0]["text"] == "续跑:同意"
+
+
 def test_inbound_propagates_depth(client, monkeypatch):
     """入站把 metadata.a2a_depth 透传给 dev_call_agent（不重置 0），续计跨系统深度。"""
     seen = {}
