@@ -122,6 +122,50 @@ def _check_hitl_cycle(client, headers) -> bool:
     return ok
 
 
+def _a2a_msg(text: str, *, task_id: str | None = None) -> dict:
+    msg: dict = {"role": "user", "parts": [{"kind": "text", "text": text}], "messageId": "e2e"}
+    if task_id:
+        msg["taskId"] = task_id
+    return {"jsonrpc": "2.0", "id": "e2e", "method": "message/send", "params": {"message": msg}}
+
+
+def _a2a_text(result: dict) -> str:
+    return "".join(
+        p.get("text", "") for a in (result.get("artifacts") or []) for p in (a.get("parts") or [])
+    )
+
+
+def _check_a2a_inbound(client, headers) -> bool:
+    """入站开放 A2A：外部 A2A 客户端经 /a2a/{key} message/send 调自家 agent → completed task。"""
+    try:
+        body = client.post(f"{BASE}/a2a/qwen-chat", headers=headers,
+                           json=_a2a_msg("1+1 等于几？只回数字")).json()
+        result = body.get("result") or {}
+        ok = result.get("status", {}).get("state") == "completed" and "2" in _a2a_text(result)
+    except Exception:  # noqa: BLE001
+        result, ok = {}, False
+    print(f"{'✅' if ok else '❌'} {'a2a-inbound':24} → {_a2a_text(result)[:50]}")
+    return ok
+
+
+def _check_a2a_hitl(client, headers) -> bool:
+    """入站 A2A + durable HITL：send→input-required(task_id)→send(taskId+答案)→completed。
+    验跨系统 HITL 协同（A2A input-required == ctx.ask_human）端到端。"""
+    try:
+        r1 = (client.post(f"{BASE}/a2a/example-hitl", headers=headers,
+                          json=_a2a_msg("删除生产库 orders 表")).json().get("result") or {})
+        if r1.get("status", {}).get("state") != "input-required" or not r1.get("id"):
+            print(f"❌ {'a2a-hitl':24} → 未进 input-required：{r1}")
+            return False
+        r2 = (client.post(f"{BASE}/a2a/example-hitl", headers=headers,
+                          json=_a2a_msg("拒绝", task_id=r1["id"])).json().get("result") or {})
+        ok = r2.get("status", {}).get("state") == "completed" and "拒绝" in _a2a_text(r2)
+    except Exception:  # noqa: BLE001
+        r2, ok = {}, False
+    print(f"{'✅' if ok else '❌'} {'a2a-hitl (cross-sys)':24} → {_a2a_text(r2)[:50]}")
+    return ok
+
+
 def main() -> int:
     token = _dev_token()
     headers = {"X-Dev-Token": token, "Content-Type": "application/json"}
@@ -143,8 +187,9 @@ def main() -> int:
             print(f"{status} {key:24} → {snippet}")
             passed += ok
             failed += not ok
-        # 结构化输出 + 路由决策 + durable HITL 循环（特殊路径，非单次 call_agent）
-        for fn in (_check_structured, _check_route_decision, _check_hitl_cycle):
+        # 结构化输出 + 路由决策 + durable HITL 循环 + 开放 A2A 入站/HITL（特殊路径，非单次 call_agent）
+        for fn in (_check_structured, _check_route_decision, _check_hitl_cycle,
+                   _check_a2a_inbound, _check_a2a_hitl):
             ok = fn(client, headers)
             passed += ok
             failed += not ok
