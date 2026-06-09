@@ -108,7 +108,7 @@ agentkit dev  my_agent -i "..."  # watch 源文件，改动即热重载重跑（
 | 手动分段 / 透传事件 | `ctx.span(name)` / `ctx.emit(event)` |
 | 请求上下文 | `ctx.query / messages / history / session_id / config / attachments` |
 
-声明面 `@agent(...)`：`models` / `kb` / `tools` / `config` / `mcp_servers`（消费外部 MCP）/ `call_agents`（A2A allow-list）/ `sandboxed` + `trust_tier`（不可信代码 docker 隔离）。完整用法见 `docs/agentkit-guide.md`。
+声明面 `@agent(...)`：`models` / `kb` / `tools` / `config` / `mcp_servers`（消费外部 MCP）/ `call_agents`（A2A allow-list）/ `sandboxed` + `trust_tier`（不可信代码 docker 隔离）。完整用法见 `docs/agentkit-guide.md`；任务导向食谱（RAG/工具/编排/HITL/MCP/A2A…）见 `docs/agentkit-cookbook.md`。
 
 ## 配置双源（代码优先）
 

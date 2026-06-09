@@ -5,6 +5,9 @@ Chameleon 的 `agentkit` 让你**只写业务逻辑**：声明一个 `@agent`、
 分发。同一份代码两种跑法——本地 `agentkit chat` 离线自测、提交后站内进程内运行，行为一致。
 
 > 公共面 `chameleon.agentkit` 是冻结契约（只增不改）。`chameleon.agentkit.testing` 同。
+>
+> 本册是**概念/API 参考**；想直接照着「我要建某类 agent」的任务找最短可跑食谱，见
+> [agentkit-cookbook.md](./agentkit-cookbook.md)（RAG/工具/编排/分诊/HITL/MCP/多模态/跨系统 A2A/结构化）。
 
 ## 1. 起步：一条命令
 
