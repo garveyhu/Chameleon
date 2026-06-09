@@ -43,6 +43,7 @@ def agent(
     mcp_servers: list[McpServerConfig] | None = None,
     call_agents: list[str] | None = None,
     durable: bool = False,
+    working_memory: type | None = None,
 ) -> Callable[[T], T]:
     """声明一个本地智能体。
 
@@ -71,6 +72,7 @@ def agent(
             mcp_servers=list(mcp_servers or []),
             call_agents=list(call_agents or []),
             durable=durable,
+            working_memory=working_memory,
             handler=target,
             is_class=isinstance(target, type),
         )

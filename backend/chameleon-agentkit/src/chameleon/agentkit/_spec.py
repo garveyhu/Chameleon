@@ -159,6 +159,10 @@ class AgentManifest:
     #: durable execution：开启后 ctx 外部调用走 memoization journal（崩溃/暂停后重放不重调），
     #: 且 ctx.ask_human 可暂停 run 等人工输入（HITL）。免迁移复用 AgentMemory（per request_id）。
     durable: bool = False
+    #: working memory 结构化槽（一个 pydantic BaseModel 子类）。声明后运行时每轮自动把该槽
+    #: 当前值渲染进 system（"关于用户的已知信息"），作者用 ctx.memory.update_working(...) 增量改。
+    #: 落 AgentMemory 保留键 __chm_working__（按 scope_ref 跨会话持久）。None=不启用。
+    working_memory: type | None = None
     # 作者实现入口：函数式 `async def handle(ctx)` 或 BaseAgent 子类
     handler: Any = None
     is_class: bool = False

@@ -91,6 +91,17 @@ class MemoryHandle(Protocol):
         """
         ...
 
+    async def get_working(self) -> dict[str, Any]:
+        """读 working memory 结构化槽当前值（@agent(working_memory=) 声明的）。"""
+        ...
+
+    async def update_working(self, **fields: Any) -> dict[str, Any]:
+        """增量更新 working memory 槽（merge 入既有值，按 scope 跨会话持久）；返新值。
+
+        声明了 @agent(working_memory=Schema) 后，下一轮运行时自动把新值渲染进 system。
+        """
+        ...
+
 
 class RuntimeTransport(ABC):
     """ctx 背后的可插拔后端：解析已配置资源 + 观测。"""
@@ -247,6 +258,8 @@ _CHECKPOINT_KEY = "__chm_checkpoint__"
 _JOURNAL_PREFIX = "__chm_journal__"
 #: durable Slice2 HITL 待人工输入标记键（复用 AgentMemory，免迁移）。
 _PENDING_KEY = "__chm_pending__"
+#: working memory 结构化槽的保留键（@agent(working_memory=) 声明时运行时自动注入 system）。
+_WORKING_KEY = "__chm_working__"
 
 
 class AgentPaused(Exception):  # noqa: N818 —— 控制流信号非错误，沿用 LangGraph interrupt 命名直觉
@@ -310,6 +323,9 @@ class AgentRun:
         #: 的元信息做条件分支；文档/数据类异步入临时 KB，通过 ctx.kb.search()
         #: 也能拿到检索结果。
         self.attachments: list[dict[str, Any]] = attachments or []
+        #: working memory 自动注入文本（@agent(working_memory=) 声明时由 runner 在 run 前
+        #: 载入并渲染好挂这里）；_build_messages 每轮把它并进 system。空=未启用/无已知信息。
+        self._working_memory_text: str = ""
 
     # —— 模型（slot=走绑定链；model=点名已配置 code，二选一）——
 
@@ -477,8 +493,10 @@ class AgentRun:
         不依赖 langchain：LangChain chat model 的 ainvoke/astream 接受 (role, content) 元组。
         """
         msgs: list[tuple[str, str]] = []
-        if system:
-            msgs.append(("system", system))
+        # working memory 自动注入：作者 system 在前（定角色），已知用户信息块在后（给上下文）。
+        sys_parts = [p for p in (system, self._working_memory_text) if p]
+        if sys_parts:
+            msgs.append(("system", "\n\n".join(sys_parts)))
         for m in self.history:
             role = getattr(m, "role", "user")
             if role not in ("system", "user", "assistant"):
@@ -772,6 +790,17 @@ class _MemoryProxy:
             if not (h.key.startswith("__chm_") and h.key.endswith("__"))
         ]
 
+    async def get_working(self) -> dict[str, Any]:
+        cur = await self._t.memory_get(_WORKING_KEY, {})
+        return cur if isinstance(cur, dict) else {}
+
+    async def update_working(self, **fields: Any) -> dict[str, Any]:
+        # merge 入既有槽（保留键，不进语义召回——working memory 每轮自动注入，无需检索）。
+        cur = await self.get_working()
+        cur.update(fields)
+        await self._t.memory_set(_WORKING_KEY, cur)
+        return cur
+
 
 class _KbProxy:
     """`ctx.kb` 的实现：把 search 转发给 transport（结构上满足 KbHandle）。"""
@@ -839,6 +868,35 @@ def _degenerate_memory_search(
             hits.append(MemoryHit(key=key, value=value, text=text, score=score))
     hits.sort(key=lambda h: h.score, reverse=True)
     return hits[:top_k]
+
+
+def _render_working_memory(schema: Any, data: dict[str, Any]) -> str:
+    """把 working memory 槽渲染成 system 注入块。schema（pydantic 类）给字段顺序/标签，
+    data 是当前值；空值字段不渲染。无任何值时返空串（不注入噪声）。"""
+    if not data:
+        return ""
+    empties = (None, "", [], {})
+    lines: list[str] = []
+    fields = getattr(schema, "model_fields", None) if schema is not None else None
+    if isinstance(fields, dict):
+        for name, f in fields.items():
+            v = data.get(name)
+            if v in empties:
+                continue
+            label = getattr(f, "description", None) or name
+            lines.append(f"- {label}：{v}")
+        for k, v in data.items():  # update_working 写的 schema 外字段也带上
+            if k not in fields and v not in empties:
+                lines.append(f"- {k}：{v}")
+    else:
+        lines = [f"- {k}：{v}" for k, v in data.items() if v not in empties]
+    if not lines:
+        return ""
+    return (
+        "[关于用户的已知信息]\n"
+        + "\n".join(lines)
+        + "\n（如获知新的用户偏好/事实，调用 ctx.memory.update_working(...) 记住）"
+    )
 
 
 def _usage_of(resp: Any) -> dict[str, int] | None:

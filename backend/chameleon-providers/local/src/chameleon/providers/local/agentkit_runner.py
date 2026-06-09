@@ -980,6 +980,17 @@ async def run_agentkit(ctx: InvokeContext) -> AsyncIterator[StreamEvent]:
                 yield StreamEvent(type=StreamEventType.error, data={"message": str(e)})
                 return
 
+        # working memory 自动注入（M2）：声明了 @agent(working_memory=Schema) → run 前载入
+        # 槽当前值（按 scope_ref 跨会话），渲染成 system 块挂到 run，_build_messages 每轮并入。
+        # 无 scope（无身份）则跳过——working memory 同 kv 需持久化 scope 才有意义。
+        if manifest.working_memory is not None and scope_ref:
+            from chameleon.agentkit._runtime import _WORKING_KEY, _render_working_memory
+
+            slot = await transport.memory_get(_WORKING_KEY, {})
+            run._working_memory_text = _render_working_memory(
+                manifest.working_memory, slot if isinstance(slot, dict) else {}
+            )
+
         # 沙箱路由：@agent(sandboxed=True) 在生产/force 下走隔离子进程执行（handle 在子
         # 进程，ctx 资源经 broker=transport 受控解析；凭据/DB 只在主进程）。
         if _should_sandbox(manifest):
