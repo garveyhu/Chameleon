@@ -28,9 +28,12 @@ class DevStructuredRequest(BaseModel):
 
 
 class DevMemoryRequest(BaseModel):
-    action: str  # get / set / all
+    action: str  # get / set / all / search
     key: str = ""
     value: Any = None
+    query: str = ""  # action=search
+    top_k: int = 5
+    min_score: float = 0.0
 
 
 class DevCallAgentRequest(BaseModel):

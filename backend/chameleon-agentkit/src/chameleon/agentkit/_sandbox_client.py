@@ -261,6 +261,23 @@ class SandboxClientTransport(RuntimeTransport):
     async def memory_all(self):  # noqa: ANN201
         return await self._rpc("memory_all", {}) or {}
 
+    async def memory_search(self, query, *, top_k=5, min_score=0.0):  # noqa: ANN001, ANN201
+        from chameleon.agentkit._spec import MemoryHit
+
+        rows = await self._rpc(
+            "memory_search", {"query": query, "top_k": top_k, "min_score": min_score}
+        )
+        return [
+            MemoryHit(
+                key=r.get("key", ""),
+                value=r.get("value"),
+                text=r.get("text", ""),
+                score=float(r.get("score", 0.0)),
+            )
+            for r in (rows or [])
+            if r.get("key")
+        ]
+
     async def media_generate(self, *, kind, prompt, slot=None, model=None, params=None, input_images=None):  # noqa: ANN001, ANN201
         from chameleon.agentkit._spec import MediaResult
 

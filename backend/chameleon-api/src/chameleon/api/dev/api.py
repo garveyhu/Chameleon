@@ -65,7 +65,14 @@ async def dev_structured(
 async def dev_memory(
     req: DevMemoryRequest, _: None = Depends(require_dev_token)
 ) -> Result[dict]:
-    out = await service.dev_memory(action=req.action, key=req.key, value=req.value)
+    out = await service.dev_memory(
+        action=req.action,
+        key=req.key,
+        value=req.value,
+        query=req.query,
+        top_k=req.top_k,
+        min_score=req.min_score,
+    )
     return Result.ok({"result": out})
 
 

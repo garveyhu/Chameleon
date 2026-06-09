@@ -23,7 +23,13 @@ from loguru import logger
 
 from chameleon.agentkit import AgentPaused, AgentRun, RuntimeTransport
 from chameleon.agentkit._runtime import _PENDING_KEY, _content_to_text
-from chameleon.agentkit._spec import Doc, MediaResult, ModelSlot, ToolSpec
+from chameleon.agentkit._spec import (
+    Doc,
+    MediaResult,
+    MemoryHit,
+    ModelSlot,
+    ToolSpec,
+)
 from chameleon.core.observe.context import (
     ObservationType,
     current_observation_id,
@@ -71,6 +77,21 @@ def _scoped_observation_id(name: str) -> str | None:
     current = current_observation_id()
     base = current if (current and current.startswith(f"{root}.")) else root
     return f"{base}.{name}"
+
+
+def _memory_text_projection(value: Any) -> str:
+    """把记忆值投影成 embed 输入文本：str 原样；其它 JSON 序列化（中文不转义）。
+
+    None / 空 → 空串（_index 据此删除向量行，保持与 KV 清空同步）。
+    """
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(value)
 
 
 class InProcessTransport(RuntimeTransport):
@@ -552,6 +573,24 @@ class InProcessTransport(RuntimeTransport):
                     raise
                 existing.value = {"v": value}
                 await s.commit()
+        # 旁路语义索引（M1）：KV 是真相源、已落库；向量索引失败不回滚 set（warn 降级）。
+        # 框架保留键（journal/checkpoint/pending）不入语义召回集，跳过 embed 省成本。
+        if not (key.startswith("__chm_") and key.endswith("__")):
+            await self._index_memory_vector(key, value)
+
+    async def _index_memory_vector(self, key: str, value: Any) -> None:
+        """旁路把记忆值的文本投影 embed 入 agent_memory_vector（经桥委托 engine）。"""
+        from chameleon.providers.base.memory_vector_bridge import get_memory_index_fn
+
+        index_fn = get_memory_index_fn()
+        if index_fn is None:
+            return  # 桥未接（无向量后端）→ memory 退化为纯 KV
+        try:
+            await index_fn(
+                self._agent_key, self._scope_ref, key, _memory_text_projection(value)
+            )
+        except Exception:  # noqa: BLE001 —— 索引尽力而为，绝不拖垮 set
+            logger.warning("memory 向量索引失败 agent={} key={}", self._agent_key, key)
 
     async def memory_all(self) -> dict[str, Any]:
         if not self._scope_ref:
@@ -567,6 +606,59 @@ class InProcessTransport(RuntimeTransport):
                     select(AgentMemory).where(
                         AgentMemory.agent_key == self._agent_key,
                         AgentMemory.scope_ref == self._scope_ref,
+                    )
+                )
+            ).scalars().all()
+        return {
+            r.mkey: (r.value.get("v") if isinstance(r.value, dict) else None)
+            for r in rows
+        }
+
+    async def memory_search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        if not self._scope_ref:
+            return []
+        from chameleon.providers.base.memory_vector_bridge import get_memory_search_fn
+
+        search_fn = get_memory_search_fn()
+        if search_fn is None:
+            return []  # 桥未接（无向量后端）→ 无语义召回
+        rows = await search_fn(
+            self._agent_key, self._scope_ref, query, top_k=top_k, min_score=min_score
+        )
+        if not rows:
+            return []
+        # 回填原始值（KV 真相源）：一次批量查命中 key 的 value，避免 N 次往返。
+        keys = [r["key"] for r in rows if r.get("key")]
+        values = await self._memory_values_for(keys)
+        return [
+            MemoryHit(
+                key=r["key"],
+                value=values.get(r["key"]),
+                text=r.get("text", ""),
+                score=float(r.get("score", 0.0)),
+            )
+            for r in rows
+            if r.get("key")
+        ]
+
+    async def _memory_values_for(self, keys: list[str]) -> dict[str, Any]:
+        """批量取一组 mkey 的原始值（按本 agent + scope 隔离）。"""
+        if not keys:
+            return {}
+        from sqlalchemy import select
+
+        from chameleon.data.infra.db import AsyncSessionLocal
+        from chameleon.data.models import AgentMemory
+
+        async with AsyncSessionLocal() as s:
+            rows = (
+                await s.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == self._agent_key,
+                        AgentMemory.scope_ref == self._scope_ref,
+                        AgentMemory.mkey.in_(keys),
                     )
                 )
             ).scalars().all()

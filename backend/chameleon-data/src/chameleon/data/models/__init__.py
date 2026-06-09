@@ -6,6 +6,7 @@
 from chameleon.data.models.agent import Agent
 from chameleon.data.models.agent_kb_link import AgentKbLink
 from chameleon.data.models.agent_memory import AgentMemory
+from chameleon.data.models.agent_memory_vector import AgentMemoryVector
 from chameleon.data.models.ai_task import AiTask
 from chameleon.data.models.api_key import ApiKey, CallLog
 from chameleon.data.models.app_template import AppTemplate
@@ -65,6 +66,7 @@ __all__ = [
     "Agent",
     "AgentKbLink",
     "AgentMemory",
+    "AgentMemoryVector",
     "AiTask",
     # 业务域
     "ChatSession",

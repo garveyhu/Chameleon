@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from pydantic import BaseModel
 
-from chameleon.agentkit._spec import Doc, MediaResult, ToolSpec
+from chameleon.agentkit._spec import Doc, MediaResult, MemoryHit, ToolSpec
 
 if TYPE_CHECKING:
     from chameleon.core.runtime_types import Message, StreamEvent
@@ -80,6 +80,16 @@ class MemoryHandle(Protocol):
     async def set(self, key: str, value: Any) -> None: ...
 
     async def all(self) -> dict[str, Any]: ...
+
+    async def search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        """语义召回：按 query 语义检索本 agent + 作用域下相关记忆条目（跨会话）。
+
+        旁路向量集合（memory.set 时 embed 入库），按 scope_ref 硬隔离做 vector+BM25
+        hybrid 召回。平台未接桥（无向量后端）时回退退化扫描。返按相关性降序。
+        """
+        ...
 
 
 class RuntimeTransport(ABC):
@@ -157,6 +167,17 @@ class RuntimeTransport(ABC):
     @abstractmethod
     async def memory_all(self) -> dict[str, Any]:
         """取本 agent + 作用域下全部 kv。"""
+        ...
+
+    @abstractmethod
+    async def memory_search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        """语义召回本 agent + 作用域下相关记忆（hybrid：vector+BM25+可选 rerank）。
+
+        scope 隔离硬约束：只在 (agent_key, scope_ref) 内召回，绝不串号。未接向量桥
+        （平台无后端 / dev 未起）时回退退化扫描或空。
+        """
         ...
 
     @abstractmethod
@@ -741,6 +762,16 @@ class _MemoryProxy:
             if not (k.startswith("__chm_") and k.endswith("__"))
         }
 
+    async def search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        # 滤掉框架保留键命中（journal/checkpoint/working 等不该出现在作者语义召回里）。
+        hits = await self._t.memory_search(query, top_k=top_k, min_score=min_score)
+        return [
+            h for h in hits
+            if not (h.key.startswith("__chm_") and h.key.endswith("__"))
+        ]
+
 
 class _KbProxy:
     """`ctx.kb` 的实现：把 search 转发给 transport（结构上满足 KbHandle）。"""
@@ -782,6 +813,32 @@ def _fingerprint(*parts: Any) -> str:
 
     raw = "\x00".join("" if p is None else str(p) for p in parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _degenerate_memory_search(
+    memory: dict[str, Any], query: str, *, top_k: int = 5, min_score: float = 0.0
+) -> list[MemoryHit]:
+    """无向量后端时的退化语义召回（standalone / fake / dev 回退）：纯 stdlib 词项重叠打分。
+
+    平台档（InProcessTransport）走真 hybrid（vector+BM25+rerank）；本地无 DB/embedding 时
+    用查询词项命中比例近似，够本地自测，不引入 jieba/embedding 依赖。
+    """
+    q = (query or "").lower().strip()
+    if not q:
+        return []
+    terms = [t for t in q.split() if t]
+    hits: list[MemoryHit] = []
+    for key, value in memory.items():
+        text = value if isinstance(value, str) else str(value)
+        low = text.lower()
+        if terms:
+            score = sum(1 for t in terms if t in low) / len(terms)
+        else:
+            score = 1.0 if q in low else 0.0
+        if score > 0.0 and score >= min_score:
+            hits.append(MemoryHit(key=key, value=value, text=text, score=score))
+    hits.sort(key=lambda h: h.score, reverse=True)
+    return hits[:top_k]
 
 
 def _usage_of(resp: Any) -> dict[str, int] | None:

@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from chameleon.agentkit._runtime import RuntimeTransport
-from chameleon.agentkit._spec import Doc, ToolSpec
+from chameleon.agentkit._spec import Doc, MemoryHit, ToolSpec
 
 
 class _DevSpan:
@@ -331,6 +331,25 @@ class HttpDevTransport(RuntimeTransport):
     async def memory_all(self) -> dict[str, Any]:
         out = await self._post("/v1/dev/memory", {"action": "all"})
         return out.get("result") or {} if isinstance(out, dict) else {}
+
+    async def memory_search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        out = await self._post(
+            "/v1/dev/memory",
+            {"action": "search", "query": query, "top_k": top_k, "min_score": min_score},
+        )
+        rows = (out.get("result") if isinstance(out, dict) else None) or []
+        return [
+            MemoryHit(
+                key=r.get("key", ""),
+                value=r.get("value"),
+                text=r.get("text", ""),
+                score=float(r.get("score", 0.0)),
+            )
+            for r in rows
+            if r.get("key")
+        ]
 
     async def media_generate(self, *, kind, prompt, slot=None, model=None, params=None, input_images=None):  # noqa: ANN001, ANN201
         raise NotImplementedError("dev 模式暂不支持 ctx.media；请在站内验证该路径。")

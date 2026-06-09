@@ -130,6 +130,19 @@ async def _resolve_rpc(broker: Any, frame: dict[str, Any]) -> dict[str, Any]:
             return {"ok": True, "data": None}
         if method == "memory_all":
             return {"ok": True, "data": await broker.memory_all()}
+        if method == "memory_search":
+            hits = await broker.memory_search(
+                args.get("query", ""),
+                top_k=int(args.get("top_k", 5)),
+                min_score=float(args.get("min_score", 0.0)),
+            )
+            return {
+                "ok": True,
+                "data": [
+                    {"key": h.key, "value": h.value, "text": h.text, "score": h.score}
+                    for h in hits
+                ],
+            }
         if method == "call_agent":
             # scope 红线：沙箱（不可信）只能调声明的子 agent（call_agents allow-list）；
             # 未声明=拒（防横向越权调任意 agent）。depth/budget 闸仍在 broker.call_agent 内。

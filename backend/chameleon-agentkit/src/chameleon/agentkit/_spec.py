@@ -60,6 +60,23 @@ class Doc:
 
 
 @dataclass(slots=True)
+class MemoryHit:
+    """`ctx.memory.search` 的一条语义召回命中（按 scope 隔离的 hybrid 检索结果）。
+
+    Attributes:
+        key: 记忆条目的 mkey（`ctx.memory.set(key, value)` 的 key）。
+        value: 该条目的原始值（从 KV 真相源回填；standalone/fake 直接给）。
+        text: 该条目的文本投影（embed 输入 + 召回回显）。
+        score: hybrid 召回分（vector+BM25 融合，越大越相关）。
+    """
+
+    key: str
+    value: Any = None
+    text: str = ""
+    score: float = 0.0
+
+
+@dataclass(slots=True)
 class McpServerConfig:
     """一个外部 MCP server 的连接配置（`@agent(mcp_servers=[...])` 声明）。
 

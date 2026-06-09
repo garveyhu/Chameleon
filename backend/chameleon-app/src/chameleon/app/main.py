@@ -203,12 +203,20 @@ def _wire_media_cost_bridge() -> None:
     wire_media_cost_bridge()
 
 
+def _wire_memory_vector_bridge() -> None:
+    """注入语义记忆 fn，让 agentkit ctx.memory.search/set 用上 engine embed+hybrid（不反向依赖）。"""
+    from chameleon.engine.retrieval.memory_pipeline import wire_memory_vector_bridge
+
+    wire_memory_vector_bridge()
+
+
 def create_app() -> FastAPI:
     setup_logger()
     _register_observation_sink()
     _wire_agent_bridges()
     _wire_a2a_bridge()
     _wire_retrieval_bridge()
+    _wire_memory_vector_bridge()
     _wire_media_cost_bridge()
 
     app = FastAPI(

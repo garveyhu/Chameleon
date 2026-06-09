@@ -22,8 +22,12 @@ import inspect
 from collections.abc import AsyncIterator
 from typing import Any
 
-from chameleon.agentkit._runtime import AgentRun, RuntimeTransport
-from chameleon.agentkit._spec import Doc, MediaResult, ToolSpec
+from chameleon.agentkit._runtime import (
+    AgentRun,
+    RuntimeTransport,
+    _degenerate_memory_search,
+)
+from chameleon.agentkit._spec import Doc, MediaResult, MemoryHit, ToolSpec
 
 
 class _FakeMsg:
@@ -157,6 +161,13 @@ class FakeTransport(RuntimeTransport):
 
     async def memory_all(self) -> dict[str, Any]:
         return dict(self._memory)
+
+    async def memory_search(
+        self, query: str, *, top_k: int = 5, min_score: float = 0.0
+    ) -> list[MemoryHit]:
+        return _degenerate_memory_search(
+            self._memory, query, top_k=top_k, min_score=min_score
+        )
 
     async def media_generate(
         self,

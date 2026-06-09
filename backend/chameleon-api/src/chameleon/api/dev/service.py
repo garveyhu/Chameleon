@@ -236,12 +236,54 @@ _DEV_MEMORY_AGENT = "__dev__"
 _DEV_MEMORY_SCOPE = "__dev__"
 
 
-async def dev_memory(*, action: str, key: str = "", value: Any = None) -> Any:
-    """dev 跨会话记忆 get/set/all —— 复用 AgentMemory 表的 dev 命名空间。"""
+async def dev_memory(
+    *,
+    action: str,
+    key: str = "",
+    value: Any = None,
+    query: str = "",
+    top_k: int = 5,
+    min_score: float = 0.0,
+) -> Any:
+    """dev 跨会话记忆 get/set/all/search —— 复用 AgentMemory 表的 dev 命名空间。
+
+    search 走与平台同一条语义召回桥（memory_vector_bridge），dev 自测能验真 hybrid 召回。
+    """
     from sqlalchemy import select
 
     from chameleon.data.infra.db import AsyncSessionLocal
     from chameleon.data.models import AgentMemory
+    from chameleon.providers.base.memory_vector_bridge import (
+        get_memory_index_fn,
+        get_memory_search_fn,
+    )
+
+    if action == "search":
+        search_fn = get_memory_search_fn()
+        if search_fn is None:
+            return []
+        rows = await search_fn(
+            _DEV_MEMORY_AGENT, _DEV_MEMORY_SCOPE, query, top_k=top_k, min_score=min_score
+        )
+        async with AsyncSessionLocal() as session:
+            kv_rows = (
+                await session.execute(
+                    select(AgentMemory).where(
+                        AgentMemory.agent_key == _DEV_MEMORY_AGENT,
+                        AgentMemory.scope_ref == _DEV_MEMORY_SCOPE,
+                    )
+                )
+            ).scalars().all()
+        values = {
+            r.mkey: (r.value.get("v") if isinstance(r.value, dict) else None)
+            for r in kv_rows
+        }
+        return [
+            {"key": r["key"], "value": values.get(r["key"]), "text": r.get("text", ""),
+             "score": r.get("score", 0.0)}
+            for r in rows
+            if r.get("key")
+        ]
 
     async with AsyncSessionLocal() as session:
         if action == "set":
@@ -267,6 +309,20 @@ async def dev_memory(*, action: str, key: str = "", value: Any = None) -> Any:
             else:
                 row.value = {"v": value}
             await session.commit()
+            # 旁路语义索引（与 InProcessTransport 一致）：dev 自测也能验真 hybrid 召回。
+            index_fn = get_memory_index_fn()
+            if index_fn is not None:
+                import json
+
+                from loguru import logger
+
+                try:
+                    text = value if isinstance(value, str) else (
+                        json.dumps(value, ensure_ascii=False) if value is not None else ""
+                    )
+                    await index_fn(_DEV_MEMORY_AGENT, _DEV_MEMORY_SCOPE, key, text)
+                except Exception:  # noqa: BLE001 —— 索引尽力而为，不拖垮 set
+                    logger.warning("dev memory 向量索引失败 key={}", key)
             return {"ok": True}
         rows = (
             await session.execute(
