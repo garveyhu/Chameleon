@@ -168,9 +168,9 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         name: '200 - HITL 暂停（durable 应用）',
-        desc: '应用 ask_human 暂停时收到 pending 后流结束；widget 渲染回填框，用户回答后带 resume_answer 重调本端点续跑',
+        desc: '应用 ask_human 暂停时收到 pending；注意其后仍会跟一条 end（answer 为空）再 [DONE]——客户端务必让 pending 状态不被 end 覆盖（渲染回填框，用户回答后带 resume_answer 重调本端点续跑）',
         example:
-          'data: {"meta": {...}}\ndata: {"pending": {"prompt": "金额超阈值，是否批准？", "call_index": 0, "run_id": "run_01H..."}}\ndata: [DONE]',
+          'data: {"meta": {...}}\ndata: {"pending": {"prompt": "金额超阈值，是否批准？", "call_index": 0, "run_id": "run_01H..."}}\ndata: {"end": true, "answer": ""}\ndata: [DONE]',
       },
     ],
     cURL: `curl -N -X POST '{BASE}/v1/embed/em_xxx/invoke/stream' \\

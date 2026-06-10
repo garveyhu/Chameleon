@@ -306,21 +306,26 @@ export class EmbedApi {
       }
       return false;
     };
-    while (!done) {
-      const { done: rd, value } = await reader.read();
-      if (rd) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx = buffer.indexOf('\n\n');
-      while (idx !== -1) {
-        if (flush(buffer.slice(0, idx))) {
-          done = true;
-          break;
+    try {
+      while (!done) {
+        const { done: rd, value } = await reader.read();
+        if (rd) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx = buffer.indexOf('\n\n');
+        while (idx !== -1) {
+          if (flush(buffer.slice(0, idx))) {
+            done = true;
+            break;
+          }
+          buffer = buffer.slice(idx + 2);
+          idx = buffer.indexOf('\n\n');
         }
-        buffer = buffer.slice(idx + 2);
-        idx = buffer.indexOf('\n\n');
       }
+      if (!done && buffer.length > 0) flush(buffer);
+    } finally {
+      // flush 内 throw（token 重签路径）会穿透循环——确保释放连接
+      reader.cancel().catch(() => undefined);
     }
-    if (!done && buffer.length > 0) flush(buffer);
   }
 
   private async unwrap<T>(res: Response): Promise<T> {

@@ -21,7 +21,8 @@ Stream 的单一翻译器思路；线格式维持现状（与 widget / 文档已
 | metadata 其他（media 等）        | 丢弃（媒体走 delta markdown，作者侧约定）  |
 | tool_call / tool_result          | 丢弃（同 step；接入 thought 渲染时此处开闸）|
 | error {...}                      | {"error": {type, message, code?, guardrail?}}|
-| done                             | 丢弃（B 格式终态是 end，由调用方组装）     |
+| done（全程无 delta 且有 answer） | {"delta": answer}（非流式答案兜底）        |
+| done（其余）                     | 丢弃（B 格式终态是 end，由调用方组装）     |
 
 约定：error 是终态——调用方收到含 "error" 的 chunk 后应停止消费并
 **不再发 end**（契约见 core/api/sse_events 模块注释）。
@@ -48,6 +49,7 @@ class StreamTranslateState:
     usage: dict[str, Any] | None = None
     saw_error: bool = False
     saw_pending: bool = False
+    saw_delta: bool = False
     _extras: dict[str, Any] = field(default_factory=dict)
 
     def usage_sse(self) -> dict[str, int] | None:
@@ -76,7 +78,10 @@ def translate_event(
     """
     if ev.type == StreamEventType.delta:
         text = ev.data.get("text", "")
-        return [{"delta": text}] if text else []
+        if text:
+            state.saw_delta = True
+            return [{"delta": text}]
+        return []
 
     if ev.type == StreamEventType.citation:
         return [{"citation": ev.data}] if show_citations else []
@@ -114,5 +119,15 @@ def translate_event(
             err["guardrail"] = ev.data["guardrail"]
         return [{"error": err}]
 
-    # tool_call / tool_result / done：站内渠道暂不透传（接 thought 渲染时开闸）
+    if ev.type == StreamEventType.done:
+        # 非流式答案兜底：有的 provider（graph 无答案节点 delta、fastgpt fastAnswer）
+        # 整条答案只在 done.answer——若全程没出过 delta，把它补成终段 delta，
+        # 否则该轮在站内渠道显示空气泡且 assistant 消息不落库
+        answer = ev.data.get("answer")
+        if not state.saw_delta and isinstance(answer, str) and answer:
+            state.saw_delta = True
+            return [{"delta": answer}]
+        return []
+
+    # tool_call / tool_result：站内渠道暂不透传（接 thought 渲染时开闸）
     return []

@@ -164,5 +164,24 @@ def test_translate_event_full_mapping() -> None:
                   "code": 40001, "guardrail": "NoInjection"}
     }]
     assert st.saw_error
-    # done 由调用方组装 end，转换器丢弃
+    # done 由调用方组装 end，转换器丢弃（本流已出过 delta）
     assert translate_event(_ev(StreamEventType.done, answer="x"), st) == []
+
+
+def test_translate_done_answer_fallback_when_no_delta() -> None:
+    """全程无 delta 的 done.answer 兜底为终段 delta——graph 无答案节点流式、
+    fastgpt fastAnswer 等场景，否则站内渠道显示空气泡且 assistant 不落库。"""
+    from chameleon.core.api.stream_translate import (
+        StreamTranslateState,
+        translate_event,
+    )
+
+    st = StreamTranslateState()
+    assert translate_event(_ev(StreamEventType.done, answer="整段答案"), st) == [
+        {"delta": "整段答案"}
+    ]
+    assert st.saw_delta
+    # 出过 delta 后 done 照旧丢弃
+    st2 = StreamTranslateState()
+    translate_event(_ev(StreamEventType.delta, text="流式"), st2)
+    assert translate_event(_ev(StreamEventType.done, answer="整段答案"), st2) == []
