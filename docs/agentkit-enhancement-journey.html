@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>agentkit 框架增强 · 到哪了</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#141b24; --card:#19222e; --card2:#1d2733; --line:#28323f;
+    --txt:#e6edf3; --mut:#8b97a5; --dim:#5c6775;
+    --accent:#4a9eda; --accent2:#5dd9b0; --vio:#a78bfa; --amb:#e3b341;
+    --ok:#3fb950; --warn:#d29922; --no:#f06a5d;
+    --code:#0a0e14; --kw:#7ee0c0; --str:#d9a45b; --cmt:#5c6775;
+    --r:13px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:radial-gradient(1200px 600px at 50% -200px,rgba(74,158,218,.10),transparent),var(--bg);
+    color:var(--txt);font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,system-ui,sans-serif;
+    line-height:1.62;font-size:15px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 24px 90px}
+  header.hero{max-width:1120px;margin:0 auto;padding:64px 24px 30px}
+  .tag{display:inline-block;font-size:12px;color:var(--accent2);border:1px solid var(--line);
+    border-radius:999px;padding:4px 13px;letter-spacing:.05em;margin-bottom:20px;background:rgba(93,217,176,.05)}
+  h1{font-size:38px;margin:0 0 12px;letter-spacing:-.015em;line-height:1.18;font-weight:700}
+  h1 .g{background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--mut);font-size:17px;max-width:780px;margin:0}
+  .lead b{color:var(--txt);font-weight:600}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--dim);
+    margin:54px 0 20px;font-weight:700;display:flex;align-items:center;gap:12px}
+  h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+
+  /* 顶部数据条 */
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:13px;margin-top:34px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:18px 16px;text-align:center;position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .stat .v{font-size:30px;font-weight:800;color:#fff;letter-spacing:-.02em}
+  .stat .l{font-size:11.5px;color:var(--mut);margin-top:3px;letter-spacing:.02em}
+
+  /* before -> after */
+  .ba{display:grid;grid-template-columns:1fr 44px 1fr;gap:0;align-items:stretch;margin-bottom:14px}
+  .ba .col{border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+  .ba .before{background:rgba(240,106,93,.05);border-color:rgba(240,106,93,.22)}
+  .ba .after{background:rgba(93,217,176,.06);border-color:rgba(93,217,176,.26)}
+  .ba .arrow{display:flex;align-items:center;justify-content:center;color:var(--accent2);font-size:22px}
+  .ba h4{margin:0 0 9px;font-size:12px;text-transform:uppercase;letter-spacing:.08em}
+  .ba .before h4{color:#f0846f}.ba .after h4{color:var(--accent2)}
+  .ba ul{margin:0;padding-left:17px}.ba li{font-size:13px;color:var(--mut);margin:4px 0}
+  .ba .after li{color:#c5d1da}
+
+  /* 梯队卡片 */
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:19px 21px;transition:.16s}
+  .card:hover{border-color:#3a4a5e;transform:translateY(-1px)}
+  .card .top{display:flex;align-items:center;gap:10px;margin-bottom:5px}
+  .pill{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;letter-spacing:.04em}
+  .p1{background:rgba(74,158,218,.14);color:var(--accent);border:1px solid rgba(74,158,218,.3)}
+  .p2{background:rgba(93,217,176,.13);color:var(--accent2);border:1px solid rgba(93,217,176,.28)}
+  .p3{background:rgba(167,139,250,.14);color:var(--vio);border:1px solid rgba(167,139,250,.3)}
+  .card h3{font-size:16px;margin:0;font-weight:650;flex:1}
+  .done{font-size:11px;color:var(--ok);font-weight:600;white-space:nowrap}
+  .card .desc{color:var(--mut);font-size:13.5px;margin:8px 0 12px}
+  .card .feat{list-style:none;margin:0;padding:0}
+  .card .feat li{font-size:12.5px;color:#bcc8d2;padding:3px 0 3px 17px;position:relative}
+  .card .feat li::before{content:"▸";position:absolute;left:0;color:var(--accent2);font-size:11px}
+  .card .meta{margin-top:13px;padding-top:11px;border-top:1px solid var(--line);display:flex;gap:14px;font-size:11px;color:var(--dim);flex-wrap:wrap}
+  .card .meta code{color:var(--kw);font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:10.5px}
+
+  /* 时间线 */
+  .tl{position:relative;padding-left:26px}
+  .tl::before{content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;background:linear-gradient(180deg,var(--accent),var(--accent2),var(--vio))}
+  .ti{position:relative;padding:7px 0 7px 16px}
+  .ti::before{content:"";position:absolute;left:-23px;top:13px;width:9px;height:9px;border-radius:50%;background:var(--accent2);border:2px solid var(--bg);box-shadow:0 0 0 2px rgba(93,217,176,.3)}
+  .ti .h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+  .ti code{color:var(--accent);font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;font-weight:600}
+  .ti .t{font-size:13.5px;color:#d3dde5}
+  .ti .s{font-size:11.5px;color:var(--dim)}
+
+  /* 验证面 */
+  .verify{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}
+  .vc{background:var(--card2);border:1px solid var(--line);border-radius:var(--r);padding:16px 19px;display:flex;gap:13px;align-items:flex-start}
+  .vc .ic{font-size:19px;line-height:1.3;flex:none}
+  .vc h4{margin:0 0 3px;font-size:14px;color:var(--txt)}
+  .vc p{margin:0;font-size:12.5px;color:var(--mut)}
+  .vc b{color:var(--accent2)}
+
+  /* next */
+  .next{background:linear-gradient(180deg,rgba(74,158,218,.07),rgba(74,158,218,.01));
+    border:1px solid rgba(74,158,218,.24);border-left:3px solid var(--accent);border-radius:var(--r);padding:20px 24px;margin-top:18px}
+  .next h3{margin:0 0 6px;font-size:16px}
+  .next p{margin:0 0 12px;color:var(--mut);font-size:13.5px}
+  .next ol{margin:0;padding-left:20px}.next li{font-size:13.5px;color:#c5d1da;margin:6px 0}
+  .next li b{color:#fff}
+
+  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:60px;border-top:1px solid var(--line);padding-top:22px}
+  footer b{color:var(--mut)}
+  @media(max-width:760px){
+    .stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}
+    .verify{grid-template-columns:1fr}.ba{grid-template-columns:1fr;gap:8px}.ba .arrow{transform:rotate(90deg);height:24px}
+    h1{font-size:30px}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">框架增强 · 2026-06-09 一日冲刺 · feature/code</div>
+  <h1>你的 <span class="g">agentkit</span> 框架增强，<br/>到哪了。</h1>
+  <p class="lead">从"决定优化代码框架"到现在，按一份对标 2026 主流框架的路线图，
+  把 agentkit 从<b>能用</b>推到<b>对标顶级</b>：记忆从纯 KV → 语义召回 + 工作记忆 + 对话压缩；
+  每个 LLM/工具/子 agent 调用<b>可重放</b>（崩溃/暂停恢复零重复计费）；瞬时错误<b>自动退避重试</b>；
+  注入/PII/越权有<b>安全轨道</b>拦截；改 agent 能跑数据集<b>回归打分</b>。全部真库验证、已 live。</p>
+
+  <div class="stats">
+    <div class="stat"><div class="v">13</div><div class="l">feat/test commit</div></div>
+    <div class="stat"><div class="v">5</div><div class="l">能力梯队全交付</div></div>
+    <div class="stat"><div class="v">36</div><div class="l">新增真库测试</div></div>
+    <div class="stat"><div class="v">155</div><div class="l">回归套件全绿</div></div>
+    <div class="stat"><div class="v">+3.6k</div><div class="l">行（41 文件）</div></div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2>一句话：改造前 → 改造后</h2>
+
+  <div class="ba">
+    <div class="col before"><h4>改造前</h4><ul>
+      <li>记忆只有 KV：set/get/all，存不进语义、跨会话只能精确取键</li>
+      <li>一次 429 / 超时 → 整个 agent 失败，没有重试</li>
+      <li>durable 只覆盖 complete(文本) + ask_human，其余调用重放就重复扣费</li>
+      <li>没有任何输入/输出安全校验（注入 / PII / 越权裸奔）</li>
+      <li>改了 agent 代码无法跑回归打分，没有安全网</li>
+    </ul></div>
+    <div class="arrow">→</div>
+    <div class="col after"><h4>改造后</h4><ul>
+      <li><b>语义召回</b> hybrid（向量+BM25+rerank）+ 结构化工作记忆自动注入 + 对话压缩</li>
+      <li><b>瞬时退避重试</b>贯穿 complete / stream / 工具循环（@agent(retries=N)）</li>
+      <li>durable <b>全覆盖</b>：kb/media/结构化/子 agent/流式/工具循环逐步可重放，崩溃恢复不重执行</li>
+      <li><b>guardrails</b>：注入拦截 / PII 脱敏 / 长度 / 输出 schema（block/redact/retry/warn）</li>
+      <li>agentkit agent 当被测对象，跑数据集 → judge 打分 → 版本对比闭环</li>
+    </ul></div>
+  </div>
+
+  <h2>五大能力梯队（对标 2026 主流框架）</h2>
+  <div class="grid">
+
+    <div class="card">
+      <div class="top"><span class="pill p1">T1-1</span><h3>记忆升级</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">2026 行业公认最大缺口。复用平台向量+rerank 检索栈，ROI 异常高。</div>
+      <ul class="feat">
+        <li>M1 语义召回 <code>ctx.memory.search()</code> · 新 pgvector 表 · full hybrid · scope 硬隔离</li>
+        <li>M2 working memory：<code>@agent(working_memory=Schema)</code> 每轮自动注入 system</li>
+        <li>M3 observational：长对话后台 Observer→Reflector 压缩成稠密观察</li>
+      </ul>
+      <div class="meta"><span><code>748f57b 7fe5892 4a33cc4</code></span><span>9 测试</span></div>
+    </div>
+
+    <div class="card">
+      <div class="top"><span class="pill p3">T3-1</span><h3>eval 回归闭环</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">改 agent 代码有了安全网。核实闭环已存在（provider 无关），补回归测试钉死。</div>
+      <ul class="feat">
+        <li>agentkit @agent 经 <code>DatasetRun(agent_key=)</code> 当被测对象</li>
+        <li>统一 invoke 聚合 answer → 现有 judge / 对比 / 优化全套复用</li>
+        <li>前端「指定智能体」+ AgentPicker「代码」类别已支持选 agentkit agent</li>
+      </ul>
+      <div class="meta"><span><code>65ededa</code></span><span>真库回归网</span></div>
+    </div>
+
+    <div class="card">
+      <div class="top"><span class="pill p2">T2-2</span><h3>ctx 弹性</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">一次瞬时错误就整个 agent 失败 → 生产不可靠。Temporal 式自动重试是标配。</div>
+      <ul class="feat">
+        <li>瞬时判别（rate limit / timeout / 5xx / 连接）退避重试；4xx / 解析不重试</li>
+        <li>覆盖 complete / run_with_tools（每步）/ stream（建连前）</li>
+        <li>重试包在 durable journal 内：重试成功才记录，重放不冲突</li>
+      </ul>
+      <div class="meta"><span><code>c7b7805 f144796</code></span><span>8 测试</span></div>
+    </div>
+
+    <div class="card">
+      <div class="top"><span class="pill p1">T1-2</span><h3>durable 全覆盖</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">2026 主线表准（OpenAI+Temporal GA 跑 Codex）。每个调用可重试可恢复。</div>
+      <ul class="feat">
+        <li>易：kb.search / media.generate / 结构化输出 可重放</li>
+        <li>中：call_agent / gather / route / stream 可重放</li>
+        <li>难：run_with_tools <b>fine-grained</b> 循环内逐步 journal —— 中途崩溃恢复不重执行已完成工具（比 LangGraph 更细）</li>
+      </ul>
+      <div class="meta"><span><code>3318230 572ad97 7a7bac0 a36f154</code></span><span>10 测试</span></div>
+    </div>
+
+    <div class="card">
+      <div class="top"><span class="pill p2">T2-1</span><h3>guardrails 安全轨道</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">合规/安全场景准入证。声明式输入/输出轨道，命中按策略处置。</div>
+      <ul class="feat">
+        <li>内置 NoInjection / PiiRedact / MaxLen / OutputJsonSchema + 扩展基类</li>
+        <li><code>@agent(guardrails=[...])</code>：入口跑 input 轨、出口跑 output 轨</li>
+        <li>策略 block / redact / retry / warn-only；lean SDK 自包含正则</li>
+      </ul>
+      <div class="meta"><span><code>89e6eb6</code></span><span>8 测试</span></div>
+    </div>
+
+    <div class="card">
+      <div class="top"><span class="pill p3">UI</span><h3>前端能力面</h3><span class="done">✓ 交付</span></div>
+      <div class="desc">后端 SDK 变强，运营侧要看得见。应用详情「能力」tab 透出新能力。</div>
+      <ul class="feat">
+        <li>后端 AgentCapabilities 透出 working/observe/retries/guardrails</li>
+        <li>前端徽章：结构化记忆 · 对话压缩 · 弹性重试 ×N + 安全轨道区</li>
+        <li><b>浏览器实测</b>过（6006/7009 live 截图核实）</li>
+      </ul>
+      <div class="meta"><span><code>0116157</code></span><span>tsc+eslint+浏览器</span></div>
+    </div>
+
+  </div>
+
+  <h2>怎么走到这的（commit 时间线）</h2>
+  <div class="tl">
+    <div class="ti"><div class="h"><code>748f57b</code><span class="t">memory 语义召回 M1（ctx.memory.search + hybrid 向量集合）</span></div></div>
+    <div class="ti"><div class="h"><code>7fe5892</code><span class="t">working memory 结构化槽自动注入 M2</span></div></div>
+    <div class="ti"><div class="h"><code>4a33cc4</code><span class="t">observational memory 压缩 M3（Observer/Reflector）</span></div></div>
+    <div class="ti"><div class="h"><code>65ededa</code><span class="t">agentkit @agent 当被测对象的 eval 闭环回归测试（T3-1）</span></div></div>
+    <div class="ti"><div class="h"><code>c7b7805</code><span class="t">ctx 弹性——瞬时错误退避重试（complete + run_with_tools）</span></div></div>
+    <div class="ti"><div class="h"><code>3318230</code><span class="t">durable「易」片——kb.search / media / 结构化输出可重放</span></div></div>
+    <div class="ti"><div class="h"><code>572ad97</code><span class="t">durable「中」片——call_agent / gather / route / stream 可重放</span></div></div>
+    <div class="ti"><div class="h"><code>7a7bac0</code><span class="t">durable「难」片——run_with_tools 可重放（durable 全覆盖收官）</span></div></div>
+    <div class="ti"><div class="h"><code>89e6eb6</code><span class="t">guardrails 安全轨道（路线图收官）</span></div></div>
+    <div class="ti"><div class="h"><code>0116157</code><span class="t">应用「能力」tab 透出记忆/弹性/安全轨道（前端面）</span></div></div>
+    <div class="ti"><div class="h"><code>a36f154</code><span class="t">durable run_with_tools 升级 fine-grained 逐步 journal</span></div></div>
+    <div class="ti"><div class="h"><code>f144796</code><span class="t">ctx.stream 建连瞬时退避重试（收口 T2-2）</span><span class="s">← HEAD（最新）</span></div></div>
+  </div>
+
+  <h2>不是只看 diff——怎么验的</h2>
+  <div class="verify">
+    <div class="vc"><div class="ic">🗄️</div><div><h4>真 test-DB，不 mock</h4><p>真 Postgres + pgvector + alembic 迁移 + 完整 provider/runner 路径。改 durable <b>必补真库往返测试</b>（首跑 journal、重放零再执行）。</p></div></div>
+    <div class="vc"><div class="ic">🧪</div><div><h4>回归套件 155 全绿</h4><p>每完成一个可独立验证单元就 commit；收官跑全 agentkit 套件 <b>155 passed</b>，含中途崩溃恢复、pause→resume 集成验收。</p></div></div>
+    <div class="vc"><div class="ic">🔒</div><div><h4>架构契约 3/3 KEPT</h4><p>每步 ruff + import-linter；<b>agentkit lean SDK 不反依赖 engine/system</b>（复用检索走 engine bridge、任务走 aikit）始终 GREEN。</p></div></div>
+    <div class="vc"><div class="ic">🖥️</div><div><h4>浏览器实测 + live</h4><p>前端「能力」tab 在 6006/7009 <b>真截图核实</b>；dev DB 已迁移、后端已 reload，新能力<b>已 live</b>。</p></div></div>
+  </div>
+
+  <h2>下一步建议（不在本轮范围，供你定）</h2>
+  <div class="next">
+    <h3>从"能力补全"切到"成为品类老大"</h3>
+    <p>本轮做的是能力增强路线图（已收官）。母计划 <code>docs/plans/2026-06-08-world-class-orchestration-roadmap.md</code>
+    的对抗评审结论：定义品类的是<b>标准互操作 + 多语言 authoring + 安全多租户运行时</b>。按高杠杆排序：</p>
+    <ol>
+      <li><b>开发体验三件套</b>（自动发现 workspace member · <code>agentkit new</code> 脚手架 · <code>agentkit test</code>）——杀作者上手摩擦，采用率天花板。</li>
+      <li><b>OpenTelemetry GenAI 出站</b>——已有内部 trace/cost，补 exporter 接 Datadog/Grafana，企业可信度硬通货。</li>
+      <li><b>统一成本/安全闸收口</b>——审 embed / mcp 入口的 context_vars 是否都剥离 <code>_a2a_*</code>（agent 主路径已修，旁路待审）。</li>
+      <li><b>前端运营面</b>——durable HITL 暂停 run 的管理 + 回填续跑 UI。</li>
+      <li><b>补建 <code>scripts/e2e_real_agents.py</code></b>——真打 7009 的 e2e 回归脚本，让"验证驱动"可重复执行。</li>
+    </ol>
+  </div>
+
+  <footer>
+    Chameleon · agentkit 内部智能体编排 SDK · 框架增强一日冲刺 2026-06-09（feature/code）<br/>
+    <b>数据均取自真实 git 历史与测试运行，未注水。</b> 13 commit · 41 文件 · +3608/−192 · 36 新测试 · 155 套件全绿 · 3 架构契约 GREEN。
+  </footer>
+
+</div>
+</body>
+</html>

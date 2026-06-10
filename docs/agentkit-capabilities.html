@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>agentkit 能力总览</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#161c24; --card:#1b2330; --line:#28303c;
+    --txt:#e6edf3; --mut:#8b97a5; --dim:#5c6775;
+    --accent:#4a9eda; --accent2:#5dd9b0;
+    --ok:#3fb950; --warn:#d29922; --no:#f06a5d;
+    --code:#0c1117; --kw:#7ee0c0; --str:#d9a45b; --cmt:#5c6775;
+    --radius:12px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,system-ui,sans-serif;
+    line-height:1.6;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 80px}
+  header.hero{padding:56px 24px 36px;max-width:1080px;margin:0 auto}
+  .tag{display:inline-block;font-size:12px;color:var(--accent2);border:1px solid var(--line);
+    border-radius:999px;padding:3px 12px;letter-spacing:.04em;margin-bottom:18px}
+  h1{font-size:34px;margin:0 0 10px;letter-spacing:-.01em}
+  h1 span{color:var(--accent)}
+  .lead{color:var(--mut);font-size:17px;max-width:760px;margin:0}
+  .lead code{background:var(--code);padding:2px 7px;border-radius:6px;color:var(--kw);font-size:14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);
+    margin:48px 0 18px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:10px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 20px;transition:border-color .15s}
+  .card:hover{border-color:#3a4a5e}
+  .card .ct{display:flex;align-items:center;gap:9px;margin-bottom:6px}
+  .card h3{font-size:15.5px;margin:0;font-weight:600}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:999px;font-weight:600;letter-spacing:.03em}
+  .b-ship{background:rgba(93,217,176,.13);color:var(--accent2);border:1px solid rgba(93,217,176,.25)}
+  .card p{color:var(--mut);font-size:13.5px;margin:0 0 12px}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:8px;margin:0;
+    padding:11px 13px;overflow:auto;font-size:12.5px;line-height:1.55;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+  pre .k{color:var(--kw)} pre .s{color:var(--str)} pre .c{color:var(--cmt)} pre .d{color:var(--dim)}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch}
+  .step{flex:1;min-width:200px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:14px 16px}
+  .step .n{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.08em}
+  .step h4{margin:5px 0 4px;font-size:14.5px}
+  .step p{margin:0;color:var(--mut);font-size:12.5px}
+  .step code{color:var(--kw);font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);
+    background:var(--panel);font-weight:600}
+  tr:last-child td{border-bottom:none}
+  td.cap{font-weight:600;white-space:nowrap}
+  td.cap code{color:var(--kw);font-size:12px}
+  .st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;font-size:12.5px}
+  .dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .d-ok{background:var(--ok)} .d-warn{background:var(--warn)} .d-no{background:var(--no)}
+  .note{color:var(--dim);font-size:12px}
+  .callout{background:linear-gradient(180deg,rgba(240,106,93,.08),rgba(240,106,93,.02));
+    border:1px solid rgba(240,106,93,.3);border-left:3px solid var(--no);
+    border-radius:10px;padding:16px 20px;margin:18px 0}
+  .callout b{color:#f7a399}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;text-align:center}
+  .stat .v{font-size:26px;font-weight:700;color:var(--accent)}
+  .stat .l{font-size:12px;color:var(--mut);margin-top:2px}
+  .legend{display:flex;gap:20px;margin:14px 0 0;font-size:12.5px;color:var(--mut);flex-wrap:wrap}
+  footer{color:var(--dim);font-size:12px;text-align:center;margin-top:54px;
+    border-top:1px solid var(--line);padding-top:20px}
+  @media(max-width:720px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="tag">平台内置 · 代码优先 · 内部 SDK</div>
+  <h1><span>agentkit</span> 能做什么</h1>
+  <p class="lead">写一个 <code>@agent</code> + <code>async def handle(ctx)</code>，平台隐式接管
+  模型 / 知识库 / 工具 / 记忆 / 子智能体 / 多模态 / 追踪 / 计费 / 互操作。
+  同一份代码，换 transport 即换运行环境——本机自测 → 站内运行 → 沙箱隔离，零改动。</p>
+</header>
+
+<div class="wrap">
+
+  <h2>核心能力</h2>
+  <div class="grid">
+
+    <div class="card">
+      <div class="ct"><h3>对话 / 流式</h3><span class="badge b-ship">基础</span></div>
+      <p>单模型一问一答或流式输出，平台注入模型、自动 trace + 计费。</p>
+<pre><span class="k">async for</span> chunk <span class="k">in</span> ctx.stream(user=ctx.query):
+    <span class="k">yield</span> chunk</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>RAG 知识检索</h3><span class="badge b-ship">能力</span></div>
+      <p>hybrid 召回 + rerank + 查询扩展，自动 citation 进 trace。</p>
+<pre>hits = <span class="k">await</span> ctx.kb.search(ctx.query, rerank=<span class="k">True</span>)
+ctx.stream(system=<span class="s">f"依据：{hits}"</span>, user=ctx.query)</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>工具调用 ReAct</h3><span class="badge b-ship">能力</span></div>
+      <p>模型自主决定调哪些工具、循环到收敛，含并行调用 + token 预算闸。</p>
+<pre><span class="k">async for</span> d <span class="k">in</span> ctx.run_with_tools(user=ctx.query):
+    <span class="k">yield</span> d   <span class="c"># 平台工具 + 本地 @tool</span></pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>多智能体编排</h3><span class="badge b-ship">能力</span></div>
+      <p>并行扇出 <code>gather</code> / 路由 <code>route</code> / 移交 <code>handoff</code>，预算均分 + 深度限制。</p>
+<pre>a, b = <span class="k">await</span> ctx.gather([(<span class="s">"researcher"</span>, q),
+                          (<span class="s">"writer"</span>, q)])</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>MCP 双向互操作</h3><span class="badge b-ship">旗舰</span></div>
+      <p>消费外部 MCP server 的工具；自家 agent 也可暴露为 MCP server（stdio/http/sse）。</p>
+<pre><span class="k">@agent</span>(mcp_servers=[McpServerConfig(
+    name=<span class="s">"math"</span>, url=<span class="s">"http://localhost:9100/mcp"</span>)])</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>开放 A2A 跨系统</h3><span class="badge b-ship">旗舰</span></div>
+      <p>调远程 Agent2Agent（对齐 Google A2A）；自家 agent 经 <code>/a2a/{key}</code> 暴露给外部客户端。</p>
+<pre>remote = <span class="k">await</span> ctx.call_agent(
+    <span class="s">"https://partner/a2a/their-agent"</span>, input=q)</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>人在环 / 可恢复 (durable)</h3><span class="badge b-ship">旗舰</span></div>
+      <p>高风险动作前暂停等人工批准，恢复后继续；journal 重放、进程重启不丢、防决策翻转。</p>
+<pre><span class="k">@agent</span>(durable=<span class="k">True</span>)
+decision = <span class="k">await</span> ctx.ask_human(<span class="s">"批准删库？"</span>)</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>不可信代码沙箱</h3><span class="badge b-ship">旗舰</span></div>
+      <p>陌生人代码 docker 隔离：<code>--network none --read-only</code> + scope 鉴权 + fail-closed。</p>
+<pre><span class="k">@agent</span>(sandboxed=<span class="k">True</span>, trust_tier=<span class="s">"untrusted"</span>)</pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>多模态生成</h3><span class="badge b-ship">能力</span></div>
+      <p>文生图 / 图生图，产物存 MinIO + 计费归集；本地 ComfyUI 或远程 DashScope。</p>
+<pre>r = <span class="k">await</span> ctx.media.generate(kind=<span class="s">"image"</span>, prompt=q)
+<span class="k">yield</span> <span class="s">f"![]({r.url})"</span></pre>
+    </div>
+
+    <div class="card">
+      <div class="ct"><h3>结构化输出 / 记忆</h3><span class="badge b-ship">能力</span></div>
+      <p>返回严格 schema 的 Pydantic 实例；跨会话 kv 记忆。</p>
+<pre>p = <span class="k">await</span> ctx.complete(user=q, schema=Person)
+<span class="k">await</span> ctx.memory.set(<span class="s">"last"</span>, p.name)</pre>
+    </div>
+
+  </div>
+
+  <h2>运行三态（同一份 handle 代码）</h2>
+  <div class="flow">
+    <div class="step"><div class="n">STANDALONE</div><h4>本机脱平台</h4>
+      <p>装 SDK + 自带 key，<code>StandaloneTransport</code> 本机跑，不连平台——作者快速自测。</p></div>
+    <div class="step"><div class="n">DEV</div><h4>连 dev 服务</h4>
+      <p><code>agentkit dev/chat</code> 经 HttpDevTransport 回调站内资源；改文件热重载重跑。</p></div>
+    <div class="step"><div class="n">IN-PROCESS</div><h4>站内进程内</h4>
+      <p>提交进 <code>chameleon-agents/</code> 自动发现，InProcessTransport 进程内运行。</p></div>
+    <div class="step"><div class="n">SANDBOX</div><h4>docker 隔离</h4>
+      <p>不可信代码经 SandboxTransport 在隔离容器跑，broker 守 scope 红线。</p></div>
+  </div>
+
+  <h2>⚠️ 前端「应用详情 / 设置」覆盖现状</h2>
+  <div class="callout">
+    <b>关键缺口：后端 SDK 变强了，前端没跟上。</b> agent 的 9 个声明能力里，前端只覆盖了 4 个旧能力
+    （models / kb / tools / config）。<b>5 个新旗舰能力（MCP / A2A / 沙箱 / 信任级 / durable）前端完全
+    没有 UI，后端 API 也没把这些字段透出</b>——代码里声明了，但运营侧看不见、配不了。覆盖率约 <b>44%</b>。
+  </div>
+  <table>
+    <thead><tr><th>能力</th><th>后端 SDK</th><th>前端详情/设置 UI</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="cap"><code>models</code> 多模型槽</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-ok"></i>完整</span></td>
+        <td class="note">LinkedModelsForm，分槽绑定</td></tr>
+      <tr><td class="cap"><code>kb</code> 知识库</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-ok"></i>完整</span></td>
+        <td class="note">LinkedKbsForm</td></tr>
+      <tr><td class="cap"><code>tools</code> 平台工具</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-ok"></i>完整</span></td>
+        <td class="note">LinkedToolsForm 启停</td></tr>
+      <tr><td class="cap"><code>config</code> 配置项</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-ok"></i>完整</span></td>
+        <td class="note">AgentConfigForm 按声明渲染</td></tr>
+      <tr><td class="cap"><code>media</code> 多模态</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-warn"></i>部分</span></td>
+        <td class="note">仅监测 tab 自适应展示，无配置</td></tr>
+      <tr><td class="cap"><code>mcp_servers</code> MCP</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付（旗舰）</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无 UI、API 未透出</td></tr>
+      <tr><td class="cap"><code>call_agents</code> A2A</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付（旗舰）</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无 UI、API 未透出</td></tr>
+      <tr><td class="cap"><code>sandboxed</code> 沙箱</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付（旗舰）</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无 UI、API 未透出</td></tr>
+      <tr><td class="cap"><code>trust_tier</code> 信任级</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无 UI、API 未透出</td></tr>
+      <tr><td class="cap"><code>durable</code> 可恢复/HITL</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付（旗舰）</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无暂停/恢复运营 UI、API 未透出</td></tr>
+      <tr><td class="cap"><code>memory</code> 跨会话记忆</td>
+        <td><span class="st"><i class="dot d-ok"></i>已交付</span></td>
+        <td><span class="st"><i class="dot d-no"></i>完全没有</span></td>
+        <td class="note">无记忆查看/管理 UI</td></tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <span><i class="dot d-ok" style="display:inline-block"></i> 完整</span>
+    <span><i class="dot d-warn" style="display:inline-block"></i> 部分/只读</span>
+    <span><i class="dot d-no" style="display:inline-block"></i> 前端完全没有</span>
+  </div>
+
+  <h2>这条线的工程产出（feat/agentkit-capabilities）</h2>
+  <div class="stats">
+    <div class="stat"><div class="v">141</div><div class="l">专属 commit</div></div>
+    <div class="stat"><div class="v">63</div><div class="l">agentkit 单测</div></div>
+    <div class="stat"><div class="v">11/11</div><div class="l">真 Qwen e2e 门</div></div>
+    <div class="stat"><div class="v">~20</div><div class="l">对抗评审轮次</div></div>
+  </div>
+  <p class="note" style="margin-top:14px">公共 SDK 12 模块（冻结契约 + CI 门禁）· 9 个示例 agent ·
+  13 份设计文档 · 技术面 ~8.3（优秀框架水准）· import-linter 3 架构契约 GREEN。</p>
+
+  <footer>
+    Chameleon · agentkit 内部智能体编排 SDK · 截至 2026-06-09（feature/code）<br/>
+    诚实说明：后端能力地基扎实并经多轮评审硬化；前端运营侧对 5 个新旗舰能力的覆盖是明确的下一步缺口。
+  </footer>
+
+</div>
+</body>
+</html>
