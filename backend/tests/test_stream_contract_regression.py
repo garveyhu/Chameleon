@@ -85,3 +85,31 @@ async def test_sse_envelope_plain_exception_has_no_code() -> None:
     envelope = _parse_sse_data(chunks[0])
     assert envelope["error"]["type"] == "RuntimeError"
     assert "code" not in envelope["error"]
+
+
+# ── SafeIntJSONResponse：公开 API 雪花精度的唯一全局防线 ──
+
+
+def test_safe_int_response_stringifies_snowflake_ids() -> None:
+    """REST 响应边界把超出 JS 安全整数的 int 转 str（全局 default_response_class）。
+
+    这是公开 API 不丢精度的唯一支柱——schema 注解仍是 int，靠它在 wire 上转
+    string。若被移除/绕过，外部 JS 客户端按 message_id 寻址的端点全部失效。
+    """
+    import json as _json
+
+    from chameleon.core.api.response import SafeIntJSONResponse
+
+    body = SafeIntJSONResponse(
+        content={
+            "id": 58136219874689024,  # 雪花，> 2^53
+            "seq": 42,  # 正常小整数不动
+            "ok": True,  # bool 不动
+            "nested": {"doc_ids": [58136219874689040, 7]},
+        }
+    ).body
+    parsed = _json.loads(body)
+    assert parsed["id"] == "58136219874689024"
+    assert parsed["seq"] == 42
+    assert parsed["ok"] is True
+    assert parsed["nested"]["doc_ids"] == ["58136219874689040", 7]
