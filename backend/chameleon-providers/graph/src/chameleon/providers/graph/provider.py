@@ -219,7 +219,25 @@ class GraphProvider(Provider):
                         )
                         return
                     elif kind == "graph.finished":
-                        if payload.get("status") != "success":
+                        gstatus = payload.get("status")
+                        if gstatus == "paused":
+                            # human_input 节点暂停 ≠ 失败。provider 流式路径暂不支持
+                            # 渠道内回填（resume 在运营面：工作流运行日志 → 回填续跑），
+                            # 给终端用户诚实提示；run 落 paused 而非 failed。
+                            # 注意不可发 human_input_pending step——渠道会翻成 pending
+                            # 回填框，但回填走 agentkit durable 的 resolve_resume，
+                            # graph 的断点不在那里，会误导必失败。
+                            run_status = "paused"
+                            yield StreamEvent(
+                                type=StreamEventType.delta,
+                                data={
+                                    "text": "（流程已暂停，等待人工处理；"
+                                    "处理完成前的追问不会进入本次流程。）"
+                                },
+                            )
+                            streamed_any = True
+                            continue
+                        if gstatus != "success":
                             err = payload.get("error") or {}
                             run_status = "failed"
                             run_error = err
