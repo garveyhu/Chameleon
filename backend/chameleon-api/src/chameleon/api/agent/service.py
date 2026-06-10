@@ -795,6 +795,42 @@ async def _prepare_invocation(
         end_user_id=req.user,
     )
 
+    # durable HITL 续跑：pending 按 durable scope_ref(=session_id) 寻址、journal 按首跑
+    # run_id 重放——服务端权威读 pending（call_index/原始 query/run_id），与 embed/playground
+    # 同契约（见 engine/agent/durable）。客户端的 input 仅落历史，ctx 用原始 query 重放。
+    resume_cvars: dict = {}
+    resume_rid: str | None = None
+    resume_query: str | None = None
+    if req.resume_answer is not None:
+        if not req.session_id:
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message="resume_answer 需同时传暂停时的 session_id",
+            )
+        if not isinstance(req.input, str):
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message="resume 续跑时 input 须为字符串（人工回答的展示文本）",
+            )
+        from chameleon.engine.agent.durable import resolve_resume
+
+        # scope 推导须与首跑一致（agentkit_runner: end_user_id or session_id）——
+        # API 渠道 cvars 传 end_user_id，pending 落在 end_user scope 而非 session
+        spec = await resolve_resume(
+            agent_key, conv.end_user_id or conv.session_id
+        )
+        if spec is None or not spec.run_id:
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message="无暂停可恢复：该会话无待人工输入",
+            )
+        resume_cvars = {
+            "_resume_call_index": spec.call_index,
+            "_resume_answer": req.resume_answer,
+        }
+        resume_rid = spec.run_id
+        resume_query = spec.query
+
     if isinstance(req.input, str):
         history = await session_service.load_messages(session, conv.session_id)
         current_input_text = req.input
@@ -868,7 +904,8 @@ async def _prepare_invocation(
 
     ctx = InvokeContext(
         agent_def=agent_def,
-        input=current_input_obj,
+        # resume 时用暂停现场的原始 query 重放（journal 命中靠 query+run_id 不变）
+        input=resume_query if resume_query is not None else current_input_obj,
         history=history,
         session_id=conv.session_id,
         provider_conv_id=conv.provider_conv_id,
@@ -878,11 +915,12 @@ async def _prepare_invocation(
             "end_user_id": conv.end_user_id,
             "_a2a_budget": _resolve_initial_budget(current_app),  # 平台权威下发
             "_a2a_depth": 0,
+            **resume_cvars,  # 服务端权威注入（sanitize 已剥客户端伪造的 _resume_*）
         },
         options=req.options,
         app_id=current_app.app_id,
         stream=stream,
-        request_id=request_id,
+        request_id=resume_rid or request_id,
         attachments=attachments_dump,
     )
     return agent_def, provider, conv, ctx, current_input_text

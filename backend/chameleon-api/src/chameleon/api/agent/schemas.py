@@ -55,6 +55,11 @@ class InvokeRequest(BaseModel):
     options: dict[str, Any] = Field(
         default_factory=dict, description="provider-specific 运行时覆盖"
     )
+    resume_answer: str | None = Field(
+        None,
+        description="durable HITL 续跑：上次调用因 ask_human 暂停后带人工回答续跑。"
+        "必须同时传暂停时的 session_id；input 传该回答的展示文本（落会话历史）",
+    )
 
     model_config = ConfigDict(extra="forbid")
 

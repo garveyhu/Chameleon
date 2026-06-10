@@ -87,6 +87,11 @@ class FlatInvokeRequest(BaseModel):
     )
     context: dict = Field(default_factory=dict)
     options: dict = Field(default_factory=dict)
+    resume_answer: str | None = Field(
+        None,
+        description="durable HITL 续跑：流中 step(human_input_pending) / 非流式 "
+        "done.steps 出现暂停后，带人工回答 + 暂停时的 session_id 续跑",
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -136,6 +141,7 @@ async def flat_invoke(
         stream=req.stream,
         context=req.context,
         options=req.options,
+        resume_answer=req.resume_answer,
     )
     if req.stream:
         return StreamingResponse(

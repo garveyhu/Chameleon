@@ -14,24 +14,50 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chameleon.api.agent import service
 from chameleon.api.agent.schemas import InvokeRequest, MessageInput
 from chameleon.api.openai.schemas import OAChatRequest
+from chameleon.core.api.exceptions import BusinessError, ResultCode
 from chameleon.data.infra.auth import CurrentApp, current_app
 from chameleon.data.infra.db import get_session
 
 router = APIRouter(prefix="/v1", tags=["openai-compat"])
 
+# OpenAI 新版把 system 改叫 developer —— 映射回内部 system；其余未知 role 报 400
+_ROLE_MAP = {"developer": "system"}
+_KNOWN_ROLES = ("user", "assistant", "system", "tool")
+
 
 def _to_invoke_request(req: OAChatRequest) -> InvokeRequest:
+    messages: list[MessageInput] = []
+    for m in req.messages:
+        role = _ROLE_MAP.get(m.role, m.role)
+        if role not in _KNOWN_ROLES:
+            raise BusinessError(
+                ResultCode.ValidationError,
+                message=f"不支持的 message role: {m.role}",
+            )
+        messages.append(MessageInput(role=role, content=m.content))
     return InvokeRequest(
-        input=[MessageInput(role=m.role, content=m.content) for m in req.messages],
+        input=messages,
         session_id=req.session_id,
         user=req.user,
         stream=req.stream,
     )
+
+
+def _err_chunk(message: str, code: int | None = None) -> str:
+    """OpenAI 风格流中错误对象（error.type/code/message）"""
+    err: dict = {
+        "message": message,
+        "type": "invalid_request_error" if code and code < 50000 else "server_error",
+    }
+    if code is not None:
+        err["code"] = code
+    return f"data: {json.dumps({'error': err}, ensure_ascii=False)}\n\n"
 
 
 def _chunk(cid: str, created: int, model: str, delta: dict, finish: str | None) -> str:
@@ -62,19 +88,44 @@ async def chat_completions(
     if req.stream:
 
         async def gen() -> AsyncIterator[str]:
-            async for ev in service.stream_invoke(
-                req.model, ir, current_app=app, request_id=request_id, channel="openai"
-            ):
-                if ev.type.value == "delta":
-                    text = ev.data.get("text", "")
-                    if text:
-                        yield _chunk(cid, created, req.model, {"content": text}, None)
-                elif ev.type.value == "error":
-                    err = {"error": {"message": ev.data.get("message", "error")}}
-                    yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
-                    return
-            yield _chunk(cid, created, req.model, {}, "stop")
-            yield "data: [DONE]\n\n"
+            sent_role = False
+            try:
+                async for ev in service.stream_invoke(
+                    req.model,
+                    ir,
+                    current_app=app,
+                    request_id=request_id,
+                    channel="openai",
+                ):
+                    if ev.type.value == "delta":
+                        text = ev.data.get("text", "")
+                        if text:
+                            if not sent_role:
+                                # OpenAI 标准：首 chunk delta 带 role
+                                yield _chunk(
+                                    cid, created, req.model,
+                                    {"role": "assistant"}, None,
+                                )
+                                sent_role = True
+                            yield _chunk(
+                                cid, created, req.model, {"content": text}, None
+                            )
+                    elif ev.type.value == "error":
+                        yield _err_chunk(
+                            ev.data.get("message", "error"), ev.data.get("code")
+                        )
+                        yield "data: [DONE]\n\n"
+                        return
+                yield _chunk(cid, created, req.model, {}, "stop")
+                yield "data: [DONE]\n\n"
+            except Exception as e:  # noqa: BLE001
+                # 首 chunk 前的准备异常（鉴权/agent 不存在）：200 头已发出，
+                # 裸断流会让 OpenAI SDK 抛不可读的连接错误
+                logger.exception("openai-compat stream failed")
+                code = int(e.code) if isinstance(e, BusinessError) else None
+                msg = e.message if isinstance(e, BusinessError) else str(e)[:300]
+                yield _err_chunk(msg, code)
+                yield "data: [DONE]\n\n"
 
         return StreamingResponse(
             gen(),

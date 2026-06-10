@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 
 from loguru import logger
 
+from chameleon.core.api.exceptions import BusinessError
 from chameleon.providers.base.types import StreamEvent
 
 _KEEPALIVE_INTERVAL_SEC = 15.0
@@ -65,6 +66,17 @@ async def sse_iter(
                 # 客户端断开 / 上游取消（A3：调用方负责审计）
                 logger.warning("sse stream cancelled by client or upstream")
                 raise
+            except Exception as e:  # noqa: BLE001
+                # 首事件前的准备异常（鉴权 / agent 不存在 / resume 校验）——此时 200 头
+                # 已发出，裸断流会让客户端拿不到任何可解析的错误；统一翻成 error 事件
+                logger.exception("sse stream failed")
+                payload: dict = {"type": type(e).__name__, "message": str(e)[:300]}
+                if isinstance(e, BusinessError):
+                    payload["code"] = int(e.code)
+                    payload["message"] = e.message[:300]
+                body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+                yield f"event: error\ndata: {body}\n\n".encode("utf-8")
+                return
     finally:
         if next_task is not None and not next_task.done():
             next_task.cancel()
