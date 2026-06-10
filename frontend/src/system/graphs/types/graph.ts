@@ -135,6 +135,18 @@ export interface GraphRunDetail extends GraphRunItem {
   node_runs: NodeRunItem[];
 }
 
+/** 待人工回填断点（human_input 节点暂停产生） */
+export interface PendingInputItem {
+  id: EntityId;
+  graph_run_id: EntityId;
+  node_id: string;
+  status: 'pending' | 'resolved' | 'timeout';
+  prompt: string | null;
+  input_schema: Record<string, unknown> | null;
+  node_input: unknown;
+  timeout_at: string | null;
+}
+
 // ── 调试运行视图（编辑器内）─────────────────────────────────
 
 /** 单节点在一次运行中的投影：驱动 canvas 染色 + inspector 结果区 */

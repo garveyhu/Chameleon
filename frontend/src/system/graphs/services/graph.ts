@@ -12,6 +12,7 @@ import type {
   GraphRunItem,
   GraphSpec,
   GraphStreamChunk,
+  PendingInputItem,
   TestRunResult,
   WebAppInfo,
 } from '@/system/graphs/types/graph';
@@ -121,6 +122,14 @@ export const graphApi = {
 
   /** 单次运行详情（含逐节点执行 node_runs） */
   getRun: (runId: EntityId) => get<GraphRunDetail>(`/v1/admin/graphs/runs/${runId}`),
+
+  /** 待人工回填断点列表（human_input 暂停；status=pending/resolved/timeout） */
+  listPendingInputs: (status = 'pending') =>
+    get<PendingInputItem[]>('/v1/admin/graphs/pending', { params: { status } }),
+
+  /** 人工回填后从断点恢复跑（value 作为 human_input 节点输出注入） */
+  resumeRun: (runId: EntityId, value: Record<string, unknown>) =>
+    post<GraphRunDetail>(`/v1/admin/graphs/runs/${runId}/resume`, { value }),
 
   /** 智能体级密钥：列未吊销 */
   listAgentKeys: (graphId: EntityId) => get<AgentApiKey[]>(`/v1/admin/graphs/${graphId}/api-keys`),

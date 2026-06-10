@@ -5,8 +5,8 @@
  */
 import { useState } from 'react';
 
-import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, ScrollText } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronRight, PlayCircle, ScrollText } from 'lucide-react';
 
 import { DataTable, TablePagination, TableToolbar } from '@/core/components/table';
 import type { DataTableColumn } from '@/core/components/table';
@@ -24,9 +24,10 @@ import type { StatusTone } from '@/core/components/ui/status-badge';
 import { Tooltip } from '@/core/components/ui/tooltip';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import type { EntityId } from '@/core/types/api';
 import { graphApi } from '@/system/graphs/services/graph';
-import type { GraphRunItem, NodeRunItem } from '@/system/graphs/types/graph';
+import type { GraphRunDetail, GraphRunItem, NodeRunItem } from '@/system/graphs/types/graph';
 
 interface Props {
   graphId: EntityId;
@@ -277,6 +278,8 @@ const RunDetailSheet = ({ runId, onClose }: { runId: EntityId | null; onClose: (
                 </Field>
               )}
 
+              {run.status === 'paused' && <ResumeSection run={run} />}
+
               <Field label="输入">
                 <Json value={run.input} />
               </Field>
@@ -302,6 +305,94 @@ const RunDetailSheet = ({ runId, onClose }: { runId: EntityId | null; onClose: (
         </SheetBody>
       </SheetContent>
     </Sheet>
+  );
+};
+
+/** paused run 的人工回填区：拉对应 pending 断点（prompt / 期望结构），回填 JSON 续跑 */
+const ResumeSection = ({ run }: { run: GraphRunDetail }) => {
+  const qc = useQueryClient();
+  const [valueText, setValueText] = useState('{}');
+
+  const pendingQ = useQuery({
+    queryKey: ['graph-pending-inputs'],
+    queryFn: () => graphApi.listPendingInputs('pending'),
+  });
+  // 雪花 id 可能 string/number 混合，一律 String() 归一比较
+  const pending = (pendingQ.data ?? []).find(
+    p => String(p.graph_run_id) === String(run.id),
+  );
+
+  const resumeMut = useMutation({
+    mutationFn: (value: Record<string, unknown>) => graphApi.resumeRun(run.id, value),
+    onSuccess: r => {
+      toast.success(r.status === 'paused' ? '已回填，流程再次暂停于下一断点' : '已回填续跑');
+      qc.invalidateQueries({ queryKey: ['graph-run', run.id] });
+      qc.invalidateQueries({ queryKey: ['graph-runs'] });
+      qc.invalidateQueries({ queryKey: ['graph-pending-inputs'] });
+    },
+    onError: e => toast.error(`回填失败：${(e as Error).message}`),
+  });
+
+  const submit = () => {
+    let value: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(valueText || '{}');
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        toast.error('回填值须是 JSON 对象（作为 human_input 节点的输出注入）');
+        return;
+      }
+      value = parsed as Record<string, unknown>;
+    } catch {
+      toast.error('JSON 解析失败，请检查格式');
+      return;
+    }
+    resumeMut.mutate(value);
+  };
+
+  return (
+    <Field label="人工回填续跑">
+      <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2.5">
+        {pending?.prompt && (
+          <div className="text-[12px] text-amber-900">{pending.prompt}</div>
+        )}
+        <div className="flex items-center gap-2 text-[10.5px] text-amber-700/80">
+          {pending && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 font-mono">
+              断点节点 {pending.node_id}
+            </span>
+          )}
+          {pending?.timeout_at && <span>超时 {formatDateTime(pending.timeout_at)}</span>}
+          {!pending && !pendingQ.isLoading && (
+            <span>未找到对应断点记录（可能已超时清理），仍可尝试回填</span>
+          )}
+        </div>
+        {pending?.input_schema && (
+          <details className="text-[10.5px] text-amber-700/80">
+            <summary className="cursor-pointer select-none">期望结构（input_schema）</summary>
+            <pre className="mt-1 max-h-32 overflow-auto rounded bg-stone-900 px-2 py-1.5 font-mono text-[10.5px] text-stone-100">
+              {JSON.stringify(pending.input_schema, null, 2)}
+            </pre>
+          </details>
+        )}
+        <textarea
+          value={valueText}
+          onChange={e => setValueText(e.target.value)}
+          rows={3}
+          spellCheck={false}
+          placeholder='{"approved": true}'
+          className="w-full rounded-md border border-amber-200 bg-white px-2.5 py-1.5 font-mono text-[11.5px] text-stone-800 focus:border-amber-400 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={resumeMut.isPending}
+          className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
+        >
+          <PlayCircle className="h-3.5 w-3.5" />
+          {resumeMut.isPending ? '回填中…' : '回填并续跑'}
+        </button>
+      </div>
+    </Field>
   );
 };
 
