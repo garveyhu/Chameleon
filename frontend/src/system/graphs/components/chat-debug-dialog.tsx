@@ -172,6 +172,17 @@ export const ChatDebugDialog = ({
         {
           signal: ctrl.signal,
           onChunk: chunk => {
+            if ('error' in chunk) {
+              // sse_response 兜底信封（无 type 包装的业务异常）：不处理会留下
+              // 静默空气泡，错误不可见
+              hadError = true;
+              patchLast(m => ({
+                ...m,
+                error: chunk.error.message || '执行失败',
+                streaming: false,
+              }));
+              return;
+            }
             if (chunk.type === 'delta') {
               const t = chunk.data.text ?? '';
               if (t) {

@@ -17,7 +17,7 @@ import type {
   NodeRunView,
 } from '@/system/graphs/types/graph';
 
-export type RunPhase = 'idle' | 'running' | 'success' | 'failed';
+export type RunPhase = 'idle' | 'running' | 'success' | 'failed' | 'paused';
 
 export interface GraphRunState {
   phase: RunPhase;
@@ -36,7 +36,7 @@ type Action =
   | { kind: 'delta'; nodeId: string; text: string }
   | {
       kind: 'end';
-      status: 'success' | 'failed';
+      status: 'success' | 'failed' | 'paused';
       output?: unknown;
       error?: { type: string; message: string } | null;
       durationMs?: number | null;
@@ -159,11 +159,23 @@ export function useGraphRunner({ graphId, isDirty, save }: UseGraphRunnerArgs) {
       const p = chunk['graph.finished'];
       dispatch({
         kind: 'end',
-        status: p.status === 'success' ? 'success' : 'failed',
+        // paused（human_input 断点）≠ 失败：终态显示「已暂停」，回填走运行日志
+        status:
+          p.status === 'success' ? 'success' : p.status === 'paused' ? 'paused' : 'failed',
         output: p.output,
         error: p.error ?? null,
         durationMs: p.duration_ms ?? null,
         nodeCount: p.node_count ?? null,
+      });
+    } else if ('error' in chunk) {
+      // sse_response 兜底信封（业务异常无 graph.finished）：必须显式收终态，
+      // 否则 RunDialog 永久「运行中」转圈
+      dispatch({
+        kind: 'end',
+        status: 'failed',
+        error: chunk.error,
+        durationMs: null,
+        nodeCount: null,
       });
     }
   }, []);

@@ -188,12 +188,14 @@ export type GraphStreamChunk =
   | { 'graph.node.delta': { node_id: string; delta: string } }
   | { 'graph.node.finished': GraphNodeEventPayload }
   | { 'graph.node.failed': GraphNodeEventPayload }
-  | { 'graph.finished': GraphFinishedPayload };
+  | { 'graph.finished': GraphFinishedPayload }
+  // sse_response 对业务异常的兜底信封（流中无 graph.finished 时的唯一终态信号）
+  | { error: { type: string; message: string } };
 
 // ── 对话调试（把 draft 当可对话 agent 跑）SSE chunk ──────────
 // 后端 /chat/stream 形状：{ type, data }（GraphProvider StreamEvent 镜像）
 
-export interface GraphChatChunk {
+export interface GraphChatEventChunk {
   type: 'delta' | 'step' | 'done' | 'error' | 'citation';
   data: {
     text?: string; // delta
@@ -208,3 +210,8 @@ export interface GraphChatChunk {
     [k: string]: unknown;
   };
 }
+
+/** /chat/stream 的 chunk：业务事件（type 包装）或 sse_response 兜底信封 */
+export type GraphChatChunk =
+  | GraphChatEventChunk
+  | { error: { type: string; message: string } };

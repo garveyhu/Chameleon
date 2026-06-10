@@ -641,6 +641,9 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
                       </span>
                     )}
                     {runner.phase === 'failed' && <span className="text-rose-600">✗ 运行失败</span>}
+                    {runner.phase === 'paused' && (
+                      <span className="text-amber-600">⏸ 已暂停（回填见运行日志）</span>
+                    )}
                   </div>
                 )}
 

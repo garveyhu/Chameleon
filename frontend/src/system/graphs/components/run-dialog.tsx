@@ -152,15 +152,21 @@ export const RunDialog = ({
           {/* 运行摘要 */}
           {runner.phase !== 'idle' && (
             <div className="flex items-center gap-2 border-t border-stone-200/70 pt-3">
-              <NodeRunStatusBadge
-                status={
-                  runner.phase === 'running'
-                    ? 'running'
-                    : runner.phase === 'success'
-                      ? 'success'
-                      : 'failed'
-                }
-              />
+              {runner.phase === 'paused' ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+                  ⏸ 已暂停（human_input 断点，回填见运行日志）
+                </span>
+              ) : (
+                <NodeRunStatusBadge
+                  status={
+                    runner.phase === 'running'
+                      ? 'running'
+                      : runner.phase === 'success'
+                        ? 'success'
+                        : 'failed'
+                  }
+                />
+              )}
               {runner.durationMs != null && (
                 <span className="tnum text-[11px] text-stone-500">
                   {formatDurationMs(runner.durationMs)}
