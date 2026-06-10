@@ -143,3 +143,24 @@ class GraphEventManager:
             if event is None:
                 return
             yield event
+
+
+def jsonable_event_value(v: Any) -> Any:
+    """事件 payload 序列化安全转换：非 JSON 原生类型降级为 str。
+
+    paused 现场（pending / node_outputs）含任意节点输出，可能携带 pydantic
+    model 等对象——事件会经 SSE json.dumps（test-run 渠道），不可序列化会把
+    整条流炸成 error。
+    """
+    if v is None or isinstance(v, (bool, int, float, str)):
+        return v
+    if isinstance(v, dict):
+        return {str(k): jsonable_event_value(val) for k, val in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [jsonable_event_value(x) for x in v]
+    if hasattr(v, "model_dump"):
+        try:
+            return jsonable_event_value(v.model_dump())
+        except Exception:  # noqa: BLE001
+            return str(v)
+    return str(v)

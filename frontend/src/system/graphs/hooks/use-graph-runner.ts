@@ -215,7 +215,13 @@ export function useGraphRunner({ graphId, isDirty, save }: UseGraphRunnerArgs) {
         const detail = await graphApi.run(graphId, input);
         dispatch({
           kind: 'end',
-          status: detail.status === 'success' ? 'success' : 'failed',
+          // 持久化路径同样三态：human_input 暂停 ≠ 失败（与流式 Test Run 对齐）
+          status:
+            detail.status === 'success'
+              ? 'success'
+              : detail.status === 'paused'
+                ? 'paused'
+                : 'failed',
           output: detail.output,
           error: detail.error ?? null,
           durationMs: detail.duration_ms ?? null,

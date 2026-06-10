@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from loguru import logger
@@ -118,6 +118,8 @@ class GraphProvider(Provider):
         node_recs: dict[str, dict[str, Any]] = {}
         run_status = "running"
         run_error: dict[str, Any] | None = None
+        run_pending: dict[str, Any] | None = None  # paused 暂停现场（断点行素材）
+        run_node_outputs: Any = None  # paused 时的节点输出快照（resume_state）
 
         # 把 graph 内部 LLM 节点的 generation 行挂到外层 trace 上：合并外层
         # TraceContext + 用 ctx.agent_def.key 强制覆盖 agent_key（避免被外层
@@ -228,6 +230,10 @@ class GraphProvider(Provider):
                             # 回填框，但回填走 agentkit durable 的 resolve_resume，
                             # graph 的断点不在那里，会误导必失败。
                             run_status = "paused"
+                            # 暂停现场 → finally 落 HumanInputPending 断点行——
+                            # 没有断点行，运营回填必失败且超时清扫永远扫不到
+                            run_pending = payload.get("pending") or None
+                            run_node_outputs = payload.get("node_outputs")
                             yield StreamEvent(
                                 type=StreamEventType.delta,
                                 data={
@@ -254,6 +260,15 @@ class GraphProvider(Provider):
         finally:
             reset_trace_context(trace_token)
             if gid:
+                # paused 时按节点声明算超时（与 GraphRunner._persist_pending 同语义）
+                pending_timeout_at: datetime | None = None
+                if run_pending and run_pending.get("node_id"):
+                    node_spec = spec.find_node(run_pending["node_id"])
+                    ts = node_spec.data.get("timeout_seconds") if node_spec else None
+                    if isinstance(ts, int) and ts > 0:
+                        pending_timeout_at = datetime.now(timezone.utc) + timedelta(
+                            seconds=ts
+                        )
                 await persist_provider_run(
                     graph_id=gid,
                     request_id=node_ctx.request_id,
@@ -264,6 +279,9 @@ class GraphProvider(Provider):
                     status=run_status,
                     output=final_output if final_output is not None else answer_output,
                     error=run_error,
+                    pending=run_pending,
+                    pending_resume_state=run_node_outputs,
+                    pending_timeout_at=pending_timeout_at,
                     node_records=list(node_recs.values()),
                 )
 

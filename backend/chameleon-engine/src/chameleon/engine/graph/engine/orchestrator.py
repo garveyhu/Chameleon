@@ -38,6 +38,7 @@ from chameleon.engine.graph.engine.event_manager import (
     event_graph_node_finished,
     event_graph_node_started,
     event_graph_started,
+    jsonable_event_value,
 )
 from chameleon.engine.graph.engine.ready_queue import ReadyQueue
 from chameleon.engine.graph.engine.state import GraphExecState
@@ -243,6 +244,14 @@ class Orchestrator:
         finally:
             if events is not None:
                 if result is not None:
+                    # paused 时把暂停现场带给流式消费者（provider 渠道据此落
+                    # HumanInputPending 断点行——否则运营回填无断点可寻、永不超时）
+                    extra: dict[str, Any] = {}
+                    if result.status.value == "paused" and result.pending:
+                        extra["pending"] = jsonable_event_value(result.pending)
+                        extra["node_outputs"] = jsonable_event_value(
+                            result.node_outputs
+                        )
                     await events.emit(
                         event_graph_finished(
                             status=result.status.value,
@@ -250,6 +259,7 @@ class Orchestrator:
                             node_count=len(result.node_runs),
                             output=result.output,
                             error=result.error,
+                            **extra,
                         )
                     )
                 await events.close()

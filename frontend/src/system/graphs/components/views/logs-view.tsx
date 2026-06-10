@@ -363,7 +363,7 @@ const ResumeSection = ({ run }: { run: GraphRunDetail }) => {
           )}
           {pending?.timeout_at && <span>超时 {formatDateTime(pending.timeout_at)}</span>}
           {!pending && !pendingQ.isLoading && (
-            <span>未找到对应断点记录（可能已超时清理），仍可尝试回填</span>
+            <span>未找到断点记录（已超时清理或旧版本运行），无法回填</span>
           )}
         </div>
         {pending?.input_schema && (
@@ -385,7 +385,8 @@ const ResumeSection = ({ run }: { run: GraphRunDetail }) => {
         <button
           type="button"
           onClick={submit}
-          disabled={resumeMut.isPending}
+          // 无断点行的 paused run（旧版本/已清理）回填必失败——直接禁用防误导
+          disabled={resumeMut.isPending || (!pending && !pendingQ.isLoading)}
           className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-[12px] font-medium text-white transition hover:bg-amber-700 disabled:opacity-50"
         >
           <PlayCircle className="h-3.5 w-3.5" />
