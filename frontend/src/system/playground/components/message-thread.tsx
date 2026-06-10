@@ -258,6 +258,27 @@ const MessageBubble = ({
           />
         )}
 
+        {/* RAG 引用条（agent 路径 citation 事件；与 widget / 编辑器调试同水位） */}
+        {!isUser && !!msg.citations?.length && (
+          <div className="max-w-full space-y-1 px-1">
+            {msg.citations.map((c, i) => (
+              <details
+                key={`${c.source ?? ''}-${i}`}
+                className="rounded-md border border-stone-200 bg-stone-50/80 px-2 py-1 text-[11px] text-stone-600"
+              >
+                <summary className="cursor-pointer select-none truncate text-stone-500">
+                  📄 {c.title || c.source || `引用 ${i + 1}`}
+                </summary>
+                {c.snippet && (
+                  <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-stone-500">
+                    {c.snippet}
+                  </div>
+                )}
+              </details>
+            ))}
+          </div>
+        )}
+
         {/* footer：用量常显，trace + 动作 hover 浮现 */}
         <div
           className={cn(

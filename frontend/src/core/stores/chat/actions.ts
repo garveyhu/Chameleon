@@ -246,6 +246,20 @@ export const createChatActions: StateCreator<
                 'chat/appendDelta',
               );
             }
+            if (chunk.citation) {
+              // RAG 引用累积到消息上（与 embed widget / 编辑器调试同水位）
+              const cit = chunk.citation;
+              setMsgs(
+                columnId,
+                prev =>
+                  prev.map(m =>
+                    m.id === targetId
+                      ? { ...m, citations: [...(m.citations ?? []), cit] }
+                      : m,
+                  ),
+                'chat/appendCitation',
+              );
+            }
             if (chunk.pending) {
               // durable agent 暂停等人工输入 → 标 paused + 存 pending，UI 渲染回填框
               sawPending = true;

@@ -31,6 +31,8 @@ export interface PlaygroundMessage {
   pending?: { prompt: string; runId: string; callIndex: number | null } | null;
   /** assistant 完成后填的 usage */
   usage?: PlaygroundUsage | null;
+  /** RAG 引用（agent 路径 citation 事件累积；气泡下渲染引用条） */
+  citations?: { source?: string; title?: string; snippet?: string }[];
   error?: string | null;
   /** 后端 SSE meta 透出（assistant 才有），用于 feedback 上报 */
   requestId?: string;

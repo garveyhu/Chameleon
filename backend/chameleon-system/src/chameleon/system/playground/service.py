@@ -643,6 +643,7 @@ async def _stream_agent(
         context_vars=cvars,
         options={"gen_params": gen_params or {}, "input_images": input_images or []},
     )
+    usage_acc: dict | None = None
     try:
         async for ev in provider.stream(ctx):
             if ev.type == StreamEventType.delta:
@@ -651,6 +652,16 @@ async def _stream_agent(
                     yield {"delta": text}
             elif ev.type == StreamEventType.citation:
                 yield {"citation": ev.data}
+            elif ev.type == StreamEventType.metadata:
+                # agentkit 流末 emit {"usage": {...}}（OpenAI 命名）——暂存，end 时
+                # 按 SSE 层约定翻成 input/output_tokens（与 embed/model-direct 同水位）
+                u = ev.data.get("usage")
+                if isinstance(u, dict) and u.get("total_tokens"):
+                    usage_acc = {
+                        "input_tokens": u.get("prompt_tokens") or u.get("input_tokens") or 0,
+                        "output_tokens": u.get("completion_tokens") or u.get("output_tokens") or 0,
+                        "total_tokens": u.get("total_tokens") or 0,
+                    }
             elif ev.type == StreamEventType.step and ev.data.get("name") == "human_input_pending":
                 # durable agent 暂停等人工输入 → 透出 pending，前端渲染回填框并以 run_id 续跑
                 yield {
@@ -678,7 +689,7 @@ async def _stream_agent(
         logger.exception("playground agent invoke failed | agent=%s", invoke_agent_key)
         yield {"error": {"type": type(e).__name__, "message": str(e)[:300]}}
         return
-    yield {"end": True}
+    yield {"end": True, **({"usage": usage_acc} if usage_acc else {})}
 
 
 async def _stream_llm(
