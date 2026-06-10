@@ -468,7 +468,7 @@ export class ChameleonWidget {
         ${this.behavior.allow_file_upload ? '<div class="attachment-chips" hidden></div>' : ''}
         <div class="composer">
           ${this.behavior.allow_file_upload ? `<button class="upload-btn" type="button" aria-label="上传附件">${paperclipIcon}</button>` : ''}
-          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*,video/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/epub+zip,application/rtf,application/xml,application/zip,application/json,text/plain,text/markdown,text/html,text/csv,text/xml,message/rfc822,.md,.markdown,.mdx,.txt,.log,.csv,.html,.htm,.xml,.json,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.rtf,.zip,.eml,.msg,.svg"/>' : ''}
+          ${this.behavior.allow_file_upload ? '<input class="file-input" type="file" multiple hidden accept="image/*,audio/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/epub+zip,application/rtf,application/xml,application/zip,application/json,text/plain,text/markdown,text/html,text/csv,text/xml,message/rfc822,.md,.markdown,.mdx,.txt,.log,.csv,.html,.htm,.xml,.json,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.epub,.rtf,.zip,.eml,.msg,.svg"/>' : ''}
           <textarea rows="1" placeholder="${escapeAttr(placeholder)}"></textarea>
           <button class="send-btn" type="button" aria-label="发送">${sendIcon}</button>
         </div>
@@ -1451,8 +1451,9 @@ export class ChameleonWidget {
       'flex:1;min-width:0;padding:5px 8px;border:1px solid #ddd;border-radius:8px;font-size:13px;';
     const btn = document.createElement('button');
     btn.textContent = '提交';
+    // 提交按钮跟随主题色（amber 提示框是状态语义色，保持固定）
     btn.style.cssText =
-      'padding:5px 12px;border:none;border-radius:8px;background:#2b6cb0;color:#fff;font-size:13px;cursor:pointer;';
+      `padding:5px 12px;border:none;border-radius:8px;background:${this.ui.theme_color || '#6366F1'};color:#fff;font-size:13px;cursor:pointer;`;
     const submit = (): void => {
       const v = inp.value.trim();
       if (v) void this.resumeHuman(msg, v);

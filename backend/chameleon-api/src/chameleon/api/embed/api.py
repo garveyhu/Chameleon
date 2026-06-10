@@ -226,8 +226,13 @@ async def list_my_sessions(
     e, end_user_id = await _resolve_token_context(
         embed_key, session_token, origin, session
     )
+    policy = embed_service._resolve_session_policy(e)
     rows = await embed_service.list_sessions_for_end_user(
-        session, embed=e, end_user_id=end_user_id
+        session,
+        embed=e,
+        end_user_id=end_user_id,
+        # 不透传则恒为函数默认 90 天，运营配的时间窗静默失效
+        max_history_days=policy.max_history_days,
     )
     items = [
         EmbedSessionItem(
