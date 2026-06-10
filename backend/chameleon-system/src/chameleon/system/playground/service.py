@@ -592,7 +592,7 @@ async def _stream_agent(
     首帧图经 InvokeContext.options 透传给 provider→driver。
     """
     from chameleon.providers.base.registry import AGENTS, PROVIDERS
-    from chameleon.providers.base.types import InvokeContext, Message, StreamEventType
+    from chameleon.providers.base.types import InvokeContext, Message
 
     agent = AGENTS.get(invoke_agent_key)
     if agent is None:
@@ -643,53 +643,25 @@ async def _stream_agent(
         context_vars=cvars,
         options={"gen_params": gen_params or {}, "input_images": input_images or []},
     )
-    usage_acc: dict | None = None
+    # 事件→chunk 走统一转换器（与 embed 共用，新事件只改 stream_translate 一处）
+    from chameleon.core.api.stream_translate import (
+        StreamTranslateState,
+        translate_event,
+    )
+
+    st = StreamTranslateState()
     try:
         async for ev in provider.stream(ctx):
-            if ev.type == StreamEventType.delta:
-                text = ev.data.get("text", "")
-                if text:
-                    yield {"delta": text}
-            elif ev.type == StreamEventType.citation:
-                yield {"citation": ev.data}
-            elif ev.type == StreamEventType.metadata:
-                # agentkit 流末 emit {"usage": {...}}（OpenAI 命名）——暂存，end 时
-                # 按 SSE 层约定翻成 input/output_tokens（与 embed/model-direct 同水位）
-                u = ev.data.get("usage")
-                if isinstance(u, dict) and u.get("total_tokens"):
-                    usage_acc = {
-                        "input_tokens": u.get("prompt_tokens") or u.get("input_tokens") or 0,
-                        "output_tokens": u.get("completion_tokens") or u.get("output_tokens") or 0,
-                        "total_tokens": u.get("total_tokens") or 0,
-                    }
-            elif ev.type == StreamEventType.step and ev.data.get("name") == "human_input_pending":
-                # durable agent 暂停等人工输入 → 透出 pending，前端渲染回填框并以 run_id 续跑
-                yield {
-                    "pending": {
-                        "prompt": ev.data.get("prompt", ""),
-                        "call_index": ev.data.get("call_index"),
-                        "run_id": ev.data.get("run_id"),
-                    }
-                }
-            elif ev.type == StreamEventType.error:
-                yield {
-                    "error": {
-                        "type": ev.data.get("type", "ProviderError"),
-                        "message": ev.data.get("message", "应用执行失败"),
-                        # guardrail 拦截等结构化字段透传，前端可差异化展示
-                        **(
-                            {"guardrail": ev.data["guardrail"]}
-                            if ev.data.get("guardrail")
-                            else {}
-                        ),
-                    }
-                }
-                return
+            for chunk in translate_event(ev, st):
+                yield chunk
+            if st.saw_error:
+                return  # error 终态：不再发 end（契约见 sse_events）
     except Exception as e:  # noqa: BLE001
         logger.exception("playground agent invoke failed | agent=%s", invoke_agent_key)
         yield {"error": {"type": type(e).__name__, "message": str(e)[:300]}}
         return
-    yield {"end": True, **({"usage": usage_acc} if usage_acc else {})}
+    usage_sse = st.usage_sse()
+    yield {"end": True, **({"usage": usage_sse} if usage_sse else {})}
 
 
 async def _stream_llm(

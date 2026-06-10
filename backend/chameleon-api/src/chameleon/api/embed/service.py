@@ -29,11 +29,9 @@ from chameleon.core.api.exceptions import (
 from chameleon.core.api.sse_events import (
     UsagePayload,
     event_citation,
-    event_delta,
     event_end,
     event_error,
     event_meta,
-    event_pending,
 )
 from chameleon.core.observe import TraceContext, reset_trace_context, set_trace_context
 from chameleon.data.infra.object_store import refresh_object_urls
@@ -44,7 +42,6 @@ from chameleon.providers.base.errors import ProviderError
 from chameleon.providers.base.types import (
     InvokeContext,
     InvokeResult,
-    StreamEventType,
     _StreamAggregator,
 )
 from chameleon.system.api_key.service import (
@@ -823,31 +820,24 @@ async def stream_invoke(
     start = time.monotonic()
     err: dict | None = None
 
+    # 事件→chunk 走统一转换器（与 playground 共用；pending/usage/guardrail
+    # 等新事件语义只需改 stream_translate 一处，三渠道同步生效）
+    from chameleon.core.api.stream_translate import (
+        StreamTranslateState,
+        translate_event,
+    )
+
+    st = StreamTranslateState()
     try:
         async for ev in provider.stream(ctx):
             agg.feed(ev)
-            if ev.type == StreamEventType.delta:
-                text = ev.data.get("text")
-                if text:
-                    yield event_delta(text)
-            elif ev.type == StreamEventType.citation and show_citations:
-                yield event_citation(ev.data)
-            elif (
-                ev.type == StreamEventType.step
-                and ev.data.get("name") == "human_input_pending"
-            ):
-                # durable agent 暂停等人工输入 → widget 渲染回填框，回填后带 resume_answer 续跑
-                yield event_pending(
-                    ev.data.get("prompt", ""),
-                    call_index=ev.data.get("call_index"),
-                    run_id=ev.data.get("run_id"),
-                )
-            elif ev.type == StreamEventType.error:
+            for chunk in translate_event(ev, st, show_citations=show_citations):
+                yield chunk
+            if st.saw_error:
                 err = {
                     "type": ev.data.get("type", "ProviderError"),
                     "message": ev.data.get("message", "provider stream error"),
                 }
-                yield event_error(err["type"], err["message"])
                 return
     except Exception as e:  # noqa: BLE001
         logger.exception("embed stream failed | embed={}", embed.embed_key)

@@ -113,3 +113,56 @@ def test_safe_int_response_stringifies_snowflake_ids() -> None:
     assert parsed["seq"] == 42
     assert parsed["ok"] is True
     assert parsed["nested"]["doc_ids"] == ["58136219874689040", 7]
+
+
+# ── translate_event：渠道翻译层收口（playground/embed 共用） ──
+
+
+def _ev(t: "StreamEventType", **data) -> StreamEvent:
+    return StreamEvent(type=t, data=data)
+
+
+def test_translate_event_full_mapping() -> None:
+    from chameleon.core.api.stream_translate import (
+        StreamTranslateState,
+        translate_event,
+    )
+
+    st = StreamTranslateState()
+    # delta / 空 delta
+    assert translate_event(_ev(StreamEventType.delta, text="你"), st) == [{"delta": "你"}]
+    assert translate_event(_ev(StreamEventType.delta, text=""), st) == []
+    # citation 门控
+    cit = {"source": "kb#1", "snippet": "..."}
+    assert translate_event(_ev(StreamEventType.citation, **cit), st) == [{"citation": cit}]
+    assert translate_event(_ev(StreamEventType.citation, **cit), st, show_citations=False) == []
+    # pending（HITL）
+    out = translate_event(
+        _ev(StreamEventType.step, name="human_input_pending", status="paused",
+            prompt="批准？", call_index=0, run_id="r1"),
+        st,
+    )
+    assert out == [{"pending": {"prompt": "批准？", "call_index": 0, "run_id": "r1"}}]
+    assert st.saw_pending
+    # 其他 step / tool 事件丢弃
+    assert translate_event(_ev(StreamEventType.step, name="tool-loop", status="running"), st) == []
+    assert translate_event(_ev(StreamEventType.tool_call, name="t", args={}, id="1"), st) == []
+    # metadata.usage 暂存 + OpenAI→SSE 命名翻译
+    assert translate_event(
+        _ev(StreamEventType.metadata, usage={"prompt_tokens": 3, "completion_tokens": 5, "total_tokens": 8}),
+        st,
+    ) == []
+    assert st.usage_sse() == {"input_tokens": 3, "output_tokens": 5, "total_tokens": 8}
+    # error：终态 + 结构化字段透传
+    out = translate_event(
+        _ev(StreamEventType.error, type="GuardrailViolation", message="拦截",
+            guardrail="NoInjection", code=40001),
+        st,
+    )
+    assert out == [{
+        "error": {"type": "GuardrailViolation", "message": "拦截",
+                  "code": 40001, "guardrail": "NoInjection"}
+    }]
+    assert st.saw_error
+    # done 由调用方组装 end，转换器丢弃
+    assert translate_event(_ev(StreamEventType.done, answer="x"), st) == []
