@@ -283,17 +283,26 @@ export class EmbedApi {
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let done = false;
+    let sawBusinessChunk = false;
     const flush = (block: string): boolean => {
       for (const line of block.split('\n')) {
         if (!line.startsWith('data:')) continue;
         const payload = line.slice(5).trim();
         if (!payload) continue;
         if (payload === DONE_MARKER) return true;
+        let chunk: StreamChunk | null = null;
         try {
-          onChunk(JSON.parse(payload) as StreamChunk);
+          chunk = JSON.parse(payload) as StreamChunk;
         } catch {
-          /* 忽略非 JSON 行 */
+          continue; // 忽略非 JSON 行
         }
+        // 流首的 token 类错误转异常 —— 让 streamWithRetry 重签 session_token 后重放；
+        // 已透传过业务 chunk 则不可重放，错误照常交 UI 展示
+        if (!sawBusinessChunk && chunk.error && isTokenInvalidCode(chunk.error.code)) {
+          throw new EmbedError(chunk.error.code as number, chunk.error.message);
+        }
+        if (!chunk.error) sawBusinessChunk = true;
+        onChunk(chunk);
       }
       return false;
     };
@@ -405,3 +414,7 @@ export class EmbedError extends Error {
     this.name = 'EmbedError';
   }
 }
+
+/** JWT 族业务码（40110-40113）或裸 401 —— token 失效，可自动重签后重试 */
+export const isTokenInvalidCode = (code?: number): boolean =>
+  code === 401 || (code != null && code >= 40110 && code <= 40113);

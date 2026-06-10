@@ -150,7 +150,7 @@ export interface StreamChunk {
   end?: boolean;
   usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } | null;
   answer?: string;
-  error?: { type: string; message: string };
+  error?: { type: string; message: string; code?: number };
   /** durable HITL：agent ctx.ask_human 暂停 → 待人工回填续跑 */
   pending?: { prompt: string; call_index: number | null; run_id: string | null };
 }

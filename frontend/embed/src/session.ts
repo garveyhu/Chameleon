@@ -1,7 +1,7 @@
 /** session_token 管理：首次创建 + 过期自动重签 + localStorage 持久化 device_id（匿名身份） */
 
 import type { EmbedApi } from './api';
-import { EmbedError } from './api';
+import { EmbedError, isTokenInvalidCode } from './api';
 import type { InvokeResponse, StreamChunk, WidgetAttachment } from './types';
 
 interface SessionState {
@@ -10,7 +10,7 @@ interface SessionState {
 }
 
 const isTokenInvalidError = (e: unknown): boolean =>
-  e instanceof EmbedError && (e.code === 401 || e.code === 4030 || e.code === 4040 || e.code === 40113);
+  e instanceof EmbedError && isTokenInvalidCode(e.code);
 
 /** S12：在 localStorage 拿 / 生成一个稳定的 device_id（匿名身份模式用）
  *
