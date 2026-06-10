@@ -166,6 +166,7 @@ async def invoke(
         attachments=[a.model_dump() for a in (req.attachments or [])],
         request_id=request.headers.get("X-Request-Id"),
         client_session_id=req.session_id,
+        resume_answer=req.resume_answer,
     )
     return Result.ok(
         InvokeResponse(

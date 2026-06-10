@@ -470,6 +470,7 @@ async def invoke_once(
     attachments: list[dict] | None = None,
     request_id: str | None,
     client_session_id: str | None = None,
+    resume_answer: str | None = None,
 ) -> InvokeResult:
     """非流式调用 + 写 call_log
 
@@ -536,15 +537,34 @@ async def invoke_once(
             attachments=list(attachments),
         )
 
+    # durable HITL 续跑（与流式端点同契约）：服务端按 sid 权威读 pending，
+    # request_id 复用首跑 run_id 命中 journal，ctx 用原始 query 重放
+    _resume_cvars: dict = {}
+    _resume_rid = rid
+    _resume_input: str | None = None
+    if resume_answer is not None:
+        from chameleon.engine.agent.durable import resolve_resume
+
+        spec = await resolve_resume(agent.agent_key, sid)
+        if spec is None or not spec.run_id:
+            raise ValidationError(message="无暂停可恢复：该会话无待人工输入")
+        _resume_cvars = {
+            "_resume_call_index": spec.call_index,
+            "_resume_answer": resume_answer,
+        }
+        _resume_rid = spec.run_id
+        _resume_input = spec.query
+
     ctx = _make_context(
         agent_key=agent.agent_key,
         app_key=app_key,
-        user_input=user_input,
-        request_id=rid,
+        user_input=_resume_input if _resume_input is not None else user_input,
+        request_id=_resume_rid,
         stream=False,
         session_id=sid,
+        context_vars=_resume_cvars,
     )
-    if blocks:
+    if blocks and _resume_input is None:
         ctx.input = ctx_input  # 替换为多模态 Message 列表
 
     # Phase B v2：会话级附件 RAG 注入 system message 到 ctx.history 头
@@ -831,13 +851,17 @@ async def stream_invoke(
     try:
         async for ev in provider.stream(ctx):
             agg.feed(ev)
-            for chunk in translate_event(ev, st, show_citations=show_citations):
-                yield chunk
+            chunks = translate_event(ev, st, show_citations=show_citations)
             if st.saw_error:
+                # 先落败标记再 yield——客户端恰在 error chunk 的 yield 悬挂点
+                # 断开（GeneratorExit）时，finally 仍能以 failed 记 call_log
                 err = {
                     "type": ev.data.get("type", "ProviderError"),
                     "message": ev.data.get("message", "provider stream error"),
                 }
+            for chunk in chunks:
+                yield chunk
+            if st.saw_error:
                 return
     except Exception as e:  # noqa: BLE001
         logger.exception("embed stream failed | embed={}", embed.embed_key)
@@ -860,33 +884,36 @@ async def stream_invoke(
                 )
             yield event_end(usage=sse_usage, answer=agg_result.answer)
             # 落 assistant message + touch（与非流路径对齐）；citations 合并
-            # provider emit 的 + session_files RAG hits，让刷新后还能看到引用卡片
-            merged_citations: list[dict] = list(_assistant_citations)
-            for c in agg_result.citations:
-                merged_citations.append(c.model_dump(exclude_none=True))
-            try:
-                await session_service.append(
-                    session,
-                    sid,
-                    AppendMessageDraft(
-                        role="assistant",
-                        content=agg_result.answer,
-                        citations=merged_citations or None,
-                        usage=agg_result.usage.model_dump()
-                        if agg_result.usage
-                        else None,
-                        end_user_id=end_user_id,
-                        request_id=rid,
-                    ),
-                )
-                title = user_input if conv.title is None else None
-                await session_service.touch(session, sid, title=title)
-                await session.commit()
-            except Exception:  # noqa: BLE001
-                logger.exception(
-                    "embed stream assistant persist failed | sid={}", sid
-                )
-                await session.rollback()
+            # provider emit 的 + session_files RAG hits，让刷新后还能看到引用卡片。
+            # HITL 暂停（pending）时 answer 为空——不落空 assistant 行（对齐
+            # playground 的 if answer 守卫），否则历史回放渲出空气泡
+            if agg_result.answer:
+                merged_citations: list[dict] = list(_assistant_citations)
+                for c in agg_result.citations:
+                    merged_citations.append(c.model_dump(exclude_none=True))
+                try:
+                    await session_service.append(
+                        session,
+                        sid,
+                        AppendMessageDraft(
+                            role="assistant",
+                            content=agg_result.answer,
+                            citations=merged_citations or None,
+                            usage=agg_result.usage.model_dump()
+                            if agg_result.usage
+                            else None,
+                            end_user_id=end_user_id,
+                            request_id=rid,
+                        ),
+                    )
+                    title = user_input if conv.title is None else None
+                    await session_service.touch(session, sid, title=title)
+                    await session.commit()
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "embed stream assistant persist failed | sid={}", sid
+                    )
+                    await session.rollback()
         await _write_log(
             session,
             request_id=rid,
