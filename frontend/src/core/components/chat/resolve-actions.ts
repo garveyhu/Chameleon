@@ -100,8 +100,8 @@ export function resolveActions(
   handlers: MessageActionHandlers,
   hidden: ReadonlySet<MessageActionKey>,
 ): ResolvedActions {
-  // 流式中只留 copy，避免误操作
-  if (msg.status === 'streaming') {
+  // 流式中 / HITL 暂停中只留 copy，避免误操作（paused 等待人工回填，重发会丢 pending）
+  if (msg.status === 'streaming' || msg.status === 'paused') {
     return { primary: ['copy'], more: [] };
   }
   const pick = (order: MessageActionKey[]) =>

@@ -107,9 +107,7 @@ const metaToParams = (
         ? cfg.media_kind
         : null,
     media_model_id:
-      typeof cfg.media_model_id === 'string'
-        ? (cfg.media_model_id as EntityId)
-        : null,
+      typeof cfg.media_model_id === 'string' ? cfg.media_model_id : null,
     gen_params: undefined,
     input_images: undefined,
   };

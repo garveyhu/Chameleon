@@ -31,7 +31,7 @@ export interface ChatActionMessage {
   id: string;
   role: ChatActionRole;
   content: string;
-  status?: 'streaming' | 'done' | 'failed';
+  status?: 'streaming' | 'done' | 'failed' | 'paused';
   /** 1=👍 / -1=👎 / null=未点 */
   feedback?: 1 | -1 | null;
   pinned?: boolean;
