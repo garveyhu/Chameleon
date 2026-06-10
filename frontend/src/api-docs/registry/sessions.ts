@@ -46,7 +46,7 @@ const ENDPOINTS: EndpointSpec[] = [
           data: {
             items: [
               {
-                id: 1,
+                id: '58136219874689024',
                 session_id: 'sess_01H...',
                 agent_key: 'agt_my_app',
                 app_id: 'app_xxx',
@@ -84,7 +84,7 @@ const ENDPOINTS: EndpointSpec[] = [
           code: 200,
           message: 'ok',
           data: {
-            id: 1,
+            id: '58136219874689024',
             session_id: 'sess_01H...',
             agent_key: 'agt_my_app',
             app_id: 'app_xxx',
@@ -122,7 +122,7 @@ const ENDPOINTS: EndpointSpec[] = [
           data: {
             items: [
               {
-                id: 1,
+                id: '58136219874689025',
                 session_id: 'sess_01H...',
                 seq: 1,
                 role: 'user',
@@ -130,7 +130,7 @@ const ENDPOINTS: EndpointSpec[] = [
                 created_at: '2026-05-28T03:20:00Z',
               },
               {
-                id: 2,
+                id: '58136219874689026',
                 session_id: 'sess_01H...',
                 seq: 2,
                 role: 'assistant',
@@ -180,7 +180,7 @@ const ENDPOINTS: EndpointSpec[] = [
     desc: '对某条 assistant 消息重新生成 → 新 assistant child 挂同 user 父，形成兄弟分支。老 assistant 不删。',
     pathParams: [
       { name: 'session_id', type: 'string', required: true, desc: '会话 ID' },
-      { name: 'message_id', type: 'integer', required: true, desc: '要重新生成的 assistant 消息 id' },
+      { name: 'message_id', type: 'string | integer', required: true, desc: '要重新生成的 assistant 消息 id（建议原样回传响应里的字符串 id）' },
     ],
     responses: [
       {
@@ -188,7 +188,7 @@ const ENDPOINTS: EndpointSpec[] = [
         desc: '返回新生成的 assistant message item',
       },
     ],
-    cURL: `curl -X POST '{BASE}/v1/sessions/sess_01H.../messages/123/regenerate' \\
+    cURL: `curl -X POST '{BASE}/v1/sessions/sess_01H.../messages/58136219874689026/regenerate' \\
   -H 'Authorization: Bearer {API_KEY}'`,
   },
   {
@@ -202,7 +202,7 @@ const ENDPOINTS: EndpointSpec[] = [
     desc: '编辑某 user message → 新 user sibling 分支 + 自动 invoke 新 assistant。老消息不删。',
     pathParams: [
       { name: 'session_id', type: 'string', required: true, desc: '会话 ID' },
-      { name: 'message_id', type: 'integer', required: true, desc: '要编辑的 user 消息 id' },
+      { name: 'message_id', type: 'string | integer', required: true, desc: '要编辑的 user 消息 id（建议原样回传响应里的字符串 id）' },
     ],
     bodyParams: [
       {

@@ -454,7 +454,7 @@ const ENDPOINTS: EndpointSpec[] = [
     pathParams: [{ name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' }],
     bodyParams: [
       { name: 'session_id', type: 'string', required: false, desc: '会话 ID（可选）' },
-      { name: 'message_id', type: 'integer', required: false, desc: '消息 ID（可选）' },
+      { name: 'message_id', type: 'string | integer', required: false, desc: '消息 ID（可选，建议原样回传响应里的字符串 id）' },
       { name: 'value', type: 'enum: up | down | star', required: true, desc: '反馈类型' },
       { name: 'score', type: 'number', required: false, desc: 'star 时的评分值' },
       { name: 'comment', type: 'string', required: false, desc: '评语' },
@@ -465,7 +465,7 @@ const ENDPOINTS: EndpointSpec[] = [
   -H 'Content-Type: application/json' \\
   -d '{
     "session_id": "sess_01H...",
-    "message_id": 2,
+    "message_id": "58136219874689026",
     "value": "up"
   }'`,
   },

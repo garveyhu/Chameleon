@@ -35,7 +35,7 @@ widget 调用三个公开 endpoint（admin 端在 embed_configs 模块管理）�
 
 | Method | Path | 说明 |
 |--------|------|------|
-| GET    | `/v1/embed/{embed_key}/config`  | 拉 ui_config + behavior + welcome_message |
+| GET    | `/v1/embed/{embed_key}/config`  | 拉 ui_config + behavior + session_policy（招呼语在 ui_config.greeting） |
 | POST   | `/v1/embed/{embed_key}/session` | 颁 session_token（Redis TTL 1h） |
 | POST   | `/v1/embed/{embed_key}/invoke`  | `{session_token,input}` → `{answer}` |
 

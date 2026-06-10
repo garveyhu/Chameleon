@@ -25,7 +25,7 @@ const ENDPOINTS: EndpointSpec[] = [
           code: 200,
           message: 'ok',
           data: {
-            id: 1,
+            id: '58136219874689030',
             kb_key: 'kb_faq',
             name: '产品 FAQ',
             description: '客服常见问题',
@@ -103,8 +103,8 @@ const ENDPOINTS: EndpointSpec[] = [
           message: 'ok',
           data: [
             {
-              id: 101,
-              doc_id: 12,
+              id: '58136219874689041',
+              doc_id: '58136219874689040',
               seq: 3,
               content: '若需重置密码，请前往设置 → 账户安全 → 重置密码。',
               score: 0.872,
@@ -145,8 +145,8 @@ const ENDPOINTS: EndpointSpec[] = [
           data: {
             items: [
               {
-                id: 1,
-                kb_id: 1,
+                id: '58136219874689040',
+                kb_id: '58136219874689030',
                 title: '产品 FAQ',
                 source_type: 'text',
                 status: 'completed',
@@ -187,7 +187,7 @@ const ENDPOINTS: EndpointSpec[] = [
         example: {
           code: 200,
           message: 'ok',
-          data: { task_id: 7, document_id: 12, status: 'queued' },
+          data: { task_id: '58136219874689050', document_id: '58136219874689040', status: 'queued' },
         },
       },
     ],

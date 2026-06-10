@@ -97,6 +97,20 @@ const ENDPOINTS: EndpointSpec[] = [
           </li>
         </ul>
 
+        <H>ID 序列化规则</H>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            实体 ID（消息 / 知识库 / 文档等）是雪花算法生成的 64 位整数，超出 JS{' '}
+            <Code>Number.MAX_SAFE_INTEGER</Code>。平台在响应序列化边界统一把超界整数转为
+            <b>字符串</b>返回（如 <Code>"58136219874689024"</Code>），请始终按字符串保存与回传，
+            <b>不要</b> <Code>Number()</Code> 强转（会丢精度导致按 id 寻址的端点 404）。
+          </li>
+          <li>
+            请求侧（路径参数 / body）传字符串或数字均可，服务端自动解析；
+            <Code>session_id</Code> / <Code>request_id</Code> 本身就是字符串。
+          </li>
+        </ul>
+
         <H>会话与身份</H>
         <p>
           传 <Code>session_id</Code> 续接多轮；<Code>user</Code> 标识终端用户（会话归属 /
