@@ -194,11 +194,30 @@ async def publish_graph(
     await session.flush()
     await session.refresh(row)
     item = GraphDetail.model_validate(row)
+
+    # registry 构建时快照 published_spec（invoke 不再碰 DB）——已发布为 agent 的 graph
+    # 必须 reload，否则线上继续跑旧 spec、UI 却报"已发布 vN"
+    linked = (
+        await session.execute(
+            select(Agent.id).where(
+                Agent.source == "graph",
+                Agent.graph_id == row.id,
+                Agent.deleted_at.is_(None),
+            )
+        )
+    ).first()
     await session.commit()
+
+    if linked is not None:
+        from chameleon.providers.base import reload_agent_registry
+
+        await reload_agent_registry()
+
     logger.info(
-        "graph published | id={} | version={}",
+        "graph published | id={} | version={} | registry_reloaded={}",
         row.id,
         row.published_version,
+        linked is not None,
     )
     return item
 
