@@ -269,7 +269,7 @@ export const RunCompareStats = ({
                   />
                 ))}
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Tooltip formatter={(v: number) => v.toFixed(2)} />
+                <Tooltip formatter={v => Number(v).toFixed(2)} />
               </RadarChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -310,10 +310,10 @@ export const RunCompareStats = ({
               <XAxis dataKey="idx" tick={{ fontSize: 9, fill: '#a8a29e' }} />
               <YAxis domain={[0, 1]} tick={{ fontSize: 10, fill: '#a8a29e' }} />
               <Tooltip
-                labelFormatter={(idx: number) =>
-                  `#${idx} ${lineData[idx - 1]?.q ?? ''}`
+                labelFormatter={idx =>
+                  `#${Number(idx)} ${lineData[Number(idx) - 1]?.q ?? ''}`
                 }
-                formatter={(v: number) => (v == null ? '—' : v.toFixed(2))}
+                formatter={v => (v == null ? '—' : Number(v).toFixed(2))}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
               {runs.map((run, i) => (

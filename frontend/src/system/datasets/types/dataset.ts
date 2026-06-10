@@ -276,6 +276,8 @@ export interface RefineCandidateRequest {
     user_input: string;
     answer: string;
     note?: string;
+    /** AI 归类的能力维度 key（数据集 categories；后端 CandidatePayload.category） */
+    category?: string | null;
   };
   instruction?: string;
   mode: 'optimize' | 'regenerate';
@@ -286,6 +288,7 @@ export interface RefinedCandidate {
   user_input: string;
   answer: string | null;
   note?: string | null;
+  category?: string | null;
 }
 
 /** H3：智能优化产出 —— 重写 prompt + 报告 + 前后对比 */

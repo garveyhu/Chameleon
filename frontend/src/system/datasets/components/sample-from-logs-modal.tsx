@@ -309,6 +309,7 @@ export const SampleFromLogsModal = ({ datasetId, onClose, onDone }: Props) => {
                     onToggle={cid => patch(cid, { selected: !c.selected })}
                     onChangeInput={(cid, v) => patch(cid, { user_input: v })}
                     onChangeAnswer={(cid, v) => patch(cid, { answer: v })}
+                    onChangeNote={(cid, v) => patch(cid, { note: v })}
                     onOptimize={optimize}
                     onRegenerate={() => undefined}
                     onRemove={cid => setCandidates(prev => prev.filter(x => x.cid !== cid))}
