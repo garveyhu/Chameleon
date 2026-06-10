@@ -52,6 +52,9 @@ export const LinkedModelsForm = ({ agentId }: Props) => {
     mutationFn: () => {
       const bindings: Record<string, string> = {};
       for (const s of slots) {
+        // 锁定槽由代码定死：后端对带锁定槽名的 bindings 整单 ValidationError，
+        // 历史绑定过再锁定的槽若打包进去会把整个保存按钮砸死
+        if (s.locked) continue;
         const code = effective(s.name, s.bound_code);
         if (code) bindings[s.name] = code;
       }

@@ -794,6 +794,13 @@ async def update_agent_config(
     declared = {o.key for o in manifest.config} if manifest else set()
 
     clean = {k: v for k, v in (req.values or {}).items() if k in declared}
+    # required 且无代码默认值的参数不允许空着保存——否则运行时 ctx.config 取值 KeyError
+    if manifest:
+        for o in manifest.config:
+            if o.required and o.default is None:
+                v = clean.get(o.key)
+                if v is None or v == "":
+                    raise ValidationError(message=f"参数 {o.key}（{o.label}）为必填")
     agent.config = {**(agent.config or {}), "opts": clean}
     await session.commit()
     await reload_agent_registry()  # 让 ctx.config 重新加载

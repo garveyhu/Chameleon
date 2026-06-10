@@ -46,8 +46,17 @@ export const AgentConfigForm = ({ agentId }: Props) => {
 
   const saveMut = useMutation({
     mutationFn: () => {
-      const payload: Record<string, unknown> = {};
-      for (const o of options) payload[o.key] = effective(o);
+      // 仅提交「服务端已存值 + 本次编辑」——未动过的 Opt.default 不落库，
+      // 作者日后改代码默认值仍生效（避免保存把默认值固化进 DB）
+      const payload: Record<string, unknown> = { ...values };
+      for (const [k, v] of Object.entries(edits)) payload[k] = v;
+      for (const o of options) {
+        const v = payload[o.key];
+        // number 清空 = 回落代码默认：删键（后端按提交值全量替换 opts）
+        if (o.type === 'number' && (v === '' || (typeof v === 'number' && Number.isNaN(v)))) {
+          delete payload[o.key];
+        }
+      }
       return agentApi.updateConfig(agentId, payload);
     },
     onSuccess: () => {
@@ -61,6 +70,18 @@ export const AgentConfigForm = ({ agentId }: Props) => {
   if (schemaQ.isLoading || options.length === 0) return null;
 
   const set = (key: string, v: unknown) => setEdits(prev => ({ ...prev, [key]: v }));
+
+  const submit = () => {
+    for (const o of options) {
+      if (!o.required) continue;
+      const v = effective(o);
+      if (v === '' || v == null) {
+        toast.error(`「${o.label}」为必填项`);
+        return;
+      }
+    }
+    saveMut.mutate();
+  };
 
   return (
     <div className="mt-4 space-y-3 border-t border-stone-200/60 pt-4">
@@ -107,7 +128,13 @@ export const AgentConfigForm = ({ agentId }: Props) => {
                   type={o.type === 'number' ? 'number' : 'text'}
                   value={String(effective(o) ?? '')}
                   onChange={e =>
-                    set(o.key, o.type === 'number' ? Number(e.target.value) : e.target.value)
+                    // number 清空存 ''（提交时删键回落默认），不再 Number('')=0 静默落库
+                    set(
+                      o.key,
+                      o.type === 'number' && e.target.value !== ''
+                        ? Number(e.target.value)
+                        : e.target.value,
+                    )
                   }
                 />
               )}
@@ -117,7 +144,7 @@ export const AgentConfigForm = ({ agentId }: Props) => {
       </div>
 
       <Button
-        onClick={() => saveMut.mutate()}
+        onClick={submit}
         disabled={Object.keys(edits).length === 0 || saveMut.isPending}
       >
         <Save className="h-3.5 w-3.5" /> 保存参数
