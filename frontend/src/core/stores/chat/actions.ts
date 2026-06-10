@@ -213,8 +213,7 @@ export const createChatActions: StateCreator<
           kb_ids: params.kb_ids.length ? params.kb_ids : undefined,
           // transient override（如翻译临时 system_prompt）不写入会话配置快照
           persist_config: !overrides?.system_prompt,
-          // durable HITL 续跑：回填答案到暂停的 run（后端用 pending 原始 query 重放）
-          resume_run_id: resume?.runId,
+          // durable HITL 续跑：服务端按会话权威读 pending（run_id 服务端自取）
           resume_answer: resume?.answer,
         },
         {

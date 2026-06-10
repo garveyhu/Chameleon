@@ -51,7 +51,6 @@ class PlaygroundInvokeRequest(BaseModel):
     # 是否把本轮配置写入会话快照；transient 调用（如翻译临时指令）传 false 不污染
     persist_config: bool = True
     # durable HITL 续跑：上一轮 pending 返回的 run_id + 人工答案 → 回填续跑该暂停的 run
-    resume_run_id: str | None = None
     resume_answer: str | None = None
 
 
@@ -103,7 +102,6 @@ async def invoke(
             messages=[m.model_dump() for m in req.messages],
             kb_ids=req.kb_ids or [],
             persist_config=req.persist_config,
-            resume_run_id=req.resume_run_id,
             resume_answer=req.resume_answer,
         ),
         log_label="playground:invoke",

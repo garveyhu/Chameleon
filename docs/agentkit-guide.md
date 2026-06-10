@@ -231,17 +231,18 @@ async def handle(ctx: AgentRun):
   用 scope 读 pending、用 pending 里的 run_id 命中 journal 重放（见 `engine/agent/durable.py`
   `resolve_resume`）。回填一次性：同答案幂等、不同答案拒（防决策翻转重放）。
 
-> 公开 `/v1` API：durable agent 经流式 `/v1` 调用暂停时会透出 `human_input_pending` 事件（调用方
-> 可感知），但**经 `/v1` 的程序化 resume 尚未提供**（待真实生产需求）；需可恢复的 durable agent
-> 目前经 playground / 嵌入式 / dev 端点回填。
+> 公开 `/v1` API：durable agent 经 `/v1` 调用暂停时，流式透出 `human_input_pending` step 事件、
+> 非流式在 `done.steps` 出现同名记录；**程序化 resume 已提供**——带 `resume_answer` +
+> 暂停时的 `session_id` 重调 `/v1/invoke`（流式/非流式皆可）即从暂停点续跑。嵌入式
+> （`/v1/embed/.../invoke[/stream]` 的 `resume_answer`）、playground、dev 端点同理。
 
 ### 当前边界（务必知道，越界即报错而非静默坑你）
 
-- **durable 仅 memoize `ctx.complete`（文本）+ `ctx.ask_human`**。其余有副作用/计费的 ctx 外部
-  调用在 durable handle 里**直接报错**（穷举）：`run_with_tools` / `call_agent` / `gather` /
-  `route` / `complete(schema=)` / `stream` / `ctx.kb.search` / `ctx.media.generate`——它们尚未
-  接入 journal，重放会重执行（重复扣费/副作用，媒体生成尤其是真金白银）。后续 slice 接入后放开。
-  （`ctx.memory.set` 不拦——它是 journal/checkpoint 的持久化底座，重写值幂等。）
+- **durable 已覆盖全部 ctx 外部调用**（T1-2 收官）：`ctx.complete`（含 `schema=`）/
+  `ctx.ask_human` / `run_with_tools`（粗粒度整轮 memoize）/ `call_agent` / `gather` /
+  `route` / `stream` / `ctx.kb.search` / `ctx.media.generate` 均接入 journal——重放
+  命中即跳过执行，不重复扣费/副作用。（`ctx.memory.set` 不走 journal——它是
+  journal/checkpoint 的持久化底座，重写值幂等。）
 - **控制流必须确定性**：禁依赖 `random` / 时间 / 未 journal 的外部状态做分支——否则重放时调用序
   错位。框架按 `method + 入参指纹`校验，错位即报错（不静默返错值）。
 - **需持久化 scope**：durable 依赖 end_user / session 身份持久化 journal；无身份调用直接拒

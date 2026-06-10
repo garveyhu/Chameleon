@@ -864,7 +864,7 @@ class AgentRun:
         调用 `ctx.restore()` 取回，从断点续跑而非从头。
 
         底层复用 ctx.memory 的持久化（按 end_user 隔离），故 `state` 须 JSON 可序列化。
-        这是 durable execution 的崩溃恢复底座；HITL 暂停/重放（ctx.ask_human）见路线图后续分片。
+        这是 durable execution 的崩溃恢复底座（HITL 暂停/重放见 ctx.ask_human）。
         """
         import json
 

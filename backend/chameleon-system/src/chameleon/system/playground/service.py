@@ -329,7 +329,6 @@ async def invoke_stream(
     gen_params: dict | None = None,
     input_images: list[str] | None = None,
     persist_config: bool = True,
-    resume_run_id: str | None = None,
     resume_answer: object = None,
 ) -> AsyncIterator[dict]:
     """完整 playground 调用编排：绑 key 溯源 → 建/续会话 → KB context → 流式调用。
@@ -443,7 +442,6 @@ async def invoke_stream(
                 app_id=PLAYGROUND_APP_ID,
                 gen_params=gen_params,
                 input_images=input_images,
-                resume_run_id=resume_run_id,
                 resume_answer=resume_answer,
             ):
                 if chunk.get("delta"):
@@ -581,7 +579,6 @@ async def _stream_agent(
     app_id: str,
     gen_params: dict | None = None,
     input_images: list[str] | None = None,
-    resume_run_id: str | None = None,
     resume_answer: object = None,
 ) -> AsyncIterator[dict]:
     """调用某应用的 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk。
