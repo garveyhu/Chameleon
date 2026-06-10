@@ -526,9 +526,14 @@ const EditorBody = ({ graph, onReturn, onSaved }: EditorBodyProps) => {
   };
 
   const onPublishAgent = async () => {
+    // 后端语义：未发布过则冻结当前草稿；已发布过仅暴露既有 published 版本为
+    // 智能体（不冻结新草稿——更新线上版本走「发布版本」）。文案如实区分。
+    const published = (graph.published_version ?? 0) > 0;
     const ok = await confirm({
       title: '发布为智能体？',
-      description: `将冻结当前草稿并暴露成一个可对话智能体（agent_key=${graph.graph_key}），可在「智能体」页和统一 agent 端点调用。`,
+      description: published
+        ? `将以已发布版本 v${graph.published_version} 暴露成可对话智能体（agent_key=${graph.graph_key}）；草稿改动需另点「发布版本」才会上线。`
+        : `将冻结当前草稿并暴露成一个可对话智能体（agent_key=${graph.graph_key}），可在「智能体」页和统一 agent 端点调用。`,
     });
     if (ok) publishAgentMut.mutate();
   };

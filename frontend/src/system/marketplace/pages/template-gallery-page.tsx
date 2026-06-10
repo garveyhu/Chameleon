@@ -66,7 +66,13 @@ export const TemplateGalleryPage = () => {
   const installMut = useMutation({
     mutationFn: (id: AppTemplateItem['id']) => appTemplateApi.install(id),
     onSuccess: r => {
-      toast.success(`已安装 "${r.template_name}"`);
+      // 后端当前仅记账（artifact_id 恒空，实际建应用的链路未上线）——
+      // 不可 toast「已安装」造成假成功
+      if (r.artifact_id) {
+        toast.success(`已安装 "${r.template_name}"`);
+      } else {
+        toast.info(`"${r.template_name}" 已登记，一键创建应用即将上线`);
+      }
       qc.invalidateQueries({ queryKey: ['app-templates'] });
     },
     onError: e => toast.error('安装失败：' + (e as Error).message),
