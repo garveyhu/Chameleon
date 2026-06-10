@@ -34,7 +34,9 @@ export const AgentHelperModelField = ({ agent, compact = false }: Props) => {
     staleTime: 60_000,
   });
   const updateMut = useMutation({
-    mutationFn: (code: string | null) =>
+    // 清除语义是空串（与 icon 约定一致）：null 会被后端 `is not None` 判定为
+    // 「未传该字段」直接跳过，下拉永远弹回原模型
+    mutationFn: (code: string) =>
       agentApi.update(agent.id, { default_model_code: code }),
     onSuccess: () => {
       toast.success('已保存');
@@ -54,7 +56,7 @@ export const AgentHelperModelField = ({ agent, compact = false }: Props) => {
   const Trigger = (
     <Select
       value={current || '__none__'}
-      onValueChange={v => updateMut.mutate(v === '__none__' ? null : v)}
+      onValueChange={v => updateMut.mutate(v === '__none__' ? '' : v)}
       disabled={modelsQ.isLoading || updateMut.isPending}
     >
       <SelectTrigger className={compact ? 'h-7 w-full' : 'w-60'}>

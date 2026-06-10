@@ -7,7 +7,7 @@ import type { ReactElement, ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   ArrowLeft,
@@ -33,6 +33,7 @@ import { SectionCard } from '@/core/components/table';
 import { Badge } from '@/core/components/ui/badge';
 import { cn } from '@/core/lib/cn';
 import { formatDateTime } from '@/core/lib/format';
+import { toast } from '@/core/lib/toast';
 import { resolveOrchestrationKind } from '@/core/lib/orchestration';
 import { AgentApiTab } from '@/system/agents/components/agent-api-tab';
 import { DetailSection } from '@/system/agents/components/detail-section';
@@ -217,19 +218,48 @@ const Field = ({
   </div>
 );
 
-const StatusPill = ({ enabled }: { enabled: boolean }) => (
-  <span
-    className={cn(
-      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
-      enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500',
-    )}
-  >
-    <span
-      className={cn('h-1.5 w-1.5 rounded-full', enabled ? 'bg-emerald-500' : 'bg-stone-400')}
-    />
-    {enabled ? '已启用' : '已停用'}
-  </span>
-);
+/** 状态启停开关 —— 全 source 通用（代码应用不可删除，这里是唯一处置手段） */
+const StatusPill = ({ agent }: { agent: AgentItem }) => {
+  const qc = useQueryClient();
+  const enabled = agent.enabled;
+  const mut = useMutation({
+    mutationFn: () => (enabled ? agentApi.disable(agent.id) : agentApi.enable(agent.id)),
+    onSuccess: a => {
+      toast.success(a.enabled ? '已启用' : '已停用（线上调用将被拒绝）');
+      qc.invalidateQueries({ queryKey: ['agent', String(agent.id)] });
+      qc.invalidateQueries({ queryKey: ['agents'] });
+    },
+    onError: e => toast.error(`操作失败：${(e as Error).message}`),
+  });
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium',
+          enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500',
+        )}
+      >
+        <span
+          className={cn('h-1.5 w-1.5 rounded-full', enabled ? 'bg-emerald-500' : 'bg-stone-400')}
+        />
+        {enabled ? '已启用' : '已停用'}
+      </span>
+      <button
+        type="button"
+        disabled={mut.isPending}
+        onClick={() => mut.mutate()}
+        className={cn(
+          'rounded-md border px-2 py-0.5 text-[11px] font-medium transition disabled:opacity-50',
+          enabled
+            ? 'border-stone-200 text-stone-500 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600'
+            : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50',
+        )}
+      >
+        {mut.isPending ? '…' : enabled ? '停用' : '启用'}
+      </button>
+    </span>
+  );
+};
 
 const GenerationAppInfo = ({ agent }: { agent: AgentItem }) => {
   const modelId = (agent.config as { model_id?: string | number } | null)?.model_id;
@@ -253,7 +283,7 @@ const GenerationAppInfo = ({ agent }: { agent: AgentItem }) => {
       <div className="divide-y divide-stone-100">
         <Field label="应用标识" value={agent.agent_key} mono />
         <Field label="类型" value={isVideo ? '图生视频' : '文生图'} />
-        <Field label="状态" value={<StatusPill enabled={agent.enabled} />} />
+        <Field label="状态" value={<StatusPill agent={agent} />} />
         <Field label="生成模型" value={modelLabel} mono />
         {agent.description && <Field label="描述" value={agent.description} />}
         <Field label="创建时间" value={formatDateTime(agent.created_at)} mono />
@@ -307,7 +337,7 @@ const InfoTab = ({ agent }: { agent: AgentItem | null }) => {
         <div className="divide-y divide-stone-100">
           <Field label="应用标识" value={agent.agent_key} mono />
           <Field label="类型" value={typeLabel} />
-          <Field label="状态" value={<StatusPill enabled={agent.enabled} />} />
+          <Field label="状态" value={<StatusPill agent={agent} />} />
           {isExternal && (
             <Field label="供应商 ID" value={String(agent.provider_id ?? '—')} mono />
           )}
