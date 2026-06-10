@@ -194,6 +194,7 @@ export const createChatActions: StateCreator<
     // durable HITL：本轮是否收到过 pending（暂停）。后端 pending 后仍会 emit end，end 不可把
     // paused 冲成 done，否则回填框秒消失（评审22 C1）。
     let sawPending = false;
+    let sawError = false;
     try {
       await streamInvoke(
         {
@@ -220,6 +221,7 @@ export const createChatActions: StateCreator<
           signal: controller.signal,
           onChunk: (chunk: InvokeChunk) => {
             if (chunk.error) {
+              sawError = true;
               patch(columnId, targetId, {
                 status: 'failed',
                 error: `${chunk.error.type}: ${chunk.error.message}`,
@@ -256,8 +258,9 @@ export const createChatActions: StateCreator<
                 },
               });
             }
-            if (chunk.end && !sawPending) {
-              // 暂停态不被 end 冲成 done（否则回填框秒消失，评审22 C1）；resume 续跑时新一轮
+            if (chunk.end && !sawPending && !sawError) {
+              // 暂停态不被 end 冲成 done（否则回填框秒消失，评审22 C1）；失败态同理
+              // 不被尾随 end 冲掉（旧后端 error 后仍补发 end）。resume 续跑时新一轮
               // runInvoke 的 end 才置 done。
               patch(columnId, targetId, {
                 status: 'done',

@@ -426,6 +426,7 @@ async def invoke_stream(
     )
     started = time.monotonic()
     ok = True
+    fail_msg: str | None = None
     answer_parts: list[str] = []
     try:
         # KB 召回包成 retriever 观测段：record_scope 自身落 retriever 节点（query +
@@ -447,6 +448,15 @@ async def invoke_stream(
             ):
                 if chunk.get("delta"):
                     answer_parts.append(chunk["delta"])
+                if chunk.get("error"):
+                    # _stream_agent 把 provider 异常转成 error chunk（不上抛），
+                    # 这里同步失败标记——否则根 trace 落 success=True 观测失真
+                    ok = False
+                    err_chunk = chunk["error"]
+                    fail_msg = (
+                        f"{err_chunk.get('type', 'Error')}: "
+                        f"{err_chunk.get('message', '')}"[:500]
+                    )
                 yield chunk
         else:
             if kb_ids:
@@ -541,7 +551,7 @@ async def invoke_stream(
                 stream=True,
                 success=ok,
                 code=0 if ok else 500,
-                error_message=None,
+                error_message=fail_msg,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 prompt_tokens=p,
                 completion_tokens=c,
@@ -577,7 +587,8 @@ async def _stream_agent(
     """调用某应用的 provider（生图/视频/工作流等），把 StreamEvent 转 playground chunk。
 
     delta（含生图返回的 Markdown 图片 ![](url)）→ {"delta"}；citation → {"citation"}；
-    error → {"error"}；流末补 {"end": True}（否则前端永远「生成中」）。生成参数 /
+    error → {"error"}（终态，其后不再发 end——契约见 core/api/sse_events）；正常
+    流末补 {"end": True}（否则前端永远「生成中」）。生成参数 /
     首帧图经 InvokeContext.options 透传给 provider→driver。
     """
     from chameleon.providers.base.registry import AGENTS, PROVIDERS
@@ -585,13 +596,13 @@ async def _stream_agent(
 
     agent = AGENTS.get(invoke_agent_key)
     if agent is None:
+        # 契约（core/api/sse_events）：error 是终态事件，其后不得再发 end——
+        # 否则前端把 failed 冲成 done、失败样式丢失
         yield {"error": {"type": "AgentNotFound", "message": f"应用未注册或未启用: {invoke_agent_key}"}}
-        yield {"end": True}
         return
     provider = PROVIDERS.get(agent.provider)
     if provider is None:
         yield {"error": {"type": "ProviderError", "message": f"provider 未注册: {agent.provider}"}}
-        yield {"end": True}
         return
 
     history = [
@@ -616,7 +627,6 @@ async def _stream_agent(
         spec = await resolve_resume(invoke_agent_key, session_id)
         if spec is None or not spec.run_id:
             yield {"error": {"type": "ResumeError", "message": "无暂停可恢复：该会话无待人工输入"}}
-            yield {"end": True}
             return
         cvars = {"_resume_call_index": spec.call_index, "_resume_answer": resume_answer}
         eff_request = spec.run_id  # journal 键含首跑 run_id，必须复用才命中重放
@@ -651,12 +661,23 @@ async def _stream_agent(
                     }
                 }
             elif ev.type == StreamEventType.error:
-                yield {"error": {"type": "ProviderError", "message": ev.data.get("message", "应用执行失败")}}
-                yield {"end": True}
+                yield {
+                    "error": {
+                        "type": ev.data.get("type", "ProviderError"),
+                        "message": ev.data.get("message", "应用执行失败"),
+                        # guardrail 拦截等结构化字段透传，前端可差异化展示
+                        **(
+                            {"guardrail": ev.data["guardrail"]}
+                            if ev.data.get("guardrail")
+                            else {}
+                        ),
+                    }
+                }
                 return
     except Exception as e:  # noqa: BLE001
         logger.exception("playground agent invoke failed | agent=%s", invoke_agent_key)
         yield {"error": {"type": type(e).__name__, "message": str(e)[:300]}}
+        return
     yield {"end": True}
 
 
