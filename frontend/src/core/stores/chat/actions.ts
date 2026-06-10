@@ -161,7 +161,9 @@ export const createChatActions: StateCreator<
   };
 
   const requireModel = (params: PlaygroundParams | undefined): boolean => {
-    if (!params?.model_id) {
+    // 关联应用模式跑应用自身的 provider，不需要 model_id（与后端校验对齐：
+    // invoke_agent_key / model_id / model_name 三选一），生图等应用此时也无模型下拉
+    if (!params?.invoke_agent_key && !params?.model_id) {
       toast.error('请先选择模型');
       return false;
     }
