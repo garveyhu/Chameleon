@@ -20,7 +20,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             embed_key: 'em_xxx',
@@ -28,6 +28,7 @@ const ENDPOINTS: EndpointSpec[] = [
             description: '产品官网右下角助手',
             ui_config: { theme: 'light', primary_color: '#2563eb' },
             behavior: { show_citations: true },
+            session_policy: { identification_mode: 'anonymous_device', allow_user_manage: true },
           },
         },
       },
@@ -69,7 +70,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: { session_token: 'eyJhbGciOi...', expires_in: 3600 },
         },
@@ -94,17 +95,29 @@ const ENDPOINTS: EndpointSpec[] = [
       { name: 'session_token', type: 'string', required: true, desc: '颁发接口返回的短期 token' },
       { name: 'input', type: 'string', required: true, desc: '用户输入（1-8000 字符）' },
       {
+        name: 'session_id',
+        type: 'string | null',
+        required: false,
+        desc: 'widget 当前显示的会话 id（权威）。传了就落到该会话；缺省回退 token 绑定的会话',
+      },
+      {
         name: 'attachments',
         type: 'Attachment[]',
         required: false,
-        desc: '附件（Phase A 仅图/音走多模态进 LLM；先用 /v1/files/presigned-upload 拿 object_url）',
+        desc: '附件（图/音走多模态进 LLM，文档/数据走会话临时 RAG）。先用本组的 POST /v1/embed/{embed_key}/files/presigned-upload 三步上传拿 object_url——不要用 bearer-key 鉴权的 /v1/files 系列，widget 手里只有 session_token',
+      },
+      {
+        name: 'resume_answer',
+        type: 'string | null',
+        required: false,
+        desc: 'durable HITL 续跑：流式调用收到 pending 后，带人工回答重调本端点（流式端点同理）续跑暂停的 run',
       },
     ],
     responses: [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: { answer: '需要我帮你做什么？', session_id: 'sess_01H...', request_id: 'req_01H...' },
         },
@@ -126,16 +139,23 @@ const ENDPOINTS: EndpointSpec[] = [
     method: 'POST',
     path: '/v1/embed/{embed_key}/invoke/stream',
     auth: 'session-token',
-    desc: '同 invoke 入参，响应为 SSE。chunk 协议同 /v1/invoke 流式。',
+    desc: '同 invoke 入参（含 session_id / attachments / resume_answer），响应为 SSE。注意：协议与 /v1/invoke 的具名事件流不同——本端点是匿名 data 行，按顶层 key 判型：meta(首条，会话/请求 id) / delta(增量文本字符串) / citation(引用) / pending(HITL 暂停 {prompt, call_index, run_id}，回填后带 resume_answer 重调本端点续跑) / error({type, message, code?}) / end({end: true, answer, usage})。末尾 data: [DONE] 终止标记。',
     pathParams: [{ name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' }],
     bodyParams: [
       { name: 'session_token', type: 'string', required: true, desc: 'session_token' },
       { name: 'input', type: 'string', required: true, desc: '用户输入' },
+      { name: 'session_id', type: 'string | null', required: false, desc: '同非流式' },
       {
         name: 'attachments',
         type: 'Attachment[]',
         required: false,
-        desc: '同非流式：Phase A 图/音走多模态',
+        desc: '同非流式：经 embed 专用上传端点拿 object_url',
+      },
+      {
+        name: 'resume_answer',
+        type: 'string | null',
+        required: false,
+        desc: 'HITL 续跑人工回答（对应上次流中的 pending）',
       },
     ],
     responses: [
@@ -143,7 +163,14 @@ const ENDPOINTS: EndpointSpec[] = [
         code: 200,
         name: '200 - text/event-stream',
         example:
-          'data: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好"}\ndata: [DONE]',
+          'data: {"meta": {"agent": "agt_x", "session_id": "sess_01H...", "request_id": "req_01H..."}}\ndata: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好", "usage": {"input_tokens": 12, "output_tokens": 28}}\ndata: [DONE]',
+      },
+      {
+        code: 200,
+        name: '200 - HITL 暂停（durable 应用）',
+        desc: '应用 ask_human 暂停时收到 pending 后流结束；widget 渲染回填框，用户回答后带 resume_answer 重调本端点续跑',
+        example:
+          'data: {"meta": {...}}\ndata: {"pending": {"prompt": "金额超阈值，是否批准？", "call_index": 0, "run_id": "run_01H..."}}\ndata: [DONE]',
       },
     ],
     cURL: `curl -N -X POST '{BASE}/v1/embed/em_xxx/invoke/stream' \\
@@ -171,7 +198,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: [
             {
@@ -195,7 +222,7 @@ const ENDPOINTS: EndpointSpec[] = [
     method: 'GET',
     path: '/v1/embed/{embed_key}/sessions/{session_id}/messages',
     auth: 'session-token',
-    desc: '加载某历史会话的消息（按 seq 正序，硬上限 500 条）。',
+    desc: '加载某历史会话的消息（按 seq 正序，硬上限 500 条）。注意副作用：调用会把 session_token 重新绑定到该会话（后续不带 session_id 的 invoke 落到这里）。',
     pathParams: [
       { name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' },
       { name: 'session_id', type: 'string', required: true, desc: '会话 ID' },
@@ -220,7 +247,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: { session_token: 'eyJ...', session_id: 'sess_new_01H...', expires_in: 3600 },
         },
@@ -273,6 +300,147 @@ const ENDPOINTS: EndpointSpec[] = [
   -H 'Origin: https://your-site.example.com' \\
   -H 'Content-Type: application/json' \\
   -d '{ "session_token": "{TOKEN}", "title": "重要咨询" }'`,
+  },
+  {
+    id: 'embed.files.presign',
+    group: 'embed',
+    order: 92,
+    title: '附件上传：取预签名 URL',
+    method: 'POST',
+    path: '/v1/embed/{embed_key}/files/presigned-upload',
+    auth: 'session-token',
+    desc: 'widget 附件上传三步第 1 步：按 behavior 配置校验大小/类型后返回预签名直传 URL。第 2 步用 PUT 把文件字节直传 upload_url（不经平台）。',
+    pathParams: [{ name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' }],
+    bodyParams: [
+      { name: 'session_token', type: 'string', required: true, desc: 'session_token' },
+      { name: 'filename', type: 'string', required: true, desc: '原文件名' },
+      { name: 'content_type', type: 'string', required: true, desc: 'MIME 类型' },
+      { name: 'size', type: 'integer', required: true, desc: '文件字节数（受 behavior 上限约束）' },
+    ],
+    responses: [
+      {
+        code: 200,
+        example: {
+          code: 200,
+          message: 'ok',
+          data: { upload_url: 'https://minio.../presigned...', object_id: 'embed-attach/em_xxx/uuid/photo.png' },
+        },
+      },
+    ],
+    cURL: `curl -X POST '{BASE}/v1/embed/em_xxx/files/presigned-upload' \\
+  -H 'Origin: https://your-site.example.com' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "session_token": "{TOKEN}", "filename": "photo.png", "content_type": "image/png", "size": 102400 }'`,
+  },
+  {
+    id: 'embed.files.finalize',
+    group: 'embed',
+    order: 93,
+    title: '附件上传：登记完成',
+    method: 'POST',
+    path: '/v1/embed/{embed_key}/files/{object_id}/finalize',
+    auth: 'session-token',
+    desc: '三步第 3 步：直传完成后登记，返回长效 object_url（之后作为 invoke 的 attachments[].object_url 传入）。文档/数据类会触发异步解析入会话临时知识库。',
+    pathParams: [
+      { name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' },
+      { name: 'object_id', type: 'string', required: true, desc: '第 1 步返回的 object_id（URL encode 后拼进路径）' },
+    ],
+    bodyParams: [
+      { name: 'session_token', type: 'string', required: true, desc: 'session_token' },
+      { name: 'filename', type: 'string', required: false, desc: '原文件名（落库展示用）' },
+    ],
+    responses: [{ code: 200, desc: '返回 { object_url, file_id, ... }' }],
+    cURL: `curl -X POST '{BASE}/v1/embed/em_xxx/files/embed-attach%2Fem_xxx%2Fuuid%2Fphoto.png/finalize' \\
+  -H 'Origin: https://your-site.example.com' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "session_token": "{TOKEN}", "filename": "photo.png" }'`,
+  },
+  {
+    id: 'embed.files.status',
+    group: 'embed',
+    order: 94,
+    title: '附件解析状态',
+    method: 'POST',
+    path: '/v1/embed/{embed_key}/files/{file_id}/status',
+    auth: 'session-token',
+    desc: '轮询文档类附件的解析进度：uploaded → parsing → indexing → ready / failed。ready 后该文件内容可被会话内提问命中（临时 RAG）。',
+    pathParams: [
+      { name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' },
+      { name: 'file_id', type: 'integer', required: true, desc: 'finalize 返回的 file_id' },
+    ],
+    bodyParams: [{ name: 'session_token', type: 'string', required: true, desc: 'session_token' }],
+    responses: [
+      { code: 200, example: { code: 200, message: 'ok', data: { id: 12, status: 'ready', error: null } } },
+    ],
+    cURL: `curl -X POST '{BASE}/v1/embed/em_xxx/files/12/status' \\
+  -H 'Origin: https://your-site.example.com' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "session_token": "{TOKEN}" }'`,
+  },
+  {
+    id: 'embed.files.list',
+    group: 'embed',
+    order: 95,
+    title: '我的会话附件列表',
+    method: 'GET',
+    path: '/v1/embed/{embed_key}/sessions/{session_id}/files',
+    auth: 'session-token',
+    desc: 'end-user 拉自己在此会话上传过的附件（按 end_user 隔离）。',
+    pathParams: [
+      { name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' },
+      { name: 'session_id', type: 'string', required: true, desc: '会话 ID' },
+    ],
+    queryParams: [{ name: 'session_token', type: 'string', required: true, desc: 'session_token' }],
+    responses: [{ code: 200, desc: '返回 [{ id, filename, mime, size, kind, status, object_url, created_at }]' }],
+    cURL: `curl '{BASE}/v1/embed/em_xxx/sessions/sess_01H.../files?session_token={TOKEN}' \\
+  -H 'Origin: https://your-site.example.com'`,
+  },
+  {
+    id: 'embed.files.delete',
+    group: 'embed',
+    order: 96,
+    title: '删除我的会话附件',
+    method: 'POST',
+    path: '/v1/embed/{embed_key}/sessions/{session_id}/files/{file_id}/delete',
+    auth: 'session-token',
+    desc: '删除附件及其临时索引（后续提问不再命中该文件内容）。',
+    pathParams: [
+      { name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' },
+      { name: 'session_id', type: 'string', required: true, desc: '会话 ID' },
+      { name: 'file_id', type: 'integer', required: true, desc: '附件 ID' },
+    ],
+    bodyParams: [{ name: 'session_token', type: 'string', required: true, desc: 'session_token' }],
+    responses: [{ code: 200, desc: '{ deleted: true }' }],
+    cURL: `curl -X POST '{BASE}/v1/embed/em_xxx/sessions/sess_01H.../files/12/delete' \\
+  -H 'Origin: https://your-site.example.com' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "session_token": "{TOKEN}" }'`,
+  },
+  {
+    id: 'embed.followups',
+    group: 'embed',
+    order: 98,
+    title: '建议追问',
+    method: 'POST',
+    path: '/v1/embed/{embed_key}/suggest-followups',
+    auth: 'session-token',
+    desc: '基于刚才的问答生成 3 个建议追问。widget 在流式 end 后调用，按 behavior.show_followups 配置渲染气泡。',
+    pathParams: [{ name: 'embed_key', type: 'string', required: true, desc: '嵌入应用 key' }],
+    bodyParams: [
+      { name: 'session_token', type: 'string', required: true, desc: 'session_token' },
+      { name: 'question', type: 'string', required: true, desc: '刚才的用户问题' },
+      { name: 'answer', type: 'string', required: true, desc: '刚才的应用回答' },
+    ],
+    responses: [
+      {
+        code: 200,
+        example: { code: 200, message: 'ok', data: ['它支持哪些模型？', '怎么计费？', '可以私有化部署吗？'] },
+      },
+    ],
+    cURL: `curl -X POST '{BASE}/v1/embed/em_xxx/suggest-followups' \\
+  -H 'Origin: https://your-site.example.com' \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "session_token": "{TOKEN}", "question": "你们是做什么的", "answer": "我们是..." }'`,
   },
   {
     id: 'embed.feedback',

@@ -4,7 +4,7 @@ import type { AuthKind } from '@/api-docs/types/endpoint';
 const TIPS: Record<AuthKind, { title: string; hint: string; sample: string }> = {
   'bearer-key': {
     title: 'Bearer Token (API Key)',
-    hint: '所有请求在 Authorization 头携带本平台颁发的 API Key（app- / agent- / kbs- 等作用域前缀）。',
+    hint: '所有请求在 Authorization 头携带本平台颁发的 API Key。作用域前缀：chm_（通用，body 显式指定应用）/ app-（绑定单个应用）/ kbs-（绑定知识库，仅 KB 公开 API）。',
     sample: 'Authorization: Bearer {API_KEY}',
   },
   'admin-jwt': {

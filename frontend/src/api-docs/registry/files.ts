@@ -31,7 +31,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             object_id: 'multimodal/abc123xyz.pdf',
@@ -81,7 +81,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             object_id: 'multimodal/abc123xyz.pdf',

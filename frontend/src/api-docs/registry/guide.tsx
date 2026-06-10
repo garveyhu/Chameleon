@@ -53,7 +53,7 @@ const ENDPOINTS: EndpointSpec[] = [
               <tr>
                 <Td>代码应用 / 编排应用 / 外部（对话）</Td>
                 <Td>对话问答、RAG、工作流</Td>
-                <Td>文本；视觉模型可传图（content blocks / attachments）</Td>
+                <Td>文本；视觉模型经 /v1/invoke attachments 传图</Td>
                 <Td>文本（流式 delta）</Td>
                 <Td>按 token</Td>
               </tr>
@@ -87,9 +87,9 @@ const ENDPOINTS: EndpointSpec[] = [
         <H>多模态输入</H>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <b>图理解（VLM）</b>：OpenAI 兼容端点的 <Code>messages[].content</Code>{' '}
-            传内容块数组（text + image_url），或 <Code>/v1/invoke</Code> 的{' '}
-            <Code>attachments</Code> 传图片。仅应用绑定视觉模型（如 qwen-vl）时生效。
+            <b>图理解（VLM）</b>：经 <Code>/v1/invoke</Code> 的{' '}
+            <Code>attachments</Code> 传图片（OpenAI 兼容端点的 content 仅支持纯字符串，
+            不支持内容块数组）。仅应用绑定视觉模型（如 qwen-vl）时生效。
           </li>
           <li>
             <b>生成参数发现</b>：不同生成模型可调参数不同，UI 经声明式 param-spec 渲染；

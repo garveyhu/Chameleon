@@ -63,8 +63,8 @@ export const AgentApiDocView = ({ graph }: Props) => {
       label: '流式调用 (SSE)',
       method: 'POST',
       path: '/invoke',
-      desc: '同一端点，body 传 stream:true 即走 SSE。每行 data: {JSON}，末尾 data: [DONE]。',
-      code: `curl -N -X POST '${base}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{ "input": "你好", "stream": true, "user": "end-user-id" }'\n\n# 响应（text/event-stream）\ndata: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好", "usage": {...}}\ndata: [DONE]`,
+      desc: '同一端点，body 传 stream:true 即走 SSE 具名事件流（event: 类型 + data: JSON）。事件：delta(增量文本) / step(运行步骤，含 HITL 暂停) / citation / tool_call / tool_result / metadata / done(终态，data=完整结果) / error。以 done 或 error 收尾（无 [DONE] 标记），每 15s 一行 ": ping" 注释保活。用 fetch+ReadableStream 解析——EventSource 不支持 POST。',
+      code: `curl -N -X POST '${base}/invoke' \\\n  -H 'Authorization: Bearer {API_KEY}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{ "input": "你好", "stream": true, "user": "end-user-id" }'\n\n# 响应（text/event-stream，具名事件）\nevent: delta\ndata: {"text": "你"}\n\nevent: delta\ndata: {"text": "好"}\n\nevent: done\ndata: {"session_id": "sess_...", "request_id": "req_...", "answer": "你好", "usage": {"total_tokens": 40}}`,
     },
     {
       id: 'sessions',

@@ -41,7 +41,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             items: [
@@ -81,7 +81,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             id: 1,
@@ -117,7 +117,7 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             items: [

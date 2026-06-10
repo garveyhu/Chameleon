@@ -28,7 +28,7 @@ const ENDPOINTS: EndpointSpec[] = [
         type: 'Attachment[] | null',
         required: false,
         default: null,
-        desc: '本次调用附带的文件。Phase A 仅图片 / 音频走多模态进 LLM（其他类型暂不支持，将随 Phase B 临时 RAG 上线）。先用 /v1/files/presigned-upload 三步拿到 object_url 再传入。每条 Attachment：{ object_url, filename?, mime, size? }',
+        desc: '本次调用附带的文件。图片 / 音频走多模态进 LLM；文档 / 数据类（PDF、Word、表格等）自动入会话级临时知识库（ephemeral RAG），命中片段注入上下文并产出 citation。先用 /v1/files/presigned-upload 三步拿到 object_url 再传入。每条 Attachment：{ object_url, filename?, mime, size? }',
       },
       {
         name: 'session_id',
@@ -71,7 +71,14 @@ const ENDPOINTS: EndpointSpec[] = [
         type: 'object',
         required: false,
         default: '{}',
-        desc: 'provider-specific 运行时覆盖。对话应用：temperature / top_p / max_tokens。生成类应用（生图/视频）：options.gen_params（尺寸 / 风格 / 分辨率 / 时长 / 数量等，见「生成应用」一节）、options.input_images（图生视频首帧图 url 数组）。',
+        desc: 'provider-specific 运行时覆盖，随应用来源而异。生成类应用（生图/视频）：options.gen_params（尺寸 / 分辨率 / 时长 / 数量等，见「生成应用」一节）、options.input_images（图生视频首帧图 url 数组）。外部编排应用：Dify 透传为 inputs、FastGPT 为 variables。平台原生（代码 / 工作流）应用当前不消费通用采样参数（temperature 等），模型参数在应用配置中管理。',
+      },
+      {
+        name: 'resume_answer',
+        type: 'string | null',
+        required: false,
+        default: null,
+        desc: 'durable HITL 续跑：上次调用因应用 ask_human 暂停（流中 step 事件 name=human_input_pending / 非流式 done.steps 含同名记录）后，带人工回答续跑。必须同时传暂停时的 session_id；input 传该回答的展示文本（落会话历史）。续跑从暂停点恢复，已完成的副作用不会重复执行。',
       },
     ],
     responses: [
@@ -80,7 +87,7 @@ const ENDPOINTS: EndpointSpec[] = [
         name: '200 - application/json (stream=false)',
         desc: '非流式：返回完整 InvokeResponse',
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             session_id: 'sess_01H...',
@@ -96,9 +103,9 @@ const ENDPOINTS: EndpointSpec[] = [
       {
         code: 200,
         name: '200 - text/event-stream (stream=true)',
-        desc: 'SSE：每行 data: {JSON}，末尾 data: [DONE]。delta 增量推送、end 携带最终 usage。',
+        desc: 'SSE 为具名事件流：每个事件两行 event: <类型> + data: {JSON}。事件类型：delta(增量文本 {"text"}) / step(运行步骤；HITL 暂停时 name=human_input_pending、status=paused，带 prompt/run_id) / citation(知识库引用) / tool_call / tool_result / metadata(usage 或媒体产物) / done(终态，data=完整 InvokeResult) / error({"message","code"?})。以 done 或 error 事件收尾，没有 [DONE] 标记；每 15s 发一行 ": ping" 注释保活（按 SSE 规范忽略）。注意：EventSource 不支持 POST，请用 fetch + ReadableStream 解析。',
         example:
-          'data: {"delta": "你"}\ndata: {"delta": "好"}\ndata: {"end": true, "answer": "你好", "usage": {"total_tokens": 40}}\ndata: [DONE]',
+          'event: delta\ndata: {"text": "你"}\n\nevent: delta\ndata: {"text": "好"}\n\nevent: done\ndata: {"session_id": "sess_01H...", "request_id": "req_01H...", "answer": "你好", "steps": [], "citations": [], "tool_calls": [], "usage": {"prompt_tokens": 12, "completion_tokens": 28, "total_tokens": 40}}',
       },
     ],
     cURL: `curl -X POST '{BASE}/v1/invoke' \\
@@ -133,7 +140,7 @@ const ENDPOINTS: EndpointSpec[] = [
         type: 'object',
         required: false,
         default: '{}',
-        desc: '生成参数（随模型而异，可经 GET /v1/admin/imagegen/param-spec?model_id= 查可用字段）。图片常用：size("1024*1024") / n(张数) / negative_prompt / seed；视频常用：resolution("720P"|"1080P") / duration(秒) / seed。',
+        desc: '生成参数（随应用绑定的模型而异，以应用配置页展示的参数面板为准）。图片常用：size("1024*1024") / n(张数) / negative_prompt / seed；视频常用：resolution("720P"|"1080P") / duration(秒) / seed。',
       },
       {
         name: 'options.input_images',
@@ -156,7 +163,7 @@ const ENDPOINTS: EndpointSpec[] = [
         name: '200 - 生图（application/json）',
         desc: 'answer 为 Markdown 图片，url 为对象存储签名地址',
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             session_id: 'sess_01H...',
@@ -201,7 +208,7 @@ curl -X POST '{BASE}/v1/invoke' \\
       {
         code: 200,
         example: {
-          code: 0,
+          code: 200,
           message: 'ok',
           data: {
             scope_type: 'app',

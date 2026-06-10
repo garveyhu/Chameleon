@@ -14,7 +14,7 @@ const ENDPOINTS: EndpointSpec[] = [
     method: 'POST',
     path: '/v1/chat/completions',
     auth: 'bearer-key',
-    desc: '标准 OpenAI Chat Completions 协议子集。model 字段当 agent_key 使用，可直接接入 OpenAI 官方 SDK / LangChain / 第三方工具。stream=true 走 SSE chunk + [DONE]。',
+    desc: '标准 OpenAI Chat Completions 协议子集。model 字段当 agent_key 使用，可直接接入 OpenAI 官方 SDK / LangChain / 第三方工具。stream=true 走 SSE chunk + [DONE]。兼容范围（诚实声明）：支持 model / messages / stream / session_id / user；temperature、top_p、max_tokens、tools、tool_choice、response_format、n、stop、stream_options 会被接受但静默忽略（模型参数在应用配置中管理）；无 GET /v1/models 端点（SDK 的模型发现不可用，直接填 agent_key）；非 2xx 错误返回平台统一 Result 包装（{code, message, success}）而非 OpenAI error 对象，流中错误为 {"error": {message, type, code}} chunk + [DONE]。',
     bodyParams: [
       {
         name: 'model',
@@ -27,7 +27,7 @@ const ENDPOINTS: EndpointSpec[] = [
         name: 'messages',
         type: 'OAMessage[]',
         required: true,
-        desc: '消息数组，每条 { role, content }。role ∈ user / assistant / system / tool。content 可为纯字符串，或 OpenAI 视觉格式的内容块数组（图理解）：[{ "type": "text", "text": "..." }, { "type": "image_url", "image_url": { "url": "https://... 或 data:image/png;base64,..." } }]。图片仅在应用绑定的模型支持视觉（如 qwen-vl）时生效，否则图片块会被忽略。',
+        desc: '消息数组，每条 { role, content }。role ∈ user / assistant / system / developer / tool（developer 按 OpenAI 新版语义映射为 system）。content 仅支持纯字符串——OpenAI 视觉格式的内容块数组暂不支持；图理解请改用 POST /v1/invoke 的 attachments 字段（图片走多模态进 LLM）。最后一条消息必须是 user。',
       },
       {
         name: 'stream',
@@ -74,11 +74,10 @@ const ENDPOINTS: EndpointSpec[] = [
         code: 200,
         name: '200 - text/event-stream (stream=true)',
         example:
-          'data: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\ndata: [DONE]',
+          'data: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"你"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}\ndata: {"id":"chatcmpl-xx","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}\ndata: [DONE]',
       },
     ],
-    cURL: `# 纯文本
-curl -X POST '{BASE}/v1/chat/completions' \\
+    cURL: `curl -X POST '{BASE}/v1/chat/completions' \\
   -H 'Authorization: Bearer {API_KEY}' \\
   -H 'Content-Type: application/json' \\
   -d '{
@@ -90,19 +89,7 @@ curl -X POST '{BASE}/v1/chat/completions' \\
     "stream": false
   }'
 
-# 图理解（应用需绑定视觉模型，如 qwen-vl）
-curl -X POST '{BASE}/v1/chat/completions' \\
-  -H 'Authorization: Bearer {API_KEY}' \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "model": "agt_vision_app",
-    "messages": [
-      {"role": "user", "content": [
-        {"type": "text", "text": "这张图里有什么？"},
-        {"type": "image_url", "image_url": {"url": "https://your-cdn.com/photo.jpg"}}
-      ]}
-    ]
-  }'`,
+# 图理解请用 POST /v1/invoke + attachments（本端点 content 仅支持字符串）`,
   },
 ];
 
