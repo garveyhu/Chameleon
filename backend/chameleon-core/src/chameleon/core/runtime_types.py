@@ -195,7 +195,7 @@ class StepRecord(BaseModel):
     """中间步骤记录（节点 / 思考 / 工具调用编排等）"""
 
     name: str
-    status: Literal["running", "success", "failed"] = "success"
+    status: Literal["running", "success", "failed", "paused"] = "success"
     duration_ms: int | None = None
     input: dict[str, Any] | None = None
     output: dict[str, Any] | None = None

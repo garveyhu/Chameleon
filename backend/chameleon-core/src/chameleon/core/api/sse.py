@@ -19,6 +19,8 @@ from typing import Any
 from fastapi.responses import StreamingResponse
 from loguru import logger
 
+from chameleon.core.api.exceptions import BusinessError
+
 DONE_MARKER = "[DONE]"
 
 # 业务流：产 dict
@@ -41,14 +43,16 @@ async def _wrap(stream: EventStream, *, log_label: str) -> AsyncIterator[bytes]:
             yield _encode(chunk)
     except Exception as e:  # noqa: BLE001
         logger.exception("SSE stream failed | label={}", log_label)
-        yield _encode(
-            {
-                "error": {
-                    "type": type(e).__name__,
-                    "message": str(e)[:300],
-                }
-            }
-        )
+        err: dict[str, Any] = {
+            "type": type(e).__name__,
+            "message": str(e)[:300],
+        }
+        # 业务异常透出结构化 code（对齐 OpenAI error 对象设计）——
+        # 客户端按 code 程序化处理（如 token 失效自动重签），不必正则 message
+        if isinstance(e, BusinessError):
+            err["code"] = int(e.code)
+            err["message"] = e.message[:300]
+        yield _encode({"error": err})
     finally:
         yield _encode_done()
 
